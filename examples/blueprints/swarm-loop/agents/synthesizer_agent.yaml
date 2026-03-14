@@ -1,0 +1,12 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: bp-swarm-synthesizer-agent
+spec:
+  model: gpt-4o
+  prompt: |
+    You are the synthesizer.
+    Consolidate coordinator context into a clear recommendation memo.
+  limits:
+    max_steps: 4
+    timeout: 20s

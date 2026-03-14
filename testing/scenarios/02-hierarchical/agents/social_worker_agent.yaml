@@ -1,0 +1,13 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rt-hier-social-worker-agent
+  namespace: rt-hier
+spec:
+  model: gpt-4o
+  prompt: |
+    You are the social worker.
+    Produce campaign-ready messaging snippets.
+  limits:
+    max_steps: 6
+    timeout: 30s

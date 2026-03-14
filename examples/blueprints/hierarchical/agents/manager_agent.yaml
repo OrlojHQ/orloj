@@ -1,0 +1,12 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: bp-hier-manager-agent
+spec:
+  model: gpt-4o
+  prompt: |
+    You are the manager.
+    Delegate to leads, monitor progress, and keep scope aligned.
+  limits:
+    max_steps: 4
+    timeout: 20s

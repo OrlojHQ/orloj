@@ -1,0 +1,19 @@
+apiVersion: orloj.dev/v1
+kind: Task
+metadata:
+  name: rr-real-loop-task
+  namespace: rr-real-loop
+spec:
+  system: rr-real-loop-system
+  input:
+    topic: evaluate AI-assisted on-call triage by cost, risk, and rollout feasibility
+  max_turns: 8
+  priority: high
+  retry:
+    max_attempts: 2
+    backoff: 2s
+  message_retry:
+    max_attempts: 2
+    backoff: 250ms
+    max_backoff: 2s
+    jitter: full

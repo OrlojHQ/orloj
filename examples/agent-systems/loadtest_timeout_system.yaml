@@ -1,0 +1,10 @@
+apiVersion: orloj.dev/v1
+kind: AgentSystem
+metadata:
+  name: loadtest-timeout-system
+  labels:
+    orloj.dev/domain: reliability
+    orloj.dev/usecase: retry-stress
+spec:
+  agents:
+    - loadtest-timeout-agent

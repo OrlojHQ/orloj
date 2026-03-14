@@ -1,0 +1,9 @@
+{
+  "name": "loadtest-default",
+  "min_success_rate": 0.90,
+  "max_deadletter_rate": 0.10,
+  "max_failed_rate": 0.10,
+  "max_timed_out": 0,
+  "min_retry_total": -1,
+  "min_takeover_events": -1
+}

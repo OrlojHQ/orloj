@@ -1,0 +1,13 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rt-hier-manager-agent
+  namespace: rt-hier
+spec:
+  model: gpt-4o
+  prompt: |
+    You are the manager.
+    Delegate work to leads and keep scope aligned.
+  limits:
+    max_steps: 4
+    timeout: 20s

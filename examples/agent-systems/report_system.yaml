@@ -1,0 +1,18 @@
+apiVersion: orloj.dev/v1
+kind: AgentSystem
+metadata:
+  name: report-system
+  labels:
+    orloj.dev/domain: reporting
+    orloj.dev/usecase: weekly-report
+    orloj.dev/env: dev
+spec:
+  agents:
+    - planner-agent
+    - research-agent
+    - writer-agent
+  graph:
+    planner-agent:
+      next: research-agent
+    research-agent:
+      next: writer-agent

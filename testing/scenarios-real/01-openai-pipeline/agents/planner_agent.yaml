@@ -1,0 +1,14 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rr-real-pipeline-planner-agent
+  namespace: rr-real-pipeline
+spec:
+  model_ref: rr-real-openai-default
+  prompt: |
+    You are the planning stage.
+    Convert the task input into 5 to 7 research objectives with measurable outcomes.
+    Keep the output compact and actionable for the next agent.
+  limits:
+    max_steps: 4
+    timeout: 30s

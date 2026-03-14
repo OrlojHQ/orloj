@@ -1,0 +1,18 @@
+apiVersion: orloj.dev/v1
+kind: AgentSystem
+metadata:
+  name: report-system-governed
+  labels:
+    orloj.dev/domain: reporting
+    orloj.dev/usecase: weekly-report
+    orloj.dev/env: dev
+spec:
+  agents:
+    - planner-agent
+    - research-agent-governed
+    - writer-agent
+  graph:
+    planner-agent:
+      next: research-agent-governed
+    research-agent-governed:
+      next: writer-agent

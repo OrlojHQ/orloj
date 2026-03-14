@@ -1,0 +1,15 @@
+apiVersion: orloj.dev/v1
+kind: TaskWebhook
+metadata:
+  name: report-generic-webhook
+spec:
+  task_ref: weekly-report-template
+  auth:
+    profile: generic
+    secret_ref: webhook-shared-secret
+  idempotency:
+    event_id_header: X-Event-Id
+    dedupe_window_seconds: 86400
+  payload:
+    mode: raw
+    input_key: webhook_payload

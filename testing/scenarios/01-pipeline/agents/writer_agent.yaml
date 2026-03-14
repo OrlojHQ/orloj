@@ -1,0 +1,13 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rt-pipeline-writer-agent
+  namespace: rt-pipeline
+spec:
+  model: gpt-4o
+  prompt: |
+    You are the writing stage.
+    Convert the handoff into a polished final output.
+  limits:
+    max_steps: 4
+    timeout: 20s

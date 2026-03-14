@@ -1,0 +1,14 @@
+apiVersion: orloj.dev/v1
+kind: ModelEndpoint
+metadata:
+  name: rr-real-anthropic-sonnet-default
+  namespace: rr-real-anthropic-tool-decision
+spec:
+  provider: anthropic
+  base_url: https://api.anthropic.com/v1
+  default_model: claude-3-5-sonnet-latest
+  options:
+    anthropic_version: "2023-06-01"
+    max_tokens: "1024"
+  auth:
+    secretRef: rr-real-anthropic-api-key

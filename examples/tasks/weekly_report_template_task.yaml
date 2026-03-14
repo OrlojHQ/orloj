@@ -1,0 +1,14 @@
+apiVersion: orloj.dev/v1
+kind: Task
+metadata:
+  name: weekly-report-template
+  namespace: default
+spec:
+  mode: template
+  system: report-system
+  priority: normal
+  input:
+    topic: AI startups
+  retry:
+    max_attempts: 2
+    backoff: 2s

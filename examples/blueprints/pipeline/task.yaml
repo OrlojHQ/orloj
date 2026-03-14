@@ -1,0 +1,17 @@
+apiVersion: orloj.dev/v1
+kind: Task
+metadata:
+  name: bp-pipeline-task
+spec:
+  system: bp-pipeline-system
+  input:
+    topic: state of enterprise AI copilots
+  priority: high
+  retry:
+    max_attempts: 2
+    backoff: 2s
+  message_retry:
+    max_attempts: 2
+    backoff: 250ms
+    max_backoff: 2s
+    jitter: full

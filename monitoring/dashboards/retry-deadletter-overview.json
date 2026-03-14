@@ -1,0 +1,46 @@
+{
+  "title": "Orloj Retry/DeadLetter Overview",
+  "description": "Dashboard spec artifact for runtime reliability checks using task observability APIs.",
+  "datasource": "orloj-http-api",
+  "panels": [
+    {
+      "id": "retry_count_total",
+      "title": "Retry Count Total",
+      "query": "GET /v1/tasks/{task}/metrics -> totals.retry_count",
+      "type": "stat",
+      "alert_hint": "retry_storm_total"
+    },
+    {
+      "id": "deadletters_total",
+      "title": "DeadLetters Total",
+      "query": "GET /v1/tasks/{task}/metrics -> totals.deadletters",
+      "type": "stat",
+      "alert_hint": "deadletter_growth_total"
+    },
+    {
+      "id": "deadletter_task_rate",
+      "title": "DeadLetter Task Rate",
+      "query": "Aggregate deadletter task phase ratio over selected tasks",
+      "type": "gauge",
+      "alert_hint": "deadletter_growth_rate"
+    },
+    {
+      "id": "in_flight_total",
+      "title": "In-Flight Total",
+      "query": "GET /v1/tasks/{task}/metrics -> totals.in_flight",
+      "type": "timeseries",
+      "alert_hint": "in_flight_max"
+    },
+    {
+      "id": "latency_p95_ms_max",
+      "title": "Latency P95 Max (ms)",
+      "query": "GET /v1/tasks/{task}/metrics -> totals.latency_ms_p95",
+      "type": "timeseries",
+      "alert_hint": "latency_p95_ms_max"
+    }
+  ],
+  "notes": [
+    "Use cmd/orloj-alertcheck for deterministic threshold evaluation and non-zero exit status.",
+    "This file is a dashboard contract artifact and can be translated into Grafana JSON once datasource plugins are finalized."
+  ]
+}

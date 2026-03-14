@@ -1,0 +1,18 @@
+apiVersion: orloj.dev/v1
+kind: AgentSystem
+metadata:
+  name: bp-pipeline-system
+  labels:
+    orloj.dev/pattern: pipeline
+spec:
+  agents:
+    - bp-pipeline-planner-agent
+    - bp-pipeline-research-agent
+    - bp-pipeline-writer-agent
+  graph:
+    bp-pipeline-planner-agent:
+      edges:
+        - to: bp-pipeline-research-agent
+    bp-pipeline-research-agent:
+      edges:
+        - to: bp-pipeline-writer-agent

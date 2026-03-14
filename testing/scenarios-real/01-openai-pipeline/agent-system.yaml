@@ -1,0 +1,17 @@
+apiVersion: orloj.dev/v1
+kind: AgentSystem
+metadata:
+  name: rr-real-pipeline-system
+  namespace: rr-real-pipeline
+spec:
+  agents:
+    - rr-real-pipeline-planner-agent
+    - rr-real-pipeline-research-agent
+    - rr-real-pipeline-writer-agent
+  graph:
+    rr-real-pipeline-planner-agent:
+      edges:
+        - to: rr-real-pipeline-research-agent
+    rr-real-pipeline-research-agent:
+      edges:
+        - to: rr-real-pipeline-writer-agent

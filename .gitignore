@@ -1,0 +1,28 @@
+# Go test binaries
+*.test
+
+# Local build outputs
+/agentopsd
+/agentctl
+/agentworker
+*.out
+coverage.out
+
+# Local environment files
+.env
+.env.*
+!.env.example
+.envrc
+
+# Logs and OS/editor noise
+*.log
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Frontend dependencies and build outputs
+/frontend/node_modules/
+/frontend/dist/*
+!/frontend/dist/placeholder.txt

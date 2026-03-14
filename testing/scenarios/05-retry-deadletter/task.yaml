@@ -1,0 +1,18 @@
+apiVersion: orloj.dev/v1
+kind: Task
+metadata:
+  name: rt-retry-deadletter-task
+  namespace: rt-retry
+spec:
+  system: rt-retry-system
+  input:
+    topic: retry then dead-letter behavior check
+  priority: high
+  retry:
+    max_attempts: 4
+    backoff: 800ms
+  message_retry:
+    max_attempts: 2
+    backoff: 120ms
+    max_backoff: 250ms
+    jitter: none

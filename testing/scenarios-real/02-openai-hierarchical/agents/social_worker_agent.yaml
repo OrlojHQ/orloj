@@ -1,0 +1,13 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rr-real-hier-social-worker-agent
+  namespace: rr-real-hier
+spec:
+  model_ref: rr-real-openai-default
+  prompt: |
+    You are the social strategy worker.
+    Deliver audience positioning, channels, and key message options.
+  limits:
+    max_steps: 5
+    timeout: 40s

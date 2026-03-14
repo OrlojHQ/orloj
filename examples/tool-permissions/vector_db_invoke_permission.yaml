@@ -1,0 +1,11 @@
+apiVersion: orloj.dev/v1
+kind: ToolPermission
+metadata:
+  name: vector-db-invoke
+spec:
+  tool_ref: vector_db
+  action: invoke
+  match_mode: all
+  apply_mode: global
+  required_permissions:
+    - tool:vector_db:invoke

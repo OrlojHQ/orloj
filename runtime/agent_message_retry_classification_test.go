@@ -1,0 +1,23 @@
+package agentruntime
+
+import (
+	"testing"
+
+	"github.com/AnonJon/orloj/crds"
+)
+
+func TestClassifyMessageRetryabilityUsesToolErrorMetadata(t *testing.T) {
+	policy := crds.TaskMessageRetryPolicy{}
+	err := NewToolDeniedError(
+		"policy permission denied for tool=vector_db required=tool:vector_db:invoke",
+		map[string]string{"tool": "vector_db"},
+		ErrToolPermissionDenied,
+	)
+	classification := classifyMessageRetryability(policy, err)
+	if classification.Retryable {
+		t.Fatal("expected non-retryable classification for tool denied error")
+	}
+	if classification.Reason != ToolReasonPermissionDenied {
+		t.Fatalf("expected reason %q, got %q", ToolReasonPermissionDenied, classification.Reason)
+	}
+}

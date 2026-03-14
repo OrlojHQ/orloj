@@ -1,0 +1,13 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rt-hier-editor-agent
+  namespace: rt-hier
+spec:
+  model: gpt-4o
+  prompt: |
+    You are the editor.
+    Merge branch outputs into one coherent deliverable.
+  limits:
+    max_steps: 4
+    timeout: 20s

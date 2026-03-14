@@ -1,0 +1,104 @@
+services:
+  nats:
+    image: nats:2.10-alpine
+    command: ["-js"]
+    ports:
+      - "${NATS_PORT:-4222}:4222"
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-orloj}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-orloj}
+      POSTGRES_DB: ${POSTGRES_DB:-orloj}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-orloj} -d ${POSTGRES_DB:-orloj}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  orlojd:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BINARY: orlojd
+    environment:
+      ORLOJ_POSTGRES_DSN: ${ORLOJ_POSTGRES_DSN:-postgres://orloj:orloj@postgres:5432/orloj?sslmode=disable}
+    command:
+      - --addr=:8080
+      - --storage-backend=postgres
+      - --event-bus-backend=nats
+      - --nats-url=nats://nats:4222
+    ports:
+      - "${ORLOJ_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080/healthz >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  orlojworker-a:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BINARY: orlojworker
+    environment:
+      ORLOJ_POSTGRES_DSN: ${ORLOJ_POSTGRES_DSN:-postgres://orloj:orloj@postgres:5432/orloj?sslmode=disable}
+    command:
+      - --storage-backend=postgres
+      - --worker-id=worker-a
+      - --reconcile-interval=1s
+      - --lease-duration=30s
+      - --heartbeat-interval=10s
+      - --region=default
+      - --supported-models=gpt-4o,gpt-4o-mini
+    depends_on:
+      postgres:
+        condition: service_healthy
+      orlojd:
+        condition: service_healthy
+      nats:
+        condition: service_started
+    restart: unless-stopped
+
+  orlojworker-b:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BINARY: orlojworker
+    environment:
+      ORLOJ_POSTGRES_DSN: ${ORLOJ_POSTGRES_DSN:-postgres://orloj:orloj@postgres:5432/orloj?sslmode=disable}
+    command:
+      - --storage-backend=postgres
+      - --worker-id=worker-b
+      - --reconcile-interval=1s
+      - --lease-duration=30s
+      - --heartbeat-interval=10s
+      - --region=default
+      - --supported-models=gpt-4o,gpt-4o-mini
+    depends_on:
+      postgres:
+        condition: service_healthy
+      orlojd:
+        condition: service_healthy
+      nats:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

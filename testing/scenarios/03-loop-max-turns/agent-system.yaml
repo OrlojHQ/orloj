@@ -1,0 +1,16 @@
+apiVersion: orloj.dev/v1
+kind: AgentSystem
+metadata:
+  name: rt-loop-system
+  namespace: rt-loop
+spec:
+  agents:
+    - rt-loop-manager-agent
+    - rt-loop-research-agent
+  graph:
+    rt-loop-manager-agent:
+      edges:
+        - to: rt-loop-research-agent
+    rt-loop-research-agent:
+      edges:
+        - to: rt-loop-manager-agent

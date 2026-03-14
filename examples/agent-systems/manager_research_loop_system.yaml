@@ -1,0 +1,19 @@
+apiVersion: orloj.dev/v1
+kind: AgentSystem
+metadata:
+  name: manager-research-loop-system
+  labels:
+    orloj.dev/domain: collaboration
+    orloj.dev/usecase: manager-research-loop
+    orloj.dev/env: dev
+spec:
+  agents:
+    - manager-agent
+    - research-agent
+  graph:
+    manager-agent:
+      edges:
+        - to: research-agent
+    research-agent:
+      edges:
+        - to: manager-agent

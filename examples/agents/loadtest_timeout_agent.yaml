@@ -1,0 +1,11 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: loadtest-timeout-agent
+spec:
+  model: gpt-4o
+  prompt: |
+    Intentionally time out to exercise retry and dead-letter behavior under load.
+  limits:
+    max_steps: 2
+    timeout: 1ms

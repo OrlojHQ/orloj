@@ -1,0 +1,11 @@
+apiVersion: orloj.dev/v1
+kind: Worker
+metadata:
+  name: worker-a
+spec:
+  region: default
+  max_concurrent_tasks: 1
+  capabilities:
+    gpu: false
+    supported_models:
+      - gpt-4o

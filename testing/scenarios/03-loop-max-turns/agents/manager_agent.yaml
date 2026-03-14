@@ -1,0 +1,13 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rt-loop-manager-agent
+  namespace: rt-loop
+spec:
+  model: gpt-4o
+  prompt: |
+    You are the manager.
+    Ask focused follow-up questions and decide completion.
+  limits:
+    max_steps: 4
+    timeout: 20s

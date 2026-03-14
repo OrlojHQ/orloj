@@ -1,0 +1,9 @@
+apiVersion: orloj.dev/v1
+kind: AgentRole
+metadata:
+  name: analyst-role
+spec:
+  description: Can call web search style tools.
+  permissions:
+    - tool:web_search:invoke
+    - capability:web.read

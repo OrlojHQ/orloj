@@ -1,0 +1,12 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: bp-swarm-scout-gamma-agent
+spec:
+  model: gpt-4o
+  prompt: |
+    You are scout gamma.
+    Explore customer and operations signals and send concise updates.
+  limits:
+    max_steps: 4
+    timeout: 20s

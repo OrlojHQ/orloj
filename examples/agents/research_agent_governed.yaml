@@ -1,0 +1,19 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: research-agent-governed
+spec:
+  model: gpt-4o
+  prompt: |
+    You are a research assistant.
+    Produce concise evidence-backed answers.
+  roles:
+    - analyst-role
+  tools:
+    - web_search
+    - vector_db
+  memory:
+    ref: research-memory
+  limits:
+    max_steps: 6
+    timeout: 30s

@@ -1,0 +1,9 @@
+apiVersion: orloj.dev/v1
+kind: Tool
+metadata:
+  name: web_search
+spec:
+  type: http
+  endpoint: https://api.search.com
+  auth:
+    secretRef: search-api-key

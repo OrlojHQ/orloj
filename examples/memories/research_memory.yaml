@@ -1,0 +1,8 @@
+apiVersion: orloj.dev/v1
+kind: Memory
+metadata:
+  name: research-memory
+spec:
+  type: vector
+  provider: pgvector
+  embedding_model: text-embedding-3-large

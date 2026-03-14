@@ -1,0 +1,17 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rt-gov-analyst-agent
+  namespace: rt-gov
+spec:
+  model: gpt-4o
+  prompt: |
+    You must call tool rt-gov-search-tool on step 1.
+    If tool invocation is denied, report the denial details.
+  roles:
+    - rt-gov-limited-role
+  tools:
+    - rt-gov-search-tool
+  limits:
+    max_steps: 4
+    timeout: 20s

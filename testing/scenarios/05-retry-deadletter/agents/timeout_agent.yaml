@@ -1,0 +1,13 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rt-retry-timeout-agent
+  namespace: rt-retry
+spec:
+  model: gpt-4o
+  prompt: |
+    You are a stress test agent.
+    Simulate work that will exceed timeout bounds.
+  limits:
+    max_steps: 50
+    timeout: 1ms

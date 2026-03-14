@@ -1,0 +1,17 @@
+apiVersion: orloj.dev/v1
+kind: Tool
+metadata:
+  name: wasm_echo
+spec:
+  type: wasm
+  capabilities:
+    - wasm.echo.invoke
+  risk_level: high
+  runtime:
+    isolation_mode: wasm
+    timeout: 5s
+    retry:
+      max_attempts: 1
+      backoff: 0s
+      max_backoff: 1s
+      jitter: none

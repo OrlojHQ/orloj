@@ -1,0 +1,29 @@
+apiVersion: orloj.dev/v1
+kind: AgentSystem
+metadata:
+  name: bp-swarm-loop-system
+  labels:
+    orloj.dev/pattern: swarm-loop
+spec:
+  agents:
+    - bp-swarm-coordinator-agent
+    - bp-swarm-scout-alpha-agent
+    - bp-swarm-scout-beta-agent
+    - bp-swarm-scout-gamma-agent
+    - bp-swarm-synthesizer-agent
+  graph:
+    bp-swarm-coordinator-agent:
+      edges:
+        - to: bp-swarm-scout-alpha-agent
+        - to: bp-swarm-scout-beta-agent
+        - to: bp-swarm-scout-gamma-agent
+        - to: bp-swarm-synthesizer-agent
+    bp-swarm-scout-alpha-agent:
+      edges:
+        - to: bp-swarm-coordinator-agent
+    bp-swarm-scout-beta-agent:
+      edges:
+        - to: bp-swarm-coordinator-agent
+    bp-swarm-scout-gamma-agent:
+      edges:
+        - to: bp-swarm-coordinator-agent

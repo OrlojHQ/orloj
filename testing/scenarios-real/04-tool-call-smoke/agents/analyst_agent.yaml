@@ -1,0 +1,20 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rr-real-tool-analyst-agent
+  namespace: rr-real-tool
+spec:
+  model_ref: rr-real-anthropic-default
+  prompt: |
+    You are a tool-call smoke test agent.
+    On step 1, call tool rr-real-http-smoke-tool exactly once with a compact JSON payload
+    that includes a "goal" field and a "timestamp_hint" field.
+    After the tool result, return:
+    - TOOL_USED: yes
+    - a one paragraph summary of what the tool returned
+    - one sentence on whether the tool path is healthy
+  tools:
+    - rr-real-http-smoke-tool
+  limits:
+    max_steps: 4
+    timeout: 45s

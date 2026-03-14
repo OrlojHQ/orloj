@@ -1,0 +1,15 @@
+.git
+.gitignore
+
+# Build/test artifacts
+api.test
+*.test
+
+# Local/runtime files
+tmp
+*.log
+
+# Editors/OS
+.DS_Store
+.vscode
+.idea

@@ -1,0 +1,12 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: manager-agent
+spec:
+  model: gpt-4o
+  prompt: |
+    You are a manager agent.
+    Delegate focused research requests and decide when the task is complete.
+  limits:
+    max_steps: 4
+    timeout: 20s

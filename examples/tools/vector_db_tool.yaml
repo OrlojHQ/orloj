@@ -1,0 +1,7 @@
+apiVersion: orloj.dev/v1
+kind: Tool
+metadata:
+  name: vector_db
+spec:
+  type: http
+  endpoint: https://api.vector-db.local/query

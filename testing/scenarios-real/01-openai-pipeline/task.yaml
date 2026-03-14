@@ -1,0 +1,18 @@
+apiVersion: orloj.dev/v1
+kind: Task
+metadata:
+  name: rr-real-pipeline-task
+  namespace: rr-real-pipeline
+spec:
+  system: rr-real-pipeline-system
+  input:
+    topic: practical AI incident response assistant for SaaS support teams
+  priority: high
+  retry:
+    max_attempts: 2
+    backoff: 2s
+  message_retry:
+    max_attempts: 2
+    backoff: 250ms
+    max_backoff: 2s
+    jitter: full

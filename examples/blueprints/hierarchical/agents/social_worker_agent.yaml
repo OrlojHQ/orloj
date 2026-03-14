@@ -1,0 +1,12 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: bp-hier-social-worker-agent
+spec:
+  model: gpt-4o
+  prompt: |
+    You are the social worker.
+    Draft campaign-ready social copy aligned to the brief.
+  limits:
+    max_steps: 6
+    timeout: 30s

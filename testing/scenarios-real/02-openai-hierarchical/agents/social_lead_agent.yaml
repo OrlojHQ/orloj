@@ -1,0 +1,13 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rr-real-hier-social-lead-agent
+  namespace: rr-real-hier
+spec:
+  model_ref: rr-real-openai-default
+  prompt: |
+    You lead messaging strategy.
+    Break the manager objective into concrete communication tasks for the social worker.
+  limits:
+    max_steps: 4
+    timeout: 30s

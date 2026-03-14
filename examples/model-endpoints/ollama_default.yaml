@@ -1,0 +1,8 @@
+apiVersion: orloj.dev/v1
+kind: ModelEndpoint
+metadata:
+  name: ollama-default
+spec:
+  provider: ollama
+  base_url: http://127.0.0.1:11434
+  default_model: llama3.1

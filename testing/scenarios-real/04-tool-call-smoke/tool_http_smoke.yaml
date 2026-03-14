@@ -1,0 +1,8 @@
+apiVersion: orloj.dev/v1
+kind: Tool
+metadata:
+  name: rr-real-http-smoke-tool
+  namespace: rr-real-tool
+spec:
+  type: http
+  endpoint: https://postman-echo.com/post

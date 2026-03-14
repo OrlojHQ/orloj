@@ -1,0 +1,17 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: research-agent
+spec:
+  model_ref: openai-default
+  prompt: |
+    You are a research assistant.
+    Produce concise evidence-backed answers.
+  tools:
+    - web_search
+    - vector_db
+  memory:
+    ref: research-memory
+  limits:
+    max_steps: 6
+    timeout: 30s

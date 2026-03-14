@@ -1,0 +1,12 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: bp-pipeline-planner-agent
+spec:
+  model: gpt-4o
+  prompt: |
+    You are the planning stage.
+    Break the task into concrete research and writing requirements.
+  limits:
+    max_steps: 4
+    timeout: 20s

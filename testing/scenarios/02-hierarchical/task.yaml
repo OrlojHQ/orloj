@@ -1,0 +1,18 @@
+apiVersion: orloj.dev/v1
+kind: Task
+metadata:
+  name: rt-hier-task
+  namespace: rt-hier
+spec:
+  system: rt-hier-system
+  input:
+    topic: launch plan for an AI incident response product
+  priority: high
+  retry:
+    max_attempts: 2
+    backoff: 2s
+  message_retry:
+    max_attempts: 2
+    backoff: 250ms
+    max_backoff: 2s
+    jitter: full

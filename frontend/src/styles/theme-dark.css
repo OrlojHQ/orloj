@@ -1,0 +1,75 @@
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg-primary: #0d1117;
+  --bg-secondary: #161b22;
+  --bg-tertiary: #1c2128;
+  --bg-surface: #21262d;
+  --bg-hover: rgba(136, 198, 255, 0.04);
+  --bg-input: #0d1117;
+  --bg-overlay: rgba(0, 0, 0, 0.6);
+
+  --text-primary: #e6edf3;
+  --text-secondary: #8b949e;
+  --text-tertiary: #6e7681;
+  --text-inverse: #0d1117;
+
+  --border: #30363d;
+  --border-subtle: rgba(240, 246, 252, 0.06);
+  --border-strong: #484f58;
+
+  --accent: #22c55e;
+  --accent-hover: #16a34a;
+  --accent-alpha: rgba(34, 197, 94, 0.15);
+  --accent-text: #22c55e;
+
+  --blue: #58a6ff;
+  --blue-bg: rgba(88, 166, 255, 0.12);
+  --green: #3fb950;
+  --green-bg: rgba(63, 185, 80, 0.12);
+  --yellow: #d29922;
+  --yellow-bg: rgba(210, 153, 34, 0.12);
+  --orange: #db6d28;
+  --orange-bg: rgba(219, 109, 40, 0.12);
+  --red: #f85149;
+  --red-bg: rgba(248, 81, 73, 0.12);
+  --purple: #a78bfa;
+  --purple-bg: rgba(167, 139, 250, 0.12);
+  --gray: #484f58;
+  --gray-bg: rgba(72, 79, 88, 0.3);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+
+  --sidebar-bg: #010409;
+  --sidebar-border: #21262d;
+  --sidebar-text: #8b949e;
+  --sidebar-text-active: #e6edf3;
+  --sidebar-hover: rgba(136, 198, 255, 0.06);
+  --sidebar-active: rgba(34, 197, 94, 0.12);
+
+  --topbar-bg: rgba(22, 27, 34, 0.8);
+  --topbar-border: #21262d;
+
+  --card-bg: #161b22;
+  --card-border: #30363d;
+
+  --badge-healthy: var(--green);
+  --badge-healthy-bg: var(--green-bg);
+  --badge-running: var(--blue);
+  --badge-running-bg: var(--blue-bg);
+  --badge-pending: var(--yellow);
+  --badge-pending-bg: var(--yellow-bg);
+  --badge-failed: var(--red);
+  --badge-failed-bg: var(--red-bg);
+  --badge-deadletter: var(--orange);
+  --badge-deadletter-bg: var(--orange-bg);
+
+  --node-bg: #21262d;
+  --node-border: #3d444d;
+  --node-text: #e6edf3;
+  --edge-color: #484f58;
+  --edge-stroke: #586069;
+  --graph-grid: rgba(240, 246, 252, 0.04);
+}

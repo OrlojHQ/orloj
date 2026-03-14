@@ -1,0 +1,11 @@
+{
+  "name": "retry-deadletter-default",
+  "min_tasks": 20,
+  "retry_storm_total": 100,
+  "retry_storm_rate": 2.0,
+  "deadletter_growth_total": 20,
+  "deadletter_growth_rate": 0.10,
+  "in_flight_max": 200,
+  "latency_p95_ms_max": 120000,
+  "require_any_task_succeeded": true
+}

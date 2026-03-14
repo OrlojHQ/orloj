@@ -1,0 +1,19 @@
+apiVersion: orloj.dev/v1
+kind: Task
+metadata:
+  name: rt-loop-task
+  namespace: rt-loop
+spec:
+  system: rt-loop-system
+  input:
+    topic: evaluate incident triage copilots by risk and ROI
+  max_turns: 6
+  priority: high
+  retry:
+    max_attempts: 2
+    backoff: 2s
+  message_retry:
+    max_attempts: 2
+    backoff: 250ms
+    max_backoff: 2s
+    jitter: full

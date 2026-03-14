@@ -1,0 +1,12 @@
+apiVersion: orloj.dev/v1
+kind: ModelEndpoint
+metadata:
+  name: azure-openai-default
+spec:
+  provider: azure-openai
+  base_url: https://YOUR_RESOURCE_NAME.openai.azure.com
+  default_model: gpt-4o-deployment
+  options:
+    api_version: "2024-10-21"
+  auth:
+    secretRef: azure-openai-api-key

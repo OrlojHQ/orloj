@@ -1,0 +1,8 @@
+apiVersion: orloj.dev/v1
+kind: AgentRole
+metadata:
+  name: vector-reader-role
+spec:
+  description: Can query vector knowledge tools.
+  permissions:
+    - tool:vector_db:invoke

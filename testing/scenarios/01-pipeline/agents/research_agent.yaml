@@ -1,0 +1,13 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rt-pipeline-research-agent
+  namespace: rt-pipeline
+spec:
+  model: gpt-4o
+  prompt: |
+    You are the research stage.
+    Produce concise findings with clear assumptions.
+  limits:
+    max_steps: 6
+    timeout: 30s

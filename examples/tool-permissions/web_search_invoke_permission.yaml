@@ -1,0 +1,12 @@
+apiVersion: orloj.dev/v1
+kind: ToolPermission
+metadata:
+  name: web-search-invoke
+spec:
+  tool_ref: web_search
+  action: invoke
+  match_mode: all
+  apply_mode: global
+  required_permissions:
+    - tool:web_search:invoke
+    - capability:web.read

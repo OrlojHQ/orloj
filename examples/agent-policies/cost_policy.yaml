@@ -1,0 +1,13 @@
+apiVersion: orloj.dev/v1
+kind: AgentPolicy
+metadata:
+  name: cost-policy
+spec:
+  apply_mode: scoped
+  target_systems:
+    - report-system
+  max_tokens_per_run: 50000
+  allowed_models:
+    - gpt-4o
+  blocked_tools:
+    - filesystem_delete

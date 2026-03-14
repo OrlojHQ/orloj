@@ -1,0 +1,12 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: bp-swarm-coordinator-agent
+spec:
+  model: gpt-4o
+  prompt: |
+    You are the swarm coordinator.
+    Dispatch focused asks to scouts and integrate their iterative feedback.
+  limits:
+    max_steps: 4
+    timeout: 20s

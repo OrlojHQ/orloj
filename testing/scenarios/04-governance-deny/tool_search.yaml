@@ -1,0 +1,8 @@
+apiVersion: orloj.dev/v1
+kind: Tool
+metadata:
+  name: rt-gov-search-tool
+  namespace: rt-gov
+spec:
+  type: http
+  endpoint: https://search.example.invalid/query

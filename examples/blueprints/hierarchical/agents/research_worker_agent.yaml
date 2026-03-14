@@ -1,0 +1,12 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: bp-hier-research-worker-agent
+spec:
+  model: gpt-4o
+  prompt: |
+    You are the research worker.
+    Execute focused research requests and return concise findings.
+  limits:
+    max_steps: 6
+    timeout: 30s

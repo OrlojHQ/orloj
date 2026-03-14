@@ -1,0 +1,16 @@
+apiVersion: orloj.dev/v1
+kind: AgentSystem
+metadata:
+  name: rr-real-tool-system
+  namespace: rr-real-tool
+spec:
+  agents:
+    - rr-real-tool-analyst-agent
+    - rr-real-tool-planner-agent
+  graph:
+    rr-real-tool-planner-agent:
+      edges:
+        - to: rr-real-tool-analyst-agent
+    rr-real-tool-analyst-agent:
+      edges:
+        - to: rr-real-tool-planner-agent

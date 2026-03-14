@@ -1,0 +1,75 @@
+[data-theme="light"] {
+  color-scheme: light;
+
+  --bg-primary: #f6f8fa;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f0f2f5;
+  --bg-surface: #ffffff;
+  --bg-hover: rgba(0, 0, 0, 0.03);
+  --bg-input: #ffffff;
+  --bg-overlay: rgba(0, 0, 0, 0.4);
+
+  --text-primary: #1f2328;
+  --text-secondary: #636c76;
+  --text-tertiary: #8b949e;
+  --text-inverse: #ffffff;
+
+  --border: #d0d7de;
+  --border-subtle: rgba(0, 0, 0, 0.06);
+  --border-strong: #8b949e;
+
+  --accent: #16a34a;
+  --accent-hover: #15803d;
+  --accent-alpha: rgba(22, 163, 74, 0.12);
+  --accent-text: #15803d;
+
+  --blue: #0969da;
+  --blue-bg: rgba(9, 105, 218, 0.08);
+  --green: #1a7f37;
+  --green-bg: rgba(26, 127, 55, 0.08);
+  --yellow: #9a6700;
+  --yellow-bg: rgba(154, 103, 0, 0.08);
+  --orange: #bc4c00;
+  --orange-bg: rgba(188, 76, 0, 0.08);
+  --red: #cf222e;
+  --red-bg: rgba(207, 34, 46, 0.08);
+  --purple: #8250df;
+  --purple-bg: rgba(130, 80, 223, 0.08);
+  --gray: #8b949e;
+  --gray-bg: rgba(139, 148, 158, 0.12);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+
+  --sidebar-bg: #ffffff;
+  --sidebar-border: #d0d7de;
+  --sidebar-text: #636c76;
+  --sidebar-text-active: #1f2328;
+  --sidebar-hover: rgba(0, 0, 0, 0.04);
+  --sidebar-active: rgba(22, 163, 74, 0.08);
+
+  --topbar-bg: rgba(255, 255, 255, 0.85);
+  --topbar-border: #d0d7de;
+
+  --card-bg: #ffffff;
+  --card-border: #d0d7de;
+
+  --badge-healthy: var(--green);
+  --badge-healthy-bg: var(--green-bg);
+  --badge-running: var(--blue);
+  --badge-running-bg: var(--blue-bg);
+  --badge-pending: var(--yellow);
+  --badge-pending-bg: var(--yellow-bg);
+  --badge-failed: var(--red);
+  --badge-failed-bg: var(--red-bg);
+  --badge-deadletter: var(--orange);
+  --badge-deadletter-bg: var(--orange-bg);
+
+  --node-bg: #ffffff;
+  --node-border: #d0d7de;
+  --node-text: #1f2328;
+  --edge-color: #8b949e;
+  --edge-stroke: #8b949e;
+  --graph-grid: rgba(0, 0, 0, 0.04);
+}

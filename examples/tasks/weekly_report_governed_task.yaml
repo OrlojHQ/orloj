@@ -1,0 +1,15 @@
+apiVersion: orloj.dev/v1
+kind: Task
+metadata:
+  name: weekly-report-governed
+spec:
+  system: report-system-governed
+  input:
+    topic: AI startups
+  priority: high
+  retry:
+    max_attempts: 1
+    backoff: 1s
+  requirements:
+    region: default
+    model: gpt-4o

@@ -1,0 +1,14 @@
+apiVersion: orloj.dev/v1
+kind: TaskSchedule
+metadata:
+  name: weekly-report
+  namespace: default
+spec:
+  task_ref: weekly-report-template
+  schedule: "0 9 * * 1"
+  time_zone: America/Chicago
+  suspend: false
+  starting_deadline_seconds: 300
+  concurrency_policy: forbid
+  successful_history_limit: 10
+  failed_history_limit: 3

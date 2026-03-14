@@ -1,0 +1,9 @@
+apiVersion: orloj.dev/v1
+kind: AgentRole
+metadata:
+  name: rt-gov-limited-role
+  namespace: rt-gov
+spec:
+  description: Intentionally missing required search permission for deny-path testing.
+  permissions:
+    - capability:docs.write

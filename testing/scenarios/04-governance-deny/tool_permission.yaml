@@ -1,0 +1,12 @@
+apiVersion: orloj.dev/v1
+kind: ToolPermission
+metadata:
+  name: rt-gov-search-permission
+  namespace: rt-gov
+spec:
+  tool_ref: rt-gov-search-tool
+  action: invoke
+  match_mode: all
+  apply_mode: global
+  required_permissions:
+    - tool:search:invoke
