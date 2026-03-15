@@ -7,8 +7,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/AnonJon/orloj/crds"
-	"github.com/AnonJon/orloj/runtime"
+	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/runtime"
 )
 
 type captureAgentMessageBus struct {

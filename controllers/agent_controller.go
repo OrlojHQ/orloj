@@ -5,8 +5,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/AnonJon/orloj/runtime"
-	"github.com/AnonJon/orloj/store"
+	"github.com/OrlojHQ/orloj/runtime"
+	"github.com/OrlojHQ/orloj/store"
 )
 
 // AgentController reconciles desired Agent resources to active runtime workers.

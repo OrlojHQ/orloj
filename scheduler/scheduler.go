@@ -1,6 +1,6 @@
 package scheduler
 
-import "github.com/AnonJon/orloj/crds"
+import "github.com/OrlojHQ/orloj/crds"
 
 // Node represents a compute target.
 type Node struct {

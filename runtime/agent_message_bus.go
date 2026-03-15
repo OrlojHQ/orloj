@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/AnonJon/orloj/crds"
+	"github.com/OrlojHQ/orloj/crds"
 )
 
 // AgentMessage is the runtime envelope exchanged between agents.

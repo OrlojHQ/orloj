@@ -3,7 +3,7 @@ package controllers
 import (
 	"testing"
 
-	"github.com/AnonJon/orloj/crds"
+	"github.com/OrlojHQ/orloj/crds"
 )
 
 func TestAppendTaskTraceDeterministicStepIDsByAttempt(t *testing.T) {

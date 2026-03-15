@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AnonJon/orloj/eventbus"
+	"github.com/OrlojHQ/orloj/eventbus"
 )
 
 func TestEventsWatchURL(t *testing.T) {

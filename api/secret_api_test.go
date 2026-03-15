@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/AnonJon/orloj/crds"
+	"github.com/OrlojHQ/orloj/crds"
 )
 
 func TestSecretCRUDAndNamespaceScoping(t *testing.T) {

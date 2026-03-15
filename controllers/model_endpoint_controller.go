@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/AnonJon/orloj/store"
+	"github.com/OrlojHQ/orloj/store"
 )
 
 // ModelEndpointController reconciles ModelEndpoint resources.

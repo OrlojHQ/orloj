@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/AnonJon/orloj/crds"
+	"github.com/OrlojHQ/orloj/crds"
 )
 
 type ToolCallAuthorizer interface {

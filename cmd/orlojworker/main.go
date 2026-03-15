@@ -12,10 +12,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/AnonJon/orloj/controllers"
-	"github.com/AnonJon/orloj/crds"
-	"github.com/AnonJon/orloj/runtime"
-	"github.com/AnonJon/orloj/store"
+	"github.com/OrlojHQ/orloj/controllers"
+	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/runtime"
+	"github.com/OrlojHQ/orloj/store"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 

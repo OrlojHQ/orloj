@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AnonJon/orloj/crds"
-	agentruntime "github.com/AnonJon/orloj/runtime"
-	"github.com/AnonJon/orloj/runtime/conformance"
-	conformancecases "github.com/AnonJon/orloj/runtime/conformance/cases"
+	"github.com/OrlojHQ/orloj/crds"
+	agentruntime "github.com/OrlojHQ/orloj/runtime"
+	"github.com/OrlojHQ/orloj/runtime/conformance"
+	conformancecases "github.com/OrlojHQ/orloj/runtime/conformance/cases"
 )
 
 type funcRuntime struct {

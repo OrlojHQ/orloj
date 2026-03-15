@@ -3,7 +3,7 @@ package cases
 import (
 	"testing"
 
-	agentruntime "github.com/AnonJon/orloj/runtime"
+	agentruntime "github.com/OrlojHQ/orloj/runtime"
 )
 
 func TestBaseRequestDefaults(t *testing.T) {

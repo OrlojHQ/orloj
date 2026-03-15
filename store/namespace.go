@@ -3,7 +3,7 @@ package store
 import (
 	"strings"
 
-	"github.com/AnonJon/orloj/crds"
+	"github.com/OrlojHQ/orloj/crds"
 )
 
 func scopedName(namespace, name string) string {

@@ -3,7 +3,7 @@ package agentruntime
 import (
 	"testing"
 
-	"github.com/AnonJon/orloj/crds"
+	"github.com/OrlojHQ/orloj/crds"
 )
 
 func TestClassifyMessageRetryabilityUsesToolErrorMetadata(t *testing.T) {

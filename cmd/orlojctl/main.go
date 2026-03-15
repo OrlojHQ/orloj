@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/AnonJon/orloj/cli"
+	"github.com/OrlojHQ/orloj/cli"
 )
 
 func main() {

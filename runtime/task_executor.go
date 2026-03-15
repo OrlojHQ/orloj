@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/AnonJon/orloj/crds"
+	"github.com/OrlojHQ/orloj/crds"
 )
 
 var stepRegex = regexp.MustCompile(`step=([0-9]+)`)                     //nolint:gochecknoglobals

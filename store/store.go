@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/AnonJon/orloj/crds"
+	"github.com/OrlojHQ/orloj/crds"
 )
 
 // AgentStore keeps desired Agent state in memory for MVP.

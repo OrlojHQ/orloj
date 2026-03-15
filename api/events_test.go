@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AnonJon/orloj/api"
-	"github.com/AnonJon/orloj/crds"
-	"github.com/AnonJon/orloj/eventbus"
-	agentruntime "github.com/AnonJon/orloj/runtime"
-	"github.com/AnonJon/orloj/store"
+	"github.com/OrlojHQ/orloj/api"
+	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/eventbus"
+	agentruntime "github.com/OrlojHQ/orloj/runtime"
+	"github.com/OrlojHQ/orloj/store"
 )
 
 func TestAPIEmitsResourceEventsToBus(t *testing.T) {

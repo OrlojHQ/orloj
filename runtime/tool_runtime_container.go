@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/AnonJon/orloj/crds"
+	"github.com/OrlojHQ/orloj/crds"
 )
 
 // ContainerToolRuntimeConfig defines isolated tool execution in a locked-down container.

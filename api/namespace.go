@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/AnonJon/orloj/crds"
-	"github.com/AnonJon/orloj/store"
+	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/store"
 )
 
 func requestNamespace(r *http.Request) string {

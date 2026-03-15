@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AnonJon/orloj/crds"
-	"github.com/AnonJon/orloj/store"
+	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/store"
 )
 
 func TestTaskRetrySchedulesNextAttemptOnTimeout(t *testing.T) {

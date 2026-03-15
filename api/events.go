@@ -3,8 +3,8 @@ package api
 import (
 	"strings"
 
-	"github.com/AnonJon/orloj/crds"
-	"github.com/AnonJon/orloj/eventbus"
+	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/eventbus"
 )
 
 func (s *Server) publishResourceEvent(kind, name, action string, resource any) {

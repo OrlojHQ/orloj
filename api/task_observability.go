@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/AnonJon/orloj/crds"
+	"github.com/OrlojHQ/orloj/crds"
 )
 
 type taskMessageFilter struct {

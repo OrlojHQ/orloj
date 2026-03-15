@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/AnonJon/orloj/crds"
-	"github.com/AnonJon/orloj/eventbus"
-	"github.com/AnonJon/orloj/store"
+	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/eventbus"
+	"github.com/OrlojHQ/orloj/store"
 )
 
 // WorkerController reconciles Worker heartbeats into readiness status.

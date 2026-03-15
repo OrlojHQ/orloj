@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/AnonJon/orloj/crds"
-	"github.com/AnonJon/orloj/cronexpr"
-	"github.com/AnonJon/orloj/eventbus"
-	"github.com/AnonJon/orloj/store"
+	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/cronexpr"
+	"github.com/OrlojHQ/orloj/eventbus"
+	"github.com/OrlojHQ/orloj/store"
 )
 
 const (

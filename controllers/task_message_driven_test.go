@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/AnonJon/orloj/crds"
+	"github.com/OrlojHQ/orloj/crds"
 )
 
 func TestTaskControllerMessageDrivenKickoff(t *testing.T) {

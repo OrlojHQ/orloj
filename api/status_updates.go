@@ -6,8 +6,8 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/AnonJon/orloj/crds"
-	"github.com/AnonJon/orloj/store"
+	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/store"
 )
 
 type agentStatusPatch struct {

@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/AnonJon/orloj/crds"
+	"github.com/OrlojHQ/orloj/crds"
 )
 
 func TestNamespaceScopedResourceLookup(t *testing.T) {

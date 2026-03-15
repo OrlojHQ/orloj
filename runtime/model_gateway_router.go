@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/AnonJon/orloj/crds"
+	"github.com/OrlojHQ/orloj/crds"
 )
 
 // ModelEndpointLookup resolves namespaced ModelEndpoint resources.

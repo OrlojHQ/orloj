@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	agentruntime "github.com/AnonJon/orloj/runtime"
+	agentruntime "github.com/OrlojHQ/orloj/runtime"
 )
 
 // Executor is a backend under tool-contract conformance verification.

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/AnonJon/orloj/crds"
+	"github.com/OrlojHQ/orloj/crds"
 )
 
 func requireUpdatePrecondition(headerValue string, incoming *crds.ObjectMeta, current crds.ObjectMeta) error {

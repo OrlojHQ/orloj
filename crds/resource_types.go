@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/AnonJon/orloj/cronexpr"
+	"github.com/OrlojHQ/orloj/cronexpr"
 )
 
 // AgentSystem defines a multi-agent architecture and execution graph.

@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AnonJon/orloj/crds"
+	"github.com/OrlojHQ/orloj/crds"
 )
 
 type alertConfig struct {

@@ -1,4 +1,4 @@
-module github.com/AnonJon/orloj
+module github.com/OrlojHQ/orloj
 
 go 1.24.0
 

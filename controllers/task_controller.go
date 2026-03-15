@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/AnonJon/orloj/crds"
-	"github.com/AnonJon/orloj/eventbus"
-	"github.com/AnonJon/orloj/runtime"
-	"github.com/AnonJon/orloj/store"
+	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/eventbus"
+	"github.com/OrlojHQ/orloj/runtime"
+	"github.com/OrlojHQ/orloj/store"
 )
 
 var traceStepIDPattern = regexp.MustCompile(`^a([0-9]+)\.s([0-9]+)$`) //nolint:gochecknoglobals

@@ -9,9 +9,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/AnonJon/orloj/api"
-	"github.com/AnonJon/orloj/runtime"
-	"github.com/AnonJon/orloj/store"
+	"github.com/OrlojHQ/orloj/api"
+	"github.com/OrlojHQ/orloj/runtime"
+	"github.com/OrlojHQ/orloj/store"
 )
 
 type fixedCapabilityProvider struct {

@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AnonJon/orloj/crds"
+	"github.com/OrlojHQ/orloj/crds"
 )
 
 var hopPattern = regexp.MustCompile(`/h([0-9]+)(?:/|$)`) //nolint:gochecknoglobals

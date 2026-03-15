@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	agentruntime "github.com/AnonJon/orloj/runtime"
-	"github.com/AnonJon/orloj/runtime/conformance"
-	conformancecases "github.com/AnonJon/orloj/runtime/conformance/cases"
+	agentruntime "github.com/OrlojHQ/orloj/runtime"
+	"github.com/OrlojHQ/orloj/runtime/conformance"
+	conformancecases "github.com/OrlojHQ/orloj/runtime/conformance/cases"
 )
 
 type runtimeFunc struct {

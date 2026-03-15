@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AnonJon/orloj/crds"
+	"github.com/OrlojHQ/orloj/crds"
 )
 
 func TestTaskScheduleCRUDAndStatusPreconditions(t *testing.T) {
