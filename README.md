@@ -5,11 +5,13 @@ Kubernetes for Cognitive Systems
 
 ## Documentation
 
-- Docs home: [`docs/index.md`](docs/index.md)
+- Docs home: [`docs/pages/index.md`](docs/pages/index.md)
+- Docs site local dev: `bun run docs:dev`
+- Docs site production build: `bun run docs:build`
 - Authoring guide: [`docs/README.md`](docs/README.md)
 - OSS boundary contract: [`BOUNDARY.md`](BOUNDARY.md)
-- Extension contracts: [`docs/reference/extensions.md`](docs/reference/extensions.md)
-- Phase history: [`docs/phases/phase-log.md`](docs/phases/phase-log.md)
+- Extension contracts: [`docs/pages/reference/extensions.md`](docs/pages/reference/extensions.md)
+- Phase history: [`docs/pages/phases/phase-log.md`](docs/pages/phases/phase-log.md)
 - Starter blueprint manifests: [`examples/blueprints/README.md`](examples/blueprints/README.md)
 - Runtime test scenarios: [`testing/scenarios/README.md`](testing/scenarios/README.md)
 - Real-model runtime scenarios: [`testing/scenarios-real/README.md`](testing/scenarios-real/README.md)
@@ -289,8 +291,8 @@ React UI development scaffold (optional, incremental migration path):
 
 ```bash
 cd frontend
-npm install
-npm run dev
+bun install
+bun run dev
 ```
 
 - Vite dev server runs at `http://127.0.0.1:5173` and proxies `/v1/*` + `/healthz` to `http://127.0.0.1:8080`.
@@ -300,7 +302,7 @@ Build React assets for Go embedding:
 
 ```bash
 cd frontend
-npm run build
+bun run build
 ```
 
 After rebuilding `orlojd`, `/ui/` serves assets from `frontend/dist`.

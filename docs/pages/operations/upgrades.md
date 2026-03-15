@@ -1,0 +1,62 @@
+# Upgrades and Rollbacks
+
+This guide defines safe upgrade and rollback procedures for Orloj control plane and workers.
+
+## Principles
+
+- prefer staged rollouts over full replacement
+- take Postgres backups before upgrades
+- validate reliability gates before production promotion
+- couple release behavior with contract documentation
+
+## Pre-Upgrade Checklist
+
+- [ ] Read release notes and migration notes.
+- [ ] Snapshot Postgres.
+- [ ] Verify baseline health (`/healthz`, workers, task flow).
+- [ ] Run smoke checks in staging.
+
+## Upgrade Procedure
+
+1. Upgrade `orlojd` in staging.
+2. Verify API health and reconciliation.
+3. Upgrade one worker (canary).
+4. Validate task execution paths used by your deployment.
+5. Upgrade remaining workers.
+6. Run reliability checks:
+  - `orloj-loadtest`
+  - `orloj-alertcheck`
+
+## Production Rollout
+
+- canary one control plane instance and one worker first
+- monitor task success/dead-letter ratio, retry volume, p95 latency, heartbeat stability
+
+## Rollback Triggers
+
+- control-plane health degradation
+- retry/dead-letter rates exceed SLO thresholds
+- unexpected increase in non-retryable runtime/policy failures
+
+## Rollback Procedure
+
+1. Revert control-plane and worker binaries to previous release.
+2. Restore previous configuration values.
+3. Restore Postgres snapshot if required.
+4. Re-run smoke checks before resuming rollout.
+
+## Compatibility Guidance
+
+- keep compatibility checks green for pinned downstream consumers
+- avoid unversioned breaking changes on public contracts
+- treat contract graduation and lifecycle changes as release events
+
+## Validation Commands
+
+```bash
+curl -s http://127.0.0.1:8080/healthz | jq .
+go run ./cmd/orlojctl get workers
+go run ./cmd/orlojctl get tasks
+go run ./cmd/orloj-loadtest --quality-profile=monitoring/loadtest/quality-default.json --tasks=50
+go run ./cmd/orloj-alertcheck --profile=monitoring/alerts/retry-deadletter-default.json
+```

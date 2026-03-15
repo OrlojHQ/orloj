@@ -26,3 +26,7 @@ coverage.out
 /frontend/node_modules/
 /frontend/dist/*
 !/frontend/dist/placeholder.txt
+
+# Docs site dependencies and build outputs
+/node_modules/
+/docs/dist/

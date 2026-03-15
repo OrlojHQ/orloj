@@ -1,0 +1,13 @@
+{
+  "name": "orloj-docs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "docs:dev": "vocs dev",
+    "docs:build": "vocs build",
+    "docs:preview": "vocs preview"
+  },
+  "devDependencies": {
+    "vocs": "^1.4.1"
+  }
+}

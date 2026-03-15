@@ -39,13 +39,13 @@ REAL_GATE_POLL_INTERVAL_SECONDS ?= 2
 help: real-help
 
 ui-install:
-	cd frontend && npm install
+	cd frontend && bun install
 
 ui-dev:
-	cd frontend && npm run dev
+	cd frontend && bun run dev
 
 ui-build:
-	cd frontend && npm run build
+	cd frontend && bun run build
 
 real-help:
 	@echo "UI migration scaffold:"
