@@ -49,7 +49,7 @@ func (s *AgentStore) Upsert(agent crds.Agent) (crds.Agent, error) {
 				return crds.Agent{}, err
 			}
 		}
-		if err := upsertResource(s.db, kindAgent, key, agent); err != nil {
+		if err := upsertAgentSQL(s.db, key, agent); err != nil {
 			return crds.Agent{}, err
 		}
 		return agent, nil
@@ -75,12 +75,7 @@ func (s *AgentStore) Upsert(agent crds.Agent) (crds.Agent, error) {
 
 func (s *AgentStore) getWithErr(name string) (crds.Agent, bool, error) {
 	if s.db != nil {
-		var agent crds.Agent
-		ok, err := getResource(s.db, kindAgent, name, &agent)
-		if err != nil {
-			return crds.Agent{}, false, err
-		}
-		return agent, ok, nil
+		return getFromTable[crds.Agent](s.db, tableAgents, name)
 	}
 
 	s.mu.RLock()
@@ -99,7 +94,7 @@ func (s *AgentStore) Get(name string) (crds.Agent, bool) {
 
 func (s *AgentStore) List() []crds.Agent {
 	if s.db != nil {
-		items, err := listResources[crds.Agent](s.db, kindAgent)
+		items, err := listFromTable[crds.Agent](s.db, tableAgents)
 		if err != nil {
 			return []crds.Agent{}
 		}
@@ -122,7 +117,7 @@ func (s *AgentStore) List() []crds.Agent {
 func (s *AgentStore) Delete(name string) error {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		deleted, err := deleteResource(s.db, kindAgent, key)
+		deleted, err := deleteFromTable(s.db, tableAgents, key)
 		if err != nil {
 			return err
 		}

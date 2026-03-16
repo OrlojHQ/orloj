@@ -114,7 +114,13 @@ ModelEndpoint references are resolved by name within the same namespace, or by `
 
 ## Authentication
 
-Model authentication is managed through Secret resources referenced by `auth.secretRef`:
+Model authentication is managed through Secret resources referenced by `auth.secretRef`. The simplest way to create one is the imperative CLI command:
+
+```bash
+orlojctl create secret openai-api-key --from-literal value=sk-your-api-key-here
+```
+
+Or with a YAML manifest via `orlojctl apply -f`:
 
 ```yaml
 apiVersion: orloj.dev/v1
@@ -126,7 +132,9 @@ spec:
     value: sk-your-api-key-here
 ```
 
-Secrets are write-only: `stringData` values are base64-encoded into `data` during normalization and then cleared. The runtime reads from `data` at execution time.
+`stringData` values are base64-encoded into `data` during normalization and then cleared (write-only semantics). The runtime reads from `data` at execution time.
+
+In production, you can also skip `Secret` resources entirely and inject values via environment variables (`ORLOJ_SECRET_<name>`). See [Secret Handling](../operations/security.md#secret-handling) for details.
 
 ## Governance Integration
 

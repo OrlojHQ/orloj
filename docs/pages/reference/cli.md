@@ -16,6 +16,7 @@ Usage patterns:
 
 ```text
 orlojctl apply -f <resource.yaml>
+orlojctl create secret <name> --from-literal key=value [...]
 orlojctl get [-w] <resource>
 orlojctl delete <resource> <name>
 orlojctl run --system <name> [key=value ...]
@@ -24,6 +25,30 @@ orlojctl trace task <task-name>
 orlojctl graph system|task <name>
 orlojctl events [filters...]
 ```
+
+### `orlojctl create secret`
+
+Imperative secret creation without a YAML file. Builds a `Secret` resource from `--from-literal` flags and applies it to the server.
+
+```bash
+orlojctl create secret openai-api-key --from-literal value=sk-proj-abc123
+```
+
+Multiple keys:
+
+```bash
+orlojctl create secret provider-keys \
+  --from-literal openai=sk-proj-abc123 \
+  --from-literal anthropic=sk-ant-xyz789
+```
+
+Flags:
+
+- `--from-literal` (required, repeatable): `key=value` pair to include in the secret.
+- `--namespace` (default `default`): namespace for the secret.
+- `--server` (default `http://127.0.0.1:8080`): Orloj server URL.
+
+Values are automatically base64-encoded via `stringData` semantics. The plaintext never touches disk.
 
 ### `orlojctl run`
 
@@ -77,6 +102,7 @@ Critical flags:
 
 - `--addr`
 - `--api-key` (enable bearer token auth; env fallback: `ORLOJ_API_TOKEN`)
+- `--secret-encryption-key` (256-bit AES key for encrypting Secret data at rest; env fallback: `ORLOJ_SECRET_ENCRYPTION_KEY`)
 - `--storage-backend` (`memory|postgres`)
 - `--postgres-dsn`
 - `--task-execution-mode` (`sequential|message-driven`)
@@ -97,6 +123,7 @@ go run ./cmd/orlojworker -h
 Critical flags:
 
 - `--worker-id`
+- `--secret-encryption-key` (must match the key used by `orlojd`)
 - `--storage-backend` (`memory|postgres`)
 - `--postgres-dsn`
 - `--task-execution-mode` (`sequential|message-driven`)

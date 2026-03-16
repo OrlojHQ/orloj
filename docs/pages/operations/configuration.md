@@ -27,6 +27,7 @@ Example:
 | `ORLOJ_EVENT_BUS_BACKEND` | `orlojd` | Server event bus (`memory|nats`). |
 | `ORLOJ_NATS_URL` | `orlojd`, `orlojworker` | NATS URL and fallback for runtime message bus URL. |
 | `ORLOJ_AGENT_MESSAGE_BUS_BACKEND` | `orlojd`, `orlojworker` | Runtime message bus (`none|memory|nats-jetstream`). |
+| `ORLOJ_SECRET_ENCRYPTION_KEY` | `orlojd`, `orlojworker` | 256-bit AES key (hex or base64) for encrypting Secret resource data at rest. |
 | `ORLOJ_TOOL_ISOLATION_BACKEND` | `orlojd`, `orlojworker` | Tool isolation (`none|container|wasm`). |
 
 ## Server Flags
@@ -68,12 +69,15 @@ Model endpoints and tools reference secrets via `secretRef` fields. The runtime 
 1. **Resource store** -- looks up a `Secret` resource by name.
 2. **Environment variables** -- looks up `ORLOJ_SECRET_<name>` (prefix is configurable with `--model-secret-env-prefix` and `--tool-secret-env-prefix`).
 
-In production, prefer environment variables or an external secret manager over `Secret` resources. See [Security and Isolation -- Secret Handling](./security.md#secret-handling) for details.
+### Encryption at Rest
+
+Pass `--secret-encryption-key` (or set `ORLOJ_SECRET_ENCRYPTION_KEY`) on both `orlojd` and `orlojworker` to encrypt `Secret.spec.data` values in the database using AES-256-GCM. The same key must be used by all processes sharing the database. See [Security and Isolation -- Encryption at Rest](./security.md#encryption-at-rest) for key generation and usage.
 
 ## Recommended Production Baseline
 
 - `orlojd`: `--storage-backend=postgres`, `--task-execution-mode=message-driven`, `--agent-message-bus-backend=nats-jetstream`
 - `orlojworker`: `--storage-backend=postgres`, `--task-execution-mode=message-driven`, `--agent-message-consume`
+- Enable `--secret-encryption-key` on all processes if using `Secret` resources
 - Set provider keys via `ORLOJ_SECRET_*` environment variables or an external secret manager
 
 ## Verification

@@ -19,7 +19,7 @@ Use this checklist before broad internal rollout and before OSS launch cut readi
 ## Security and Governance
 
 - [ ] Enforce `AgentPolicy`, `AgentRole`, and `ToolPermission` on target systems.
-- [ ] Use environment-variable-backed secrets (`ORLOJ_SECRET_*`) or an external secret manager for provider/tool auth. Reserve `Secret` resources for development only.
+- [ ] Enable secret encryption at rest: set `--secret-encryption-key` on all `orlojd` and `orlojworker` processes, or use environment-variable-backed secrets (`ORLOJ_SECRET_*`) / an external secret manager for provider/tool auth.
 - [ ] Validate redaction and denial/audit metadata in trace/log paths.
 - [ ] Validate approval-hook readiness for high-risk tool operations.
 

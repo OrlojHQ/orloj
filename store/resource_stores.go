@@ -1,9 +1,7 @@
 package store
 
 import (
-	"context"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"reflect"
 	"sort"
@@ -34,8 +32,7 @@ func (s *AgentSystemStore) Upsert(item crds.AgentSystem) (crds.AgentSystem, erro
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		var existing crds.AgentSystem
-		found, err := getResource(s.db, kindAgentSystem, key, &existing)
+		existing, found, err := getFromTable[crds.AgentSystem](s.db, tableAgentSystems, key)
 		if err != nil {
 			return crds.AgentSystem{}, err
 		}
@@ -49,7 +46,7 @@ func (s *AgentSystemStore) Upsert(item crds.AgentSystem) (crds.AgentSystem, erro
 				return crds.AgentSystem{}, err
 			}
 		}
-		if err := upsertResource(s.db, kindAgentSystem, key, item); err != nil {
+		if err := upsertAgentSystemSQL(s.db, key, item); err != nil {
 			return crds.AgentSystem{}, err
 		}
 		return item, nil
@@ -76,8 +73,7 @@ func (s *AgentSystemStore) Upsert(item crds.AgentSystem) (crds.AgentSystem, erro
 func (s *AgentSystemStore) Get(name string) (crds.AgentSystem, bool) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		var item crds.AgentSystem
-		ok, err := getResource(s.db, kindAgentSystem, key, &item)
+		item, ok, err := getFromTable[crds.AgentSystem](s.db, tableAgentSystems, key)
 		if err != nil {
 			return crds.AgentSystem{}, false
 		}
@@ -92,7 +88,7 @@ func (s *AgentSystemStore) Get(name string) (crds.AgentSystem, bool) {
 
 func (s *AgentSystemStore) List() []crds.AgentSystem {
 	if s.db != nil {
-		items, err := listResources[crds.AgentSystem](s.db, kindAgentSystem)
+		items, err := listFromTable[crds.AgentSystem](s.db, tableAgentSystems)
 		if err != nil {
 			return []crds.AgentSystem{}
 		}
@@ -114,7 +110,7 @@ func (s *AgentSystemStore) List() []crds.AgentSystem {
 func (s *AgentSystemStore) Delete(name string) error {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		deleted, err := deleteResource(s.db, kindAgentSystem, key)
+		deleted, err := deleteFromTable(s.db, tableAgentSystems, key)
 		if err != nil {
 			return err
 		}
@@ -153,8 +149,7 @@ func (s *ModelEndpointStore) Upsert(item crds.ModelEndpoint) (crds.ModelEndpoint
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		var existing crds.ModelEndpoint
-		found, err := getResource(s.db, kindModelEP, key, &existing)
+		existing, found, err := getFromTable[crds.ModelEndpoint](s.db, tableModelEndpoints, key)
 		if err != nil {
 			return crds.ModelEndpoint{}, err
 		}
@@ -168,7 +163,7 @@ func (s *ModelEndpointStore) Upsert(item crds.ModelEndpoint) (crds.ModelEndpoint
 				return crds.ModelEndpoint{}, err
 			}
 		}
-		if err := upsertResource(s.db, kindModelEP, key, item); err != nil {
+		if err := upsertModelEndpointSQL(s.db, key, item); err != nil {
 			return crds.ModelEndpoint{}, err
 		}
 		return item, nil
@@ -195,8 +190,7 @@ func (s *ModelEndpointStore) Upsert(item crds.ModelEndpoint) (crds.ModelEndpoint
 func (s *ModelEndpointStore) Get(name string) (crds.ModelEndpoint, bool) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		var item crds.ModelEndpoint
-		ok, err := getResource(s.db, kindModelEP, key, &item)
+		item, ok, err := getFromTable[crds.ModelEndpoint](s.db, tableModelEndpoints, key)
 		if err != nil {
 			return crds.ModelEndpoint{}, false
 		}
@@ -211,7 +205,7 @@ func (s *ModelEndpointStore) Get(name string) (crds.ModelEndpoint, bool) {
 
 func (s *ModelEndpointStore) List() []crds.ModelEndpoint {
 	if s.db != nil {
-		items, err := listResources[crds.ModelEndpoint](s.db, kindModelEP)
+		items, err := listFromTable[crds.ModelEndpoint](s.db, tableModelEndpoints)
 		if err != nil {
 			return []crds.ModelEndpoint{}
 		}
@@ -233,7 +227,7 @@ func (s *ModelEndpointStore) List() []crds.ModelEndpoint {
 func (s *ModelEndpointStore) Delete(name string) error {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		deleted, err := deleteResource(s.db, kindModelEP, key)
+		deleted, err := deleteFromTable(s.db, tableModelEndpoints, key)
 		if err != nil {
 			return err
 		}
@@ -272,8 +266,7 @@ func (s *ToolStore) Upsert(item crds.Tool) (crds.Tool, error) {
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		var existing crds.Tool
-		found, err := getResource(s.db, kindTool, key, &existing)
+		existing, found, err := getFromTable[crds.Tool](s.db, tableTools, key)
 		if err != nil {
 			return crds.Tool{}, err
 		}
@@ -287,7 +280,7 @@ func (s *ToolStore) Upsert(item crds.Tool) (crds.Tool, error) {
 				return crds.Tool{}, err
 			}
 		}
-		if err := upsertResource(s.db, kindTool, key, item); err != nil {
+		if err := upsertToolSQL(s.db, key, item); err != nil {
 			return crds.Tool{}, err
 		}
 		return item, nil
@@ -314,8 +307,7 @@ func (s *ToolStore) Upsert(item crds.Tool) (crds.Tool, error) {
 func (s *ToolStore) Get(name string) (crds.Tool, bool) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		var item crds.Tool
-		ok, err := getResource(s.db, kindTool, key, &item)
+		item, ok, err := getFromTable[crds.Tool](s.db, tableTools, key)
 		if err != nil {
 			return crds.Tool{}, false
 		}
@@ -330,7 +322,7 @@ func (s *ToolStore) Get(name string) (crds.Tool, bool) {
 
 func (s *ToolStore) List() []crds.Tool {
 	if s.db != nil {
-		items, err := listResources[crds.Tool](s.db, kindTool)
+		items, err := listFromTable[crds.Tool](s.db, tableTools)
 		if err != nil {
 			return []crds.Tool{}
 		}
@@ -352,7 +344,7 @@ func (s *ToolStore) List() []crds.Tool {
 func (s *ToolStore) Delete(name string) error {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		deleted, err := deleteResource(s.db, kindTool, key)
+		deleted, err := deleteFromTable(s.db, tableTools, key)
 		if err != nil {
 			return err
 		}
@@ -372,9 +364,10 @@ func (s *ToolStore) Delete(name string) error {
 }
 
 type SecretStore struct {
-	mu    sync.RWMutex
-	items map[string]crds.Secret
-	db    *sql.DB
+	mu            sync.RWMutex
+	items         map[string]crds.Secret
+	db            *sql.DB
+	encryptionKey []byte
 }
 
 func NewSecretStore() *SecretStore {
@@ -385,14 +378,19 @@ func NewSecretStoreWithDB(db *sql.DB) *SecretStore {
 	return &SecretStore{items: make(map[string]crds.Secret), db: db}
 }
 
+func NewSecretStoreWithEncryption(db *sql.DB, key []byte) *SecretStore {
+	return &SecretStore{items: make(map[string]crds.Secret), db: db, encryptionKey: key}
+}
+
+func (s *SecretStore) SetEncryptionKey(key []byte) { s.encryptionKey = key }
+
 func (s *SecretStore) Upsert(item crds.Secret) (crds.Secret, error) {
 	if err := item.Normalize(); err != nil {
 		return crds.Secret{}, err
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		var existing crds.Secret
-		found, err := getResource(s.db, kindSecret, key, &existing)
+		existing, found, err := s.getDecrypted(key)
 		if err != nil {
 			return crds.Secret{}, err
 		}
@@ -406,7 +404,15 @@ func (s *SecretStore) Upsert(item crds.Secret) (crds.Secret, error) {
 				return crds.Secret{}, err
 			}
 		}
-		if err := upsertResource(s.db, kindSecret, key, item); err != nil {
+		toStore := item
+		if len(s.encryptionKey) > 0 && len(toStore.Spec.Data) > 0 {
+			enc, err := encryptSecretData(s.encryptionKey, toStore.Spec.Data)
+			if err != nil {
+				return crds.Secret{}, err
+			}
+			toStore.Spec.Data = enc
+		}
+		if err := upsertSecretSQL(s.db, key, toStore); err != nil {
 			return crds.Secret{}, err
 		}
 		return item, nil
@@ -430,11 +436,25 @@ func (s *SecretStore) Upsert(item crds.Secret) (crds.Secret, error) {
 	return item, nil
 }
 
+func (s *SecretStore) getDecrypted(key string) (crds.Secret, bool, error) {
+	item, ok, err := getFromTable[crds.Secret](s.db, tableSecrets, key)
+	if err != nil || !ok {
+		return item, ok, err
+	}
+	if len(s.encryptionKey) > 0 && len(item.Spec.Data) > 0 {
+		dec, err := decryptSecretData(s.encryptionKey, item.Spec.Data)
+		if err != nil {
+			return crds.Secret{}, false, err
+		}
+		item.Spec.Data = dec
+	}
+	return item, true, nil
+}
+
 func (s *SecretStore) Get(name string) (crds.Secret, bool) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		var item crds.Secret
-		ok, err := getResource(s.db, kindSecret, key, &item)
+		item, ok, err := s.getDecrypted(key)
 		if err != nil {
 			return crds.Secret{}, false
 		}
@@ -449,9 +469,20 @@ func (s *SecretStore) Get(name string) (crds.Secret, bool) {
 
 func (s *SecretStore) List() []crds.Secret {
 	if s.db != nil {
-		items, err := listResources[crds.Secret](s.db, kindSecret)
+		items, err := listFromTable[crds.Secret](s.db, tableSecrets)
 		if err != nil {
 			return []crds.Secret{}
+		}
+		if len(s.encryptionKey) > 0 {
+			for i := range items {
+				if len(items[i].Spec.Data) > 0 {
+					dec, err := decryptSecretData(s.encryptionKey, items[i].Spec.Data)
+					if err != nil {
+						return []crds.Secret{}
+					}
+					items[i].Spec.Data = dec
+				}
+			}
 		}
 		return items
 	}
@@ -471,7 +502,7 @@ func (s *SecretStore) List() []crds.Secret {
 func (s *SecretStore) Delete(name string) error {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		deleted, err := deleteResource(s.db, kindSecret, key)
+		deleted, err := deleteFromTable(s.db, tableSecrets, key)
 		if err != nil {
 			return err
 		}
@@ -510,8 +541,7 @@ func (s *MemoryStore) Upsert(item crds.Memory) (crds.Memory, error) {
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		var existing crds.Memory
-		found, err := getResource(s.db, kindMemory, key, &existing)
+		existing, found, err := getFromTable[crds.Memory](s.db, tableMemories, key)
 		if err != nil {
 			return crds.Memory{}, err
 		}
@@ -525,7 +555,7 @@ func (s *MemoryStore) Upsert(item crds.Memory) (crds.Memory, error) {
 				return crds.Memory{}, err
 			}
 		}
-		if err := upsertResource(s.db, kindMemory, key, item); err != nil {
+		if err := upsertMemorySQL(s.db, key, item); err != nil {
 			return crds.Memory{}, err
 		}
 		return item, nil
@@ -552,8 +582,7 @@ func (s *MemoryStore) Upsert(item crds.Memory) (crds.Memory, error) {
 func (s *MemoryStore) Get(name string) (crds.Memory, bool) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		var item crds.Memory
-		ok, err := getResource(s.db, kindMemory, key, &item)
+		item, ok, err := getFromTable[crds.Memory](s.db, tableMemories, key)
 		if err != nil {
 			return crds.Memory{}, false
 		}
@@ -568,7 +597,7 @@ func (s *MemoryStore) Get(name string) (crds.Memory, bool) {
 
 func (s *MemoryStore) List() []crds.Memory {
 	if s.db != nil {
-		items, err := listResources[crds.Memory](s.db, kindMemory)
+		items, err := listFromTable[crds.Memory](s.db, tableMemories)
 		if err != nil {
 			return []crds.Memory{}
 		}
@@ -590,7 +619,7 @@ func (s *MemoryStore) List() []crds.Memory {
 func (s *MemoryStore) Delete(name string) error {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		deleted, err := deleteResource(s.db, kindMemory, key)
+		deleted, err := deleteFromTable(s.db, tableMemories, key)
 		if err != nil {
 			return err
 		}
@@ -629,8 +658,7 @@ func (s *AgentPolicyStore) Upsert(item crds.AgentPolicy) (crds.AgentPolicy, erro
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		var existing crds.AgentPolicy
-		found, err := getResource(s.db, kindAgentPolicy, key, &existing)
+		existing, found, err := getFromTable[crds.AgentPolicy](s.db, tableAgentPolicies, key)
 		if err != nil {
 			return crds.AgentPolicy{}, err
 		}
@@ -644,7 +672,7 @@ func (s *AgentPolicyStore) Upsert(item crds.AgentPolicy) (crds.AgentPolicy, erro
 				return crds.AgentPolicy{}, err
 			}
 		}
-		if err := upsertResource(s.db, kindAgentPolicy, key, item); err != nil {
+		if err := upsertAgentPolicySQL(s.db, key, item); err != nil {
 			return crds.AgentPolicy{}, err
 		}
 		return item, nil
@@ -671,8 +699,7 @@ func (s *AgentPolicyStore) Upsert(item crds.AgentPolicy) (crds.AgentPolicy, erro
 func (s *AgentPolicyStore) Get(name string) (crds.AgentPolicy, bool) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		var item crds.AgentPolicy
-		ok, err := getResource(s.db, kindAgentPolicy, key, &item)
+		item, ok, err := getFromTable[crds.AgentPolicy](s.db, tableAgentPolicies, key)
 		if err != nil {
 			return crds.AgentPolicy{}, false
 		}
@@ -687,7 +714,7 @@ func (s *AgentPolicyStore) Get(name string) (crds.AgentPolicy, bool) {
 
 func (s *AgentPolicyStore) List() []crds.AgentPolicy {
 	if s.db != nil {
-		items, err := listResources[crds.AgentPolicy](s.db, kindAgentPolicy)
+		items, err := listFromTable[crds.AgentPolicy](s.db, tableAgentPolicies)
 		if err != nil {
 			return []crds.AgentPolicy{}
 		}
@@ -709,7 +736,7 @@ func (s *AgentPolicyStore) List() []crds.AgentPolicy {
 func (s *AgentPolicyStore) Delete(name string) error {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		deleted, err := deleteResource(s.db, kindAgentPolicy, key)
+		deleted, err := deleteFromTable(s.db, tableAgentPolicies, key)
 		if err != nil {
 			return err
 		}
@@ -748,8 +775,7 @@ func (s *AgentRoleStore) Upsert(item crds.AgentRole) (crds.AgentRole, error) {
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		var existing crds.AgentRole
-		found, err := getResource(s.db, kindAgentRole, key, &existing)
+		existing, found, err := getFromTable[crds.AgentRole](s.db, tableAgentRoles, key)
 		if err != nil {
 			return crds.AgentRole{}, err
 		}
@@ -763,7 +789,7 @@ func (s *AgentRoleStore) Upsert(item crds.AgentRole) (crds.AgentRole, error) {
 				return crds.AgentRole{}, err
 			}
 		}
-		if err := upsertResource(s.db, kindAgentRole, key, item); err != nil {
+		if err := upsertAgentRoleSQL(s.db, key, item); err != nil {
 			return crds.AgentRole{}, err
 		}
 		return item, nil
@@ -790,8 +816,7 @@ func (s *AgentRoleStore) Upsert(item crds.AgentRole) (crds.AgentRole, error) {
 func (s *AgentRoleStore) Get(name string) (crds.AgentRole, bool) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		var item crds.AgentRole
-		ok, err := getResource(s.db, kindAgentRole, key, &item)
+		item, ok, err := getFromTable[crds.AgentRole](s.db, tableAgentRoles, key)
 		if err != nil {
 			return crds.AgentRole{}, false
 		}
@@ -806,7 +831,7 @@ func (s *AgentRoleStore) Get(name string) (crds.AgentRole, bool) {
 
 func (s *AgentRoleStore) List() []crds.AgentRole {
 	if s.db != nil {
-		items, err := listResources[crds.AgentRole](s.db, kindAgentRole)
+		items, err := listFromTable[crds.AgentRole](s.db, tableAgentRoles)
 		if err != nil {
 			return []crds.AgentRole{}
 		}
@@ -828,7 +853,7 @@ func (s *AgentRoleStore) List() []crds.AgentRole {
 func (s *AgentRoleStore) Delete(name string) error {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		deleted, err := deleteResource(s.db, kindAgentRole, key)
+		deleted, err := deleteFromTable(s.db, tableAgentRoles, key)
 		if err != nil {
 			return err
 		}
@@ -867,8 +892,7 @@ func (s *ToolPermissionStore) Upsert(item crds.ToolPermission) (crds.ToolPermiss
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		var existing crds.ToolPermission
-		found, err := getResource(s.db, kindToolPerm, key, &existing)
+		existing, found, err := getFromTable[crds.ToolPermission](s.db, tableToolPermissions, key)
 		if err != nil {
 			return crds.ToolPermission{}, err
 		}
@@ -882,7 +906,7 @@ func (s *ToolPermissionStore) Upsert(item crds.ToolPermission) (crds.ToolPermiss
 				return crds.ToolPermission{}, err
 			}
 		}
-		if err := upsertResource(s.db, kindToolPerm, key, item); err != nil {
+		if err := upsertToolPermissionSQL(s.db, key, item); err != nil {
 			return crds.ToolPermission{}, err
 		}
 		return item, nil
@@ -909,8 +933,7 @@ func (s *ToolPermissionStore) Upsert(item crds.ToolPermission) (crds.ToolPermiss
 func (s *ToolPermissionStore) Get(name string) (crds.ToolPermission, bool) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		var item crds.ToolPermission
-		ok, err := getResource(s.db, kindToolPerm, key, &item)
+		item, ok, err := getFromTable[crds.ToolPermission](s.db, tableToolPermissions, key)
 		if err != nil {
 			return crds.ToolPermission{}, false
 		}
@@ -925,7 +948,7 @@ func (s *ToolPermissionStore) Get(name string) (crds.ToolPermission, bool) {
 
 func (s *ToolPermissionStore) List() []crds.ToolPermission {
 	if s.db != nil {
-		items, err := listResources[crds.ToolPermission](s.db, kindToolPerm)
+		items, err := listFromTable[crds.ToolPermission](s.db, tableToolPermissions)
 		if err != nil {
 			return []crds.ToolPermission{}
 		}
@@ -947,7 +970,7 @@ func (s *ToolPermissionStore) List() []crds.ToolPermission {
 func (s *ToolPermissionStore) Delete(name string) error {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		deleted, err := deleteResource(s.db, kindToolPerm, key)
+		deleted, err := deleteFromTable(s.db, tableToolPermissions, key)
 		if err != nil {
 			return err
 		}
@@ -1013,8 +1036,7 @@ func (s *TaskScheduleStore) Upsert(item crds.TaskSchedule) (crds.TaskSchedule, e
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		var existing crds.TaskSchedule
-		found, err := getResource(s.db, kindTaskSchedule, key, &existing)
+		existing, found, err := getFromTable[crds.TaskSchedule](s.db, tableTaskSchedules, key)
 		if err != nil {
 			return crds.TaskSchedule{}, err
 		}
@@ -1028,7 +1050,7 @@ func (s *TaskScheduleStore) Upsert(item crds.TaskSchedule) (crds.TaskSchedule, e
 				return crds.TaskSchedule{}, err
 			}
 		}
-		if err := upsertResource(s.db, kindTaskSchedule, key, item); err != nil {
+		if err := upsertTaskScheduleSQL(s.db, key, item); err != nil {
 			return crds.TaskSchedule{}, err
 		}
 		return item, nil
@@ -1056,8 +1078,7 @@ func (s *TaskScheduleStore) Upsert(item crds.TaskSchedule) (crds.TaskSchedule, e
 func (s *TaskScheduleStore) Get(name string) (crds.TaskSchedule, bool) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		var item crds.TaskSchedule
-		ok, err := getResource(s.db, kindTaskSchedule, key, &item)
+		item, ok, err := getFromTable[crds.TaskSchedule](s.db, tableTaskSchedules, key)
 		if err != nil {
 			return crds.TaskSchedule{}, false
 		}
@@ -1072,7 +1093,7 @@ func (s *TaskScheduleStore) Get(name string) (crds.TaskSchedule, bool) {
 
 func (s *TaskScheduleStore) List() []crds.TaskSchedule {
 	if s.db != nil {
-		items, err := listResources[crds.TaskSchedule](s.db, kindTaskSchedule)
+		items, err := listFromTable[crds.TaskSchedule](s.db, tableTaskSchedules)
 		if err != nil {
 			return []crds.TaskSchedule{}
 		}
@@ -1094,7 +1115,7 @@ func (s *TaskScheduleStore) List() []crds.TaskSchedule {
 func (s *TaskScheduleStore) Delete(name string) error {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		deleted, err := deleteResource(s.db, kindTaskSchedule, key)
+		deleted, err := deleteFromTable(s.db, tableTaskSchedules, key)
 		if err != nil {
 			return err
 		}
@@ -1119,8 +1140,7 @@ func (s *TaskWebhookStore) Upsert(item crds.TaskWebhook) (crds.TaskWebhook, erro
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		var existing crds.TaskWebhook
-		found, err := getResource(s.db, kindTaskWebhook, key, &existing)
+		existing, found, err := getFromTable[crds.TaskWebhook](s.db, tableTaskWebhooks, key)
 		if err != nil {
 			return crds.TaskWebhook{}, err
 		}
@@ -1134,7 +1154,7 @@ func (s *TaskWebhookStore) Upsert(item crds.TaskWebhook) (crds.TaskWebhook, erro
 				return crds.TaskWebhook{}, err
 			}
 		}
-		if err := upsertResource(s.db, kindTaskWebhook, key, item); err != nil {
+		if err := upsertTaskWebhookSQL(s.db, key, item); err != nil {
 			return crds.TaskWebhook{}, err
 		}
 		return item, nil
@@ -1162,8 +1182,7 @@ func (s *TaskWebhookStore) Upsert(item crds.TaskWebhook) (crds.TaskWebhook, erro
 func (s *TaskWebhookStore) Get(name string) (crds.TaskWebhook, bool) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		var item crds.TaskWebhook
-		ok, err := getResource(s.db, kindTaskWebhook, key, &item)
+		item, ok, err := getFromTable[crds.TaskWebhook](s.db, tableTaskWebhooks, key)
 		if err != nil {
 			return crds.TaskWebhook{}, false
 		}
@@ -1178,7 +1197,7 @@ func (s *TaskWebhookStore) Get(name string) (crds.TaskWebhook, bool) {
 
 func (s *TaskWebhookStore) List() []crds.TaskWebhook {
 	if s.db != nil {
-		items, err := listResources[crds.TaskWebhook](s.db, kindTaskWebhook)
+		items, err := listFromTable[crds.TaskWebhook](s.db, tableTaskWebhooks)
 		if err != nil {
 			return []crds.TaskWebhook{}
 		}
@@ -1200,7 +1219,7 @@ func (s *TaskWebhookStore) List() []crds.TaskWebhook {
 func (s *TaskWebhookStore) Delete(name string) error {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		deleted, err := deleteResource(s.db, kindTaskWebhook, key)
+		deleted, err := deleteFromTable(s.db, tableTaskWebhooks, key)
 		if err != nil {
 			return err
 		}
@@ -1233,8 +1252,7 @@ func (s *WorkerStore) Upsert(item crds.Worker) (crds.Worker, error) {
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		var existing crds.Worker
-		found, err := getResource(s.db, kindWorker, key, &existing)
+		existing, found, err := getFromTable[crds.Worker](s.db, tableWorkers, key)
 		if err != nil {
 			return crds.Worker{}, err
 		}
@@ -1248,7 +1266,7 @@ func (s *WorkerStore) Upsert(item crds.Worker) (crds.Worker, error) {
 				return crds.Worker{}, err
 			}
 		}
-		if err := upsertResource(s.db, kindWorker, key, item); err != nil {
+		if err := upsertWorkerSQL(s.db, key, item); err != nil {
 			return crds.Worker{}, err
 		}
 		return item, nil
@@ -1276,8 +1294,7 @@ func (s *WorkerStore) Upsert(item crds.Worker) (crds.Worker, error) {
 func (s *WorkerStore) Get(name string) (crds.Worker, bool) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		var item crds.Worker
-		ok, err := getResource(s.db, kindWorker, key, &item)
+		item, ok, err := getFromTable[crds.Worker](s.db, tableWorkers, key)
 		if err != nil {
 			return crds.Worker{}, false
 		}
@@ -1292,7 +1309,7 @@ func (s *WorkerStore) Get(name string) (crds.Worker, bool) {
 
 func (s *WorkerStore) List() []crds.Worker {
 	if s.db != nil {
-		items, err := listResources[crds.Worker](s.db, kindWorker)
+		items, err := listFromTable[crds.Worker](s.db, tableWorkers)
 		if err != nil {
 			return []crds.Worker{}
 		}
@@ -1314,7 +1331,7 @@ func (s *WorkerStore) List() []crds.Worker {
 func (s *WorkerStore) Delete(name string) error {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		deleted, err := deleteResource(s.db, kindWorker, key)
+		deleted, err := deleteFromTable(s.db, tableWorkers, key)
 		if err != nil {
 			return err
 		}
@@ -1419,8 +1436,7 @@ func (s *TaskStore) Upsert(item crds.Task) (crds.Task, error) {
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		var existing crds.Task
-		found, err := getResource(s.db, kindTask, key, &existing)
+		existing, found, err := getFromTable[crds.Task](s.db, tableTasks, key)
 		if err != nil {
 			return crds.Task{}, err
 		}
@@ -1434,7 +1450,7 @@ func (s *TaskStore) Upsert(item crds.Task) (crds.Task, error) {
 				return crds.Task{}, err
 			}
 		}
-		if err := upsertResource(s.db, kindTask, key, item); err != nil {
+		if err := upsertTaskSQL(s.db, key, item); err != nil {
 			return crds.Task{}, err
 		}
 		return item, nil
@@ -1462,8 +1478,7 @@ func (s *TaskStore) Upsert(item crds.Task) (crds.Task, error) {
 func (s *TaskStore) Get(name string) (crds.Task, bool) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		var item crds.Task
-		ok, err := getResource(s.db, kindTask, key, &item)
+		item, ok, err := getFromTable[crds.Task](s.db, tableTasks, key)
 		if err != nil {
 			return crds.Task{}, false
 		}
@@ -1478,7 +1493,7 @@ func (s *TaskStore) Get(name string) (crds.Task, bool) {
 
 func (s *TaskStore) List() []crds.Task {
 	if s.db != nil {
-		items, err := listResources[crds.Task](s.db, kindTask)
+		items, err := listFromTable[crds.Task](s.db, tableTasks)
 		if err != nil {
 			return []crds.Task{}
 		}
@@ -1500,7 +1515,7 @@ func (s *TaskStore) List() []crds.Task {
 func (s *TaskStore) Delete(name string) error {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		deleted, err := deleteResource(s.db, kindTask, key)
+		deleted, err := deleteFromTable(s.db, tableTasks, key)
 		if err != nil {
 			return err
 		}
@@ -1738,328 +1753,6 @@ func taskAttemptDue(task crds.Task, now time.Time) bool {
 		return true
 	}
 	return !now.Before(when)
-}
-
-func claimTaskSQL(db *sql.DB, name, workerID string, lease time.Duration) (crds.Task, bool, error) {
-	if lease <= 0 {
-		lease = 30 * time.Second
-	}
-	now := time.Now().UTC()
-	tx, err := db.BeginTx(context.Background(), nil)
-	if err != nil {
-		return crds.Task{}, false, err
-	}
-	defer tx.Rollback()
-
-	var payload []byte
-	err = tx.QueryRow(`SELECT payload FROM resources WHERE kind = $1 AND name = $2 FOR UPDATE`, kindTask, name).Scan(&payload)
-	if err == sql.ErrNoRows {
-		return crds.Task{}, false, nil
-	}
-	if err != nil {
-		return crds.Task{}, false, err
-	}
-
-	var task crds.Task
-	if err := json.Unmarshal(payload, &task); err != nil {
-		return crds.Task{}, false, err
-	}
-	if !isTaskClaimable(task, workerID, now) {
-		if err := tx.Commit(); err != nil {
-			return crds.Task{}, false, err
-		}
-		return crds.Task{}, false, nil
-	}
-
-	task, err = applyTaskClaim(task, workerID, lease, now)
-	if err != nil {
-		return crds.Task{}, false, err
-	}
-	nextPayload, err := json.Marshal(task)
-	if err != nil {
-		return crds.Task{}, false, err
-	}
-	if _, err := tx.Exec(
-		`UPDATE resources SET payload = $3::jsonb, updated_at = NOW() WHERE kind = $1 AND name = $2`,
-		kindTask,
-		name,
-		string(nextPayload),
-	); err != nil {
-		return crds.Task{}, false, err
-	}
-	if err := tx.Commit(); err != nil {
-		return crds.Task{}, false, err
-	}
-	return task, true, nil
-}
-
-func claimNextDueTaskSQL(db *sql.DB, workerID string, lease time.Duration, matches func(crds.Task) bool) (crds.Task, bool, error) {
-	if lease <= 0 {
-		lease = 30 * time.Second
-	}
-	now := time.Now().UTC()
-	tx, err := db.BeginTx(context.Background(), nil)
-	if err != nil {
-		return crds.Task{}, false, err
-	}
-	defer tx.Rollback()
-
-	rows, err := tx.Query(
-		`SELECT name, payload
-		 FROM resources
-		 WHERE kind = $1
-		   AND (
-		     (
-		       LOWER(COALESCE(payload->'status'->>'phase', 'pending')) IN ('', 'pending')
-		       AND (
-		         NULLIF(payload->'status'->>'nextAttemptAt', '') IS NULL
-		         OR NULLIF(payload->'status'->>'nextAttemptAt', '')::timestamptz <= NOW()
-		       )
-		     )
-		     OR (
-		       LOWER(COALESCE(payload->'status'->>'phase', '')) = 'running'
-		       AND (
-		         COALESCE(payload->'status'->>'claimedBy', '') = ''
-		         OR NULLIF(payload->'status'->>'leaseUntil', '') IS NULL
-		         OR NULLIF(payload->'status'->>'leaseUntil', '')::timestamptz <= NOW()
-		       )
-		     )
-		   )
-		 ORDER BY updated_at ASC
-		 FOR UPDATE SKIP LOCKED
-		 LIMIT 64`,
-		kindTask,
-	)
-	if err != nil {
-		return crds.Task{}, false, err
-	}
-	defer rows.Close()
-
-	var (
-		selectedName string
-		selectedTask crds.Task
-		found        bool
-	)
-	for rows.Next() {
-		var (
-			name    string
-			payload []byte
-		)
-		if err := rows.Scan(&name, &payload); err != nil {
-			return crds.Task{}, false, err
-		}
-		var task crds.Task
-		if err := json.Unmarshal(payload, &task); err != nil {
-			return crds.Task{}, false, err
-		}
-		if !isTaskClaimable(task, workerID, now) {
-			continue
-		}
-		if matches != nil && !matches(task) {
-			continue
-		}
-		selectedName = name
-		selectedTask = task
-		found = true
-		break
-	}
-	if err := rows.Err(); err != nil {
-		return crds.Task{}, false, err
-	}
-	if !found {
-		if err := tx.Commit(); err != nil {
-			return crds.Task{}, false, err
-		}
-		return crds.Task{}, false, nil
-	}
-
-	task, err := applyTaskClaim(selectedTask, workerID, lease, now)
-	if err != nil {
-		return crds.Task{}, false, err
-	}
-	nextPayload, err := json.Marshal(task)
-	if err != nil {
-		return crds.Task{}, false, err
-	}
-	if _, err := tx.Exec(
-		`UPDATE resources SET payload = $3::jsonb, updated_at = NOW() WHERE kind = $1 AND name = $2`,
-		kindTask,
-		selectedName,
-		string(nextPayload),
-	); err != nil {
-		return crds.Task{}, false, err
-	}
-	if err := tx.Commit(); err != nil {
-		return crds.Task{}, false, err
-	}
-	return task, true, nil
-}
-
-func renewTaskLeaseSQL(db *sql.DB, name, workerID string, lease time.Duration) error {
-	if lease <= 0 {
-		lease = 30 * time.Second
-	}
-	now := time.Now().UTC()
-	tx, err := db.BeginTx(context.Background(), nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	var payload []byte
-	err = tx.QueryRow(`SELECT payload FROM resources WHERE kind = $1 AND name = $2 FOR UPDATE`, kindTask, name).Scan(&payload)
-	if err == sql.ErrNoRows {
-		return fmt.Errorf("task %q not found", name)
-	}
-	if err != nil {
-		return err
-	}
-
-	var task crds.Task
-	if err := json.Unmarshal(payload, &task); err != nil {
-		return err
-	}
-	if !strings.EqualFold(strings.TrimSpace(task.Status.ClaimedBy), strings.TrimSpace(workerID)) {
-		return fmt.Errorf("task %q is claimed by %q, not %q", name, task.Status.ClaimedBy, workerID)
-	}
-	if !strings.EqualFold(strings.TrimSpace(task.Status.Phase), "running") {
-		return fmt.Errorf("task %q is not running", name)
-	}
-
-	currentMeta := task.Metadata
-	task.Status.LeaseUntil = now.Add(lease).Format(time.RFC3339Nano)
-	task.Status.LastHeartbeat = now.Format(time.RFC3339Nano)
-	task.Status.ObservedGeneration = task.Metadata.Generation
-	if err := initializeUpdateMetadata("Task", &task.Metadata, currentMeta, false); err != nil {
-		return err
-	}
-
-	nextPayload, err := json.Marshal(task)
-	if err != nil {
-		return err
-	}
-	if _, err := tx.Exec(
-		`UPDATE resources SET payload = $3::jsonb, updated_at = NOW() WHERE kind = $1 AND name = $2`,
-		kindTask,
-		name,
-		string(nextPayload),
-	); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
-func tryAcquireWorkerSlotSQL(db *sql.DB, name string) (crds.Worker, bool, error) {
-	tx, err := db.BeginTx(context.Background(), nil)
-	if err != nil {
-		return crds.Worker{}, false, err
-	}
-	defer tx.Rollback()
-
-	var payload []byte
-	err = tx.QueryRow(`SELECT payload FROM resources WHERE kind = $1 AND name = $2 FOR UPDATE`, kindWorker, name).Scan(&payload)
-	if err == sql.ErrNoRows {
-		return crds.Worker{}, false, nil
-	}
-	if err != nil {
-		return crds.Worker{}, false, err
-	}
-
-	var worker crds.Worker
-	if err := json.Unmarshal(payload, &worker); err != nil {
-		return crds.Worker{}, false, err
-	}
-	phase := strings.ToLower(strings.TrimSpace(worker.Status.Phase))
-	if phase != "ready" && phase != "pending" {
-		if err := tx.Commit(); err != nil {
-			return crds.Worker{}, false, err
-		}
-		return worker, false, nil
-	}
-
-	maxConcurrent := worker.Spec.MaxConcurrentTasks
-	if maxConcurrent <= 0 {
-		maxConcurrent = 1
-	}
-	if worker.Status.CurrentTasks >= maxConcurrent {
-		if err := tx.Commit(); err != nil {
-			return crds.Worker{}, false, err
-		}
-		return worker, false, nil
-	}
-
-	current := worker.Metadata
-	worker.Status.CurrentTasks++
-	worker.Status.ObservedGeneration = worker.Metadata.Generation
-	if err := initializeUpdateMetadata("Worker", &worker.Metadata, current, false); err != nil {
-		return crds.Worker{}, false, err
-	}
-
-	nextPayload, err := json.Marshal(worker)
-	if err != nil {
-		return crds.Worker{}, false, err
-	}
-	if _, err := tx.Exec(
-		`UPDATE resources SET payload = $3::jsonb, updated_at = NOW() WHERE kind = $1 AND name = $2`,
-		kindWorker,
-		name,
-		string(nextPayload),
-	); err != nil {
-		return crds.Worker{}, false, err
-	}
-	if err := tx.Commit(); err != nil {
-		return crds.Worker{}, false, err
-	}
-	return worker, true, nil
-}
-
-func releaseWorkerSlotSQL(db *sql.DB, name string) error {
-	tx, err := db.BeginTx(context.Background(), nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	var payload []byte
-	err = tx.QueryRow(`SELECT payload FROM resources WHERE kind = $1 AND name = $2 FOR UPDATE`, kindWorker, name).Scan(&payload)
-	if err == sql.ErrNoRows {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-
-	var worker crds.Worker
-	if err := json.Unmarshal(payload, &worker); err != nil {
-		return err
-	}
-	if worker.Status.CurrentTasks <= 0 {
-		return tx.Commit()
-	}
-
-	current := worker.Metadata
-	worker.Status.CurrentTasks--
-	if worker.Status.CurrentTasks < 0 {
-		worker.Status.CurrentTasks = 0
-	}
-	worker.Status.ObservedGeneration = worker.Metadata.Generation
-	if err := initializeUpdateMetadata("Worker", &worker.Metadata, current, false); err != nil {
-		return err
-	}
-
-	nextPayload, err := json.Marshal(worker)
-	if err != nil {
-		return err
-	}
-	if _, err := tx.Exec(
-		`UPDATE resources SET payload = $3::jsonb, updated_at = NOW() WHERE kind = $1 AND name = $2`,
-		kindWorker,
-		name,
-		string(nextPayload),
-	); err != nil {
-		return err
-	}
-	return tx.Commit()
 }
 
 func parseTimestamp(value string) (time.Time, error) {

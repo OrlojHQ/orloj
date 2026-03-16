@@ -62,6 +62,7 @@ func main() {
 	agentMessageStreamName := flag.String("agent-message-stream-name", envOrDefault("ORLOJ_AGENT_MESSAGE_STREAM", "ORLOJ_AGENT_MESSAGES"), "JetStream stream name for runtime agent messages")
 	agentMessageHistoryMax := flag.Int("agent-message-history-max", 2048, "in-memory runtime agent message history capacity")
 	agentMessageDedupeWindow := flag.Duration("agent-message-dedupe-window", 2*time.Minute, "in-memory runtime agent message dedupe window")
+	secretEncryptionKeyRaw := flag.String("secret-encryption-key", envOrDefault("ORLOJ_SECRET_ENCRYPTION_KEY", ""), "256-bit AES key (hex or base64) for encrypting Secret resource data at rest")
 	storageBackend := flag.String("storage-backend", "memory", "state backend: memory|postgres")
 	postgresDSN := flag.String("postgres-dsn", os.Getenv("ORLOJ_POSTGRES_DSN"), "postgres DSN (required when --storage-backend=postgres)")
 	sqlDriver := flag.String("sql-driver", "pgx", "database/sql driver name used for --storage-backend=postgres")
@@ -73,8 +74,15 @@ func main() {
 	logger := log.New(os.Stdout, "orlojd ", log.LstdFlags|log.Lmicroseconds)
 	backend := strings.ToLower(strings.TrimSpace(*storageBackend))
 
+	secretEncryptionKey, err := store.ParseEncryptionKey(*secretEncryptionKeyRaw)
+	if err != nil {
+		logger.Fatalf("invalid --secret-encryption-key: %v", err)
+	}
+	if len(secretEncryptionKey) > 0 {
+		logger.Printf("secret encryption at rest enabled (AES-256-GCM)")
+	}
+
 	var db *sql.DB
-	var err error
 	agentStore := store.NewAgentStore()
 	agentSystemStore := store.NewAgentSystemStore()
 	modelEndpointStore := store.NewModelEndpointStore()
@@ -123,7 +131,7 @@ func main() {
 		agentSystemStore = store.NewAgentSystemStoreWithDB(db)
 		modelEndpointStore = store.NewModelEndpointStoreWithDB(db)
 		toolStore = store.NewToolStoreWithDB(db)
-		secretStore = store.NewSecretStoreWithDB(db)
+		secretStore = store.NewSecretStoreWithEncryption(db, secretEncryptionKey)
 		memoryStore = store.NewMemoryStoreWithDB(db)
 		policyStore = store.NewAgentPolicyStoreWithDB(db)
 		roleStore = store.NewAgentRoleStoreWithDB(db)

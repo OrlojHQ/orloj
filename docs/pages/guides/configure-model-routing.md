@@ -16,7 +16,14 @@ A multi-provider setup where different agents route to different model providers
 
 ## Step 1: Create Secrets for API Keys
 
-Each provider needs a Secret resource to hold its API key:
+Each provider needs a Secret resource to hold its API key. The fastest way is the CLI -- no YAML file needed:
+
+```bash
+orlojctl create secret openai-api-key --from-literal value=sk-your-openai-key-here
+orlojctl create secret anthropic-api-key --from-literal value=sk-ant-your-anthropic-key-here
+```
+
+Alternatively, use YAML manifests with `orlojctl apply -f`:
 
 ```yaml
 apiVersion: orloj.dev/v1
@@ -28,25 +35,7 @@ spec:
     value: sk-your-openai-key-here
 ```
 
-```yaml
-apiVersion: orloj.dev/v1
-kind: Secret
-metadata:
-  name: anthropic-api-key
-spec:
-  stringData:
-    value: sk-ant-your-anthropic-key-here
-```
-
-Apply both:
-```bash
-orlojctl apply -f openai_api_key.yaml
-orlojctl apply -f anthropic_api_key.yaml
-```
-
-The `stringData.value` is base64-encoded into `data` during normalization and then cleared. The runtime reads credentials from `data` at execution time.
-
-> **Production note:** Secret resources are convenient for development but store values in the database without encryption at rest. In production, use environment variables instead (`ORLOJ_SECRET_openai_api_key`, `ORLOJ_SECRET_anthropic_api_key`) or an external secret manager. The resolver chain tries the resource store first, then env vars. See [Security and Isolation](../operations/security.md#secret-handling) for details.
+> **Production note:** Enable `--secret-encryption-key` on `orlojd` and `orlojworker` to encrypt secret data at rest in the database, or use environment variables (`ORLOJ_SECRET_openai_api_key`) / an external secret manager. See [Security and Isolation](../operations/security.md#secret-handling) for details.
 
 ## Step 2: Create Model Endpoints
 

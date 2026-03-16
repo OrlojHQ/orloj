@@ -33,6 +33,8 @@ func Run(args []string) error {
 	switch args[0] {
 	case "apply":
 		return runApply(args[1:])
+	case "create":
+		return runCreate(args[1:])
 	case "get":
 		return runGet(args[1:])
 	case "delete":
@@ -95,6 +97,86 @@ func runApply(args []string) error {
 	}
 
 	fmt.Printf("applied %s/%s\n", strings.ToLower(kind), name)
+	return nil
+}
+
+type stringSliceFlag []string
+
+func (f *stringSliceFlag) String() string { return strings.Join(*f, ", ") }
+func (f *stringSliceFlag) Set(v string) error {
+	*f = append(*f, v)
+	return nil
+}
+
+func runCreate(args []string) error {
+	if len(args) == 0 {
+		return errors.New("usage: orlojctl create secret <name> --from-literal key=value [--from-literal key2=value2 ...]")
+	}
+	switch strings.ToLower(strings.TrimSpace(args[0])) {
+	case "secret":
+		return runCreateSecret(args[1:])
+	default:
+		return fmt.Errorf("unsupported create resource %q (supported: secret)", args[0])
+	}
+}
+
+func runCreateSecret(args []string) error {
+	fs := flag.NewFlagSet("create secret", flag.ContinueOnError)
+	server := fs.String("server", defaultServer, "Orloj server URL")
+	var ns string
+	fs.StringVar(&ns, "namespace", "default", "secret namespace")
+	fs.StringVar(&ns, "n", "default", "secret namespace (shorthand)")
+	var literals stringSliceFlag
+	fs.Var(&literals, "from-literal", "key=value pair (repeatable)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() < 1 {
+		return errors.New("secret name is required: orlojctl create secret <name> --from-literal key=value")
+	}
+	name := strings.TrimSpace(fs.Arg(0))
+	if name == "" {
+		return errors.New("secret name cannot be empty")
+	}
+	if len(literals) == 0 {
+		return errors.New("at least one --from-literal key=value is required")
+	}
+
+	stringData := make(map[string]string, len(literals))
+	for _, lit := range literals {
+		parts := strings.SplitN(lit, "=", 2)
+		if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" {
+			return fmt.Errorf("invalid --from-literal %q: expected key=value", lit)
+		}
+		stringData[strings.TrimSpace(parts[0])] = parts[1]
+	}
+
+	secret := crds.Secret{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Secret",
+		Metadata:   crds.ObjectMeta{Name: name, Namespace: ns},
+		Spec:       crds.SecretSpec{StringData: stringData},
+	}
+	if err := secret.Normalize(); err != nil {
+		return fmt.Errorf("invalid secret: %w", err)
+	}
+
+	payload, err := json.Marshal(secret)
+	if err != nil {
+		return fmt.Errorf("marshal secret: %w", err)
+	}
+
+	resp, err := http.Post(*server+"/v1/secrets", "application/json", bytes.NewReader(payload))
+	if err != nil {
+		return fmt.Errorf("create secret request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("create secret failed: %s", bytes.TrimSpace(body))
+	}
+
+	fmt.Printf("created secret/%s\n", name)
 	return nil
 }
 
@@ -565,7 +647,9 @@ func runLogs(args []string) error {
 func runDelete(args []string) error {
 	fs := flag.NewFlagSet("delete", flag.ContinueOnError)
 	server := fs.String("server", defaultServer, "Agent API server URL")
-	namespace := fs.String("namespace", "", "resource namespace override")
+	var ns string
+	fs.StringVar(&ns, "namespace", "", "resource namespace override")
+	fs.StringVar(&ns, "n", "", "resource namespace override (shorthand)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -587,8 +671,8 @@ func runDelete(args []string) error {
 	}
 
 	url := strings.TrimRight(*server, "/") + endpoint + "/" + name
-	if strings.TrimSpace(*namespace) != "" {
-		url += "?namespace=" + strings.TrimSpace(*namespace)
+	if strings.TrimSpace(ns) != "" {
+		url += "?namespace=" + strings.TrimSpace(ns)
 	}
 	req, err := http.NewRequest(http.MethodDelete, url, nil)
 	if err != nil {
@@ -1122,7 +1206,9 @@ func runRun(args []string) error {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	system := fs.String("system", "", "AgentSystem name to execute (required)")
 	server := fs.String("server", defaultServer, "Orloj server URL")
-	namespace := fs.String("namespace", "default", "namespace for the task")
+	var ns string
+	fs.StringVar(&ns, "namespace", "default", "namespace for the task")
+	fs.StringVar(&ns, "n", "default", "namespace for the task (shorthand)")
 	pollInterval := fs.Duration("poll", 2*time.Second, "status poll interval")
 	timeout := fs.Duration("timeout", 5*time.Minute, "maximum wait time")
 	if err := fs.Parse(args); err != nil {
@@ -1145,7 +1231,7 @@ func runRun(args []string) error {
 	task := crds.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: taskName, Namespace: *namespace},
+		Metadata:   crds.ObjectMeta{Name: taskName, Namespace: ns},
 		Spec: crds.TaskSpec{
 			System: *system,
 			Input:  input,
@@ -1157,7 +1243,7 @@ func runRun(args []string) error {
 		return fmt.Errorf("marshal task: %w", err)
 	}
 
-	createURL := fmt.Sprintf("%s/v1/tasks?namespace=%s", *server, url.QueryEscape(*namespace))
+	createURL := fmt.Sprintf("%s/v1/tasks?namespace=%s", *server, url.QueryEscape(ns))
 	resp, err := http.Post(createURL, "application/json", bytes.NewReader(payload))
 	if err != nil {
 		return fmt.Errorf("create task: %w", err)
@@ -1180,7 +1266,7 @@ func runRun(args []string) error {
 		case <-ctx.Done():
 			return fmt.Errorf("timeout waiting for task %s", taskName)
 		case <-ticker.C:
-			taskURL := fmt.Sprintf("%s/v1/tasks/%s?namespace=%s", *server, url.PathEscape(taskName), url.QueryEscape(*namespace))
+			taskURL := fmt.Sprintf("%s/v1/tasks/%s?namespace=%s", *server, url.PathEscape(taskName), url.QueryEscape(ns))
 			getResp, err := http.Get(taskURL)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "poll error: %v\n", err)
@@ -1226,6 +1312,7 @@ func printUsage() {
 
 Usage:
   orlojctl apply -f <resource.yaml>
+  orlojctl create secret <name> --from-literal key=value [--from-literal key2=value2 ...]
   orlojctl get [-w] agents|agent-systems|model-endpoints|tools|secrets|memories|agent-policies|agent-roles|tool-permissions|tasks|task-schedules|task-webhooks|workers
   orlojctl delete <resource> <name>
   orlojctl run --system <name> [key=value ...]
@@ -1298,7 +1385,9 @@ func runEvents(args []string) error {
 	eventType := fs.String("type", "", "filter by event type (example: resource.created)")
 	kind := fs.String("kind", "", "filter by resource kind (example: Task)")
 	name := fs.String("name", "", "filter by resource name")
-	namespace := fs.String("namespace", "", "filter by resource namespace")
+	var evtNs string
+	fs.StringVar(&evtNs, "namespace", "", "filter by resource namespace")
+	fs.StringVar(&evtNs, "n", "", "filter by resource namespace (shorthand)")
 	once := fs.Bool("once", false, "exit after first matching event")
 	timeout := fs.Duration("timeout", 0, "max time to wait for matching events (example: 30s)")
 	raw := fs.Bool("raw", false, "print raw event JSON payload")
@@ -1315,7 +1404,7 @@ func runEvents(args []string) error {
 		Type:      *eventType,
 		Kind:      *kind,
 		Name:      *name,
-		Namespace: *namespace,
+		Namespace: evtNs,
 	})
 	if err != nil {
 		return err

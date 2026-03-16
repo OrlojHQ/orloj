@@ -32,7 +32,13 @@ The first resolver that returns a value wins.
 
 ### Development
 
-Use `Secret` resources for local development. They are convenient for getting started but store base64-encoded values in the database (Postgres JSONB or in-memory), which is not encrypted at rest.
+Use `Secret` resources for local development. The fastest way is the imperative CLI command -- no YAML file needed:
+
+```bash
+orlojctl create secret openai-api-key --from-literal value=sk-your-key-here
+```
+
+Or with a YAML manifest:
 
 ```yaml
 apiVersion: orloj.dev/v1
@@ -44,28 +50,54 @@ spec:
     value: sk-your-key-here
 ```
 
+### Encryption at Rest
+
+When using the Postgres storage backend, enable encryption at rest for `Secret` resources by passing a 256-bit AES key to both `orlojd` and `orlojworker`:
+
+```bash
+# Generate a key (hex-encoded, 64 characters)
+openssl rand -hex 32
+
+# Pass via flag
+orlojd --secret-encryption-key=<hex-key> ...
+orlojworker --secret-encryption-key=<hex-key> ...
+
+# Or via environment variable
+export ORLOJ_SECRET_ENCRYPTION_KEY=<hex-key>
+```
+
+When enabled, all `Secret.spec.data` values are encrypted with AES-256-GCM before being written to the database and decrypted transparently on read. This protects secrets against direct database access, backup exposure, and log/dump leaks.
+
+The key must be identical across all server and worker processes that share the same database. Both hex-encoded (64 characters) and base64-encoded (44 characters) formats are accepted.
+
+**Without** an encryption key, `Secret` data is stored as base64-encoded plaintext in the JSONB payload -- suitable for development but not for production.
+
 ### Production
 
-In production, use environment variables or an external secret manager that injects values into the worker environment:
+For production, choose one or both of the following approaches:
 
-**Environment variables (simplest)**
+**1. Encrypted Secret resources** -- enable `--secret-encryption-key` and continue using `Secret` resources as in development. This is the simplest upgrade path.
+
+**2. Environment variables** -- bypass `Secret` resources entirely by injecting provider keys into the runtime environment:
+
 ```bash
 export ORLOJ_SECRET_openai_api_key="sk-prod-key"
 ```
 
 The resolver normalizes the secret name: a `secretRef: openai-api-key` looks up `ORLOJ_SECRET_openai_api_key` (hyphens become underscores).
 
-**External secret managers** -- inject secrets as environment variables using your platform's native mechanism:
+**3. External secret managers** -- inject secrets as environment variables using your platform's native mechanism:
 
 - **Kubernetes**: Use [external-secrets-operator](https://external-secrets.io/) or the CSI secrets driver to sync Vault/AWS Secrets Manager/GCP Secret Manager values into pod env vars.
 - **HashiCorp Vault**: Use [Vault Agent](https://developer.hashicorp.com/vault/docs/agent-and-proxy/agent) sidecar to render secrets into env or files.
 - **Cloud providers**: Use AWS Secrets Manager, GCP Secret Manager, or Azure Key Vault with their respective injection mechanisms.
 
-In all cases, the `Secret` resource is not needed -- the env-var resolver handles resolution directly.
+Approaches 2 and 3 do not require `Secret` resources -- the env-var resolver handles resolution directly.
 
 ### Security Requirements
 
 - Raw secret values must not appear in logs or trace payloads.
+- Store the encryption key itself in a secure location (e.g., a KMS, Vault, or hardware security module). Do not commit it to version control.
 - Validate redaction behavior during incident drills.
 
 ## Operational Requirements
