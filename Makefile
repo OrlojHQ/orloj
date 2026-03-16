@@ -26,7 +26,7 @@ ANTHROPIC_NO_USE_TASK := rr-anthropic-tool-no-use-task
 REAL_GATE_TIMEOUT_SECONDS ?= 240
 REAL_GATE_POLL_INTERVAL_SECONDS ?= 2
 
-.PHONY: help ui-install ui-dev ui-build \
+.PHONY: build help ui-install ui-dev ui-build \
 	real-help real-apply real-apply-all \
 	real-apply-pipeline real-apply-hier real-apply-loop real-apply-tool real-apply-anthropic-tool-decision \
 	real-get real-messages real-metrics real-check \
@@ -35,6 +35,9 @@ REAL_GATE_POLL_INTERVAL_SECONDS ?= 2
 	real-gate-anthropic-tool-decision \
 	real-wait-task-succeeded \
 	real-check-all
+
+build:
+	go build ./cmd/...
 
 help: real-help
 
@@ -48,6 +51,9 @@ ui-build:
 	cd frontend && bun run build
 
 real-help:
+	@echo "Build:"
+	@echo "  make build        # compile all binaries (go build ./cmd/...)"
+	@echo ""
 	@echo "UI migration scaffold:"
 	@echo "  make ui-install   # install frontend dependencies"
 	@echo "  make ui-dev       # run React dev server on http://127.0.0.1:5173"

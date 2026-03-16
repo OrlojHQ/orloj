@@ -147,7 +147,7 @@ func (e *WASMCommandExecutor) Execute(ctx context.Context, req WASMToolExecuteRe
 			ToolCodeExecutionFailed,
 			ToolReasonBackendFailure,
 			true,
-			fmt.Sprintf("wasm command execution failed for tool=%s stderr=%s", strings.TrimSpace(req.Tool), compactStderr(stderr)),
+			fmt.Sprintf("wasm command execution failed for tool=%s stderr=%s", strings.TrimSpace(req.Tool), RedactSensitive(compactStderr(stderr))),
 			runErr,
 			map[string]string{
 				"isolation_mode": "wasm",

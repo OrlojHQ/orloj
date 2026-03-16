@@ -1,5 +1,7 @@
 # Extension Contracts
 
+> **Stability: beta** -- Extension interfaces are functional and in use, but may evolve additively in future releases. See [Versioning and Deprecation](../project/versioning-and-deprecation.md).
+
 Orloj core exposes optional extension hooks for additive cloud and enterprise integrations. Extensions allow commercial or custom features to plug into the runtime without modifying the open-source core.
 
 ## Design Rules

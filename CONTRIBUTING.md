@@ -2,6 +2,9 @@
 
 Thanks for contributing to Orloj.
 
+Please note that this project is governed by a
+[Code of Conduct](./CODE_OF_CONDUCT.md). By participating, you agree to uphold it.
+
 ## Before You Start
 
 - Open an issue first for substantial changes.

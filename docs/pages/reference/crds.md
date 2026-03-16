@@ -1,13 +1,13 @@
 # Resource Reference
 
+> **Stability: beta** -- All resource kinds under `orloj.dev/v1` are suitable for production use, but their schemas may evolve with migration guidance in future minor releases. See [Versioning and Deprecation](../project/versioning-and-deprecation.md).
+
 This document describes the current resource schemas in `orloj.dev/v1`, based on the runtime types and normalization logic in:
 
 - `crds/agent.go`
 - `crds/model_endpoint.go`
 - `crds/resource_types.go`
 - `crds/graph.go`
-
-Status: Resource lifecycle policy is documented in [Versioning and Deprecation](../project/versioning-and-deprecation.md). Treat `orloj.dev/v1` as the primary contract surface for current releases.
 
 ## Common Conventions
 

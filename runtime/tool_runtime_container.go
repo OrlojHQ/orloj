@@ -327,7 +327,7 @@ func (r *ContainerToolRuntime) callHTTP(ctx context.Context, tool string, spec c
 			ToolCodeExecutionFailed,
 			ToolReasonBackendFailure,
 			true,
-			fmt.Sprintf("container sandbox execution failed for tool=%s stderr=%s", tool, compactStderr(stderr)),
+			fmt.Sprintf("container sandbox execution failed for tool=%s stderr=%s", tool, RedactSensitive(compactStderr(stderr))),
 			err,
 			map[string]string{
 				"tool":           tool,

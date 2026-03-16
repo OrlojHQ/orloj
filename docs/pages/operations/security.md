@@ -104,7 +104,7 @@ Approaches 2 and 3 do not require `Secret` resources -- the env-var resolver han
 
 - Enforce least-privilege tool permissions.
 - Monitor denial and runtime policy error trends.
-- Integrate approval hooks for high-risk operations before OSS cut.
+- Approval hooks for high-risk operations are a post-launch roadmap item (Phase 12). See [Roadmap](../phases/roadmap.md).
 
 ## Related Docs
 

@@ -29,6 +29,10 @@ A breaking change proposal must include:
 - rollback strategy
 - conformance/test updates
 
+## Code of Conduct
+
+All participants are expected to follow the [Code of Conduct](https://github.com/OrlojHQ/orloj/blob/main/CODE_OF_CONDUCT.md).
+
 ## Contribution Standards
 
 - New behavior requires tests and documentation updates.

@@ -510,6 +510,7 @@ func (c *TaskController) markFailed(task crds.Task, reason string) error {
 }
 
 func (c *TaskController) handleExecutionFailure(task crds.Task, reason string) error {
+	reason = agentruntime.RedactSensitive(reason)
 	if task.Spec.Retry.MaxAttempts > 0 && task.Status.Attempts >= task.Spec.Retry.MaxAttempts && isRetryableError(reason) {
 		return c.markDeadLetter(task, reason)
 	}
@@ -1554,7 +1555,7 @@ func (c *TaskController) appendRuntimeStepTrace(task *crds.Task, agentName strin
 			ErrorCode:           strings.TrimSpace(runtimeEvent.ErrorCode),
 			ErrorReason:         strings.TrimSpace(runtimeEvent.ErrorReason),
 			Retryable:           runtimeEvent.Retryable,
-			Message:             strings.TrimSpace(runtimeEvent.Message),
+			Message:             agentruntime.RedactSensitive(strings.TrimSpace(runtimeEvent.Message)),
 			Step:                runtimeEvent.Step,
 		}
 		if strings.EqualFold(runtimeEvent.Type, "tool_call") {

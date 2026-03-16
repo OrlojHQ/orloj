@@ -9,6 +9,8 @@ This section covers release governance and open-source operating expectations fo
 - [Security Policy](./security-policy.md)
 - [Versioning and Deprecation](./versioning-and-deprecation.md)
 - [Release Process](./release-process.md)
+- [Contributing](https://github.com/OrlojHQ/orloj/blob/main/CONTRIBUTING.md)
+- [Code of Conduct](https://github.com/OrlojHQ/orloj/blob/main/CODE_OF_CONDUCT.md)
 
 ## Scope
 
