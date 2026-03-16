@@ -2,6 +2,11 @@
 *.test
 
 # Local build outputs
+/orlojd
+/orlojworker
+/orlojctl
+/orloj-loadtest
+/orloj-alertcheck
 /agentopsd
 /agentctl
 /agentworker
