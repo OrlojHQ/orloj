@@ -5,9 +5,14 @@ Use this section to run, secure, troubleshoot, and validate Orloj in production-
 ## Core Operator Guides
 
 - [Runbook](./runbook.md)
+- [Deployment Overview](../deployment/index.md)
+- [VPS Deployment](../deployment/vps.md)
+- [Kubernetes Deployment](../deployment/kubernetes.md)
 - [Configuration](./configuration.md)
 - [Troubleshooting](./troubleshooting.md)
 - [Upgrades and Rollbacks](./upgrades.md)
+- [Task Scheduling (Cron)](./task-scheduling.md)
+- [Webhook Triggers](./webhooks.md)
 - [Security and Isolation](./security.md)
 
 ## Reliability and Validation

@@ -1,0 +1,252 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: orloj
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: orloj-runtime-secrets
+  namespace: orloj
+type: Opaque
+stringData:
+  postgres-user: orloj
+  postgres-password: change-me
+  postgres-db: orloj
+  postgres-dsn: postgres://orloj:change-me@postgres:5432/orloj?sslmode=disable
+  model-gateway-api-key: ""
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: orloj-runtime-config
+  namespace: orloj
+data:
+  ORLOJ_TASK_EXECUTION_MODE: message-driven
+  ORLOJ_EVENT_BUS_BACKEND: nats
+  ORLOJ_NATS_URL: nats://nats:4222
+  ORLOJ_AGENT_MESSAGE_BUS_BACKEND: nats-jetstream
+  ORLOJ_AGENT_MESSAGE_NATS_URL: nats://nats:4222
+  ORLOJ_MODEL_GATEWAY_PROVIDER: mock
+  ORLOJ_MODEL_GATEWAY_DEFAULT_MODEL: ""
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data
+  namespace: orloj
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: orloj
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: orloj-runtime-secrets
+                  key: postgres-user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: orloj-runtime-secrets
+                  key: postgres-password
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: orloj-runtime-secrets
+                  key: postgres-db
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: postgres-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: orloj
+spec:
+  selector:
+    app: postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nats
+  namespace: orloj
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nats
+  template:
+    metadata:
+      labels:
+        app: nats
+    spec:
+      containers:
+        - name: nats
+          image: nats:2.10-alpine
+          args:
+            - -js
+          ports:
+            - containerPort: 4222
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nats
+  namespace: orloj
+spec:
+  selector:
+    app: nats
+  ports:
+    - port: 4222
+      targetPort: 4222
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orlojd
+  namespace: orloj
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orlojd
+  template:
+    metadata:
+      labels:
+        app: orlojd
+    spec:
+      containers:
+        - name: orlojd
+          image: ghcr.io/example/orloj-orlojd:latest
+          args:
+            - --addr=:8080
+            - --storage-backend=postgres
+          ports:
+            - containerPort: 8080
+          env:
+            - name: ORLOJ_POSTGRES_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: orloj-runtime-secrets
+                  key: postgres-dsn
+            - name: ORLOJ_MODEL_GATEWAY_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: orloj-runtime-secrets
+                  key: model-gateway-api-key
+          envFrom:
+            - configMapRef:
+                name: orloj-runtime-config
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orlojd
+  namespace: orloj
+spec:
+  selector:
+    app: orlojd
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orlojworker
+  namespace: orloj
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: orlojworker
+  template:
+    metadata:
+      labels:
+        app: orlojworker
+    spec:
+      containers:
+        - name: orlojworker
+          image: ghcr.io/example/orloj-orlojworker:latest
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - exec /usr/local/bin/app --storage-backend=postgres --worker-id="${POD_NAME}" --region=default --max-concurrent-tasks=4
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: ORLOJ_POSTGRES_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: orloj-runtime-secrets
+                  key: postgres-dsn
+            - name: ORLOJ_MODEL_GATEWAY_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: orloj-runtime-secrets
+                  key: model-gateway-api-key
+            - name: ORLOJ_AGENT_MESSAGE_CONSUME
+              value: "true"
+          envFrom:
+            - configMapRef:
+                name: orloj-runtime-config
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault

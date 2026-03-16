@@ -429,6 +429,8 @@ Example: `examples/workers/worker_a.yaml`
 ## Related References
 
 - [API Reference](./api.md)
+- [Task Scheduling (Cron)](../operations/task-scheduling.md)
+- [Webhook Triggers](../operations/webhooks.md)
 - [Tool Contract v1](./tool-contract-v1.md)
 - [WASM Tool Module Contract v1](./wasm-tool-module-contract-v1.md)
 - [Tool Runtime Conformance](../operations/tool-runtime-conformance.md)

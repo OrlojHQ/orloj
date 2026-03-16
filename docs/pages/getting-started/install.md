@@ -75,6 +75,10 @@ Expected result:
 
 ## Next Steps
 
+- [Deployment Overview](../deployment/index.md)
+- [Local Deployment](../deployment/local.md)
+- [VPS Deployment](../deployment/vps.md)
+- [Kubernetes Deployment](../deployment/kubernetes.md)
 - [Quickstart](./quickstart.md)
 - [Production Checklist](./production-checklist.md)
 - [Configuration](../operations/configuration.md)

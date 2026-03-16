@@ -46,6 +46,9 @@ Expected result:
 
 ## Related Docs
 
+- [Deployment Overview](../deployment/index.md)
+- [VPS Deployment](../deployment/vps.md)
+- [Kubernetes Deployment](../deployment/kubernetes.md)
 - [Configuration](./configuration.md)
 - [Troubleshooting](./troubleshooting.md)
 - [Upgrades and Rollbacks](./upgrades.md)

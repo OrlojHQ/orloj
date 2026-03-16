@@ -11,6 +11,13 @@ These docs are organized for production use: start with installation and quickst
 - [Quickstart](./getting-started/quickstart.md)
 - [Production Checklist](./getting-started/production-checklist.md)
 
+## Deployment Targets
+
+- [Deployment Overview](./deployment/index.md)
+- [Local Deployment](./deployment/local.md)
+- [VPS Deployment (Compose + systemd)](./deployment/vps.md)
+- [Kubernetes Deployment (Generic Manifests)](./deployment/kubernetes.md)
+
 ## Concepts and Architecture
 
 - [Concepts](./concepts/index.md)
@@ -25,6 +32,8 @@ These docs are organized for production use: start with installation and quickst
 - [Configuration](./operations/configuration.md)
 - [Troubleshooting](./operations/troubleshooting.md)
 - [Upgrades and Rollbacks](./operations/upgrades.md)
+- [Task Scheduling (Cron)](./operations/task-scheduling.md)
+- [Webhook Triggers](./operations/webhooks.md)
 - [Security and Isolation](./operations/security.md)
 - [Load Testing](./operations/load-testing.md)
 - [Monitoring and Alerts](./operations/monitoring-alerts.md)

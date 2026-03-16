@@ -6,6 +6,7 @@ export default defineConfig({
   rootDir: 'docs',
   topNav: [
     { text: 'Getting Started', link: '/getting-started/' },
+    { text: 'Deployment', link: '/deployment/' },
     { text: 'Concepts', link: '/concepts/' },
     { text: 'Operations', link: '/operations/' },
     { text: 'Reference', link: '/reference/' },
@@ -21,6 +22,15 @@ export default defineConfig({
         { text: 'Install', link: '/getting-started/install' },
         { text: 'Quickstart', link: '/getting-started/quickstart' },
         { text: 'Production Checklist', link: '/getting-started/production-checklist' },
+      ],
+    },
+    {
+      text: 'Deployment',
+      items: [
+        { text: 'Overview', link: '/deployment/' },
+        { text: 'Local Deployment', link: '/deployment/local' },
+        { text: 'VPS Deployment', link: '/deployment/vps' },
+        { text: 'Kubernetes Deployment', link: '/deployment/kubernetes' },
       ],
     },
     {
@@ -40,6 +50,8 @@ export default defineConfig({
         { text: 'Configuration', link: '/operations/configuration' },
         { text: 'Troubleshooting', link: '/operations/troubleshooting' },
         { text: 'Upgrades and Rollbacks', link: '/operations/upgrades' },
+        { text: 'Task Scheduling (Cron)', link: '/operations/task-scheduling' },
+        { text: 'Webhook Triggers', link: '/operations/webhooks' },
         { text: 'Security and Isolation', link: '/operations/security' },
         { text: 'Load Testing', link: '/operations/load-testing' },
         { text: 'Monitoring and Alerts', link: '/operations/monitoring-alerts' },

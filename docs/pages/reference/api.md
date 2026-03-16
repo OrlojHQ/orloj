@@ -84,4 +84,6 @@ Both profiles support replay protection through timestamp skew and/or event-id d
 ## Related Docs
 
 - [CRD Reference](./crds.md)
+- [Task Scheduling (Cron)](../operations/task-scheduling.md)
+- [Webhook Triggers](../operations/webhooks.md)
 - [Tool Contract v1](./tool-contract-v1.md)

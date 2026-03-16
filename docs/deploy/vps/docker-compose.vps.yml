@@ -1,0 +1,115 @@
+services:
+  nats:
+    image: nats:2.10-alpine
+    command: ["-js"]
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  orlojd:
+    build:
+      context: ../../..
+      dockerfile: Dockerfile
+      args:
+        BINARY: orlojd
+    environment:
+      ORLOJ_POSTGRES_DSN: ${ORLOJ_POSTGRES_DSN}
+      ORLOJ_TASK_EXECUTION_MODE: message-driven
+      ORLOJ_EVENT_BUS_BACKEND: nats
+      ORLOJ_NATS_URL: nats://nats:4222
+      ORLOJ_AGENT_MESSAGE_BUS_BACKEND: nats-jetstream
+      ORLOJ_AGENT_MESSAGE_NATS_URL: nats://nats:4222
+      ORLOJ_MODEL_GATEWAY_PROVIDER: ${ORLOJ_MODEL_GATEWAY_PROVIDER}
+      ORLOJ_MODEL_GATEWAY_API_KEY: ${ORLOJ_MODEL_GATEWAY_API_KEY}
+      ORLOJ_MODEL_GATEWAY_DEFAULT_MODEL: ${ORLOJ_MODEL_GATEWAY_DEFAULT_MODEL}
+      ORLOJ_API_TOKEN: ${ORLOJ_API_TOKEN}
+    command:
+      - --addr=:8080
+      - --storage-backend=postgres
+    ports:
+      - "${ORLOJ_HTTP_PORT}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080/healthz >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  orlojworker-a:
+    build:
+      context: ../../..
+      dockerfile: Dockerfile
+      args:
+        BINARY: orlojworker
+    environment:
+      ORLOJ_POSTGRES_DSN: ${ORLOJ_POSTGRES_DSN}
+      ORLOJ_TASK_EXECUTION_MODE: message-driven
+      ORLOJ_AGENT_MESSAGE_BUS_BACKEND: nats-jetstream
+      ORLOJ_AGENT_MESSAGE_NATS_URL: nats://nats:4222
+      ORLOJ_AGENT_MESSAGE_CONSUME: "true"
+      ORLOJ_MODEL_GATEWAY_PROVIDER: ${ORLOJ_MODEL_GATEWAY_PROVIDER}
+      ORLOJ_MODEL_GATEWAY_API_KEY: ${ORLOJ_MODEL_GATEWAY_API_KEY}
+      ORLOJ_MODEL_GATEWAY_DEFAULT_MODEL: ${ORLOJ_MODEL_GATEWAY_DEFAULT_MODEL}
+    command:
+      - --storage-backend=postgres
+      - --worker-id=worker-a
+      - --region=${ORLOJ_WORKER_REGION}
+      - --max-concurrent-tasks=${ORLOJ_WORKER_MAX_CONCURRENCY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      orlojd:
+        condition: service_healthy
+      nats:
+        condition: service_started
+    restart: unless-stopped
+
+  orlojworker-b:
+    build:
+      context: ../../..
+      dockerfile: Dockerfile
+      args:
+        BINARY: orlojworker
+    environment:
+      ORLOJ_POSTGRES_DSN: ${ORLOJ_POSTGRES_DSN}
+      ORLOJ_TASK_EXECUTION_MODE: message-driven
+      ORLOJ_AGENT_MESSAGE_BUS_BACKEND: nats-jetstream
+      ORLOJ_AGENT_MESSAGE_NATS_URL: nats://nats:4222
+      ORLOJ_AGENT_MESSAGE_CONSUME: "true"
+      ORLOJ_MODEL_GATEWAY_PROVIDER: ${ORLOJ_MODEL_GATEWAY_PROVIDER}
+      ORLOJ_MODEL_GATEWAY_API_KEY: ${ORLOJ_MODEL_GATEWAY_API_KEY}
+      ORLOJ_MODEL_GATEWAY_DEFAULT_MODEL: ${ORLOJ_MODEL_GATEWAY_DEFAULT_MODEL}
+    command:
+      - --storage-backend=postgres
+      - --worker-id=worker-b
+      - --region=${ORLOJ_WORKER_REGION}
+      - --max-concurrent-tasks=${ORLOJ_WORKER_MAX_CONCURRENCY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      orlojd:
+        condition: service_healthy
+      nats:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

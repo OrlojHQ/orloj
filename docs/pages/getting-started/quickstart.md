@@ -49,6 +49,9 @@ Expected result:
 
 ## Next Steps
 
+- [Deployment Overview](../deployment/index.md)
+- [VPS Deployment](../deployment/vps.md)
+- [Kubernetes Deployment](../deployment/kubernetes.md)
 - [Production Checklist](./production-checklist.md)
 - [Starter Blueprints](../architecture/starter-blueprints.md)
 - [Execution and Messaging](../architecture/execution-model.md)

@@ -1,0 +1,17 @@
+[Unit]
+Description=Orloj Stack (Docker Compose)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/orloj
+ExecStart=/usr/bin/env docker compose --env-file /opt/orloj/docs/deploy/vps/.env.vps -f /opt/orloj/docs/deploy/vps/docker-compose.vps.yml up -d --build
+ExecStop=/usr/bin/env docker compose --env-file /opt/orloj/docs/deploy/vps/.env.vps -f /opt/orloj/docs/deploy/vps/docker-compose.vps.yml down
+ExecReload=/usr/bin/env docker compose --env-file /opt/orloj/docs/deploy/vps/.env.vps -f /opt/orloj/docs/deploy/vps/docker-compose.vps.yml up -d --build
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

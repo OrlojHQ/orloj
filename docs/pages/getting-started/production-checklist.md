@@ -37,6 +37,9 @@ Use this checklist before broad internal rollout and before OSS launch cut readi
 
 ## Related Guides
 
+- [Deployment Overview](../deployment/index.md)
+- [VPS Deployment](../deployment/vps.md)
+- [Kubernetes Deployment](../deployment/kubernetes.md)
 - [Runbook](../operations/runbook.md)
 - [Security and Isolation](../operations/security.md)
 - [Release Process](../project/release-process.md)

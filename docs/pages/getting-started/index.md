@@ -13,8 +13,9 @@ After completing this section, you should be able to:
 ## Recommended Path
 
 1. [Install](./install.md)
-2. [Quickstart](./quickstart.md)
-3. [Production Checklist](./production-checklist.md)
+2. [Deployment Overview](../deployment/index.md)
+3. [Quickstart](./quickstart.md)
+4. [Production Checklist](./production-checklist.md)
 
 ## Prerequisites
 
