@@ -4,7 +4,7 @@ Use this runbook for baseline production operation and incident response.
 
 ## Reference Topology
 
-1. `orlojd` control plane
+1. `orlojd` server
 2. Postgres state backend
 3. NATS JetStream for message-driven execution
 4. multiple `orlojworker` instances
@@ -15,7 +15,7 @@ Use this runbook for baseline production operation and incident response.
 2. Start `orlojd` with `--storage-backend=postgres` and `--task-execution-mode=message-driven`.
 3. Start at least two workers with `--agent-message-consume`.
 4. Configure model provider and credentials.
-5. Apply required resources (`ModelEndpoint`, `Tool`, `Agent`, `AgentSystem`, `Task`, governance CRDs).
+5. Apply required resources (`ModelEndpoint`, `Tool`, `Agent`, `AgentSystem`, `Task`, governance resources).
 
 ## Verification
 

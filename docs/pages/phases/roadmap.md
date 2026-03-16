@@ -11,7 +11,7 @@ This roadmap is forward-looking only. Completed delivery history is tracked in `
 ## Release Gate 0: Core OSS Readiness
 
 Gate 0 is a hard blocker for OSS launch and must pass before broad post-core expansion.
-Non-goal for Gate 0: multi-control-plane high availability; defer HA implementation to later reliability hardening.
+Non-goal for Gate 0: multi-server high availability; defer HA implementation to later reliability hardening.
 
 ### 0.1 Extensibility Readiness
 
@@ -81,15 +81,15 @@ Test gate:
 - Documentation link checks and scenario walkthrough checks pass.
 - Example manifests and commands validate against current binaries.
 
-### 0.5 API/CRD Stability Policy
+### 0.5 API/Resource Stability Policy
 
 Deliverables:
-- Public surface lifecycle labels for APIs and CRDs (`experimental`, `beta`, `stable`).
+- Public surface lifecycle labels for APIs and resources (`experimental`, `beta`, `stable`).
 - Deprecation/removal windows for each stability level.
 - CI API/schema diff guard that blocks unversioned breaking changes.
 
 Done means:
-- Public API and CRD docs declare lifecycle status and compatibility expectations.
+- Public API and resource docs declare lifecycle status and compatibility expectations.
 - Deprecation policy includes minimum support window and migration-note requirements.
 - Breaking API/schema changes require explicit versioning and approval path.
 
@@ -167,18 +167,42 @@ Test gate:
 ### 0.10 Operability Baseline
 
 Deliverables:
-- Control-plane operability baseline for OSS operators: readiness, health, metrics, and trace/log correlation conventions.
-- Operator-facing SLI definitions and runbook mappings for core control-plane behavior.
+- Server operability baseline for OSS operators: readiness, health, metrics, and trace/log correlation conventions.
+- Operator-facing SLI definitions and runbook mappings for core server behavior.
 - Baseline operational checks wired into release verification.
 
 Done means:
-- Operators can assess control-plane health from documented endpoints/signals.
+- Operators can assess server health from documented endpoints/signals.
 - Core operational runbooks map alerts/signals to concrete remediation actions.
-- Operability expectations are explicit for single-control-plane deployments.
+- Operability expectations are explicit for single-server deployments.
 
 Test gate:
 - Operability smoke checks validate readiness/health and baseline telemetry signals.
 - Runbook validation scenarios pass for startup, degraded behavior, and recovery.
+
+## Post-Launch Engineering
+
+Items planned for after OSS launch. These address architectural improvements identified during the pre-launch review.
+
+### Database Schema Normalization
+
+Move from the single `resources` JSONB table to dedicated tables per resource type with typed columns. Enables proper indexing, foreign-key constraints, and query performance at scale. The single-table design works for launch but will become a bottleneck.
+
+### Worker API Gateway
+
+Workers currently connect directly to Postgres. Introduce an API-mediated path where workers interact with the server through the REST API or a lightweight RPC layer. This decouples workers from the database, simplifies network security, and enables the server to enforce admission control on worker operations.
+
+### Secret Encryption at Rest
+
+Add optional encryption for `Secret.spec.data` values stored in the database. Accept a `--secret-encryption-key` flag and encrypt/decrypt transparently in the resource store layer. This makes the built-in Secret resource viable for production use alongside the existing env-var resolution path.
+
+### Worker Initialization Simplification
+
+Reduce boilerplate in `cmd/orlojworker/main.go` and `cmd/orlojd/main.go` by extracting a shared store-initialization factory. Both binaries currently initialize 11+ stores with identical patterns.
+
+### Python SDK
+
+Create a thin Python client library for the Orloj REST API. Target use cases: programmatic task submission, status polling, and result retrieval from Python-based ML/data pipelines.
 
 ## Active Milestones
 
@@ -315,7 +339,7 @@ Test gate:
 Deliverables:
 - Backup/restore and disaster-recovery procedures with tests.
 - Upgrade/canary strategies and reliability conformance suites.
-- Multi-control-plane HA hardening (leader election/failover) as post-Gate-0 optional reliability work.
+- Multi-server HA hardening (leader election/failover) as post-Gate-0 optional reliability work.
 
 Exit criteria:
 - Operational recovery and upgrade safety are validated before release.
@@ -339,7 +363,7 @@ Test gate:
 ### Phase 16: GitOps Sync for Orloj Resources
 
 Deliverables:
-- Repository watcher/reconciler for Orloj manifests (`Git -> Orloj API`).
+- Repository watcher/sync service for Orloj manifests (`Git -> Orloj API`).
 - Auto-apply with optional auto-prune for deleted manifests.
 - Drift detection, sync status/history, and rollback-friendly revision tracking.
 - Policy controls for branch/path scope and sync safety guards.
@@ -348,7 +372,7 @@ Exit criteria:
 - GitOps sync is deterministic, auditable, and safe-by-default.
 
 Test gate:
-- Drift/reconcile/rollback integration scenarios pass.
+- Drift/detect-and-sync/rollback integration scenarios pass.
 
 ## Contract Stability Track (Cross-Cutting)
 

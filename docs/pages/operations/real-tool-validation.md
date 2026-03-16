@@ -20,7 +20,7 @@ Scenario path:
 
 ## Runtime Startup
 
-Terminal 1 (control plane):
+Terminal 1 (server):
 
 ```bash
 go run ./cmd/orlojd --task-execution-mode=message-driven --agent-message-bus-backend=memory

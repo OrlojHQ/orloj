@@ -41,6 +41,18 @@ Join state persists in `Task.status.join_states`.
 - lease expiry allows safe takeover by another worker
 - idempotency keys protect replay and crash recovery
 
+## Choosing an Execution Mode
+
+Orloj supports two execution modes that share the same resource model and graph definitions.
+
+**Sequential mode** (`--task-execution-mode=sequential`) runs the entire graph in-process on the server or embedded worker. Best for getting started, development, and single-agent systems. No message bus required.
+
+**Message-driven mode** (`--task-execution-mode=message-driven`) distributes execution across workers via the message bus. Each agent step is a queued message with durable delivery, retry, and dead-letter guarantees. Best for production, parallel fan-out, and horizontal scaling.
+
+Both modes produce the same task trace, history, and output. You can develop in sequential mode and deploy to production in message-driven mode without changing your resource definitions.
+
+See [Configuration](../operations/configuration.md) for the full set of flags.
+
 ## Related Docs
 
 - [Tool Contract v1](../reference/tool-contract-v1.md)

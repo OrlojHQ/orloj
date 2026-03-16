@@ -37,6 +37,8 @@ func Run(args []string) error {
 		return runGet(args[1:])
 	case "delete":
 		return runDelete(args[1:])
+	case "run":
+		return runRun(args[1:])
 	case "logs":
 		return runLogs(args[1:])
 	case "trace":
@@ -1116,13 +1118,117 @@ func parseInt64OrZero(value string) int64 {
 	return n
 }
 
+func runRun(args []string) error {
+	fs := flag.NewFlagSet("run", flag.ContinueOnError)
+	system := fs.String("system", "", "AgentSystem name to execute (required)")
+	server := fs.String("server", defaultServer, "Orloj server URL")
+	namespace := fs.String("namespace", "default", "namespace for the task")
+	pollInterval := fs.Duration("poll", 2*time.Second, "status poll interval")
+	timeout := fs.Duration("timeout", 5*time.Minute, "maximum wait time")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *system == "" {
+		return errors.New("--system is required")
+	}
+
+	input := make(map[string]string)
+	for _, arg := range fs.Args() {
+		parts := strings.SplitN(arg, "=", 2)
+		if len(parts) != 2 {
+			return fmt.Errorf("invalid input %q: expected key=value", arg)
+		}
+		input[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
+	}
+
+	taskName := fmt.Sprintf("run-%s-%d", *system, time.Now().UnixMilli())
+	task := crds.Task{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Task",
+		Metadata:   crds.ObjectMeta{Name: taskName, Namespace: *namespace},
+		Spec: crds.TaskSpec{
+			System: *system,
+			Input:  input,
+		},
+	}
+
+	payload, err := json.Marshal(task)
+	if err != nil {
+		return fmt.Errorf("marshal task: %w", err)
+	}
+
+	createURL := fmt.Sprintf("%s/v1/tasks?namespace=%s", *server, url.QueryEscape(*namespace))
+	resp, err := http.Post(createURL, "application/json", bytes.NewReader(payload))
+	if err != nil {
+		return fmt.Errorf("create task: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("create task failed (%d): %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	fmt.Printf("task %s created, watching...\n", taskName)
+
+	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
+	defer cancel()
+
+	ticker := time.NewTicker(*pollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("timeout waiting for task %s", taskName)
+		case <-ticker.C:
+			taskURL := fmt.Sprintf("%s/v1/tasks/%s?namespace=%s", *server, url.PathEscape(taskName), url.QueryEscape(*namespace))
+			getResp, err := http.Get(taskURL)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "poll error: %v\n", err)
+				continue
+			}
+			body, _ := io.ReadAll(getResp.Body)
+			getResp.Body.Close()
+			if getResp.StatusCode >= 300 {
+				fmt.Fprintf(os.Stderr, "poll error (%d): %s\n", getResp.StatusCode, strings.TrimSpace(string(body)))
+				continue
+			}
+
+			var result crds.Task
+			if err := json.Unmarshal(body, &result); err != nil {
+				fmt.Fprintf(os.Stderr, "parse error: %v\n", err)
+				continue
+			}
+
+			phase := strings.ToLower(strings.TrimSpace(result.Status.Phase))
+			switch phase {
+			case "succeeded":
+				fmt.Printf("task %s succeeded\n", taskName)
+				if result.Status.Output != nil {
+					out, _ := json.MarshalIndent(result.Status.Output, "", "  ")
+					fmt.Println(string(out))
+				}
+				return nil
+			case "failed", "deadletter":
+				fmt.Printf("task %s %s\n", taskName, phase)
+				if result.Status.LastError != "" {
+					fmt.Printf("error: %s\n", result.Status.LastError)
+				}
+				return fmt.Errorf("task %s", phase)
+			default:
+				fmt.Printf("task %s: %s\n", taskName, result.Status.Phase)
+			}
+		}
+	}
+}
+
 func printUsage() {
-	fmt.Print(`orlojctl - Agents-as-Code CLI (MVP)
+	fmt.Print(`orlojctl - Orloj CLI
 
 Usage:
   orlojctl apply -f <resource.yaml>
   orlojctl get [-w] agents|agent-systems|model-endpoints|tools|secrets|memories|agent-policies|agent-roles|tool-permissions|tasks|task-schedules|task-webhooks|workers
   orlojctl delete <resource> <name>
+  orlojctl run --system <name> [key=value ...]
   orlojctl logs <agent-name>|task/<task-name>
   orlojctl trace task <task-name>
   orlojctl graph system|task <name>

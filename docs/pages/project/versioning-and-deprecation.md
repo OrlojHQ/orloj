@@ -1,6 +1,6 @@
 # Versioning and Deprecation
 
-This policy defines stability levels and compatibility expectations for API, CRD, and extension surfaces.
+This policy defines stability levels and compatibility expectations for API, resource definition, and extension surfaces.
 
 ## Stability Levels
 

@@ -2,9 +2,9 @@
 
 Use this checklist before broad internal rollout and before OSS launch cut readiness.
 
-## Runtime and Data Plane
+## Runtime and Workers
 
-- [ ] Use Postgres state backend (`--storage-backend=postgres`) for control plane and workers.
+- [ ] Use Postgres state backend (`--storage-backend=postgres`) for server and workers.
 - [ ] Use durable message bus backend in message-driven mode (`nats-jetstream` recommended).
 - [ ] Run at least two workers in production namespaces.
 - [ ] Verify lease takeover behavior under worker interruption.
@@ -19,14 +19,14 @@ Use this checklist before broad internal rollout and before OSS launch cut readi
 ## Security and Governance
 
 - [ ] Enforce `AgentPolicy`, `AgentRole`, and `ToolPermission` on target systems.
-- [ ] Use secret-backed provider/tool auth (`Secret` + `secretRef`).
+- [ ] Use environment-variable-backed secrets (`ORLOJ_SECRET_*`) or an external secret manager for provider/tool auth. Reserve `Secret` resources for development only.
 - [ ] Validate redaction and denial/audit metadata in trace/log paths.
 - [ ] Validate approval-hook readiness for high-risk tool operations.
 
 ## Contracts and Documentation
 
 - [ ] Keep contract docs aligned with runtime behavior.
-- [ ] Ensure API/CRD lifecycle status and deprecation policy are published.
+- [ ] Ensure API/resource lifecycle status and deprecation policy are published.
 - [ ] Validate docs build in CI: `bun run docs:build`.
 
 ## Release Process

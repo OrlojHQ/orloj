@@ -1,68 +1,57 @@
-# Orloj Documentation
+# What is Orloj?
 
-Orloj is a Kubernetes-style control plane for multi-agent runtime orchestration, governance, and operations.
+Orloj is an open-source orchestration plane for multi-agent AI systems. Define your agents, tools, policies, and workflows as declarative YAML manifests. Orloj handles scheduling, execution, model routing, governance enforcement, and reliability -- so you can run multi-agent systems in production with the same operational rigor you expect from infrastructure.
 
-These docs are organized for production use: start with installation and quickstart, then move to operations, contracts, and release governance.
+## Why Orloj?
 
-## Getting Started
+Running AI agents in production today looks a lot like running containers before Kubernetes: ad-hoc scripts, no governance, no observability, and no standard way to manage the lifecycle of an agent fleet.
 
-- [Getting Started Overview](./getting-started/index.md)
-- [Install](./getting-started/install.md)
-- [Quickstart](./getting-started/quickstart.md)
-- [Production Checklist](./getting-started/production-checklist.md)
+Orloj solves this by providing an orchestration plane purpose-built for AI agent systems:
 
-## Deployment Targets
+- **Agents become manageable infrastructure.** Declare agents, their models, tools, and constraints in version-controlled manifests. Apply them with a single command.
+- **Multi-agent workflows are first-class.** Define pipelines, hierarchies, and swarm topologies as directed graphs. The runtime handles message routing, fan-out/fan-in, and turn-bounded loops.
+- **Governance is built in, not bolted on.** Policies, roles, and tool permissions are enforced at the execution layer. Unauthorized tool calls fail closed -- not silently.
+- **Production reliability by default.** Lease-based task ownership, capped exponential retry with jitter, idempotency tracking, and dead-letter handling are part of the core runtime.
 
-- [Deployment Overview](./deployment/index.md)
-- [Local Deployment](./deployment/local.md)
-- [VPS Deployment (Compose + systemd)](./deployment/vps.md)
-- [Kubernetes Deployment (Generic Manifests)](./deployment/kubernetes.md)
+## How It Works
 
-## Concepts and Architecture
+1. **Start the server** -- run `orlojd` to host the API, resource store, and task scheduler.
+2. **Connect workers** -- run one or more `orlojworker` instances that claim and execute tasks. (Or use `--embedded-worker` for single-process development.)
+3. **Define your system** -- write declarative YAML manifests for agents, tools, policies, and the agent graph.
+4. **Submit a task** -- apply a Task resource. The scheduler assigns it to a worker, which executes the agent graph and returns results.
 
-- [Concepts](./concepts/index.md)
-- [Architecture Overview](./architecture/overview.md)
-- [Execution and Messaging](./architecture/execution-model.md)
-- [Starter Blueprints](./architecture/starter-blueprints.md)
+**Server** (`orlojd`) -- API server, resource storage (in-memory or Postgres), background services, and task scheduler.
 
-## Operations
+**Workers** (`orlojworker`) -- task execution, model gateway routing, tool runtime with isolation, and message bus consumers.
 
-- [Operations Overview](./operations/index.md)
-- [Runbook](./operations/runbook.md)
-- [Configuration](./operations/configuration.md)
-- [Troubleshooting](./operations/troubleshooting.md)
-- [Upgrades and Rollbacks](./operations/upgrades.md)
-- [Task Scheduling (Cron)](./operations/task-scheduling.md)
-- [Webhook Triggers](./operations/webhooks.md)
-- [Security and Isolation](./operations/security.md)
-- [Load Testing](./operations/load-testing.md)
-- [Monitoring and Alerts](./operations/monitoring-alerts.md)
-- [Tool Runtime Conformance](./operations/tool-runtime-conformance.md)
-- [Real Tool Validation](./operations/real-tool-validation.md)
+**Governance** -- AgentPolicy, AgentRole, and ToolPermission resources enforced inline during every tool call and model interaction.
 
-## Reference
+You interact with Orloj through `orlojctl` (the CLI), the REST API, or the built-in web console.
 
-- [Reference Overview](./reference/index.md)
-- [CLI Reference](./reference/cli.md)
-- [API Reference](./reference/api.md)
-- [CRD Reference](./reference/crds.md)
-- [Extension Contracts](./reference/extensions.md)
-- [Tool Contract v1](./reference/tool-contract-v1.md)
-- [WASM Tool Module Contract v1](./reference/wasm-tool-module-contract-v1.md)
+## Key Capabilities
 
-## Project and Release
+| Capability                  | Description                                                                                   |
+| --------------------------- | --------------------------------------------------------------------------------------------- |
+| **Agents-as-Code**          | Declarative YAML manifests for agents, systems, tools, policies, and tasks                    |
+| **DAG-based orchestration** | Pipeline, hierarchical, and swarm-loop topologies with fan-out/fan-in support                 |
+| **Model routing**           | Per-agent model binding via ModelEndpoint resources (OpenAI, Anthropic, Azure OpenAI, Ollama) |
+| **Tool isolation**          | Container, WASM, or sandboxed execution with configurable timeouts and retry                  |
+| **Governance and RBAC**     | AgentPolicy, AgentRole, and ToolPermission with fail-closed enforcement                       |
+| **Task scheduling**         | Cron-based schedules and webhook-triggered task creation from external events                 |
+| **Reliability**             | Lease-based ownership, idempotent replay, capped retry with jitter, dead-letter transitions   |
+| **Observability**           | Task trace, message lifecycle, per-agent/per-edge metrics, and live event streaming           |
+| **Web console**             | Built-in UI with topology views, task inspection, and command palette                         |
 
-- [Project Overview](./project/index.md)
-- [Support](./project/support.md)
-- [Governance](./project/governance.md)
-- [Security Policy](./project/security-policy.md)
-- [Versioning and Deprecation](./project/versioning-and-deprecation.md)
-- [Release Process](./project/release-process.md)
-- [Roadmap](./phases/roadmap.md)
-- [Phase Log](./phases/phase-log.md)
+## What Orloj is Not
 
-## Repository Boundaries
+- **Not a model training or fine-tuning platform.** Orloj orchestrates agents that call models -- it does not train them.
+- **Not a prompt engineering tool.** Prompts live in Agent manifests, but Orloj does not provide prompt authoring or evaluation workflows.
+- **Not a chatbot framework.** Orloj manages multi-agent backend workflows, not user-facing conversational interfaces.
+- **Not a Kubernetes operator.** Orloj uses declarative YAML manifests and a familiar resource model (`apiVersion`, `kind`, `spec`, `status`), but it is a standalone system. It does not require a Kubernetes cluster.
 
-- [Cloud Boundary](./boundaries/agentops-cloud.BOUNDARY.md)
-- [Enterprise Boundary](./boundaries/agentops-enterprise.BOUNDARY.md)
-- [Plugins Boundary](./boundaries/agentops-plugins.BOUNDARY.md)
+## Get Started
+
+1. [Install Orloj](./getting-started/install.md) -- run from source, build binaries, or use Docker Compose.
+2. [Quickstart](./getting-started/quickstart.md) -- deploy a multi-agent pipeline in under five minutes.
+3. [Explore Concepts](./concepts/) -- understand agents, tasks, tools, governance, and the execution model.
+4. [Follow a Guide](./guides/) -- step-by-step tutorials for common workflows.

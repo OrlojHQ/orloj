@@ -60,6 +60,20 @@ func newTokenAuthorizerFromEnv() RequestAuthorizer {
 	return tokenAuthorizer{cfg: loadAuthConfig()}
 }
 
+// NewAPIKeyAuthorizer returns an authorizer that validates a single API key
+// as an admin bearer token. When key is empty, auth is disabled (all requests
+// pass). This is intended for the --api-key CLI flag.
+func NewAPIKeyAuthorizer(key string) RequestAuthorizer {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return tokenAuthorizer{cfg: authConfig{enabled: false}}
+	}
+	return tokenAuthorizer{cfg: authConfig{
+		enabled: true,
+		tokens:  map[string]string{key: "admin"},
+	}}
+}
+
 func (a tokenAuthorizer) Authorize(r *http.Request, requiredRole string) (bool, int, string) {
 	if strings.TrimSpace(requiredRole) == "" {
 		return true, 0, ""

@@ -1,4 +1,4 @@
-# CRD Reference
+# Resource Reference
 
 This document describes the current resource schemas in `orloj.dev/v1`, based on the runtime types and normalization logic in:
 
@@ -7,11 +7,11 @@ This document describes the current resource schemas in `orloj.dev/v1`, based on
 - `crds/resource_types.go`
 - `crds/graph.go`
 
-Status: API/CRD lifecycle policy is documented in [Versioning and Deprecation](../project/versioning-and-deprecation.md). Treat `orloj.dev/v1` as the primary contract surface for current releases.
+Status: Resource lifecycle policy is documented in [Versioning and Deprecation](../project/versioning-and-deprecation.md). Treat `orloj.dev/v1` as the primary contract surface for current releases.
 
 ## Common Conventions
 
-- Every resource uses Kubernetes-style top-level fields: `apiVersion`, `kind`, `metadata`, `spec`, `status`.
+- Every resource uses standard top-level fields: `apiVersion`, `kind`, `metadata`, `spec`, `status`.
 - `metadata.name` is required for all resources.
 - `metadata.namespace` defaults to `default` when omitted.
 - Most resources default `status.phase` to `Pending` during normalization.
@@ -40,6 +40,7 @@ Status: API/CRD lifecycle policy is documented in [Versioning and Deprecation](.
 - `model_ref` (string): reference to a `ModelEndpoint` (`name` or `namespace/name`).
 - `prompt` (string): agent instruction prompt.
 - `tools` ([]string): tool names available to the agent.
+- `allowed_tools` ([]string): tools pre-authorized without RBAC. Bypasses AgentRole/ToolPermission checks for listed tools.
 - `roles` ([]string): bound `AgentRole` names.
 - `memory` (object):
   - `ref` (string): `Memory` resource name.

@@ -23,45 +23,12 @@ const (
 	kindWorker       = "Worker"
 )
 
-// EnsurePostgresSchema provisions required control-plane tables.
+// EnsurePostgresSchema runs all pending database migrations. New schema changes
+// should be added as numbered SQL files in store/migrations/ (e.g.,
+// 002_add_foo.up.sql). Migrations are tracked in a schema_migrations table and
+// applied exactly once, in lexicographic order.
 func EnsurePostgresSchema(db *sql.DB) error {
-	if db == nil {
-		return fmt.Errorf("db is required")
-	}
-
-	statements := []string{
-		`CREATE TABLE IF NOT EXISTS resources (
-			kind TEXT NOT NULL,
-			name TEXT NOT NULL,
-			payload JSONB NOT NULL,
-			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-			PRIMARY KEY(kind, name)
-		)`,
-		`CREATE INDEX IF NOT EXISTS idx_resources_kind_updated_at ON resources(kind, updated_at DESC)`,
-		`CREATE TABLE IF NOT EXISTS task_logs (
-			id BIGSERIAL PRIMARY KEY,
-			task_name TEXT NOT NULL,
-			entry TEXT NOT NULL,
-			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-		)`,
-		`CREATE INDEX IF NOT EXISTS idx_task_logs_task_created_at ON task_logs(task_name, created_at ASC)`,
-		`CREATE TABLE IF NOT EXISTS webhook_dedupe (
-			endpoint_id TEXT NOT NULL,
-			event_id TEXT NOT NULL,
-			task_name TEXT NOT NULL,
-			expires_at TIMESTAMPTZ NOT NULL,
-			created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-			PRIMARY KEY(endpoint_id, event_id)
-		)`,
-		`CREATE INDEX IF NOT EXISTS idx_webhook_dedupe_expires_at ON webhook_dedupe(expires_at ASC)`,
-	}
-
-	for _, stmt := range statements {
-		if _, err := db.Exec(stmt); err != nil {
-			return err
-		}
-	}
-	return nil
+	return Migrate(db)
 }
 
 func upsertResource(db *sql.DB, kind string, name string, value any) error {

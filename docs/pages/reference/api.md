@@ -76,6 +76,95 @@ Both profiles support replay protection through timestamp skew and/or event-id d
 - `error_reason`
 - `retryable`
 
+## Request and Response Examples
+
+### Create a Resource
+
+```
+POST /v1/agents
+Content-Type: application/json
+```
+
+```json
+{
+  "apiVersion": "orloj.dev/v1",
+  "kind": "Agent",
+  "metadata": {
+    "name": "research-agent",
+    "namespace": "default"
+  },
+  "spec": {
+    "model": "gpt-4o",
+    "prompt": "You are a research assistant.",
+    "tools": ["web_search"],
+    "limits": {
+      "max_steps": 6,
+      "timeout": "30s"
+    }
+  }
+}
+```
+
+Response (`201 Created`):
+
+```json
+{
+  "apiVersion": "orloj.dev/v1",
+  "kind": "Agent",
+  "metadata": {
+    "name": "research-agent",
+    "namespace": "default",
+    "resourceVersion": "1"
+  },
+  "spec": { "...": "..." },
+  "status": {
+    "phase": "Pending"
+  }
+}
+```
+
+### Get a Resource
+
+```
+GET /v1/agents/research-agent?namespace=default
+```
+
+Returns the full resource including `metadata`, `spec`, and `status`.
+
+### Update a Resource
+
+```
+PUT /v1/agents/research-agent
+Content-Type: application/json
+If-Match: "1"
+```
+
+The request body must include the full resource. The `resourceVersion` (or `If-Match` header) must match the current version. Stale updates return `409 Conflict`.
+
+### Delete a Resource
+
+```
+DELETE /v1/agents/research-agent?namespace=default
+```
+
+Returns `200 OK` on success.
+
+### List Resources
+
+```
+GET /v1/agents?namespace=default
+```
+
+Returns an array of all resources of that type in the specified namespace.
+
+### Watch Resources
+
+```
+GET /v1/agents/watch
+```
+
+Returns a server-sent event stream of resource changes. Events include the resource kind, name, and the change type (created, updated, deleted).
+
 ## Concurrency Semantics
 
 - `PUT` requires `metadata.resourceVersion` or `If-Match`
@@ -83,7 +172,7 @@ Both profiles support replay protection through timestamp skew and/or event-id d
 
 ## Related Docs
 
-- [CRD Reference](./crds.md)
-- [Task Scheduling (Cron)](../operations/task-scheduling.md)
-- [Webhook Triggers](../operations/webhooks.md)
+- [Resource Reference](./crds.md)
+- [CLI Reference](./cli.md)
 - [Tool Contract v1](./tool-contract-v1.md)
+- [Glossary](./glossary.md)

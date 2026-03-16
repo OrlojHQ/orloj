@@ -11,23 +11,13 @@ This guide covers supported installation patterns for local evaluation and produ
 
 ## Option 1: Run from Source
 
-Start the control plane:
+Start the server with an embedded worker (single process, no external dependencies):
 
 ```bash
 go run ./cmd/orlojd \
   --storage-backend=memory \
-  --task-execution-mode=message-driven \
-  --agent-message-bus-backend=memory
-```
-
-Start a worker in a second terminal:
-
-```bash
-go run ./cmd/orlojworker \
-  --storage-backend=memory \
-  --task-execution-mode=message-driven \
-  --agent-message-bus-backend=memory \
-  --agent-message-consume \
+  --task-execution-mode=sequential \
+  --embedded-worker \
   --model-gateway-provider=mock
 ```
 
@@ -39,11 +29,10 @@ go build -o ./bin/orlojworker ./cmd/orlojworker
 go build -o ./bin/orlojctl ./cmd/orlojctl
 ```
 
-Run binaries:
+Run the server:
 
 ```bash
-./bin/orlojd --storage-backend=memory
-./bin/orlojworker --storage-backend=memory
+./bin/orlojd --storage-backend=memory --task-execution-mode=sequential --embedded-worker --model-gateway-provider=mock
 ```
 
 ## Option 3: Docker Compose

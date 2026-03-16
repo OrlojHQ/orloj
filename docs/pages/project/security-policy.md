@@ -31,8 +31,8 @@ Use private reporting through repository security advisories or maintainer-desig
 
 This policy covers:
 
-- control plane and worker binaries
-- API and CRD surfaces
+- server and worker binaries
+- API and resource surfaces
 - runtime isolation boundaries
 - release artifacts and provenance
 

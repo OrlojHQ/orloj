@@ -8,7 +8,7 @@ This directory is the canonical source for the Vocs documentation site.
 - `pages/getting-started/`: onboarding and production readiness checklists.
 - `pages/concepts/`: conceptual explanations and mental model.
 - `pages/architecture/`: system architecture and execution model docs.
-- `pages/reference/`: CRD and API reference docs.
+- `pages/reference/`: resource and API reference docs.
 - `pages/operations/`: deployment, runtime, and production operations docs.
 - `pages/phases/`: phase-by-phase implementation history.
 

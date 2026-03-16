@@ -35,6 +35,7 @@ type AgentToolAuthorizer struct {
 	roles         []string
 	missingRoles  []string
 	rules         map[string][]toolPermissionRule
+	allowedTools  map[string]struct{}
 }
 
 func NewAgentToolAuthorizer(
@@ -49,10 +50,18 @@ func NewAgentToolAuthorizer(
 	if isNilLookup(permissionLookup) {
 		permissionLookup = nil
 	}
+	allowed := make(map[string]struct{}, len(agent.Spec.AllowedTools))
+	for _, t := range agent.Spec.AllowedTools {
+		key := normalizeToolKey(t)
+		if key != "" {
+			allowed[key] = struct{}{}
+		}
+	}
 	a := &AgentToolAuthorizer{
 		enforceByRole: len(agent.Spec.Roles) > 0,
 		permissions:   make(map[string]struct{}),
 		rules:         make(map[string][]toolPermissionRule),
+		allowedTools:  allowed,
 	}
 
 	for _, rawRole := range agent.Spec.Roles {
@@ -133,6 +142,9 @@ func toolPermissionAppliesToAgent(item crds.ToolPermission, agentName string) bo
 
 func (a *AgentToolAuthorizer) Authorize(tool string, spec crds.ToolSpec) error {
 	if a == nil {
+		return nil
+	}
+	if _, ok := a.allowedTools[normalizeToolKey(tool)]; ok {
 		return nil
 	}
 	if len(a.missingRoles) > 0 {

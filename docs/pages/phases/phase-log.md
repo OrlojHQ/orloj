@@ -2,7 +2,7 @@
 
 ## Phase 1-2 Foundations
 
-- control plane scaffolding and CRD CRUD/status contracts
+- server scaffolding and resource CRUD/status contracts
 - scheduler + worker leasing model
 - event/watch infrastructure and web console baseline
 
@@ -27,11 +27,11 @@
 
 - tool capability/risk/runtime policy enforcement
 - isolated tool execution backend path (container runtime)
-- namespaced Secret CRD + `secretRef` resolution for tool auth
+- namespaced Secret resource + `secretRef` resolution for tool auth
 
 ## Phase 7
 
-- `AgentRole` + `ToolPermission` CRDs for permission-as-code governance
+- `AgentRole` + `ToolPermission` resources for permission-as-code governance
 - `Agent.spec.roles[]` binding model for agent identity/authorization
 - runtime tool call authorization hooks with fail-closed denials
 - permission denial classification as policy/non-retryable errors
@@ -46,7 +46,7 @@
 
 ## Phase 8.1
 
-- `ModelEndpoint` CRD introduced for namespaced provider routing
+- `ModelEndpoint` resource introduced for namespaced provider routing
 - `Agent.spec.model_ref` binding for per-agent model provider selection
 - runtime `ModelRouter` added (`model_ref` -> endpoint -> provider gateway)
 - endpoint auth via namespaced `Secret` (`auth.secretRef`) with env-prefix fallback
@@ -69,7 +69,7 @@
 
 - added enterprise/provider plugins: `azure-openai` and `ollama`
 - added runtime gateways/tests for Azure OpenAI and Ollama chat APIs
-- worker/control-plane provider flags and env key fallback updated for Azure OpenAI
+- worker/server provider flags and env key fallback updated for Azure OpenAI
 - added examples/secrets for `azure-openai` and `ollama` model endpoints
 
 ## Forward Roadmap

@@ -23,8 +23,10 @@ import (
 
 func main() {
 	addr := flag.String("addr", ":8080", "server listen address")
+	apiKey := flag.String("api-key", envOrDefault("ORLOJ_API_TOKEN", ""), "API key for bearer token auth (empty disables auth; env fallback: ORLOJ_API_TOKEN or ORLOJ_API_TOKENS)")
 	reconcile := flag.Duration("reconcile-interval", 2*time.Second, "agent reconcile interval")
 	runTaskWorker := flag.Bool("run-task-worker", false, "run embedded task worker in orlojd process")
+	embeddedWorker := flag.Bool("embedded-worker", false, "alias for --run-task-worker")
 	taskWorkerID := flag.String("task-worker-id", "embedded-worker", "worker id for embedded task worker")
 	taskLeaseDuration := flag.Duration("task-lease-duration", 30*time.Second, "task lease duration for embedded worker")
 	taskHeartbeatInterval := flag.Duration("task-heartbeat-interval", 10*time.Second, "task lease heartbeat interval for embedded worker")
@@ -236,6 +238,7 @@ func main() {
 		WebhookDedupe: webhookDedupeStore,
 		Workers:       workerStore,
 	}, runtime, logger, api.ServerOptions{
+		Authorizer: api.NewAPIKeyAuthorizer(*apiKey),
 		Extensions: extensions,
 	})
 	bus, closeBus := newEventBus(logger, *eventBusBackend, *natsURL, *natsSubjectPrefix)
@@ -277,7 +280,7 @@ func main() {
 	go taskSchedulerController.Start(ctx)
 	go taskScheduleController.Start(ctx)
 	go workerController.Start(ctx)
-	if *runTaskWorker {
+	if *runTaskWorker || *embeddedWorker {
 		go taskController.Start(ctx)
 		if strings.EqualFold(strings.TrimSpace(*taskExecutionMode), "message-driven") {
 			if agentMessageBus == nil {

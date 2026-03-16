@@ -1,17 +1,25 @@
 # Concepts
 
-This section explains the mental model for operating Orloj.
+This section explains the core building blocks of Orloj and how they fit together. Each concept page covers what a resource is, why it exists, how to configure it, and how it interacts with the rest of the system.
 
-## Core Concepts
+If you are new to Orloj, start with the [Architecture Overview](../architecture/overview.md) to understand the system's layers, then work through the concepts below.
 
-- Control plane and worker/data plane responsibilities.
-- Graph-based execution through `AgentSystem.spec.graph`.
-- Message-driven ownership, leases, retries, and dead-letter behavior.
-- Governance and authorization (`AgentPolicy`, `AgentRole`, `ToolPermission`).
-- Model and tool abstractions (`ModelEndpoint`, tool contracts, isolation modes).
+## Core Resources
 
-## Read Next
+**[Agents and Agent Systems](./agents-and-systems.md)** -- Agents are declarative units of work backed by language models. Agent Systems compose agents into directed graphs (pipelines, hierarchies, swarm loops) that Orloj executes as coordinated workflows.
 
-- [Architecture Overview](../architecture/overview.md)
-- [Execution and Messaging](../architecture/execution-model.md)
-- [Starter Blueprints](../architecture/starter-blueprints.md)
+**[Tasks and Scheduling](./tasks-and-scheduling.md)** -- Tasks are requests to execute an Agent System. They carry input, track execution state through a well-defined lifecycle, and support cron-based scheduling and webhook-triggered creation.
+
+**[Tools and Isolation](./tools-and-isolation.md)** -- Tools are external capabilities that agents invoke during execution. Orloj provides a standardized tool contract, four isolation backends (none, sandboxed, container, WASM), and configurable timeout and retry.
+
+**[Model Routing](./model-routing.md)** -- ModelEndpoints decouple agents from specific model providers. Configure connections to OpenAI, Anthropic, Azure OpenAI, or Ollama, and bind agents to endpoints by reference.
+
+**[Governance and Policies](./governance.md)** -- AgentPolicy, AgentRole, and ToolPermission resources enforce authorization at the execution layer. The governance model is fail-closed: unauthorized tool calls are denied, not silently ignored.
+
+## Architecture and Execution
+
+**[Architecture Overview](../architecture/overview.md)** -- The three-layer architecture: server, workers, and governance.
+
+**[Execution and Messaging](../architecture/execution-model.md)** -- Graph routing, fan-out/fan-in, message lifecycle, ownership guarantees, and tool selection.
+
+**[Starter Blueprints](../architecture/starter-blueprints.md)** -- Ready-to-run pipeline, hierarchical, and swarm-loop topologies with example manifests.

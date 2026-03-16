@@ -4,7 +4,7 @@ Intended location: root of private `orloj-cloud` repository.
 
 ## Allowed Scope
 
-- Org/project/account tenancy control-plane services.
+- Org/project/account tenancy server services.
 - Hosted operations automation (reliability, backups, restore orchestration, SLA workflows).
 - Billing, metering ingestion, and usage reporting pipelines.
 

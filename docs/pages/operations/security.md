@@ -23,18 +23,56 @@ WASM backend uses executor-factory boundaries and command-backed runtime executi
 
 ## Secret Handling
 
-- secrets are namespace-scoped `Secret` resources
-- `spec.data` values are base64-encoded
-- `stringData` supports write-time plaintext input
-- runtime resolves `Tool.spec.auth.secretRef` and injects auth into isolated execution
-- raw secret values must not appear in logs or trace payloads
+Orloj resolves secrets referenced by `secretRef` fields (on ModelEndpoint and Tool resources) using a chain of resolvers, tried in order:
+
+1. **Resource Store** -- looks up a `Secret` resource by name and reads the base64-encoded value from `spec.data`.
+2. **Environment Variables** -- looks up `ORLOJ_SECRET_<name>` (configurable prefix via `--model-secret-env-prefix` / `--tool-secret-env-prefix`).
+
+The first resolver that returns a value wins.
+
+### Development
+
+Use `Secret` resources for local development. They are convenient for getting started but store base64-encoded values in the database (Postgres JSONB or in-memory), which is not encrypted at rest.
+
+```yaml
+apiVersion: orloj.dev/v1
+kind: Secret
+metadata:
+  name: openai-api-key
+spec:
+  stringData:
+    value: sk-your-key-here
+```
+
+### Production
+
+In production, use environment variables or an external secret manager that injects values into the worker environment:
+
+**Environment variables (simplest)**
+```bash
+export ORLOJ_SECRET_openai_api_key="sk-prod-key"
+```
+
+The resolver normalizes the secret name: a `secretRef: openai-api-key` looks up `ORLOJ_SECRET_openai_api_key` (hyphens become underscores).
+
+**External secret managers** -- inject secrets as environment variables using your platform's native mechanism:
+
+- **Kubernetes**: Use [external-secrets-operator](https://external-secrets.io/) or the CSI secrets driver to sync Vault/AWS Secrets Manager/GCP Secret Manager values into pod env vars.
+- **HashiCorp Vault**: Use [Vault Agent](https://developer.hashicorp.com/vault/docs/agent-and-proxy/agent) sidecar to render secrets into env or files.
+- **Cloud providers**: Use AWS Secrets Manager, GCP Secret Manager, or Azure Key Vault with their respective injection mechanisms.
+
+In all cases, the `Secret` resource is not needed -- the env-var resolver handles resolution directly.
+
+### Security Requirements
+
+- Raw secret values must not appear in logs or trace payloads.
+- Validate redaction behavior during incident drills.
 
 ## Operational Requirements
 
-- enforce least-privilege tool permissions
-- validate redaction behavior during incident drills
-- monitor denial and runtime policy error trends
-- integrate approval hooks for high-risk operations before OSS cut
+- Enforce least-privilege tool permissions.
+- Monitor denial and runtime policy error trends.
+- Integrate approval hooks for high-risk operations before OSS cut.
 
 ## Related Docs
 

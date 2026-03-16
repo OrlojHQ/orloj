@@ -54,13 +54,14 @@ type AgentList struct {
 
 // AgentSpec defines desired runtime behavior.
 type AgentSpec struct {
-	Model    string      `json:"model,omitempty"`
-	ModelRef string      `json:"model_ref,omitempty"`
-	Prompt   string      `json:"prompt"`
-	Tools    []string    `json:"tools,omitempty"`
-	Roles    []string    `json:"roles,omitempty"`
-	Memory   MemorySpec  `json:"memory,omitempty"`
-	Limits   AgentLimits `json:"limits,omitempty"`
+	Model        string      `json:"model,omitempty"`
+	ModelRef     string      `json:"model_ref,omitempty"`
+	Prompt       string      `json:"prompt"`
+	Tools        []string    `json:"tools,omitempty"`
+	AllowedTools []string    `json:"allowed_tools,omitempty"`
+	Roles        []string    `json:"roles,omitempty"`
+	Memory       MemorySpec  `json:"memory,omitempty"`
+	Limits       AgentLimits `json:"limits,omitempty"`
 }
 
 // MemorySpec configures runtime memory backend.
@@ -118,6 +119,21 @@ func (a *Agent) Normalize() error {
 		normalizedRoles = append(normalizedRoles, role)
 	}
 	a.Spec.Roles = normalizedRoles
+	normalizedAllowed := make([]string, 0, len(a.Spec.AllowedTools))
+	seenAllowed := make(map[string]struct{}, len(a.Spec.AllowedTools))
+	for _, t := range a.Spec.AllowedTools {
+		t = strings.TrimSpace(t)
+		if t == "" {
+			continue
+		}
+		key := strings.ToLower(t)
+		if _, exists := seenAllowed[key]; exists {
+			continue
+		}
+		seenAllowed[key] = struct{}{}
+		normalizedAllowed = append(normalizedAllowed, t)
+	}
+	a.Spec.AllowedTools = normalizedAllowed
 	if a.Spec.Limits.MaxSteps <= 0 {
 		a.Spec.Limits.MaxSteps = 10
 	}

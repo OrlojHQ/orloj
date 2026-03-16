@@ -1,35 +1,46 @@
 # Starter Blueprints
 
-This guide maps common orchestration patterns to runnable manifests in `examples/blueprints/`.
+Blueprints are ready-to-run templates that combine agents, an agent system (the graph), and a task into a single directory. They are the fastest way to see Orloj in action and to understand each orchestration pattern.
 
 ## Available Patterns
 
-1. Pipeline
-- Purpose: predictable stage-by-stage execution.
-- Topology: `planner -> research -> writer`.
-- Files: `examples/blueprints/pipeline/`.
+### Pipeline
 
-2. Hierarchical
-- Purpose: manager-led delegation.
-- Topology: `manager -> leads -> workers -> editor`.
-- Files: `examples/blueprints/hierarchical/`.
+Predictable stage-by-stage execution: `planner -> research -> writer`.
 
-3. Swarm and Loop
-- Purpose: parallel exploration with iterative coordination.
-- Topology: `coordinator <-> scouts` and `coordinator -> synthesizer`.
-- Files: `examples/blueprints/swarm-loop/`.
-- Safety boundary: bounded by `Task.spec.max_turns`.
+```bash
+orlojctl apply -f examples/blueprints/pipeline/
+```
 
-## Runtime Requirements
+### Hierarchical
 
-- `--task-execution-mode=message-driven`
-- non-`none` `--agent-message-bus-backend` (`memory` or `nats-jetstream`)
-- worker consumer enabled with `--agent-message-consume`
+Manager-led delegation: `manager -> leads -> workers -> editor`.
 
-## Apply Blueprints
+```bash
+orlojctl apply -f examples/blueprints/hierarchical/
+```
 
-See:
+### Swarm and Loop
 
-- [`examples/blueprints/README.md`](../../../examples/blueprints/README.md)
+Parallel exploration with iterative coordination: `coordinator <-> scouts -> synthesizer`. Safety-bounded by `Task.spec.max_turns`.
 
-That guide includes the exact `orlojctl apply -f ...` commands for each blueprint.
+```bash
+orlojctl apply -f examples/blueprints/swarm-loop/
+```
+
+## Runtime Compatibility
+
+Blueprints work in both execution modes:
+
+- **Sequential** -- run with `--embedded-worker` for single-process development. Good for getting started.
+- **Message-driven** -- run with `--agent-message-bus-backend=memory` (or `nats-jetstream`) and `--agent-message-consume` for distributed execution. Required for parallel fan-out in the swarm-loop pattern.
+
+## What is Inside a Blueprint
+
+Each blueprint directory contains:
+
+- `agents/*.yaml` -- individual Agent resources with prompts, model config, and tool bindings.
+- `agent-system.yaml` -- the AgentSystem resource defining the graph topology (nodes and edges).
+- `task.yaml` -- a Task resource that targets the agent system with sample input.
+
+Apply the entire directory with `orlojctl apply -f <path>/` to create all resources at once.
