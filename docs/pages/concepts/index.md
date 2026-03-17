@@ -6,30 +6,33 @@ If you are new to Orloj, start with the [Architecture Overview](../architecture/
 
 ## At a Glance
 
-```mermaid
-flowchart TD
-    Task["Task"] -->|triggers| AgentSystem["AgentSystem"]
-    TaskSchedule["TaskSchedule"] -->|creates| Task
-    TaskWebhook["TaskWebhook"] -->|creates| Task
+```
+                  TaskSchedule ──creates──▶ Task ◀──creates── TaskWebhook
+                                             │
+                                          triggers
+                                             ▼
+                                        AgentSystem
+                                        ╱          ╲
+                                   composes      composes
+                                     ╱                ╲
+                                Agent A ─────────── Agent B
+                               ╱   │   ╲           ╱   │
+                          calls  invokes reads  calls invokes
+                            ╱      │    ╲       ╱      │
+                   ModelEndpoint  Tool  Memory  │      │
+                        │          │            │      │
+                   resolves    resolves          │      │
+                    auth via    auth via         │      │
+                        ╲       ╱               │      │
+                         Secret                 │      │
+                                                │      │
+              ┄┄┄┄┄┄┄┄ Governance ┄┄┄┄┄┄┄┄┄┄┄┄┄┤┄┄┄┄┄┄┤
+              ┆                                 ┆      ┆
+        AgentPolicy ┄┄ constrains ┄┄▶ Agent A, Agent B
+        AgentRole   ┄┄ grants permissions to ┄▶ Agents
+        ToolPermission ┄ controls access to ┄▶ Tools
 
-    AgentSystem -->|composes| AgentA["Agent A"]
-    AgentSystem -->|composes| AgentB["Agent B"]
-
-    AgentA -->|calls| ModelEndpoint["ModelEndpoint"]
-    AgentA -->|invokes| Tool["Tool"]
-    AgentB -->|calls| ModelEndpoint
-    AgentB -->|invokes| Tool
-
-    ModelEndpoint -->|resolves auth via| Secret["Secret"]
-    Tool -->|resolves auth via| Secret
-    AgentA -->|reads/writes| Memory["Memory"]
-
-    AgentPolicy["AgentPolicy"] -.->|constrains| AgentA
-    AgentPolicy -.->|constrains| AgentB
-    AgentRole["AgentRole"] -.->|grants permissions to| AgentA
-    ToolPermission["ToolPermission"] -.->|controls access to| Tool
-
-    Worker["Worker"] -->|claims and executes| Task
+              Worker ──claims and executes──▶ Task
 ```
 
 ## Core Resources
