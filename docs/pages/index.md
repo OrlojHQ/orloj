@@ -42,12 +42,11 @@ You interact with Orloj through `orlojctl` (the CLI), the REST API, or the built
 | **Observability**           | Task trace, message lifecycle, per-agent/per-edge metrics, and live event streaming           |
 | **Web console**             | Built-in UI with topology views, task inspection, and command palette                         |
 
-## What Orloj is Not
+## Scope
 
-- **Not a model training or fine-tuning platform.** Orloj orchestrates agents that call models -- it does not train them.
-- **Not a prompt engineering tool.** Prompts live in Agent manifests, but Orloj does not provide prompt authoring or evaluation workflows.
-- **Not a chatbot framework.** Orloj manages multi-agent backend workflows, not user-facing conversational interfaces.
-- **Not a Kubernetes operator.** Orloj uses declarative YAML manifests and a familiar resource model (`apiVersion`, `kind`, `spec`, `status`), but it is a standalone system. It does not require a Kubernetes cluster.
+Orloj focuses on production orchestration for multi-agent systems. It assumes you have already chosen your models, prompts, and tools -- Orloj's job is to run them reliably at scale with governance enforced.
+
+Orloj does not train or fine-tune models, provide prompt authoring workflows, or serve as a user-facing chatbot framework. While it uses a Kubernetes-style resource model (`apiVersion`, `kind`, `spec`, `status`), it is a standalone system and does not require a Kubernetes cluster.
 
 ## Get Started
 

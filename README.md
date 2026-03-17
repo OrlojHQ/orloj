@@ -1,5 +1,7 @@
 # Orloj
 
+*Named after the [Prague Orloj](https://en.wikipedia.org/wiki/Prague_astronomical_clock), an astronomical clock that has coordinated complex mechanisms for over 600 years.*
+
 **A lightweight orchestration plane for multi-agent AI systems.**
 
 Define agents, tools, policies, and workflows as declarative YAML. Orloj handles scheduling, execution, model routing, governance enforcement, and reliability -- so you can run multi-agent systems in production with the same operational rigor you expect from infrastructure.

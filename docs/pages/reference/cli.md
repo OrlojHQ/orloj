@@ -20,6 +20,7 @@ orlojctl create secret <name> --from-literal key=value [...]
 orlojctl get [-w] <resource>
 orlojctl delete <resource> <name>
 orlojctl run --system <name> [key=value ...]
+orlojctl init --blueprint pipeline|hierarchical|swarm-loop [--name <prefix>] [--dir <path>]
 orlojctl logs <agent-name>|task/<task-name>
 orlojctl trace task <task-name>
 orlojctl graph system|task <name>
@@ -66,6 +67,26 @@ Flags:
 - `--timeout` (default `5m`): maximum wait time.
 
 Positional arguments after flags are parsed as `key=value` input pairs.
+
+### `orlojctl init`
+
+Scaffold a new agent system from a blueprint template. Generates agent manifests, an agent-system graph, and a task file in the target directory.
+
+```bash
+orlojctl init --blueprint pipeline --name my-project --dir ./agents
+```
+
+Flags:
+
+- `--blueprint` (required): Blueprint to scaffold (`pipeline`, `hierarchical`, `swarm-loop`).
+- `--name` (default: blueprint name): Prefix for generated resource names.
+- `--dir` (default: `.`): Output directory. Creates an `agents/` subdirectory for agent manifests.
+
+Generated files:
+
+- `agents/<role>_agent.yaml` -- one per agent in the topology
+- `agent-system.yaml` -- the agent graph with edges
+- `task.yaml` -- a starter task targeting the system
 
 Supported resources:
 

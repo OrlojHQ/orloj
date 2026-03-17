@@ -12,6 +12,11 @@ This section covers release governance and open-source operating expectations fo
 - [Contributing](https://github.com/OrlojHQ/orloj/blob/main/CONTRIBUTING.md)
 - [Code of Conduct](https://github.com/OrlojHQ/orloj/blob/main/CODE_OF_CONDUCT.md)
 
+## For Contributors
+
+- [Roadmap](../phases/roadmap.md) -- forward-looking delivery milestones and release gates
+- [Phase Log](../phases/phase-log.md) -- completed delivery history
+
 ## Scope
 
 These pages define how Orloj is maintained as a public project, including support channels, security response process, compatibility policy, and release mechanics.

@@ -103,8 +103,6 @@ export default defineConfig({
         { text: 'Security Policy', link: '/project/security-policy' },
         { text: 'Versioning and Deprecation', link: '/project/versioning-and-deprecation' },
         { text: 'Release Process', link: '/project/release-process' },
-        { text: 'Roadmap', link: '/phases/roadmap' },
-        { text: 'Phase Log', link: '/phases/phase-log' },
         { text: 'Cloud Boundary', link: '/boundaries/agentops-cloud.BOUNDARY' },
         { text: 'Enterprise Boundary', link: '/boundaries/agentops-enterprise.BOUNDARY' },
         { text: 'Plugins Boundary', link: '/boundaries/agentops-plugins.BOUNDARY' },

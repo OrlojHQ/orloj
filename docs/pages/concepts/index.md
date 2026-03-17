@@ -4,6 +4,34 @@ This section explains the core building blocks of Orloj and how they fit togethe
 
 If you are new to Orloj, start with the [Architecture Overview](../architecture/overview.md) to understand the system's layers, then work through the concepts below.
 
+## At a Glance
+
+```mermaid
+flowchart TD
+    Task["Task"] -->|triggers| AgentSystem["AgentSystem"]
+    TaskSchedule["TaskSchedule"] -->|creates| Task
+    TaskWebhook["TaskWebhook"] -->|creates| Task
+
+    AgentSystem -->|composes| AgentA["Agent A"]
+    AgentSystem -->|composes| AgentB["Agent B"]
+
+    AgentA -->|calls| ModelEndpoint["ModelEndpoint"]
+    AgentA -->|invokes| Tool["Tool"]
+    AgentB -->|calls| ModelEndpoint
+    AgentB -->|invokes| Tool
+
+    ModelEndpoint -->|resolves auth via| Secret["Secret"]
+    Tool -->|resolves auth via| Secret
+    AgentA -->|reads/writes| Memory["Memory"]
+
+    AgentPolicy["AgentPolicy"] -.->|constrains| AgentA
+    AgentPolicy -.->|constrains| AgentB
+    AgentRole["AgentRole"] -.->|grants permissions to| AgentA
+    ToolPermission["ToolPermission"] -.->|controls access to| Tool
+
+    Worker["Worker"] -->|claims and executes| Task
+```
+
 ## Core Resources
 
 **[Agents and Agent Systems](./agents-and-systems.md)** -- Agents are declarative units of work backed by language models. Agent Systems compose agents into directed graphs (pipelines, hierarchies, swarm loops) that Orloj executes as coordinated workflows.

@@ -41,6 +41,8 @@ func Run(args []string) error {
 		return runDelete(args[1:])
 	case "run":
 		return runRun(args[1:])
+	case "init":
+		return runInit(args[1:])
 	case "logs":
 		return runLogs(args[1:])
 	case "trace":
@@ -1316,6 +1318,7 @@ Usage:
   orlojctl get [-w] agents|agent-systems|model-endpoints|tools|secrets|memories|agent-policies|agent-roles|tool-permissions|tasks|task-schedules|task-webhooks|workers
   orlojctl delete <resource> <name>
   orlojctl run --system <name> [key=value ...]
+  orlojctl init --blueprint pipeline|hierarchical|swarm-loop [--name <prefix>] [--dir <path>]
   orlojctl logs <agent-name>|task/<task-name>
   orlojctl trace task <task-name>
   orlojctl graph system|task <name>

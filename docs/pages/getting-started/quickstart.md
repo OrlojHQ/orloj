@@ -63,6 +63,35 @@ go run ./cmd/orlojworker \
 
 See [Execution and Messaging](../architecture/execution-model.md) for details on the message lifecycle, ownership guarantees, and retry behavior.
 
+## Try with a Real Model
+
+The quickstart above uses the mock gateway, which returns placeholder output. To see actual AI reasoning flow through your pipeline, swap in a real model provider.
+
+### Using OpenAI
+
+Set your API key and restart the server:
+
+```bash
+export ORLOJ_SECRET_OPENAI_API_KEY=sk-...
+
+go run ./cmd/orlojd \
+  --storage-backend=memory \
+  --task-execution-mode=sequential \
+  --embedded-worker \
+  --model-gateway-provider=openai
+```
+
+The pipeline agents reference `gpt-4o` by default. Apply the same blueprint and watch the task produce real output:
+
+```bash
+go run ./cmd/orlojctl apply -f examples/blueprints/pipeline/
+go run ./cmd/orlojctl run --system bp-pipeline-system topic="state of enterprise AI copilots"
+```
+
+### Using Ollama (Local Models)
+
+If you prefer to run models locally, start an [Ollama](https://ollama.com) server, then create a ModelEndpoint that points to it. See [Configure Model Routing](../guides/configure-model-routing.md) for the full walkthrough.
+
 ## Next Steps
 
 - [Starter Blueprints](../architecture/starter-blueprints.md) -- pipeline, hierarchical, and swarm-loop topologies

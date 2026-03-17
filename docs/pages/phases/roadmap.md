@@ -204,6 +204,18 @@ Reduce boilerplate in `cmd/orlojworker/main.go` and `cmd/orlojd/main.go` by extr
 
 Create a thin Python client library for the Orloj REST API. Target use cases: programmatic task submission, status polling, and result retrieval from Python-based ML/data pipelines.
 
+### Scheduler Package Cleanup
+
+`scheduler/scheduler.go` is a stub that returns the first graph node. Real scheduling logic lives in `TaskSchedulerController` (worker assignment) and `TaskController` (graph traversal and claim). Evaluate removing the package or consolidating the scheduling surface so the code structure matches the actual responsibility boundaries.
+
+### OpenTelemetry Tracing Extension
+
+Add a `TracingSink` extension interface alongside the existing `MeteringSink` and `AuditSink`. This would enable distributed tracing through agent graphs, which is especially valuable for debugging hierarchical and swarm-loop topologies where a task fans out across multiple agents and join points.
+
+### Memory Resource Maturity Review
+
+The `Memory` CRD exists and agents can reference it via `spec.memory.ref`, but the runtime integration surface is limited. Evaluate whether to flesh out the vector-store retrieval implementation or explicitly scope the Memory resource as experimental with a graduation timeline.
+
 ## Active Milestones
 
 ### Tool Platform 2 (Remaining Runtime Work)
