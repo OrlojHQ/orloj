@@ -12,14 +12,6 @@ This roadmap is forward-looking only. Completed delivery history is tracked in `
 
 Gate 0 is largely complete. The following items were evaluated during the pre-launch audit and deferred to post-launch hardening. See `docs/pages/phases/phase-log.md` for completed Gate 0 work.
 
-### 0.2 Reliability Readiness
-
-Load and failure-injection tooling (`orloj-loadtest`, `orloj-alertcheck`) works for manual validation. Remaining work is CI integration for SLO-backed quality gates and automated backup/restore verification.
-
-Deliverables:
-- SLO-backed load and failure quality gates enforced in CI.
-- Backup/restore verification and upgrade/canary validation paths.
-
 ### 0.6 Draft-to-Stable Contract Graduation
 
 Contracts exist, pass conformance suites, and are documented. Remaining work is formal graduation labeling and versioned change-control process.
@@ -65,9 +57,9 @@ Base OpenTelemetry integration is complete (OTLP export, span instrumentation on
 
 The `Memory` resource exists and agents can reference it via `spec.memory.ref`, but the runtime integration surface is limited. Evaluate whether to flesh out the vector-store retrieval implementation or explicitly scope the Memory resource as experimental with a graduation timeline.
 
-## Pre-Launch: Tool Platform
+## Post-Launch Milestones
 
-Tool Platform 2-6 are the remaining pre-launch milestones. They are sequenced -- each builds on the previous. All other milestones (Phases 10-16) are post-launch.
+These milestones are planned for after OSS launch.
 
 ### Tool Platform 5: Tool SDK and Developer Experience
 
@@ -75,7 +67,7 @@ Current state: tool contract is defined in `runtime/tool_contract.go` (`ToolExec
 
 Deliverables:
 
-- **Provider-agnostic tool SDK**: A Go package that handles the `ToolExecutionRequest`/`ToolExecutionResponse` contract, including envelope validation, error taxonomy mapping, and retry semantics. Developers import this and implement a handler function.
+- **Provider-agnostic tool SDK**: A Go package (separate repo) that handles the `ToolExecutionRequest`/`ToolExecutionResponse` contract, including envelope validation, error taxonomy mapping, and retry semantics. Developers import this and implement a handler function.
 - **Local tool simulator**: A standalone binary or test harness that sends `ToolExecutionRequest` payloads to a tool endpoint and validates responses against the contract. Developers use this to test their tool implementations locally without running the full Orloj stack.
 - **Conformance kit**: Package the existing `runtime/conformance/harness.go` as a reusable test kit with a CLI wrapper. Tool developers run this against their implementations to verify contract compliance.
 - **Developer docs**: Extend `docs/pages/guides/build-custom-tool.md` with SDK usage, simulator workflow, and conformance testing instructions.
@@ -108,10 +100,6 @@ Exit criteria:
 Test gate:
 - Metrics/tracing payload tests and alert-profile validations pass.
 - Reliability scorecard generation is reproducible in CI.
-
-## Post-Launch Milestones
-
-These milestones are planned for after OSS launch.
 
 ### Phase 10: External Provider Runtime
 

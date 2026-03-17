@@ -45,3 +45,80 @@ jobs:
 
       - name: Vet
         run: go vet ./...
+
+  reliability:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.0
+
+      - name: Install frontend dependencies
+        run: cd frontend && bun install --frozen-lockfile
+
+      - name: Build frontend (for Go embed)
+        run: cd frontend && bun run build
+
+      - name: Build server
+        run: go build -o orlojd ./cmd/orlojd
+
+      - name: Start orlojd (memory backend, embedded worker, mock model)
+        run: |
+          ./orlojd \
+            --storage-backend=memory \
+            --run-task-worker \
+            --task-worker-id=ci-worker \
+            --model-gateway-provider=mock \
+            --reconcile-interval=1s \
+            --addr=:8080 &
+          echo "ORLOJD_PID=$!" >> "$GITHUB_ENV"
+
+      - name: Wait for healthy server
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8080/healthz > /dev/null 2>&1; then
+              echo "Server healthy after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Server failed to become healthy within 30s"
+          exit 1
+
+      - name: Run load test (SLO quality gates)
+        run: |
+          go run ./cmd/orloj-loadtest \
+            --base-url=http://127.0.0.1:8080 \
+            --namespace=default \
+            --tasks=30 \
+            --quality-profile=monitoring/loadtest/quality-ci.json \
+            --min-ready-workers=1 \
+            --worker-ready-timeout=30s \
+            --run-timeout=3m \
+            --json
+
+      - name: Run alert check
+        run: |
+          go run ./cmd/orloj-alertcheck \
+            --base-url=http://127.0.0.1:8080 \
+            --namespace=default \
+            --profile=monitoring/alerts/retry-deadletter-ci.json \
+            --json
+
+      - name: Stop server
+        if: always()
+        run: |
+          if [ -n "$ORLOJD_PID" ]; then
+            kill "$ORLOJD_PID" 2>/dev/null || true
+            wait "$ORLOJD_PID" 2>/dev/null || true
+          fi

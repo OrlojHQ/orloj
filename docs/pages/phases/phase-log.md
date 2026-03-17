@@ -417,6 +417,40 @@
   - `build-custom-tool.md`: annotating tools with operation classes
   - `tool-contract-v1.md`: approval error codes table
 
+## Release Gate 0.2: Reliability Readiness
+
+SLO-backed quality gates enforced in CI, and backup/restore documentation for Postgres deployments.
+
+Deliverables:
+
+- created CI quality profile `monitoring/loadtest/quality-ci.json`:
+  - 30-task baseline, `min_success_rate: 0.85`, `max_deadletter_rate: 0.15`, `max_failed_rate: 0.15`
+  - retry/takeover minimum gates disabled (no failure injection in CI)
+- created CI alert profile `monitoring/alerts/retry-deadletter-ci.json`:
+  - `min_tasks: 10`, `latency_p95_ms_max: 300000` (5 min, accommodates CI runner variability)
+  - same retry storm and deadletter thresholds as default
+- added `reliability` job to `.github/workflows/ci.yml`:
+  - runs after `build-and-test`
+  - builds and starts `orlojd` with `--storage-backend=memory --run-task-worker --model-gateway-provider=mock`
+  - health check loop waits for `/healthz` (up to 30s)
+  - runs `orloj-loadtest` with CI quality profile (30 tasks, SLO gates)
+  - runs `orloj-alertcheck` with CI alert profile
+  - server cleanup in `always()` step
+  - no Postgres, Docker, or external services required
+- created `docs/pages/operations/backup-restore.md`:
+  - Postgres backup procedure (`pg_dump --format=custom`)
+  - what to back up (database, secret encryption key, configuration)
+  - restore procedure with validation steps
+  - point-in-time recovery guidance
+  - disaster recovery checklist
+- updated `docs/pages/operations/upgrades.md`:
+  - pre-upgrade checklist links to backup-restore guide
+  - rollback procedure references backup-restore guide
+- updated `docs/pages/operations/load-testing.md`:
+  - documented CI quality profile alongside default profile
+- updated `docs/pages/operations/monitoring-alerts.md`:
+  - documented CI alert profile and its use in the reliability CI job
+
 ## Documentation Process
 
 For each new phase:

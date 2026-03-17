@@ -10,9 +10,12 @@ This guide defines repeatable operational checks for retry storms, dead-letter g
 
 ## Artifacts
 
-- Alert profile: `monitoring/alerts/retry-deadletter-default.json`
+- Alert profile (default): `monitoring/alerts/retry-deadletter-default.json`
+- Alert profile (CI): `monitoring/alerts/retry-deadletter-ci.json`
 - Dashboard contract: `monitoring/dashboards/retry-deadletter-overview.json`
 - Alert check command: `cmd/orloj-alertcheck`
+
+The CI profile uses a lower `min_tasks` floor and a higher latency ceiling to accommodate CI runner variability. It is used by the `reliability` job in `.github/workflows/ci.yml`.
 
 ## Alert Check Command
 

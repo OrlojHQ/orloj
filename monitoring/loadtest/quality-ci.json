@@ -1,0 +1,9 @@
+{
+  "name": "loadtest-ci",
+  "min_success_rate": 0.85,
+  "max_deadletter_rate": 0.15,
+  "max_failed_rate": 0.15,
+  "max_timed_out": 0,
+  "min_retry_total": -1,
+  "min_takeover_events": -1
+}

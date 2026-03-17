@@ -77,13 +77,21 @@ go run ./cmd/orloj-loadtest --tasks=100 --json=true
 - `2`: quality gates failed
 - `1`: command/config/runtime failure
 
-## Quality Profile
+## Quality Profiles
 
-Default profile:
+### Default (manual validation)
 
 - `monitoring/loadtest/quality-default.json`
 
-Profile fields:
+For interactive or staging validation with full failure injection.
+
+### CI (automated quality gates)
+
+- `monitoring/loadtest/quality-ci.json`
+
+Used by the `reliability` CI job. Runs 30 tasks with relaxed thresholds suitable for memory-backend, mock-model CI environments. No failure injection; validates baseline task flow health.
+
+### Profile fields
 
 - `min_success_rate`
 - `max_deadletter_rate`

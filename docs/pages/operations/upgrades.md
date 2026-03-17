@@ -12,7 +12,8 @@ This guide defines safe upgrade and rollback procedures for the Orloj server and
 ## Pre-Upgrade Checklist
 
 - [ ] Read release notes and migration notes.
-- [ ] Snapshot Postgres.
+- [ ] Take a full Postgres backup per the [Backup and Restore](backup-restore.md) guide.
+- [ ] Record the current `ORLOJ_SECRET_ENCRYPTION_KEY`.
 - [ ] Verify baseline health (`/healthz`, workers, task flow).
 - [ ] Run smoke checks in staging.
 
@@ -42,7 +43,7 @@ This guide defines safe upgrade and rollback procedures for the Orloj server and
 
 1. Revert server and worker binaries to previous release.
 2. Restore previous configuration values.
-3. Restore Postgres snapshot if required.
+3. Restore Postgres from backup if required (see [Backup and Restore](backup-restore.md)).
 4. Re-run smoke checks before resuming rollout.
 
 ## Compatibility Guidance
