@@ -155,6 +155,6 @@ If an agent's configured model is not in the policy's `allowed_models` list, exe
 
 ## Related Resources
 
-- [Resource Reference: ModelEndpoint, Secret](../reference/crds.md)
+- [Resource Reference: ModelEndpoint, Secret](../reference/resources.md)
 - [Configuration](../operations/configuration.md)
 - [Guide: Configure Model Routing](../guides/configure-model-routing.md)

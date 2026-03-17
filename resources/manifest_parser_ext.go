@@ -1,4 +1,4 @@
-package crds
+package resources
 
 import (
 	"encoding/json"
@@ -315,6 +315,11 @@ func ParseToolManifest(data []byte) (Tool, error) {
 				subsection = "capabilities"
 				runtimeSubsection = ""
 			}
+		case "operation_classes", "operationClasses":
+			if section == "spec" {
+				subsection = "operation_classes"
+				runtimeSubsection = ""
+			}
 		case "scopes":
 			if section == "spec" && subsection == "auth" {
 				runtimeSubsection = "scopes"
@@ -334,6 +339,11 @@ func ParseToolManifest(data []byte) (Tool, error) {
 
 	if section == "spec" && subsection == "capabilities" && strings.HasPrefix(trimmed, "- ") {
 		out.Spec.Capabilities = append(out.Spec.Capabilities, stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))))
+		continue
+	}
+
+	if section == "spec" && subsection == "operation_classes" && strings.HasPrefix(trimmed, "- ") {
+		out.Spec.OperationClasses = append(out.Spec.OperationClasses, stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))))
 		continue
 	}
 
@@ -803,6 +813,10 @@ func ParseToolPermissionManifest(data []byte) (ToolPermission, error) {
 				if section == "spec" {
 					subsection = "target_agents"
 				}
+			case "operation_rules", "operationRules":
+				if section == "spec" {
+					subsection = "operation_rules"
+				}
 			}
 			continue
 		}
@@ -813,6 +827,32 @@ func ParseToolPermissionManifest(data []byte) (ToolPermission, error) {
 		}
 		if section == "spec" && subsection == "target_agents" && strings.HasPrefix(trimmed, "- ") {
 			out.Spec.TargetAgents = append(out.Spec.TargetAgents, stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))))
+			continue
+		}
+		if section == "spec" && subsection == "operation_rules" && strings.HasPrefix(trimmed, "- ") {
+			out.Spec.OperationRules = append(out.Spec.OperationRules, OperationRule{})
+			rest := strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))
+			if k, v, ok := parseKeyValue(rest); ok {
+				idx := len(out.Spec.OperationRules) - 1
+				switch k {
+				case "operation_class", "operationClass":
+					out.Spec.OperationRules[idx].OperationClass = stripQuotes(v)
+				case "verdict":
+					out.Spec.OperationRules[idx].Verdict = stripQuotes(v)
+				}
+			}
+			continue
+		}
+		if section == "spec" && subsection == "operation_rules" && len(out.Spec.OperationRules) > 0 {
+			if k, v, ok := parseKeyValue(trimmed); ok {
+				idx := len(out.Spec.OperationRules) - 1
+				switch k {
+				case "operation_class", "operationClass":
+					out.Spec.OperationRules[idx].OperationClass = stripQuotes(v)
+				case "verdict":
+					out.Spec.OperationRules[idx].Verdict = stripQuotes(v)
+				}
+			}
 			continue
 		}
 

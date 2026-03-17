@@ -12,12 +12,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 // AgentWorker runs the core execution loop for one agent.
 type AgentWorker struct {
-	agent        crds.Agent
+	agent        resources.Agent
 	toolRuntime  ToolRuntime
 	memory       MemoryStore
 	modelGateway ModelGateway
@@ -26,16 +26,16 @@ type AgentWorker struct {
 	input        map[string]string
 }
 
-func NewAgentWorker(agent crds.Agent, toolRuntime ToolRuntime, memory MemoryStore, onEvent func(string)) *AgentWorker {
+func NewAgentWorker(agent resources.Agent, toolRuntime ToolRuntime, memory MemoryStore, onEvent func(string)) *AgentWorker {
 	return NewAgentWorkerWithInterval(agent, toolRuntime, memory, onEvent, 2*time.Second)
 }
 
-func NewAgentWorkerWithInterval(agent crds.Agent, toolRuntime ToolRuntime, memory MemoryStore, onEvent func(string), stepEvery time.Duration) *AgentWorker {
+func NewAgentWorkerWithInterval(agent resources.Agent, toolRuntime ToolRuntime, memory MemoryStore, onEvent func(string), stepEvery time.Duration) *AgentWorker {
 	return NewAgentWorkerWithIntervalAndGatewayAndInput(agent, toolRuntime, memory, &MockModelGateway{}, nil, onEvent, stepEvery)
 }
 
 func NewAgentWorkerWithIntervalAndGateway(
-	agent crds.Agent,
+	agent resources.Agent,
 	toolRuntime ToolRuntime,
 	memory MemoryStore,
 	modelGateway ModelGateway,
@@ -46,7 +46,7 @@ func NewAgentWorkerWithIntervalAndGateway(
 }
 
 func NewAgentWorkerWithIntervalAndGatewayAndInput(
-	agent crds.Agent,
+	agent resources.Agent,
 	toolRuntime ToolRuntime,
 	memory MemoryStore,
 	modelGateway ModelGateway,
@@ -151,7 +151,7 @@ func (w *AgentWorker) Run(ctx context.Context) {
 						}
 						reqID := fmt.Sprintf(
 							"%s/%s/s%03d/%s",
-							crds.NormalizeNamespace(w.agent.Metadata.Namespace),
+							resources.NormalizeNamespace(w.agent.Metadata.Namespace),
 							strings.TrimSpace(w.agent.Metadata.Name),
 							step,
 							normalizeToolKey(failedTool),
@@ -186,7 +186,7 @@ func (w *AgentWorker) Run(ctx context.Context) {
 				}
 				reqID := fmt.Sprintf(
 					"%s/%s/s%03d/%s",
-					crds.NormalizeNamespace(w.agent.Metadata.Namespace),
+					resources.NormalizeNamespace(w.agent.Metadata.Namespace),
 					strings.TrimSpace(w.agent.Metadata.Name),
 					step,
 					normalizeToolKey(tool),
@@ -255,7 +255,7 @@ func (w *AgentWorker) Run(ctx context.Context) {
 	}
 }
 
-func normalizeModelUsageWithFallback(usage ModelUsage, agent crds.Agent, resp ModelResponse, step int) ModelUsage {
+func normalizeModelUsageWithFallback(usage ModelUsage, agent resources.Agent, resp ModelResponse, step int) ModelUsage {
 	normalized := normalizeModelUsage(usage)
 	if normalized.TotalTokens > 0 {
 		return normalized
@@ -284,7 +284,7 @@ func normalizeModelUsage(usage ModelUsage) ModelUsage {
 	return usage
 }
 
-func estimateModelCallTokens(agent crds.Agent, resp ModelResponse, step int) int {
+func estimateModelCallTokens(agent resources.Agent, resp ModelResponse, step int) int {
 	promptTokens := len([]rune(strings.TrimSpace(agent.Spec.Prompt))) / 4
 	outputTokens := len([]rune(strings.TrimSpace(resp.Content))) / 4
 	toolTokens := 0
@@ -323,7 +323,7 @@ func (w *AgentWorker) modelContext(step int) map[string]string {
 }
 
 type workerHandle struct {
-	agent  crds.Agent
+	agent  resources.Agent
 	cancel context.CancelFunc
 	done   chan struct{}
 }
@@ -348,7 +348,7 @@ func NewManager(logger *log.Logger) *Manager {
 	}
 }
 
-func (m *Manager) EnsureRunning(agent crds.Agent) {
+func (m *Manager) EnsureRunning(agent resources.Agent) {
 	if err := agent.Normalize(); err != nil {
 		m.recordLog(agent.Metadata.Name, fmt.Sprintf("invalid agent manifest: %v", err))
 		return
@@ -456,17 +456,17 @@ func (m *Manager) recordLog(name, msg string) {
 }
 
 func agentRuntimeKey(namespace, name string) string {
-	return crds.NormalizeNamespace(namespace) + "/" + strings.TrimSpace(name)
+	return resources.NormalizeNamespace(namespace) + "/" + strings.TrimSpace(name)
 }
 
 func normalizeRuntimeName(name string) string {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return agentRuntimeKey(crds.DefaultNamespace, "")
+		return agentRuntimeKey(resources.DefaultNamespace, "")
 	}
 	if strings.Contains(name, "/") {
 		parts := strings.SplitN(name, "/", 2)
 		return agentRuntimeKey(parts[0], parts[1])
 	}
-	return agentRuntimeKey(crds.DefaultNamespace, name)
+	return agentRuntimeKey(resources.DefaultNamespace, name)
 }

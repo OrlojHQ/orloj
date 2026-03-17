@@ -9,7 +9,7 @@ import (
 
 	agentruntime "github.com/OrlojHQ/orloj/runtime"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 type testSecretResolver struct {
@@ -30,7 +30,7 @@ func TestAuthInjectorBearerProfile(t *testing.T) {
 	}}
 	injector := agentruntime.NewAuthInjector(secrets, nil)
 
-	result, err := injector.Resolve(context.Background(), "test_tool", crds.ToolAuth{
+	result, err := injector.Resolve(context.Background(), "test_tool", resources.ToolAuth{
 		Profile:   "bearer",
 		SecretRef: "my-api-key",
 	})
@@ -54,7 +54,7 @@ func TestAuthInjectorBearerDefaultWhenProfileEmpty(t *testing.T) {
 	}}
 	injector := agentruntime.NewAuthInjector(secrets, nil)
 
-	result, err := injector.Resolve(context.Background(), "test_tool", crds.ToolAuth{
+	result, err := injector.Resolve(context.Background(), "test_tool", resources.ToolAuth{
 		SecretRef: "token",
 	})
 	if err != nil {
@@ -71,7 +71,7 @@ func TestAuthInjectorAPIKeyHeaderProfile(t *testing.T) {
 	}}
 	injector := agentruntime.NewAuthInjector(secrets, nil)
 
-	result, err := injector.Resolve(context.Background(), "test_tool", crds.ToolAuth{
+	result, err := injector.Resolve(context.Background(), "test_tool", resources.ToolAuth{
 		Profile:    "api_key_header",
 		SecretRef:  "my-key",
 		HeaderName: "X-Api-Key",
@@ -96,7 +96,7 @@ func TestAuthInjectorAPIKeyHeaderRequiresHeaderName(t *testing.T) {
 	}}
 	injector := agentruntime.NewAuthInjector(secrets, nil)
 
-	_, err := injector.Resolve(context.Background(), "test_tool", crds.ToolAuth{
+	_, err := injector.Resolve(context.Background(), "test_tool", resources.ToolAuth{
 		Profile:   "api_key_header",
 		SecretRef: "my-key",
 	})
@@ -111,7 +111,7 @@ func TestAuthInjectorBasicProfile(t *testing.T) {
 	}}
 	injector := agentruntime.NewAuthInjector(secrets, nil)
 
-	result, err := injector.Resolve(context.Background(), "test_tool", crds.ToolAuth{
+	result, err := injector.Resolve(context.Background(), "test_tool", resources.ToolAuth{
 		Profile:   "basic",
 		SecretRef: "basic-creds",
 	})
@@ -133,7 +133,7 @@ func TestAuthInjectorBasicRejectsNoColon(t *testing.T) {
 	}}
 	injector := agentruntime.NewAuthInjector(secrets, nil)
 
-	_, err := injector.Resolve(context.Background(), "test_tool", crds.ToolAuth{
+	_, err := injector.Resolve(context.Background(), "test_tool", resources.ToolAuth{
 		Profile:   "basic",
 		SecretRef: "bad-creds",
 	})
@@ -149,7 +149,7 @@ func TestAuthInjectorOAuth2RequiresTokenCache(t *testing.T) {
 	}}
 	injector := agentruntime.NewAuthInjector(secrets, nil)
 
-	_, err := injector.Resolve(context.Background(), "test_tool", crds.ToolAuth{
+	_, err := injector.Resolve(context.Background(), "test_tool", resources.ToolAuth{
 		Profile:   "oauth2_client_credentials",
 		SecretRef: "oauth",
 		TokenURL:  "https://auth.example.com/token",
@@ -167,7 +167,7 @@ func TestAuthInjectorOAuth2RequiresTokenURL(t *testing.T) {
 	cache := agentruntime.NewOAuth2TokenCache(nil)
 	injector := agentruntime.NewAuthInjector(secrets, cache)
 
-	_, err := injector.Resolve(context.Background(), "test_tool", crds.ToolAuth{
+	_, err := injector.Resolve(context.Background(), "test_tool", resources.ToolAuth{
 		Profile:   "oauth2_client_credentials",
 		SecretRef: "oauth",
 	})
@@ -179,7 +179,7 @@ func TestAuthInjectorOAuth2RequiresTokenURL(t *testing.T) {
 func TestAuthInjectorNoAuthWhenEmpty(t *testing.T) {
 	injector := agentruntime.NewAuthInjector(nil, nil)
 
-	result, err := injector.Resolve(context.Background(), "test_tool", crds.ToolAuth{})
+	result, err := injector.Resolve(context.Background(), "test_tool", resources.ToolAuth{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -194,7 +194,7 @@ func TestAuthInjectorUnsupportedProfile(t *testing.T) {
 	}}
 	injector := agentruntime.NewAuthInjector(secrets, nil)
 
-	_, err := injector.Resolve(context.Background(), "test_tool", crds.ToolAuth{
+	_, err := injector.Resolve(context.Background(), "test_tool", resources.ToolAuth{
 		Profile:   "custom_thing",
 		SecretRef: "key",
 	})
@@ -207,7 +207,7 @@ func TestAuthInjectorSecretResolutionFailure(t *testing.T) {
 	secrets := testSecretResolver{values: map[string]string{}}
 	injector := agentruntime.NewAuthInjector(secrets, nil)
 
-	_, err := injector.Resolve(context.Background(), "test_tool", crds.ToolAuth{
+	_, err := injector.Resolve(context.Background(), "test_tool", resources.ToolAuth{
 		Profile:   "bearer",
 		SecretRef: "nonexistent",
 	})
@@ -226,7 +226,7 @@ func TestAuthInjectorSecretResolutionFailure(t *testing.T) {
 func TestAuthInjectorNoResolverConfigured(t *testing.T) {
 	injector := agentruntime.NewAuthInjector(nil, nil)
 
-	_, err := injector.Resolve(context.Background(), "test_tool", crds.ToolAuth{
+	_, err := injector.Resolve(context.Background(), "test_tool", resources.ToolAuth{
 		Profile:   "bearer",
 		SecretRef: "some-key",
 	})

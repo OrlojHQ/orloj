@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 type staticModelGateway struct {
@@ -23,19 +23,19 @@ func (s *staticModelGateway) Complete(_ context.Context, req ModelRequest) (Mode
 }
 
 type stubModelEndpointLookup struct {
-	items map[string]crds.ModelEndpoint
+	items map[string]resources.ModelEndpoint
 }
 
-func (s *stubModelEndpointLookup) Get(name string) (crds.ModelEndpoint, bool) {
+func (s *stubModelEndpointLookup) Get(name string) (resources.ModelEndpoint, bool) {
 	item, ok := s.items[name]
 	return item, ok
 }
 
 type stubSecretLookup struct {
-	items map[string]crds.Secret
+	items map[string]resources.Secret
 }
 
-func (s *stubSecretLookup) Get(name string) (crds.Secret, bool) {
+func (s *stubSecretLookup) Get(name string) (resources.Secret, bool) {
 	item, ok := s.items[name]
 	return item, ok
 }
@@ -54,10 +54,10 @@ func TestModelRouterUsesFallbackWithoutModelRef(t *testing.T) {
 }
 
 func TestModelRouterRoutesByModelRef(t *testing.T) {
-	lookup := &stubModelEndpointLookup{items: map[string]crds.ModelEndpoint{
+	lookup := &stubModelEndpointLookup{items: map[string]resources.ModelEndpoint{
 		"team-a/openai-team-a": {
-			Metadata: crds.ObjectMeta{Name: "openai-team-a", Namespace: "team-a", ResourceVersion: "2"},
-			Spec: crds.ModelEndpointSpec{
+			Metadata: resources.ObjectMeta{Name: "openai-team-a", Namespace: "team-a", ResourceVersion: "2"},
+			Spec: resources.ModelEndpointSpec{
 				Provider:     "mock",
 				DefaultModel: "router-default",
 			},
@@ -86,7 +86,7 @@ func TestModelRouterRoutesByModelRef(t *testing.T) {
 func TestModelRouterErrorsWhenEndpointMissing(t *testing.T) {
 	router := NewModelRouter(ModelRouterConfig{
 		Fallback:  &staticModelGateway{content: "fallback"},
-		Endpoints: &stubModelEndpointLookup{items: map[string]crds.ModelEndpoint{}},
+		Endpoints: &stubModelEndpointLookup{items: map[string]resources.ModelEndpoint{}},
 	})
 	_, err := router.Complete(context.Background(), ModelRequest{
 		Namespace: "team-a",
@@ -103,21 +103,21 @@ func TestModelRouterErrorsWhenEndpointMissing(t *testing.T) {
 
 func TestModelRouterResolvesEndpointSecret(t *testing.T) {
 	secretValue := "sk-test-value"
-	lookup := &stubModelEndpointLookup{items: map[string]crds.ModelEndpoint{
+	lookup := &stubModelEndpointLookup{items: map[string]resources.ModelEndpoint{
 		"team-a/openai-team-a": {
-			Metadata: crds.ObjectMeta{Name: "openai-team-a", Namespace: "team-a", ResourceVersion: "4"},
-			Spec: crds.ModelEndpointSpec{
+			Metadata: resources.ObjectMeta{Name: "openai-team-a", Namespace: "team-a", ResourceVersion: "4"},
+			Spec: resources.ModelEndpointSpec{
 				Provider:     "openai",
 				BaseURL:      "https://example.invalid/v1",
 				DefaultModel: "gpt-test",
-				Auth:         crds.ModelEndpointAuth{SecretRef: "openai-api-key"},
+				Auth:         resources.ModelEndpointAuth{SecretRef: "openai-api-key"},
 			},
 		},
 	}}
-	secrets := &stubSecretLookup{items: map[string]crds.Secret{
+	secrets := &stubSecretLookup{items: map[string]resources.Secret{
 		"team-a/openai-api-key": {
-			Metadata: crds.ObjectMeta{Name: "openai-api-key", Namespace: "team-a"},
-			Spec:     crds.SecretSpec{Data: map[string]string{"value": base64.StdEncoding.EncodeToString([]byte(secretValue))}},
+			Metadata: resources.ObjectMeta{Name: "openai-api-key", Namespace: "team-a"},
+			Spec:     resources.SecretSpec{Data: map[string]string{"value": base64.StdEncoding.EncodeToString([]byte(secretValue))}},
 		},
 	}}
 
@@ -156,10 +156,10 @@ func TestParseModelEndpointRef(t *testing.T) {
 }
 
 func TestModelRouterOpenAIFailsWithoutKey(t *testing.T) {
-	lookup := &stubModelEndpointLookup{items: map[string]crds.ModelEndpoint{
+	lookup := &stubModelEndpointLookup{items: map[string]resources.ModelEndpoint{
 		"team-a/openai-team-a": {
-			Metadata: crds.ObjectMeta{Name: "openai-team-a", Namespace: "team-a", ResourceVersion: "5"},
-			Spec: crds.ModelEndpointSpec{
+			Metadata: resources.ObjectMeta{Name: "openai-team-a", Namespace: "team-a", ResourceVersion: "5"},
+			Spec: resources.ModelEndpointSpec{
 				Provider:     "openai",
 				BaseURL:      "https://example.invalid/v1",
 				DefaultModel: "gpt-test",
@@ -180,10 +180,10 @@ func TestModelRouterOpenAIFailsWithoutKey(t *testing.T) {
 }
 
 func TestModelRouterAnthropicFailsWithoutKey(t *testing.T) {
-	lookup := &stubModelEndpointLookup{items: map[string]crds.ModelEndpoint{
+	lookup := &stubModelEndpointLookup{items: map[string]resources.ModelEndpoint{
 		"team-a/anthropic-team-a": {
-			Metadata: crds.ObjectMeta{Name: "anthropic-team-a", Namespace: "team-a", ResourceVersion: "6"},
-			Spec: crds.ModelEndpointSpec{
+			Metadata: resources.ObjectMeta{Name: "anthropic-team-a", Namespace: "team-a", ResourceVersion: "6"},
+			Spec: resources.ModelEndpointSpec{
 				Provider:     "anthropic",
 				BaseURL:      "https://example.invalid/v1",
 				DefaultModel: "claude-test",
@@ -204,10 +204,10 @@ func TestModelRouterAnthropicFailsWithoutKey(t *testing.T) {
 }
 
 func TestModelRouterAzureOpenAIFailsWithoutKey(t *testing.T) {
-	lookup := &stubModelEndpointLookup{items: map[string]crds.ModelEndpoint{
+	lookup := &stubModelEndpointLookup{items: map[string]resources.ModelEndpoint{
 		"team-a/azure-team-a": {
-			Metadata: crds.ObjectMeta{Name: "azure-team-a", Namespace: "team-a", ResourceVersion: "9"},
-			Spec: crds.ModelEndpointSpec{
+			Metadata: resources.ObjectMeta{Name: "azure-team-a", Namespace: "team-a", ResourceVersion: "9"},
+			Spec: resources.ModelEndpointSpec{
 				Provider:     "azure-openai",
 				BaseURL:      "https://example.openai.azure.com",
 				DefaultModel: "deployment-a",
@@ -231,10 +231,10 @@ func TestModelRouterAzureOpenAIFailsWithoutKey(t *testing.T) {
 }
 
 func TestModelRouterEndpointOptionsValidation(t *testing.T) {
-	lookup := &stubModelEndpointLookup{items: map[string]crds.ModelEndpoint{
+	lookup := &stubModelEndpointLookup{items: map[string]resources.ModelEndpoint{
 		"team-a/anthropic-team-a": {
-			Metadata: crds.ObjectMeta{Name: "anthropic-team-a", Namespace: "team-a", ResourceVersion: "7"},
-			Spec: crds.ModelEndpointSpec{
+			Metadata: resources.ObjectMeta{Name: "anthropic-team-a", Namespace: "team-a", ResourceVersion: "7"},
+			Spec: resources.ModelEndpointSpec{
 				Provider:     "anthropic",
 				BaseURL:      "https://example.invalid/v1",
 				DefaultModel: "claude-test",
@@ -259,10 +259,10 @@ func TestModelRouterEndpointOptionsValidation(t *testing.T) {
 }
 
 func TestModelRouterOllamaDoesNotRequireAPIKey(t *testing.T) {
-	lookup := &stubModelEndpointLookup{items: map[string]crds.ModelEndpoint{
+	lookup := &stubModelEndpointLookup{items: map[string]resources.ModelEndpoint{
 		"team-a/ollama-local": {
-			Metadata: crds.ObjectMeta{Name: "ollama-local", Namespace: "team-a", ResourceVersion: "8"},
-			Spec: crds.ModelEndpointSpec{
+			Metadata: resources.ObjectMeta{Name: "ollama-local", Namespace: "team-a", ResourceVersion: "8"},
+			Spec: resources.ModelEndpointSpec{
 				Provider:     "ollama",
 				BaseURL:      "http://127.0.0.1:11434",
 				DefaultModel: "llama3.2",

@@ -6,27 +6,40 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
+const (
+	AuthorizeVerdictAllow            = "allow"
+	AuthorizeVerdictDeny             = "deny"
+	AuthorizeVerdictApprovalRequired = "approval_required"
+)
+
+type AuthorizeResult struct {
+	Verdict string
+	Reason  string
+	Details map[string]string
+}
+
 type ToolCallAuthorizer interface {
-	Authorize(tool string, spec crds.ToolSpec) error
+	Authorize(tool string, spec resources.ToolSpec) (*AuthorizeResult, error)
 }
 
 type AgentRoleLookup interface {
-	Get(name string) (crds.AgentRole, bool)
+	Get(name string) (resources.AgentRole, bool)
 }
 
 type ToolPermissionLookup interface {
-	List() []crds.ToolPermission
+	List() []resources.ToolPermission
 }
 
 type toolPermissionRule struct {
-	Name      string
-	ToolRef   string
-	Action    string
-	MatchMode string
-	Required  []string
+	Name           string
+	ToolRef        string
+	Action         string
+	MatchMode      string
+	Required       []string
+	OperationRules []resources.OperationRule
 }
 
 type AgentToolAuthorizer struct {
@@ -40,7 +53,7 @@ type AgentToolAuthorizer struct {
 
 func NewAgentToolAuthorizer(
 	namespace string,
-	agent crds.Agent,
+	agent resources.Agent,
 	roleLookup AgentRoleLookup,
 	permissionLookup ToolPermissionLookup,
 ) *AgentToolAuthorizer {
@@ -95,7 +108,7 @@ func NewAgentToolAuthorizer(
 		return a
 	}
 	for _, item := range permissionLookup.List() {
-		if crds.NormalizeNamespace(item.Metadata.Namespace) != crds.NormalizeNamespace(namespace) {
+		if resources.NormalizeNamespace(item.Metadata.Namespace) != resources.NormalizeNamespace(namespace) {
 			continue
 		}
 		if !toolPermissionAppliesToAgent(item, agent.Metadata.Name) {
@@ -114,17 +127,18 @@ func NewAgentToolAuthorizer(
 			required = append(required, token)
 		}
 		a.rules[key] = append(a.rules[key], toolPermissionRule{
-			Name:      strings.TrimSpace(item.Metadata.Name),
-			ToolRef:   strings.TrimSpace(item.Spec.ToolRef),
-			Action:    normalizePermissionToken(item.Spec.Action),
-			MatchMode: strings.ToLower(strings.TrimSpace(item.Spec.MatchMode)),
-			Required:  required,
+			Name:           strings.TrimSpace(item.Metadata.Name),
+			ToolRef:        strings.TrimSpace(item.Spec.ToolRef),
+			Action:         normalizePermissionToken(item.Spec.Action),
+			MatchMode:      strings.ToLower(strings.TrimSpace(item.Spec.MatchMode)),
+			Required:       required,
+			OperationRules: item.Spec.OperationRules,
 		})
 	}
 	return a
 }
 
-func toolPermissionAppliesToAgent(item crds.ToolPermission, agentName string) bool {
+func toolPermissionAppliesToAgent(item resources.ToolPermission, agentName string) bool {
 	mode := strings.ToLower(strings.TrimSpace(item.Spec.ApplyMode))
 	if mode == "" || mode == "global" {
 		return true
@@ -140,17 +154,18 @@ func toolPermissionAppliesToAgent(item crds.ToolPermission, agentName string) bo
 	return false
 }
 
-func (a *AgentToolAuthorizer) Authorize(tool string, spec crds.ToolSpec) error {
+func (a *AgentToolAuthorizer) Authorize(tool string, spec resources.ToolSpec) (*AuthorizeResult, error) {
+	allow := &AuthorizeResult{Verdict: AuthorizeVerdictAllow}
 	if a == nil {
-		return nil
+		return allow, nil
 	}
 	if _, ok := a.allowedTools[normalizeToolKey(tool)]; ok {
-		return nil
+		return allow, nil
 	}
 	if len(a.missingRoles) > 0 {
 		missing := append([]string(nil), a.missingRoles...)
 		sort.Strings(missing)
-		return NewToolDeniedError(
+		return nil, NewToolDeniedError(
 			fmt.Sprintf("policy permission denied for tool=%s missing_roles=%s", strings.TrimSpace(tool), strings.Join(missing, ",")),
 			map[string]string{
 				"tool":          strings.TrimSpace(tool),
@@ -163,12 +178,12 @@ func (a *AgentToolAuthorizer) Authorize(tool string, spec crds.ToolSpec) error {
 	toolKey := normalizeToolKey(tool)
 	rules := a.rules[toolKey]
 	if len(rules) == 0 && !a.enforceByRole {
-		return nil
+		return allow, nil
 	}
 	if len(rules) == 0 {
 		required := defaultRequiredPermissions(tool, spec, "invoke")
 		if ok, missing := permissionMatchAll(a.permissions, required); !ok {
-			return NewToolDeniedError(
+			return nil, NewToolDeniedError(
 				fmt.Sprintf("policy permission denied for tool=%s required=%s", strings.TrimSpace(tool), strings.Join(missing, ",")),
 				map[string]string{
 					"tool":     strings.TrimSpace(tool),
@@ -177,52 +192,111 @@ func (a *AgentToolAuthorizer) Authorize(tool string, spec crds.ToolSpec) error {
 				ErrToolPermissionDenied,
 			)
 		}
-		return nil
+		return allow, nil
 	}
 
+	aggregateVerdict := AuthorizeVerdictAllow
 	for _, rule := range rules {
 		required := append([]string(nil), rule.Required...)
-		if len(required) == 0 {
+		if len(required) == 0 && len(rule.OperationRules) == 0 {
 			required = defaultRequiredPermissions(tool, spec, rule.Action)
 		}
-		if len(required) == 0 {
+		if len(required) == 0 && len(rule.OperationRules) == 0 {
 			continue
 		}
-		matchMode := strings.ToLower(strings.TrimSpace(rule.MatchMode))
-		if matchMode == "" {
-			matchMode = "all"
+
+		if len(required) > 0 {
+			matchMode := strings.ToLower(strings.TrimSpace(rule.MatchMode))
+			if matchMode == "" {
+				matchMode = "all"
+			}
+			switch matchMode {
+			case "any":
+				if ok, missing := permissionMatchAny(a.permissions, required); !ok {
+					return nil, NewToolDeniedError(
+						fmt.Sprintf("policy permission denied for tool=%s rule=%s required_any=%s", strings.TrimSpace(tool), rule.Name, strings.Join(missing, ",")),
+						map[string]string{
+							"tool":         strings.TrimSpace(tool),
+							"rule":         strings.TrimSpace(rule.Name),
+							"required_any": strings.Join(missing, ","),
+						},
+						ErrToolPermissionDenied,
+					)
+				}
+			default:
+				if ok, missing := permissionMatchAll(a.permissions, required); !ok {
+					return nil, NewToolDeniedError(
+						fmt.Sprintf("policy permission denied for tool=%s rule=%s required=%s", strings.TrimSpace(tool), rule.Name, strings.Join(missing, ",")),
+						map[string]string{
+							"tool":     strings.TrimSpace(tool),
+							"rule":     strings.TrimSpace(rule.Name),
+							"required": strings.Join(missing, ","),
+						},
+						ErrToolPermissionDenied,
+					)
+				}
+			}
 		}
-		switch matchMode {
-		case "any":
-			if ok, missing := permissionMatchAny(a.permissions, required); !ok {
-				return NewToolDeniedError(
-					fmt.Sprintf("policy permission denied for tool=%s rule=%s required_any=%s", strings.TrimSpace(tool), rule.Name, strings.Join(missing, ",")),
-					map[string]string{
-						"tool":         strings.TrimSpace(tool),
-						"rule":         strings.TrimSpace(rule.Name),
-						"required_any": strings.Join(missing, ","),
-					},
-					ErrToolPermissionDenied,
-				)
-			}
-		default:
-			if ok, missing := permissionMatchAll(a.permissions, required); !ok {
-				return NewToolDeniedError(
-					fmt.Sprintf("policy permission denied for tool=%s rule=%s required=%s", strings.TrimSpace(tool), rule.Name, strings.Join(missing, ",")),
-					map[string]string{
-						"tool":     strings.TrimSpace(tool),
-						"rule":     strings.TrimSpace(rule.Name),
-						"required": strings.Join(missing, ","),
-					},
-					ErrToolPermissionDenied,
-				)
-			}
+
+		if len(rule.OperationRules) > 0 {
+			ruleVerdict := evaluateOperationRules(rule.OperationRules, spec.OperationClasses)
+			aggregateVerdict = mostRestrictiveVerdict(aggregateVerdict, ruleVerdict)
 		}
 	}
-	return nil
+
+	if aggregateVerdict == AuthorizeVerdictDeny {
+		return nil, NewToolDeniedError(
+			fmt.Sprintf("policy operation denied for tool=%s", strings.TrimSpace(tool)),
+			map[string]string{"tool": strings.TrimSpace(tool)},
+			ErrToolPermissionDenied,
+		)
+	}
+	if aggregateVerdict == AuthorizeVerdictApprovalRequired {
+		return &AuthorizeResult{
+			Verdict: AuthorizeVerdictApprovalRequired,
+			Reason:  fmt.Sprintf("approval required for tool=%s", strings.TrimSpace(tool)),
+			Details: map[string]string{"tool": strings.TrimSpace(tool)},
+		}, nil
+	}
+	return allow, nil
 }
 
-func defaultRequiredPermissions(tool string, spec crds.ToolSpec, action string) []string {
+func evaluateOperationRules(rules []resources.OperationRule, toolOpClasses []string) string {
+	verdict := AuthorizeVerdictAllow
+	for _, toolOp := range toolOpClasses {
+		opVerdict := matchOperationClass(rules, toolOp)
+		verdict = mostRestrictiveVerdict(verdict, opVerdict)
+	}
+	return verdict
+}
+
+func matchOperationClass(rules []resources.OperationRule, opClass string) string {
+	for _, rule := range rules {
+		if rule.OperationClass == opClass {
+			return rule.Verdict
+		}
+	}
+	for _, rule := range rules {
+		if rule.OperationClass == "*" {
+			return rule.Verdict
+		}
+	}
+	return AuthorizeVerdictAllow
+}
+
+func mostRestrictiveVerdict(a, b string) string {
+	rank := map[string]int{
+		AuthorizeVerdictAllow:            0,
+		AuthorizeVerdictApprovalRequired: 1,
+		AuthorizeVerdictDeny:             2,
+	}
+	if rank[b] > rank[a] {
+		return b
+	}
+	return a
+}
+
+func defaultRequiredPermissions(tool string, spec resources.ToolSpec, action string) []string {
 	action = normalizePermissionToken(action)
 	if action == "" {
 		action = "invoke"

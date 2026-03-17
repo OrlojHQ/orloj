@@ -6,24 +6,24 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 type staticSecretLookup struct {
-	items map[string]crds.Secret
+	items map[string]resources.Secret
 }
 
-func (l staticSecretLookup) Get(name string) (crds.Secret, bool) {
+func (l staticSecretLookup) Get(name string) (resources.Secret, bool) {
 	item, ok := l.items[name]
 	return item, ok
 }
 
 func TestStoreSecretResolverResolvesNamespacedSecretValue(t *testing.T) {
 	lookup := staticSecretLookup{
-		items: map[string]crds.Secret{
+		items: map[string]resources.Secret{
 			"team-a/openai-key": {
-				Metadata: crds.ObjectMeta{Name: "openai-key", Namespace: "team-a"},
-				Spec: crds.SecretSpec{
+				Metadata: resources.ObjectMeta{Name: "openai-key", Namespace: "team-a"},
+				Spec: resources.SecretSpec{
 					Data: map[string]string{
 						"value": base64.StdEncoding.EncodeToString([]byte("sk-abc-123")),
 					},
@@ -43,10 +43,10 @@ func TestStoreSecretResolverResolvesNamespacedSecretValue(t *testing.T) {
 
 func TestStoreSecretResolverSupportsKeyOverride(t *testing.T) {
 	lookup := staticSecretLookup{
-		items: map[string]crds.Secret{
+		items: map[string]resources.Secret{
 			"default/multi": {
-				Metadata: crds.ObjectMeta{Name: "multi", Namespace: "default"},
-				Spec: crds.SecretSpec{
+				Metadata: resources.ObjectMeta{Name: "multi", Namespace: "default"},
+				Spec: resources.SecretSpec{
 					Data: map[string]string{
 						"token": base64.StdEncoding.EncodeToString([]byte("tok-xyz")),
 					},
@@ -66,7 +66,7 @@ func TestStoreSecretResolverSupportsKeyOverride(t *testing.T) {
 
 func TestChainSecretResolverFallsBackToEnvResolver(t *testing.T) {
 	t.Setenv("ORLOJ_SECRET_SEARCH_API_KEY", "env-token")
-	storeResolver := NewStoreSecretResolver(staticSecretLookup{items: map[string]crds.Secret{}}, "value")
+	storeResolver := NewStoreSecretResolver(staticSecretLookup{items: map[string]resources.Secret{}}, "value")
 	envResolver := NewEnvSecretResolver("ORLOJ_SECRET_")
 	chain := NewChainSecretResolver(storeResolver, envResolver).WithNamespace("default")
 	value, err := chain.Resolve(context.Background(), "search-api-key")
@@ -89,7 +89,7 @@ func TestParseSecretRefDefaults(t *testing.T) {
 }
 
 func TestChainSecretResolverReturnsNotFoundWhenAllResolversMiss(t *testing.T) {
-	chain := NewChainSecretResolver(NewStoreSecretResolver(staticSecretLookup{items: map[string]crds.Secret{}}, "value"))
+	chain := NewChainSecretResolver(NewStoreSecretResolver(staticSecretLookup{items: map[string]resources.Secret{}}, "value"))
 	_, err := chain.Resolve(context.Background(), "missing")
 	if err == nil {
 		t.Fatal("expected not found error")

@@ -5,11 +5,11 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 func TestGRPCToolRuntimeFailsOnMissingEndpoint(t *testing.T) {
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"grpc_tool": {Type: "grpc"},
 	})
 	runtime := NewGRPCToolRuntime(registry, nil, nil)
@@ -64,11 +64,11 @@ func TestGRPCToolRuntimeFailsOnEmptyToolName(t *testing.T) {
 }
 
 func TestGRPCToolRuntimeSecretResolutionFailure(t *testing.T) {
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"grpc_tool": {
 			Type:     "grpc",
 			Endpoint: "localhost:50051",
-			Auth:     crds.ToolAuth{SecretRef: "missing"},
+			Auth:     resources.ToolAuth{SecretRef: "missing"},
 		},
 	})
 	secrets := staticSecretResolver{values: map[string]string{}}

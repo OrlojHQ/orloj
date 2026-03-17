@@ -4,19 +4,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 func TestTaskStoreClaimAndRenewLease(t *testing.T) {
 	s := NewTaskStore()
-	task := crds.Task{
+	task := resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "t1"},
-		Spec: crds.TaskSpec{
+		Metadata:   resources.ObjectMeta{Name: "t1"},
+		Spec: resources.TaskSpec{
 			System: "sys",
 			Input:  map[string]string{"topic": "x"},
-			Retry:  crds.TaskRetryPolicy{MaxAttempts: 3, Backoff: "10ms"},
+			Retry:  resources.TaskRetryPolicy{MaxAttempts: 3, Backoff: "10ms"},
 		},
 	}
 	if _, err := s.Upsert(task); err != nil {
@@ -48,11 +48,11 @@ func TestTaskStoreClaimAndRenewLease(t *testing.T) {
 
 func TestTaskStoreClaimFailoverOnLeaseExpiry(t *testing.T) {
 	s := NewTaskStore()
-	task := crds.Task{
+	task := resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "t2"},
-		Spec: crds.TaskSpec{
+		Metadata:   resources.ObjectMeta{Name: "t2"},
+		Spec: resources.TaskSpec{
 			System: "sys",
 			Input:  map[string]string{"topic": "x"},
 		},

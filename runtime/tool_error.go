@@ -25,6 +25,9 @@ const (
 	ToolCodeAuthExpired          = "auth_expired"
 	ToolCodeAuthInvalid          = "auth_invalid"
 	ToolCodeAuthForbidden        = "auth_forbidden"
+	ToolCodeApprovalPending      = "approval_pending"
+	ToolCodeApprovalDenied       = "approval_denied"
+	ToolCodeApprovalTimeout      = "approval_timeout"
 )
 
 const (
@@ -40,6 +43,9 @@ const (
 	ToolReasonAuthExpired          = "tool_auth_expired"
 	ToolReasonAuthInvalid          = "tool_auth_invalid"
 	ToolReasonAuthForbidden        = "tool_auth_forbidden"
+	ToolReasonApprovalPending      = "tool_approval_pending"
+	ToolReasonApprovalDenied       = "tool_approval_denied"
+	ToolReasonApprovalTimeout      = "tool_approval_timeout"
 )
 
 // ToolError is the canonical runtime tool error envelope.
@@ -167,6 +173,13 @@ func IsToolDeniedError(err error) bool {
 	return strings.EqualFold(strings.TrimSpace(toolErr.Status), ToolStatusDenied) ||
 		strings.EqualFold(strings.TrimSpace(toolErr.Code), ToolCodePermissionDenied) ||
 		strings.EqualFold(strings.TrimSpace(toolErr.Reason), ToolReasonPermissionDenied)
+}
+
+func IsApprovalRequiredError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return errors.Is(err, ErrToolApprovalRequired)
 }
 
 func ToolErrorMeta(err error) (code string, reason string, retryable bool, ok bool) {

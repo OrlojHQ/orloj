@@ -5,15 +5,15 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/store"
 )
 
 func requestNamespace(r *http.Request) string {
 	if r == nil {
-		return crds.DefaultNamespace
+		return resources.DefaultNamespace
 	}
-	return crds.NormalizeNamespace(r.URL.Query().Get("namespace"))
+	return resources.NormalizeNamespace(r.URL.Query().Get("namespace"))
 }
 
 func namespaceFilter(r *http.Request) (string, bool) {
@@ -24,19 +24,19 @@ func namespaceFilter(r *http.Request) (string, bool) {
 	if raw == "" {
 		return "", false
 	}
-	return crds.NormalizeNamespace(raw), true
+	return resources.NormalizeNamespace(raw), true
 }
 
 func scopedNameForRequest(r *http.Request, name string) string {
 	return store.ScopedName(requestNamespace(r), name)
 }
 
-func applyRequestNamespace(r *http.Request, meta *crds.ObjectMeta) error {
+func applyRequestNamespace(r *http.Request, meta *resources.ObjectMeta) error {
 	if meta == nil {
 		return nil
 	}
 	ns := requestNamespace(r)
-	meta.Namespace = crds.NormalizeNamespace(meta.Namespace)
+	meta.Namespace = resources.NormalizeNamespace(meta.Namespace)
 	if strings.TrimSpace(meta.Namespace) == "" {
 		meta.Namespace = ns
 	}

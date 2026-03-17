@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 type testWASMExecutor struct {
@@ -50,7 +50,7 @@ func TestWASMToolRuntimeMissingRegistry(t *testing.T) {
 }
 
 func TestWASMToolRuntimeUnsupportedTool(t *testing.T) {
-	runtime := NewWASMToolRuntime(NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	runtime := NewWASMToolRuntime(NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"known_tool": {RiskLevel: "low"},
 	}), testWASMExecutor{
 		call: func(_ context.Context, req WASMToolExecuteRequest) (WASMToolExecuteResponse, error) {
@@ -74,7 +74,7 @@ func TestWASMToolRuntimeUnsupportedTool(t *testing.T) {
 }
 
 func TestWASMToolRuntimeBoundsTimeout(t *testing.T) {
-	runtime := NewWASMToolRuntime(NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	runtime := NewWASMToolRuntime(NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"slow_tool": {RiskLevel: "high"},
 	}), testWASMExecutor{
 		call: func(_ context.Context, _ WASMToolExecuteRequest) (WASMToolExecuteResponse, error) {
@@ -108,7 +108,7 @@ func TestWASMToolRuntimeBoundsTimeout(t *testing.T) {
 func TestWASMToolRuntimeBuildsExecutorFromFactory(t *testing.T) {
 	buildCalls := 0
 	runtime := NewWASMToolRuntimeWithFactory(
-		NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+		NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 			"wasm_tool": {RiskLevel: "high"},
 		}),
 		testWASMExecutorFactory{
@@ -176,7 +176,7 @@ func TestWASMToolRuntimeBuildsExecutorFromFactory(t *testing.T) {
 
 func TestWASMToolRuntimeFactoryRequiresModulePath(t *testing.T) {
 	runtime := NewWASMToolRuntimeWithFactory(
-		NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+		NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 			"wasm_tool": {RiskLevel: "high"},
 		}),
 		testWASMExecutorFactory{
@@ -211,7 +211,7 @@ func TestWASMToolRuntimeFactoryRequiresModulePath(t *testing.T) {
 func TestWASMToolRuntimeAllowsWASIDisabledConfig(t *testing.T) {
 	buildCalls := 0
 	runtime := NewWASMToolRuntimeWithFactory(
-		NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+		NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 			"wasm_tool": {RiskLevel: "high"},
 		}),
 		testWASMExecutorFactory{

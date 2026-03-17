@@ -63,31 +63,11 @@ Base OpenTelemetry integration is complete (OTLP export, span instrumentation on
 
 ### Memory Resource Maturity Review
 
-The `Memory` CRD exists and agents can reference it via `spec.memory.ref`, but the runtime integration surface is limited. Evaluate whether to flesh out the vector-store retrieval implementation or explicitly scope the Memory resource as experimental with a graduation timeline.
+The `Memory` resource exists and agents can reference it via `spec.memory.ref`, but the runtime integration surface is limited. Evaluate whether to flesh out the vector-store retrieval implementation or explicitly scope the Memory resource as experimental with a graduation timeline.
 
 ## Pre-Launch: Tool Platform
 
 Tool Platform 2-6 are the remaining pre-launch milestones. They are sequenced -- each builds on the previous. All other milestones (Phases 10-16) are post-launch.
-
-### Tool Platform 4: Policy Hooks and Risk-Tier Routing
-
-Current state: `AgentPolicy`, `AgentRole`, `ToolPermission` exist and are enforced at tool call time via `AgentToolAuthorizer`. Denials are fail-closed with deterministic reason codes. But there is no concept of operation classes or risk tiers -- authorization is all-or-nothing per tool.
-
-Deliverables:
-
-- **Tool operation class annotations**: Allow tools to declare operation classes in `Tool.spec` (e.g. `read`, `write`, `delete`, `admin`). Policy evaluation considers the operation class, not just tool name. `ToolPermission` can grant access to specific operation classes.
-- **Risk-tier routing**: `ToolPermission` or `AgentPolicy` can specify `allow`, `deny`, or `approval_required` per operation class. `approval_required` pauses the tool call and emits a pending-approval event.
-- **Human approval workflow**: Define an approval mechanism (resource, status field, or API endpoint). When a tool call requires approval, the task transitions to a waiting state. An external actor (human or system) approves/denies via API. The task resumes or fails accordingly.
-- **Policy reason codes**: Extend the existing denial reason codes to cover approval-related outcomes (`approval_pending`, `approval_denied`, `approval_timeout`).
-- **Retry/deadletter behavior**: Approval timeouts and denials are non-retryable. Approval-pending is a pausable state that does not consume retry budget.
-
-Exit criteria:
-- High-risk operations can be blocked pending approval by policy.
-- Policy outcomes are observable with deterministic reason codes.
-
-Test gate:
-- Governance policy tests cover allow/deny/approval flows.
-- Retry/deadletter behavior is correct for approval-related denials/timeouts.
 
 ### Tool Platform 5: Tool SDK and Developer Experience
 

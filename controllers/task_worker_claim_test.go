@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/store"
 )
 
@@ -23,63 +23,63 @@ func TestTaskClaimSingleExecutionAcrossWorkers(t *testing.T) {
 	taskStore := store.NewTaskStore()
 	workerStore := store.NewWorkerStore()
 
-	agent := crds.Agent{
+	agent := resources.Agent{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
-		Metadata:   crds.ObjectMeta{Name: "research-agent"},
-		Spec: crds.AgentSpec{
+		Metadata:   resources.ObjectMeta{Name: "research-agent"},
+		Spec: resources.AgentSpec{
 			Model:  "gpt-4o",
 			Prompt: "You are a research assistant.",
 			Tools:  []string{"web_search"},
-			Limits: crds.AgentLimits{MaxSteps: 2, Timeout: "1s"},
+			Limits: resources.AgentLimits{MaxSteps: 2, Timeout: "1s"},
 		},
 	}
 	if _, err := agentStore.Upsert(agent); err != nil {
 		t.Fatalf("upsert agent failed: %v", err)
 	}
-	if _, err := toolStore.Upsert(crds.Tool{
+	if _, err := toolStore.Upsert(resources.Tool{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Tool",
-		Metadata:   crds.ObjectMeta{Name: "web_search"},
-		Spec:       crds.ToolSpec{Type: "http", Endpoint: "https://example"},
+		Metadata:   resources.ObjectMeta{Name: "web_search"},
+		Spec:       resources.ToolSpec{Type: "http", Endpoint: "https://example"},
 	}); err != nil {
 		t.Fatalf("upsert tool failed: %v", err)
 	}
-	if _, err := agentSystemStore.Upsert(crds.AgentSystem{
+	if _, err := agentSystemStore.Upsert(resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
-		Metadata:   crds.ObjectMeta{Name: "report-system"},
-		Spec:       crds.AgentSystemSpec{Agents: []string{"research-agent"}},
+		Metadata:   resources.ObjectMeta{Name: "report-system"},
+		Spec:       resources.AgentSystemSpec{Agents: []string{"research-agent"}},
 	}); err != nil {
 		t.Fatalf("upsert system failed: %v", err)
 	}
-	if _, err := taskStore.Upsert(crds.Task{
+	if _, err := taskStore.Upsert(resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "weekly-report"},
-		Spec:       crds.TaskSpec{System: "report-system", Input: map[string]string{"topic": "x"}},
+		Metadata:   resources.ObjectMeta{Name: "weekly-report"},
+		Spec:       resources.TaskSpec{System: "report-system", Input: map[string]string{"topic": "x"}},
 	}); err != nil {
 		t.Fatalf("upsert task failed: %v", err)
 	}
 
-	if _, err := workerStore.Upsert(crds.Worker{
+	if _, err := workerStore.Upsert(resources.Worker{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Worker",
-		Metadata:   crds.ObjectMeta{Name: "worker-1"},
-		Spec:       crds.WorkerSpec{Region: "default"},
-		Status: crds.WorkerStatus{
+		Metadata:   resources.ObjectMeta{Name: "worker-1"},
+		Spec:       resources.WorkerSpec{Region: "default"},
+		Status: resources.WorkerStatus{
 			Phase:         "Ready",
 			LastHeartbeat: time.Now().UTC().Format(time.RFC3339Nano),
 		},
 	}); err != nil {
 		t.Fatalf("upsert worker-1 failed: %v", err)
 	}
-	if _, err := workerStore.Upsert(crds.Worker{
+	if _, err := workerStore.Upsert(resources.Worker{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Worker",
-		Metadata:   crds.ObjectMeta{Name: "worker-2"},
-		Spec:       crds.WorkerSpec{Region: "default"},
-		Status: crds.WorkerStatus{
+		Metadata:   resources.ObjectMeta{Name: "worker-2"},
+		Spec:       resources.WorkerSpec{Region: "default"},
+		Status: resources.WorkerStatus{
 			Phase:         "Ready",
 			LastHeartbeat: time.Now().UTC().Format(time.RFC3339Nano),
 		},
@@ -130,64 +130,64 @@ func TestTaskClaimHonorsAssignedWorker(t *testing.T) {
 	taskStore := store.NewTaskStore()
 	workerStore := store.NewWorkerStore()
 
-	agent := crds.Agent{
+	agent := resources.Agent{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
-		Metadata:   crds.ObjectMeta{Name: "research-agent"},
-		Spec: crds.AgentSpec{
+		Metadata:   resources.ObjectMeta{Name: "research-agent"},
+		Spec: resources.AgentSpec{
 			Model:  "gpt-4o",
 			Prompt: "You are a research assistant.",
 			Tools:  []string{"web_search"},
-			Limits: crds.AgentLimits{MaxSteps: 2, Timeout: "1s"},
+			Limits: resources.AgentLimits{MaxSteps: 2, Timeout: "1s"},
 		},
 	}
 	if _, err := agentStore.Upsert(agent); err != nil {
 		t.Fatalf("upsert agent failed: %v", err)
 	}
-	if _, err := toolStore.Upsert(crds.Tool{
+	if _, err := toolStore.Upsert(resources.Tool{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Tool",
-		Metadata:   crds.ObjectMeta{Name: "web_search"},
-		Spec:       crds.ToolSpec{Type: "http", Endpoint: "https://example"},
+		Metadata:   resources.ObjectMeta{Name: "web_search"},
+		Spec:       resources.ToolSpec{Type: "http", Endpoint: "https://example"},
 	}); err != nil {
 		t.Fatalf("upsert tool failed: %v", err)
 	}
-	if _, err := agentSystemStore.Upsert(crds.AgentSystem{
+	if _, err := agentSystemStore.Upsert(resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
-		Metadata:   crds.ObjectMeta{Name: "report-system"},
-		Spec:       crds.AgentSystemSpec{Agents: []string{"research-agent"}},
+		Metadata:   resources.ObjectMeta{Name: "report-system"},
+		Spec:       resources.AgentSystemSpec{Agents: []string{"research-agent"}},
 	}); err != nil {
 		t.Fatalf("upsert system failed: %v", err)
 	}
-	if _, err := taskStore.Upsert(crds.Task{
+	if _, err := taskStore.Upsert(resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "weekly-report"},
-		Spec:       crds.TaskSpec{System: "report-system", Input: map[string]string{"topic": "x"}},
-		Status:     crds.TaskStatus{AssignedWorker: "worker-2"},
+		Metadata:   resources.ObjectMeta{Name: "weekly-report"},
+		Spec:       resources.TaskSpec{System: "report-system", Input: map[string]string{"topic": "x"}},
+		Status:     resources.TaskStatus{AssignedWorker: "worker-2"},
 	}); err != nil {
 		t.Fatalf("upsert task failed: %v", err)
 	}
 
-	if _, err := workerStore.Upsert(crds.Worker{
+	if _, err := workerStore.Upsert(resources.Worker{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Worker",
-		Metadata:   crds.ObjectMeta{Name: "worker-1"},
-		Spec:       crds.WorkerSpec{Region: "default"},
-		Status: crds.WorkerStatus{
+		Metadata:   resources.ObjectMeta{Name: "worker-1"},
+		Spec:       resources.WorkerSpec{Region: "default"},
+		Status: resources.WorkerStatus{
 			Phase:         "Ready",
 			LastHeartbeat: time.Now().UTC().Format(time.RFC3339Nano),
 		},
 	}); err != nil {
 		t.Fatalf("upsert worker-1 failed: %v", err)
 	}
-	if _, err := workerStore.Upsert(crds.Worker{
+	if _, err := workerStore.Upsert(resources.Worker{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Worker",
-		Metadata:   crds.ObjectMeta{Name: "worker-2"},
-		Spec:       crds.WorkerSpec{Region: "default"},
-		Status: crds.WorkerStatus{
+		Metadata:   resources.ObjectMeta{Name: "worker-2"},
+		Spec:       resources.WorkerSpec{Region: "default"},
+		Status: resources.WorkerStatus{
 			Phase:         "Ready",
 			LastHeartbeat: time.Now().UTC().Format(time.RFC3339Nano),
 		},
@@ -242,23 +242,23 @@ func TestTaskWorkerCapacitySkipsClaimWhenFull(t *testing.T) {
 	policyStore := store.NewAgentPolicyStore()
 	workerStore := store.NewWorkerStore()
 
-	if _, err := taskStore.Upsert(crds.Task{
+	if _, err := taskStore.Upsert(resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "capacity-task"},
-		Spec:       crds.TaskSpec{System: "unused"},
+		Metadata:   resources.ObjectMeta{Name: "capacity-task"},
+		Spec:       resources.TaskSpec{System: "unused"},
 	}); err != nil {
 		t.Fatalf("upsert task failed: %v", err)
 	}
-	if _, err := workerStore.Upsert(crds.Worker{
+	if _, err := workerStore.Upsert(resources.Worker{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Worker",
-		Metadata:   crds.ObjectMeta{Name: "worker-1"},
-		Spec: crds.WorkerSpec{
+		Metadata:   resources.ObjectMeta{Name: "worker-1"},
+		Spec: resources.WorkerSpec{
 			Region:             "default",
 			MaxConcurrentTasks: 1,
 		},
-		Status: crds.WorkerStatus{
+		Status: resources.WorkerStatus{
 			Phase:         "Ready",
 			LastHeartbeat: time.Now().UTC().Format(time.RFC3339Nano),
 			CurrentTasks:  1,

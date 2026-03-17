@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/eventbus"
 	"github.com/OrlojHQ/orloj/store"
 )
@@ -153,7 +153,7 @@ func (c *WorkerController) reconcileByName(name string) error {
 	return nil
 }
 
-func (c *WorkerController) publishWorkerEvent(worker crds.Worker, eventType string, message string) {
+func (c *WorkerController) publishWorkerEvent(worker resources.Worker, eventType string, message string) {
 	if c.eventBus == nil {
 		return
 	}
@@ -162,7 +162,7 @@ func (c *WorkerController) publishWorkerEvent(worker crds.Worker, eventType stri
 		Type:      strings.TrimSpace(eventType),
 		Kind:      "Worker",
 		Name:      worker.Metadata.Name,
-		Namespace: crds.NormalizeNamespace(worker.Metadata.Namespace),
+		Namespace: resources.NormalizeNamespace(worker.Metadata.Namespace),
 		Action:    strings.ToLower(strings.TrimSpace(worker.Status.Phase)),
 		Message:   strings.TrimSpace(message),
 		Data: map[string]any{

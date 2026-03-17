@@ -4,10 +4,10 @@
 
 This document describes the current resource schemas in `orloj.dev/v1`, based on the runtime types and normalization logic in:
 
-- `crds/agent.go`
-- `crds/model_endpoint.go`
-- `crds/resource_types.go`
-- `crds/graph.go`
+- `resources/agent.go`
+- `resources/model_endpoint.go`
+- `resources/resource_types.go`
+- `resources/graph.go`
 
 ## Common Conventions
 
@@ -27,6 +27,7 @@ This document describes the current resource schemas in `orloj.dev/v1`, based on
 - `AgentPolicy`
 - `AgentRole`
 - `ToolPermission`
+- `ToolApproval`
 - `Task`
 - `TaskSchedule`
 - `TaskWebhook`
@@ -134,6 +135,7 @@ Example: `examples/model-endpoints/*.yaml`
 - `type` (string): tool type. Allowed values: `http`, `external`, `grpc`, `webhook-callback`, `queue`. Unknown values are rejected at apply time.
 - `endpoint` (string): tool endpoint URL (or `host:port` for gRPC).
 - `capabilities` ([]string): declared operations.
+- `operation_classes` ([]string): operation class annotations. Allowed values: `read`, `write`, `delete`, `admin`. Used by `ToolPermission.operation_rules` for per-class policy verdicts.
 - `risk_level` (string): `low`, `medium`, `high`, `critical`.
 - `runtime` (object):
   - `timeout` (duration string)
@@ -156,6 +158,7 @@ Example: `examples/model-endpoints/*.yaml`
 - `auth.headerName` is required when `profile=api_key_header`.
 - `auth.tokenURL` is required when `profile=oauth2_client_credentials`.
 - `capabilities` are trimmed and deduplicated (case-insensitive).
+- `operation_classes` are trimmed, lowercased, and deduplicated. Invalid values are rejected. Defaults to `["read"]` for `low`/`medium` risk, `["write"]` for `high`/`critical` risk.
 - `risk_level` defaults to `low`.
 - `runtime.timeout` defaults to `30s` and must parse as duration.
 - `runtime.isolation_mode` defaults to:
@@ -262,6 +265,9 @@ Examples: `examples/agent-roles/*.yaml`
 - `match_mode` (string): `all` or `any`
 - `apply_mode` (string): `global` or `scoped`
 - `target_agents` ([]string): required when `apply_mode=scoped`
+- `operation_rules` ([]object): per-operation-class policy verdicts.
+  - `operation_class` (string): `read`, `write`, `delete`, `admin`, or `*` (wildcard). Defaults to `*`.
+  - `verdict` (string): `allow`, `deny`, or `approval_required`. Defaults to `allow`.
 
 ### Defaults and Validation
 
@@ -271,12 +277,46 @@ Examples: `examples/agent-roles/*.yaml`
 - `apply_mode` defaults to `global`.
 - `required_permissions` and `target_agents` are trimmed and deduplicated.
 - `target_agents` must be non-empty when `apply_mode=scoped`.
+- `operation_rules` values are trimmed and lowercased. Invalid `operation_class` or `verdict` values are rejected.
+- When `operation_rules` is present, the authorizer evaluates the tool's `operation_classes` against the rules. The most restrictive matching verdict wins (`deny` > `approval_required` > `allow`).
+- When `operation_rules` is empty, behavior is unchanged (backward-compatible binary allow/deny).
 
 ### `status`
 
 - `phase`, `lastError`, `observedGeneration`
 
 Examples: `examples/tool-permissions/*.yaml`
+
+## ToolApproval
+
+Captures a pending human/system approval request for a tool invocation that was flagged by a `ToolPermission` `operation_rules` verdict of `approval_required`.
+
+### `spec`
+
+- `task_ref` (string, required): name of the Task resource waiting for approval.
+- `tool` (string, required): tool name that triggered the approval request.
+- `operation_class` (string): the operation class that requires approval.
+- `agent` (string): agent that attempted the tool call.
+- `input` (string): tool input payload (for audit context).
+- `reason` (string): human-readable reason for the approval request.
+- `ttl` (duration string): time-to-live before auto-expiry. Defaults to `10m`.
+
+### `status`
+
+- `phase` (string): `Pending`, `Approved`, `Denied`, `Expired`. Defaults to `Pending`.
+- `decision` (string): `approved` or `denied`.
+- `decided_by` (string): identity of the approver/denier.
+- `decided_at` (string): RFC3339 timestamp of the decision.
+- `expires_at` (string): RFC3339 timestamp when the approval expires.
+
+### API Endpoints
+
+- `POST /v1/tool-approvals` -- create an approval request.
+- `GET /v1/tool-approvals` -- list approval requests (supports namespace and label filters).
+- `GET /v1/tool-approvals/{name}` -- get a specific approval.
+- `DELETE /v1/tool-approvals/{name}` -- delete an approval.
+- `POST /v1/tool-approvals/{name}/approve` -- approve a pending request. Body: `{"decided_by": "..."}`.
+- `POST /v1/tool-approvals/{name}/deny` -- deny a pending request. Body: `{"decided_by": "..."}`.
 
 ## Task
 
@@ -322,9 +362,12 @@ Examples: `examples/tool-permissions/*.yaml`
 
 Primary fields:
 
-- `phase`, `lastError`, `startedAt`, `completedAt`, `nextAttemptAt`, `attempts`
+- `phase`: `Pending`, `Running`, `WaitingApproval`, `Succeeded`, `Failed`, `DeadLetter`.
+- `lastError`, `startedAt`, `completedAt`, `nextAttemptAt`, `attempts`
 - `output`, `assignedWorker`, `claimedBy`, `leaseUntil`, `lastHeartbeat`
 - `observedGeneration`
+
+The `WaitingApproval` phase indicates the task is paused pending a `ToolApproval` decision. When the linked `ToolApproval` is approved, the task transitions back to `Running`. When denied or expired, the task transitions to `Failed` with an `approval_denied` or `approval_timeout` reason.
 
 Observability arrays:
 

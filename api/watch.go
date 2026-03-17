@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/eventbus"
 )
 
@@ -33,7 +33,7 @@ func (s *Server) watchAgents(w http.ResponseWriter, r *http.Request) {
 			item = s.withRuntimeStatus(item)
 			records = append(records, watchRecord{
 				Name:            item.Metadata.Name,
-				Namespace:       crds.NormalizeNamespace(item.Metadata.Namespace),
+				Namespace:       resources.NormalizeNamespace(item.Metadata.Namespace),
 				ResourceVersion: parseResourceVersion(item.Metadata.ResourceVersion),
 				Resource:        item,
 			})
@@ -49,7 +49,7 @@ func (s *Server) watchTasks(w http.ResponseWriter, r *http.Request) {
 		for _, item := range items {
 			records = append(records, watchRecord{
 				Name:            item.Metadata.Name,
-				Namespace:       crds.NormalizeNamespace(item.Metadata.Namespace),
+				Namespace:       resources.NormalizeNamespace(item.Metadata.Namespace),
 				ResourceVersion: parseResourceVersion(item.Metadata.ResourceVersion),
 				Resource:        item,
 			})
@@ -65,7 +65,7 @@ func (s *Server) watchTaskSchedules(w http.ResponseWriter, r *http.Request) {
 		for _, item := range items {
 			records = append(records, watchRecord{
 				Name:            item.Metadata.Name,
-				Namespace:       crds.NormalizeNamespace(item.Metadata.Namespace),
+				Namespace:       resources.NormalizeNamespace(item.Metadata.Namespace),
 				ResourceVersion: parseResourceVersion(item.Metadata.ResourceVersion),
 				Resource:        item,
 			})
@@ -81,7 +81,7 @@ func (s *Server) watchTaskWebhooks(w http.ResponseWriter, r *http.Request) {
 		for _, item := range items {
 			records = append(records, watchRecord{
 				Name:            item.Metadata.Name,
-				Namespace:       crds.NormalizeNamespace(item.Metadata.Namespace),
+				Namespace:       resources.NormalizeNamespace(item.Metadata.Namespace),
 				ResourceVersion: parseResourceVersion(item.Metadata.ResourceVersion),
 				Resource:        item,
 			})
@@ -171,7 +171,7 @@ func (s *Server) watchResourceStream(w http.ResponseWriter, r *http.Request, sna
 
 		nextSeen := make(map[string]int64, len(records))
 		for _, rec := range records {
-			rec.Namespace = crds.NormalizeNamespace(rec.Namespace)
+			rec.Namespace = resources.NormalizeNamespace(rec.Namespace)
 			if hasNamespaceFilter && !strings.EqualFold(rec.Namespace, namespaceFilterValue) {
 				continue
 			}
@@ -212,7 +212,7 @@ func (s *Server) watchResourceStream(w http.ResponseWriter, r *http.Request, sna
 			if nameFilter != "" && !strings.EqualFold(nameFilter, name) {
 				continue
 			}
-			meta := crds.ObjectMeta{Name: name, Namespace: namespace, ResourceVersion: strconv.FormatInt(previousRV, 10)}
+			meta := resources.ObjectMeta{Name: name, Namespace: namespace, ResourceVersion: strconv.FormatInt(previousRV, 10)}
 			if err := writeSSE(w, "resource", watchEvent{Type: "deleted", Resource: map[string]any{"metadata": meta}}); err != nil {
 				return err
 			}

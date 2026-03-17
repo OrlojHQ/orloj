@@ -27,7 +27,7 @@ A ready-to-use template combining agents, an agent system, and a task for a spec
 The management layer of Orloj, running as `orlojd`. Includes the API server, resource store, background services, and task scheduler. See [Architecture Overview](../architecture/overview.md).
 
 **Resource Definition**
-A typed, declarative schema. Orloj defines 13 resource types with standard `apiVersion`, `kind`, `metadata`, `spec`, and `status` fields. See [Resource Reference](./crds.md).
+A typed, declarative schema. Orloj defines 13 resource types with standard `apiVersion`, `kind`, `metadata`, `spec`, and `status` fields. See [Resource Reference](./resources.md).
 
 ## D
 

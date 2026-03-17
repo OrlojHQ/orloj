@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 // AuthResult holds resolved authentication artifacts for tool backends.
@@ -33,7 +33,7 @@ func NewAuthInjector(secrets SecretResolver, tokenCache *OAuth2TokenCache) *Auth
 
 // Resolve produces an AuthResult for the given tool auth config.
 // Returns an empty AuthResult (no error) when no auth is configured.
-func (a *AuthInjector) Resolve(ctx context.Context, toolName string, auth crds.ToolAuth) (AuthResult, error) {
+func (a *AuthInjector) Resolve(ctx context.Context, toolName string, auth resources.ToolAuth) (AuthResult, error) {
 	profile := strings.TrimSpace(auth.Profile)
 	secretRef := strings.TrimSpace(auth.SecretRef)
 
@@ -155,7 +155,7 @@ func (a *AuthInjector) resolveBasic(ctx context.Context, toolName, secretRef str
 	}, nil
 }
 
-func (a *AuthInjector) resolveOAuth2(ctx context.Context, toolName string, auth crds.ToolAuth) (AuthResult, error) {
+func (a *AuthInjector) resolveOAuth2(ctx context.Context, toolName string, auth resources.ToolAuth) (AuthResult, error) {
 	tokenURL := strings.TrimSpace(auth.TokenURL)
 	if tokenURL == "" {
 		return AuthResult{}, NewToolError(

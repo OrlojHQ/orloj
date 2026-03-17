@@ -14,7 +14,7 @@ import (
 
 	"github.com/OrlojHQ/orloj/api"
 	"github.com/OrlojHQ/orloj/controllers"
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/runtime"
 	"github.com/OrlojHQ/orloj/store"
 )
@@ -55,40 +55,40 @@ func TestApplyRunInspectTaskLogs(t *testing.T) {
 		5*time.Millisecond,
 	)
 
-	postJSON(t, httpServer.URL+"/v1/tools", crds.Tool{
+	postJSON(t, httpServer.URL+"/v1/tools", resources.Tool{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Tool",
-		Metadata:   crds.ObjectMeta{Name: "web_search"},
-		Spec: crds.ToolSpec{
+		Metadata:   resources.ObjectMeta{Name: "web_search"},
+		Spec: resources.ToolSpec{
 			Type:     "http",
 			Endpoint: "https://api.search.example",
 		},
 	})
 
-	postJSON(t, httpServer.URL+"/v1/agents", crds.Agent{
+	postJSON(t, httpServer.URL+"/v1/agents", resources.Agent{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
-		Metadata:   crds.ObjectMeta{Name: "research-agent"},
-		Spec: crds.AgentSpec{
+		Metadata:   resources.ObjectMeta{Name: "research-agent"},
+		Spec: resources.AgentSpec{
 			Model:  "gpt-4o",
 			Prompt: "You are a research assistant.",
 			Tools:  []string{"web_search"},
-			Limits: crds.AgentLimits{MaxSteps: 2, Timeout: "1s"},
+			Limits: resources.AgentLimits{MaxSteps: 2, Timeout: "1s"},
 		},
 	})
 
-	postJSON(t, httpServer.URL+"/v1/agent-systems", crds.AgentSystem{
+	postJSON(t, httpServer.URL+"/v1/agent-systems", resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
-		Metadata:   crds.ObjectMeta{Name: "report-system"},
-		Spec:       crds.AgentSystemSpec{Agents: []string{"research-agent"}},
+		Metadata:   resources.ObjectMeta{Name: "report-system"},
+		Spec:       resources.AgentSystemSpec{Agents: []string{"research-agent"}},
 	})
 
-	postJSON(t, httpServer.URL+"/v1/agent-policies", crds.AgentPolicy{
+	postJSON(t, httpServer.URL+"/v1/agent-policies", resources.AgentPolicy{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentPolicy",
-		Metadata:   crds.ObjectMeta{Name: "cost-policy"},
-		Spec: crds.AgentPolicySpec{
+		Metadata:   resources.ObjectMeta{Name: "cost-policy"},
+		Spec: resources.AgentPolicySpec{
 			ApplyMode:       "scoped",
 			TargetSystems:   []string{"report-system"},
 			MaxTokensPerRun: 100000,
@@ -96,11 +96,11 @@ func TestApplyRunInspectTaskLogs(t *testing.T) {
 		},
 	})
 
-	postJSON(t, httpServer.URL+"/v1/tasks", crds.Task{
+	postJSON(t, httpServer.URL+"/v1/tasks", resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "weekly-report"},
-		Spec: crds.TaskSpec{
+		Metadata:   resources.ObjectMeta{Name: "weekly-report"},
+		Spec: resources.TaskSpec{
 			System:   "report-system",
 			Priority: "high",
 			Input:    map[string]string{"topic": "AI startups"},
@@ -124,7 +124,7 @@ func TestApplyRunInspectTaskLogs(t *testing.T) {
 		t.Fatalf("get task status=%d body=%s", taskResp.StatusCode, string(body))
 	}
 
-	var task crds.Task
+	var task resources.Task
 	if err := json.NewDecoder(taskResp.Body).Decode(&task); err != nil {
 		t.Fatalf("decode task failed: %v", err)
 	}

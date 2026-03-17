@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 var ErrToolSecretNotFound = errors.New("tool secret not found")
 
 type SecretResourceLookup interface {
-	Get(name string) (crds.Secret, bool)
+	Get(name string) (resources.Secret, bool)
 }
 
 type namespaceAwareSecretResolver interface {
@@ -53,10 +53,10 @@ func (r *StoreSecretResolver) Resolve(_ context.Context, secretRef string) (stri
 	if err != nil {
 		return "", err
 	}
-	lookupKey := crds.NormalizeNamespace(ns) + "/" + name
+	lookupKey := resources.NormalizeNamespace(ns) + "/" + name
 	secret, ok := r.lookup.Get(lookupKey)
 	if !ok {
-		return "", fmt.Errorf("%w: secret %q not found in namespace %q", ErrToolSecretNotFound, name, crds.NormalizeNamespace(ns))
+		return "", fmt.Errorf("%w: secret %q not found in namespace %q", ErrToolSecretNotFound, name, resources.NormalizeNamespace(ns))
 	}
 	if secret.Spec.Data == nil {
 		return "", fmt.Errorf("%w: secret %q has no data", ErrToolSecretNotFound, name)
@@ -157,7 +157,7 @@ func parseSecretRef(secretRef, defaultNamespace, defaultKey string) (namespace s
 		return "", "", "", fmt.Errorf("secretRef %q has empty secret name", secretRef)
 	}
 	if strings.TrimSpace(namespace) == "" {
-		namespace = crds.DefaultNamespace
+		namespace = resources.DefaultNamespace
 	}
 	return namespace, name, key, nil
 }

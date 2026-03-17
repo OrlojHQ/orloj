@@ -3,17 +3,17 @@ package store
 import (
 	"testing"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 func TestAgentStoreVersioningAndConflict(t *testing.T) {
 	s := NewAgentStore()
 
-	created, err := s.Upsert(crds.Agent{
+	created, err := s.Upsert(resources.Agent{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
-		Metadata:   crds.ObjectMeta{Name: "a1"},
-		Spec:       crds.AgentSpec{Model: "gpt-4o", Prompt: "p1"},
+		Metadata:   resources.ObjectMeta{Name: "a1"},
+		Spec:       resources.AgentSpec{Model: "gpt-4o", Prompt: "p1"},
 	})
 	if err != nil {
 		t.Fatalf("create upsert failed: %v", err)

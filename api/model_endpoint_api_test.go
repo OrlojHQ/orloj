@@ -7,30 +7,30 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 func TestModelEndpointCRUDAndNamespaceScoping(t *testing.T) {
 	server := newTestServer(t)
 	defer server.Close()
 
-	postJSON(t, server.URL+"/v1/model-endpoints", crds.ModelEndpoint{
+	postJSON(t, server.URL+"/v1/model-endpoints", resources.ModelEndpoint{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "ModelEndpoint",
-		Metadata: crds.ObjectMeta{
+		Metadata: resources.ObjectMeta{
 			Name:      "openai-shared",
 			Namespace: "team-a",
 		},
-		Spec: crds.ModelEndpointSpec{Provider: "openai", DefaultModel: "gpt-4o-mini"},
+		Spec: resources.ModelEndpointSpec{Provider: "openai", DefaultModel: "gpt-4o-mini"},
 	})
-	postJSON(t, server.URL+"/v1/model-endpoints", crds.ModelEndpoint{
+	postJSON(t, server.URL+"/v1/model-endpoints", resources.ModelEndpoint{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "ModelEndpoint",
-		Metadata: crds.ObjectMeta{
+		Metadata: resources.ObjectMeta{
 			Name:      "openai-shared",
 			Namespace: "team-b",
 		},
-		Spec: crds.ModelEndpointSpec{Provider: "openai", DefaultModel: "gpt-4o"},
+		Spec: resources.ModelEndpointSpec{Provider: "openai", DefaultModel: "gpt-4o"},
 	})
 
 	resp, err := http.Get(server.URL + "/v1/model-endpoints/openai-shared?namespace=team-b")
@@ -42,7 +42,7 @@ func TestModelEndpointCRUDAndNamespaceScoping(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("expected 200, got %d body=%s", resp.StatusCode, string(body))
 	}
-	var endpoint crds.ModelEndpoint
+	var endpoint resources.ModelEndpoint
 	if err := json.NewDecoder(resp.Body).Decode(&endpoint); err != nil {
 		t.Fatalf("decode model endpoint failed: %v", err)
 	}
@@ -68,11 +68,11 @@ func TestModelEndpointStatusSubresource(t *testing.T) {
 	server := newTestServer(t)
 	defer server.Close()
 
-	postJSON(t, server.URL+"/v1/model-endpoints", crds.ModelEndpoint{
+	postJSON(t, server.URL+"/v1/model-endpoints", resources.ModelEndpoint{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "ModelEndpoint",
-		Metadata:   crds.ObjectMeta{Name: "openai-default"},
-		Spec:       crds.ModelEndpointSpec{Provider: "openai", DefaultModel: "gpt-4o-mini"},
+		Metadata:   resources.ObjectMeta{Name: "openai-default"},
+		Spec:       resources.ModelEndpointSpec{Provider: "openai", DefaultModel: "gpt-4o-mini"},
 	})
 
 	resp, err := http.Get(server.URL + "/v1/model-endpoints/openai-default")
@@ -84,7 +84,7 @@ func TestModelEndpointStatusSubresource(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("expected 200, got %d body=%s", resp.StatusCode, string(body))
 	}
-	var endpoint crds.ModelEndpoint
+	var endpoint resources.ModelEndpoint
 	if err := json.NewDecoder(resp.Body).Decode(&endpoint); err != nil {
 		t.Fatalf("decode endpoint failed: %v", err)
 	}

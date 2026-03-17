@@ -152,6 +152,7 @@ func main() {
 	taskController.ConfigureWorker(*taskWorkerID, *taskLeaseDuration, *taskHeartbeatInterval)
 	taskController.SetExecutionMode(*taskExecutionMode)
 	taskController.SetGovernanceStores(stores.Roles, stores.ToolPerms)
+	taskController.SetToolApprovalStore(stores.ToolApprovals)
 	taskController.SetModelEndpointStore(stores.ModelEPs)
 	taskController.SetExecutor(taskExecutor)
 	taskController.SetExtensions(extensions)
@@ -188,8 +189,9 @@ func main() {
 		Memories:      stores.Memories,
 		Policies:      stores.Policies,
 		AgentRoles:    stores.Roles,
-		ToolPerms:     stores.ToolPerms,
-		Tasks:         stores.Tasks,
+		ToolPerms:      stores.ToolPerms,
+		ToolApprovals:  stores.ToolApprovals,
+		Tasks:          stores.Tasks,
 		TaskSchedules: stores.TaskSchedules,
 		TaskWebhooks:  stores.TaskWebhooks,
 		WebhookDedupe: stores.WebhookDedupe,

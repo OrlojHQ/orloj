@@ -4,22 +4,22 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 func TestExecutionOrderTopologicalWithFanOut(t *testing.T) {
-	system := crds.AgentSystem{
-		Spec: crds.AgentSystemSpec{
+	system := resources.AgentSystem{
+		Spec: resources.AgentSystemSpec{
 			Agents: []string{"planner", "researcher", "reviewer", "writer"},
-			Graph: map[string]crds.GraphEdge{
+			Graph: map[string]resources.GraphEdge{
 				"planner": {
-					Edges: []crds.GraphRoute{
+					Edges: []resources.GraphRoute{
 						{To: "researcher"},
 						{To: "reviewer"},
 					},
 				},
-				"researcher": {Edges: []crds.GraphRoute{{To: "writer"}}},
-				"reviewer":   {Edges: []crds.GraphRoute{{To: "writer"}}},
+				"researcher": {Edges: []resources.GraphRoute{{To: "writer"}}},
+				"reviewer":   {Edges: []resources.GraphRoute{{To: "writer"}}},
 			},
 		},
 	}
@@ -37,15 +37,15 @@ func TestExecutionOrderTopologicalWithFanOut(t *testing.T) {
 }
 
 func TestValidateGraphRejectsInvalidJoinConfig(t *testing.T) {
-	system := crds.AgentSystem{
-		Spec: crds.AgentSystemSpec{
+	system := resources.AgentSystem{
+		Spec: resources.AgentSystemSpec{
 			Agents: []string{"planner", "writer"},
-			Graph: map[string]crds.GraphEdge{
+			Graph: map[string]resources.GraphEdge{
 				"planner": {
-					Edges: []crds.GraphRoute{{To: "writer"}},
+					Edges: []resources.GraphRoute{{To: "writer"}},
 				},
 				"writer": {
-					Join: crds.GraphJoin{
+					Join: resources.GraphJoin{
 						Mode:          "invalid-mode",
 						QuorumPercent: 120,
 						OnFailure:     "unknown",

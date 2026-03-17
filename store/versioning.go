@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 type ConflictError struct {
@@ -24,7 +24,7 @@ func IsConflict(err error) bool {
 	return ok
 }
 
-func initializeCreateMetadata(resource string, meta *crds.ObjectMeta) error {
+func initializeCreateMetadata(resource string, meta *resources.ObjectMeta) error {
 	expected := strings.TrimSpace(meta.ResourceVersion)
 	if expected != "" && expected != "0" {
 		return &ConflictError{Resource: resource, Expected: expected, Current: ""}
@@ -39,7 +39,7 @@ func initializeCreateMetadata(resource string, meta *crds.ObjectMeta) error {
 	return nil
 }
 
-func initializeUpdateMetadata(resource string, meta *crds.ObjectMeta, current crds.ObjectMeta, specChanged bool) error {
+func initializeUpdateMetadata(resource string, meta *resources.ObjectMeta, current resources.ObjectMeta, specChanged bool) error {
 	expected := strings.TrimSpace(meta.ResourceVersion)
 	if expected != "" && expected != current.ResourceVersion {
 		return &ConflictError{Resource: resource, Expected: expected, Current: current.ResourceVersion}

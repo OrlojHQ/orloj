@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/store"
 )
 
@@ -17,47 +17,47 @@ func TestTaskSchedulerAssignsTasksByRequirementsAndCapacity(t *testing.T) {
 	workerStore := store.NewWorkerStore()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
-	workers := []crds.Worker{
+	workers := []resources.Worker{
 		{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Worker",
-			Metadata:   crds.ObjectMeta{Name: "worker-a"},
-			Spec: crds.WorkerSpec{
+			Metadata:   resources.ObjectMeta{Name: "worker-a"},
+			Spec: resources.WorkerSpec{
 				Region:             "us-east",
 				MaxConcurrentTasks: 1,
-				Capabilities: crds.WorkerCapabilities{
+				Capabilities: resources.WorkerCapabilities{
 					SupportedModels: []string{"gpt-4o"},
 				},
 			},
-			Status: crds.WorkerStatus{Phase: "Ready", LastHeartbeat: now, CurrentTasks: 0},
+			Status: resources.WorkerStatus{Phase: "Ready", LastHeartbeat: now, CurrentTasks: 0},
 		},
 		{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Worker",
-			Metadata:   crds.ObjectMeta{Name: "worker-b"},
-			Spec: crds.WorkerSpec{
+			Metadata:   resources.ObjectMeta{Name: "worker-b"},
+			Spec: resources.WorkerSpec{
 				Region:             "us-west",
 				MaxConcurrentTasks: 1,
-				Capabilities: crds.WorkerCapabilities{
+				Capabilities: resources.WorkerCapabilities{
 					GPU:             true,
 					SupportedModels: []string{"gpt-4o"},
 				},
 			},
-			Status: crds.WorkerStatus{Phase: "Ready", LastHeartbeat: now, CurrentTasks: 1},
+			Status: resources.WorkerStatus{Phase: "Ready", LastHeartbeat: now, CurrentTasks: 1},
 		},
 		{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Worker",
-			Metadata:   crds.ObjectMeta{Name: "worker-c"},
-			Spec: crds.WorkerSpec{
+			Metadata:   resources.ObjectMeta{Name: "worker-c"},
+			Spec: resources.WorkerSpec{
 				Region:             "us-west",
 				MaxConcurrentTasks: 2,
-				Capabilities: crds.WorkerCapabilities{
+				Capabilities: resources.WorkerCapabilities{
 					GPU:             true,
 					SupportedModels: []string{"gpt-4o"},
 				},
 			},
-			Status: crds.WorkerStatus{Phase: "Ready", LastHeartbeat: now, CurrentTasks: 0},
+			Status: resources.WorkerStatus{Phase: "Ready", LastHeartbeat: now, CurrentTasks: 0},
 		},
 	}
 	for _, worker := range workers {
@@ -66,37 +66,37 @@ func TestTaskSchedulerAssignsTasksByRequirementsAndCapacity(t *testing.T) {
 		}
 	}
 
-	tasks := []crds.Task{
+	tasks := []resources.Task{
 		{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Task",
-			Metadata:   crds.ObjectMeta{Name: "task-west-gpu-1"},
-			Spec: crds.TaskSpec{
-				Requirements: crds.TaskRequirements{Region: "us-west", GPU: true, Model: "gpt-4o"},
+			Metadata:   resources.ObjectMeta{Name: "task-west-gpu-1"},
+			Spec: resources.TaskSpec{
+				Requirements: resources.TaskRequirements{Region: "us-west", GPU: true, Model: "gpt-4o"},
 			},
 		},
 		{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Task",
-			Metadata:   crds.ObjectMeta{Name: "task-east"},
-			Spec: crds.TaskSpec{
-				Requirements: crds.TaskRequirements{Region: "us-east", Model: "gpt-4o"},
+			Metadata:   resources.ObjectMeta{Name: "task-east"},
+			Spec: resources.TaskSpec{
+				Requirements: resources.TaskRequirements{Region: "us-east", Model: "gpt-4o"},
 			},
 		},
 		{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Task",
-			Metadata:   crds.ObjectMeta{Name: "task-west-gpu-2"},
-			Spec: crds.TaskSpec{
-				Requirements: crds.TaskRequirements{Region: "us-west", GPU: true, Model: "gpt-4o"},
+			Metadata:   resources.ObjectMeta{Name: "task-west-gpu-2"},
+			Spec: resources.TaskSpec{
+				Requirements: resources.TaskRequirements{Region: "us-west", GPU: true, Model: "gpt-4o"},
 			},
 		},
 		{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Task",
-			Metadata:   crds.ObjectMeta{Name: "task-no-match"},
-			Spec: crds.TaskSpec{
-				Requirements: crds.TaskRequirements{Region: "eu-central", GPU: true, Model: "gpt-4o"},
+			Metadata:   resources.ObjectMeta{Name: "task-no-match"},
+			Spec: resources.TaskSpec{
+				Requirements: resources.TaskRequirements{Region: "eu-central", GPU: true, Model: "gpt-4o"},
 			},
 		},
 	}
@@ -139,41 +139,41 @@ func TestTaskSchedulerClearsAndReassignsInvalidAssignment(t *testing.T) {
 	workerStore := store.NewWorkerStore()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
-	if _, err := workerStore.Upsert(crds.Worker{
+	if _, err := workerStore.Upsert(resources.Worker{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Worker",
-		Metadata:   crds.ObjectMeta{Name: "worker-ready"},
-		Spec: crds.WorkerSpec{
+		Metadata:   resources.ObjectMeta{Name: "worker-ready"},
+		Spec: resources.WorkerSpec{
 			Region:             "default",
 			MaxConcurrentTasks: 1,
-			Capabilities:       crds.WorkerCapabilities{SupportedModels: []string{"gpt-4o"}},
+			Capabilities:       resources.WorkerCapabilities{SupportedModels: []string{"gpt-4o"}},
 		},
-		Status: crds.WorkerStatus{Phase: "Ready", LastHeartbeat: now},
+		Status: resources.WorkerStatus{Phase: "Ready", LastHeartbeat: now},
 	}); err != nil {
 		t.Fatalf("upsert worker-ready: %v", err)
 	}
-	if _, err := workerStore.Upsert(crds.Worker{
+	if _, err := workerStore.Upsert(resources.Worker{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Worker",
-		Metadata:   crds.ObjectMeta{Name: "worker-stale"},
-		Spec: crds.WorkerSpec{
+		Metadata:   resources.ObjectMeta{Name: "worker-stale"},
+		Spec: resources.WorkerSpec{
 			Region:             "default",
 			MaxConcurrentTasks: 1,
-			Capabilities:       crds.WorkerCapabilities{SupportedModels: []string{"gpt-4o"}},
+			Capabilities:       resources.WorkerCapabilities{SupportedModels: []string{"gpt-4o"}},
 		},
-		Status: crds.WorkerStatus{Phase: "NotReady", LastHeartbeat: now},
+		Status: resources.WorkerStatus{Phase: "NotReady", LastHeartbeat: now},
 	}); err != nil {
 		t.Fatalf("upsert worker-stale: %v", err)
 	}
 
-	if _, err := taskStore.Upsert(crds.Task{
+	if _, err := taskStore.Upsert(resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "task-1"},
-		Spec: crds.TaskSpec{
-			Requirements: crds.TaskRequirements{Model: "gpt-4o"},
+		Metadata:   resources.ObjectMeta{Name: "task-1"},
+		Spec: resources.TaskSpec{
+			Requirements: resources.TaskRequirements{Model: "gpt-4o"},
 		},
-		Status: crds.TaskStatus{AssignedWorker: "worker-stale"},
+		Status: resources.TaskStatus{AssignedWorker: "worker-stale"},
 	}); err != nil {
 		t.Fatalf("upsert task: %v", err)
 	}

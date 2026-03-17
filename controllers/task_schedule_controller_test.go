@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/store"
 )
 
@@ -16,11 +16,11 @@ func TestTaskScheduleControllerCreatesRunAndIsIdempotent(t *testing.T) {
 	taskScheduleStore := store.NewTaskScheduleStore()
 	logger := log.New(io.Discard, "", 0)
 
-	template := crds.Task{
+	template := resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "report-template", Namespace: "team-a"},
-		Spec: crds.TaskSpec{
+		Metadata:   resources.ObjectMeta{Name: "report-template", Namespace: "team-a"},
+		Spec: resources.TaskSpec{
 			Mode:     "template",
 			System:   "report-system",
 			Priority: "normal",
@@ -31,18 +31,18 @@ func TestTaskScheduleControllerCreatesRunAndIsIdempotent(t *testing.T) {
 		t.Fatalf("upsert template failed: %v", err)
 	}
 
-	schedule := crds.TaskSchedule{
+	schedule := resources.TaskSchedule{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "TaskSchedule",
-		Metadata:   crds.ObjectMeta{Name: "weekly-report", Namespace: "team-a"},
-		Spec: crds.TaskScheduleSpec{
+		Metadata:   resources.ObjectMeta{Name: "weekly-report", Namespace: "team-a"},
+		Spec: resources.TaskScheduleSpec{
 			TaskRef:           "report-template",
 			Schedule:          "* * * * *",
 			TimeZone:          "UTC",
 			Suspend:           false,
 			ConcurrencyPolicy: "forbid",
 		},
-		Status: crds.TaskScheduleStatus{
+		Status: resources.TaskScheduleStatus{
 			LastScheduleTime: time.Now().UTC().Add(-2 * time.Minute).Format(time.RFC3339Nano),
 		},
 	}
@@ -82,19 +82,19 @@ func TestTaskScheduleControllerForbidOverlapSkipsNewRun(t *testing.T) {
 	taskScheduleStore := store.NewTaskScheduleStore()
 	logger := log.New(io.Discard, "", 0)
 
-	if _, err := taskStore.Upsert(crds.Task{
+	if _, err := taskStore.Upsert(resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "tmpl", Namespace: "default"},
-		Spec:       crds.TaskSpec{Mode: "template", System: "sys"},
+		Metadata:   resources.ObjectMeta{Name: "tmpl", Namespace: "default"},
+		Spec:       resources.TaskSpec{Mode: "template", System: "sys"},
 	}); err != nil {
 		t.Fatalf("upsert template failed: %v", err)
 	}
 
-	if _, err := taskStore.Upsert(crds.Task{
+	if _, err := taskStore.Upsert(resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata: crds.ObjectMeta{
+		Metadata: resources.ObjectMeta{
 			Name:      "existing-run",
 			Namespace: "default",
 			Labels: map[string]string{
@@ -103,24 +103,24 @@ func TestTaskScheduleControllerForbidOverlapSkipsNewRun(t *testing.T) {
 				taskScheduleSlotLabel:      time.Now().UTC().Add(-1 * time.Minute).Format(time.RFC3339Nano),
 			},
 		},
-		Spec:   crds.TaskSpec{Mode: "run", System: "sys"},
-		Status: crds.TaskStatus{Phase: "Running"},
+		Spec:   resources.TaskSpec{Mode: "run", System: "sys"},
+		Status: resources.TaskStatus{Phase: "Running"},
 	}); err != nil {
 		t.Fatalf("upsert existing run failed: %v", err)
 	}
 
-	if _, err := taskScheduleStore.Upsert(crds.TaskSchedule{
+	if _, err := taskScheduleStore.Upsert(resources.TaskSchedule{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "TaskSchedule",
-		Metadata:   crds.ObjectMeta{Name: "overlap", Namespace: "default"},
-		Spec: crds.TaskScheduleSpec{
+		Metadata:   resources.ObjectMeta{Name: "overlap", Namespace: "default"},
+		Spec: resources.TaskScheduleSpec{
 			TaskRef:                 "tmpl",
 			Schedule:                "* * * * *",
 			TimeZone:                "UTC",
 			ConcurrencyPolicy:       "forbid",
 			StartingDeadlineSeconds: 300,
 		},
-		Status: crds.TaskScheduleStatus{
+		Status: resources.TaskScheduleStatus{
 			LastScheduleTime: time.Now().UTC().Add(-2 * time.Minute).Format(time.RFC3339Nano),
 		},
 	}); err != nil {
@@ -148,25 +148,25 @@ func TestTaskScheduleControllerMissedDeadlineSkipsRun(t *testing.T) {
 	taskScheduleStore := store.NewTaskScheduleStore()
 	logger := log.New(io.Discard, "", 0)
 
-	if _, err := taskStore.Upsert(crds.Task{
+	if _, err := taskStore.Upsert(resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "tmpl", Namespace: "default"},
-		Spec:       crds.TaskSpec{Mode: "template", System: "sys"},
+		Metadata:   resources.ObjectMeta{Name: "tmpl", Namespace: "default"},
+		Spec:       resources.TaskSpec{Mode: "template", System: "sys"},
 	}); err != nil {
 		t.Fatalf("upsert template failed: %v", err)
 	}
-	if _, err := taskScheduleStore.Upsert(crds.TaskSchedule{
+	if _, err := taskScheduleStore.Upsert(resources.TaskSchedule{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "TaskSchedule",
-		Metadata:   crds.ObjectMeta{Name: "deadline", Namespace: "default"},
-		Spec: crds.TaskScheduleSpec{
+		Metadata:   resources.ObjectMeta{Name: "deadline", Namespace: "default"},
+		Spec: resources.TaskScheduleSpec{
 			TaskRef:                 "tmpl",
 			Schedule:                "* * * * *",
 			TimeZone:                "UTC",
 			StartingDeadlineSeconds: 1,
 		},
-		Status: crds.TaskScheduleStatus{
+		Status: resources.TaskScheduleStatus{
 			LastScheduleTime: time.Now().UTC().Add(-2 * time.Minute).Format(time.RFC3339Nano),
 		},
 	}); err != nil {
@@ -190,18 +190,18 @@ func TestTaskScheduleControllerRetentionPrunesHistory(t *testing.T) {
 	taskScheduleStore := store.NewTaskScheduleStore()
 	logger := log.New(io.Discard, "", 0)
 
-	schedule := crds.TaskSchedule{
+	schedule := resources.TaskSchedule{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "TaskSchedule",
-		Metadata:   crds.ObjectMeta{Name: "retention", Namespace: "default"},
-		Spec: crds.TaskScheduleSpec{
+		Metadata:   resources.ObjectMeta{Name: "retention", Namespace: "default"},
+		Spec: resources.TaskScheduleSpec{
 			TaskRef:                "tmpl",
 			Schedule:               "* * * * *",
 			TimeZone:               "UTC",
 			SuccessfulHistoryLimit: 1,
 			FailedHistoryLimit:     1,
 		},
-		Status: crds.TaskScheduleStatus{
+		Status: resources.TaskScheduleStatus{
 			LastScheduleTime: time.Now().UTC().Format(time.RFC3339Nano),
 		},
 	}
@@ -221,10 +221,10 @@ func TestTaskScheduleControllerRetentionPrunesHistory(t *testing.T) {
 		{name: "f-new", phase: "DeadLetter", completed: now.Add(-1 * time.Minute)},
 	}
 	for _, tc := range cases {
-		if _, err := taskStore.Upsert(crds.Task{
+		if _, err := taskStore.Upsert(resources.Task{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Task",
-			Metadata: crds.ObjectMeta{
+			Metadata: resources.ObjectMeta{
 				Name:      tc.name,
 				Namespace: "default",
 				Labels: map[string]string{
@@ -233,8 +233,8 @@ func TestTaskScheduleControllerRetentionPrunesHistory(t *testing.T) {
 					taskScheduleSlotLabel:      tc.completed.Format(time.RFC3339Nano),
 				},
 			},
-			Spec: crds.TaskSpec{Mode: "run", System: "sys"},
-			Status: crds.TaskStatus{
+			Spec: resources.TaskSpec{Mode: "run", System: "sys"},
+			Status: resources.TaskStatus{
 				Phase:       tc.phase,
 				CompletedAt: tc.completed.Format(time.RFC3339Nano),
 			},
@@ -270,20 +270,20 @@ func TestTaskScheduleEnsureRunUsesLatestTemplateSpec(t *testing.T) {
 	taskScheduleStore := store.NewTaskScheduleStore()
 	logger := log.New(io.Discard, "", 0)
 
-	template := crds.Task{
+	template := resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "tmpl", Namespace: "default"},
-		Spec:       crds.TaskSpec{Mode: "template", System: "sys-v1"},
+		Metadata:   resources.ObjectMeta{Name: "tmpl", Namespace: "default"},
+		Spec:       resources.TaskSpec{Mode: "template", System: "sys-v1"},
 	}
 	if _, err := taskStore.Upsert(template); err != nil {
 		t.Fatalf("upsert template failed: %v", err)
 	}
 
 	controller := NewTaskScheduleController(taskScheduleStore, taskStore, logger, 5*time.Millisecond)
-	schedule := crds.TaskSchedule{
-		Metadata: crds.ObjectMeta{Name: "latest", Namespace: "default"},
-		Spec: crds.TaskScheduleSpec{
+	schedule := resources.TaskSchedule{
+		Metadata: resources.ObjectMeta{Name: "latest", Namespace: "default"},
+		Spec: resources.TaskScheduleSpec{
 			TaskRef:  "tmpl",
 			Schedule: "* * * * *",
 			TimeZone: "UTC",

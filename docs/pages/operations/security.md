@@ -150,12 +150,30 @@ Auth failures produce distinct error codes (`auth_invalid` for HTTP 401, `auth_f
 
 Every tool invocation records `tool_auth_profile` and `tool_auth_secret_ref` (the secret name, not the resolved value) in the task trace. Use these fields for audit queries and compliance reporting.
 
+## Risk-Tier Routing and Approvals
+
+Tools can declare operation classes (`read`, `write`, `delete`, `admin`) via `spec.operation_classes`. Policy rules in `ToolPermission.spec.operation_rules` define per-class verdicts: `allow`, `deny`, or `approval_required`.
+
+When a tool call triggers `approval_required`:
+- The task enters `WaitingApproval` phase.
+- A `ToolApproval` resource is created for the pending decision.
+- An operator approves or denies via the REST API.
+- Approval outcomes produce `approval_pending`, `approval_denied`, or `approval_timeout` error codes.
+
+All approval-related outcomes are non-retryable and do not consume retry budget.
+
+### Operational Guidance
+
+- Use `operation_rules` with `verdict: approval_required` for destructive operations (`delete`, `admin`) in production environments.
+- Set appropriate TTLs on `ToolApproval` resources (default: 10 minutes) to prevent tasks from waiting indefinitely.
+- Monitor `WaitingApproval` task counts and approval latencies to detect bottlenecks.
+
 ## Operational Requirements
 
 - Enforce least-privilege tool permissions.
 - Monitor denial and runtime policy error trends.
 - Monitor auth failure rates by profile for early detection of expired credentials.
-- Approval hooks for high-risk operations are a post-launch roadmap item (Phase 12). See [Roadmap](../phases/roadmap.md).
+- Monitor approval request volume and response latency for `WaitingApproval` tasks.
 
 ## Related Docs
 

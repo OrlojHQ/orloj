@@ -231,9 +231,36 @@ Retry uses capped exponential backoff. The `jitter` field controls randomization
 
 Tool invocations are gated by the [governance layer](./governance.md). An agent must have the required permissions (via AgentRole) to invoke a tool, and the tool must not be blocked by any applicable AgentPolicy. Unauthorized calls fail closed with a `tool_permission_denied` error.
 
+## Operation Classes
+
+Tools can declare operation classes via `spec.operation_classes` (e.g. `read`, `write`, `delete`, `admin`). When omitted, the default is `["read"]` for low/medium risk tools and `["write"]` for high/critical risk tools.
+
+Operation classes are used by `ToolPermission.spec.operation_rules` to define per-class policy verdicts:
+
+- **allow**: proceed with the tool call (default).
+- **deny**: block the call with a `permission_denied` error.
+- **approval_required**: pause the task and create a `ToolApproval` resource. An external actor (human or system) must approve or deny the request before the task can continue.
+
+When multiple rules match, the most restrictive verdict wins: `deny` > `approval_required` > `allow`.
+
+## Approval Workflow
+
+When a tool call is flagged as `approval_required`, the following happens:
+
+1. The `GovernedToolRuntime` returns an `ErrToolApprovalRequired` sentinel error.
+2. The task controller transitions the task to the `WaitingApproval` phase.
+3. A `ToolApproval` resource is created with details about the pending call.
+4. An external actor approves or denies the request via the API (`POST /v1/tool-approvals/{name}/approve` or `/deny`).
+5. The task controller reconciles the approval status:
+   - **Approved**: task resumes to `Running`.
+   - **Denied**: task transitions to `Failed` with `approval_denied`.
+   - **Expired** (TTL elapsed): task transitions to `Failed` with `approval_timeout`.
+
+Approval-related outcomes are non-retryable and do not consume retry budget.
+
 ## Related Resources
 
-- [Resource Reference: Tool](../reference/crds.md)
+- [Resource Reference: Tool](../reference/resources.md)
 - [Tool Contract v1](../reference/tool-contract-v1.md)
 - [WASM Tool Module Contract v1](../reference/wasm-tool-module-contract-v1.md)
 - [Tool Runtime Conformance](../operations/tool-runtime-conformance.md)

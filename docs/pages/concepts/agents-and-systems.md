@@ -157,7 +157,7 @@ metadata:
 
 ## Related Resources
 
-- [Resource Reference: Agent and AgentSystem](../reference/crds.md)
+- [Resource Reference: Agent and AgentSystem](../reference/resources.md)
 - [Execution and Messaging](../architecture/execution-model.md)
 - [Starter Blueprints](../architecture/starter-blueprints.md)
 - [Guide: Deploy Your First Pipeline](../guides/deploy-pipeline.md)

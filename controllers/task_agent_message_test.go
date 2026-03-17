@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/runtime"
 )
 
@@ -48,25 +48,25 @@ func TestTaskControllerPublishesAgentHandoffMessages(t *testing.T) {
 	bus := &captureAgentMessageBus{}
 	controller.SetAgentMessageBus(bus)
 
-	for _, agent := range []crds.Agent{
+	for _, agent := range []resources.Agent{
 		{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Agent",
-			Metadata:   crds.ObjectMeta{Name: "planner-agent"},
-			Spec: crds.AgentSpec{
+			Metadata:   resources.ObjectMeta{Name: "planner-agent"},
+			Spec: resources.AgentSpec{
 				Model:  "gpt-4o",
 				Prompt: "plan",
-				Limits: crds.AgentLimits{MaxSteps: 1, Timeout: "1s"},
+				Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
 			},
 		},
 		{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Agent",
-			Metadata:   crds.ObjectMeta{Name: "writer-agent"},
-			Spec: crds.AgentSpec{
+			Metadata:   resources.ObjectMeta{Name: "writer-agent"},
+			Spec: resources.AgentSpec{
 				Model:  "gpt-4o",
 				Prompt: "write",
-				Limits: crds.AgentLimits{MaxSteps: 1, Timeout: "1s"},
+				Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
 			},
 		},
 	} {
@@ -75,13 +75,13 @@ func TestTaskControllerPublishesAgentHandoffMessages(t *testing.T) {
 		}
 	}
 
-	if _, err := stores.agentSystemStore.Upsert(crds.AgentSystem{
+	if _, err := stores.agentSystemStore.Upsert(resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
-		Metadata:   crds.ObjectMeta{Name: "message-system"},
-		Spec: crds.AgentSystemSpec{
+		Metadata:   resources.ObjectMeta{Name: "message-system"},
+		Spec: resources.AgentSystemSpec{
 			Agents: []string{"planner-agent", "writer-agent"},
-			Graph: map[string]crds.GraphEdge{
+			Graph: map[string]resources.GraphEdge{
 				"planner-agent": {Next: "writer-agent"},
 			},
 		},
@@ -89,11 +89,11 @@ func TestTaskControllerPublishesAgentHandoffMessages(t *testing.T) {
 		t.Fatalf("upsert system: %v", err)
 	}
 
-	if _, err := stores.taskStore.Upsert(crds.Task{
+	if _, err := stores.taskStore.Upsert(resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "message-task"},
-		Spec:       crds.TaskSpec{System: "message-system", Input: map[string]string{"topic": "agents"}},
+		Metadata:   resources.ObjectMeta{Name: "message-task"},
+		Spec:       resources.TaskSpec{System: "message-system", Input: map[string]string{"topic": "agents"}},
 	}); err != nil {
 		t.Fatalf("upsert task: %v", err)
 	}
@@ -152,25 +152,25 @@ func TestTaskControllerFailsTaskWhenMessagePublishFails(t *testing.T) {
 	controller, stores := newTaskControllerHarness()
 	controller.SetAgentMessageBus(&captureAgentMessageBus{publishErr: errors.New("broker unavailable")})
 
-	for _, agent := range []crds.Agent{
+	for _, agent := range []resources.Agent{
 		{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Agent",
-			Metadata:   crds.ObjectMeta{Name: "planner-agent"},
-			Spec: crds.AgentSpec{
+			Metadata:   resources.ObjectMeta{Name: "planner-agent"},
+			Spec: resources.AgentSpec{
 				Model:  "gpt-4o",
 				Prompt: "plan",
-				Limits: crds.AgentLimits{MaxSteps: 1, Timeout: "1s"},
+				Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
 			},
 		},
 		{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Agent",
-			Metadata:   crds.ObjectMeta{Name: "writer-agent"},
-			Spec: crds.AgentSpec{
+			Metadata:   resources.ObjectMeta{Name: "writer-agent"},
+			Spec: resources.AgentSpec{
 				Model:  "gpt-4o",
 				Prompt: "write",
-				Limits: crds.AgentLimits{MaxSteps: 1, Timeout: "1s"},
+				Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
 			},
 		},
 	} {
@@ -179,13 +179,13 @@ func TestTaskControllerFailsTaskWhenMessagePublishFails(t *testing.T) {
 		}
 	}
 
-	if _, err := stores.agentSystemStore.Upsert(crds.AgentSystem{
+	if _, err := stores.agentSystemStore.Upsert(resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
-		Metadata:   crds.ObjectMeta{Name: "message-system"},
-		Spec: crds.AgentSystemSpec{
+		Metadata:   resources.ObjectMeta{Name: "message-system"},
+		Spec: resources.AgentSystemSpec{
 			Agents: []string{"planner-agent", "writer-agent"},
-			Graph: map[string]crds.GraphEdge{
+			Graph: map[string]resources.GraphEdge{
 				"planner-agent": {Next: "writer-agent"},
 			},
 		},
@@ -193,11 +193,11 @@ func TestTaskControllerFailsTaskWhenMessagePublishFails(t *testing.T) {
 		t.Fatalf("upsert system: %v", err)
 	}
 
-	if _, err := stores.taskStore.Upsert(crds.Task{
+	if _, err := stores.taskStore.Upsert(resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "message-fail-task"},
-		Spec:       crds.TaskSpec{System: "message-system"},
+		Metadata:   resources.ObjectMeta{Name: "message-fail-task"},
+		Spec:       resources.TaskSpec{System: "message-system"},
 	}); err != nil {
 		t.Fatalf("upsert task: %v", err)
 	}

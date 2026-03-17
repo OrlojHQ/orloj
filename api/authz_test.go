@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/OrlojHQ/orloj/api"
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/runtime"
 	"github.com/OrlojHQ/orloj/store"
 )
@@ -92,11 +92,11 @@ func TestAuthzEnforcement(t *testing.T) {
 	resp.Body.Close()
 
 	// Writer can create spec resources.
-	payload, _ := json.Marshal(crds.Tool{
+	payload, _ := json.Marshal(resources.Tool{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Tool",
-		Metadata:   crds.ObjectMeta{Name: "t1"},
-		Spec:       crds.ToolSpec{Type: "http", Endpoint: "https://example"},
+		Metadata:   resources.ObjectMeta{Name: "t1"},
+		Spec:       resources.ToolSpec{Type: "http", Endpoint: "https://example"},
 	})
 	req, _ = http.NewRequest(http.MethodPost, httpServer.URL+"/v1/tools", bytes.NewReader(payload))
 	req.Header.Set("Authorization", "Bearer writer-token")
@@ -121,7 +121,7 @@ func TestAuthzEnforcement(t *testing.T) {
 		b, _ := io.ReadAll(resp.Body)
 		t.Fatalf("expected get tool 200, got %d body=%s", resp.StatusCode, string(b))
 	}
-	var tool crds.Tool
+	var tool resources.Tool
 	if err := json.NewDecoder(resp.Body).Decode(&tool); err != nil {
 		t.Fatalf("decode tool failed: %v", err)
 	}

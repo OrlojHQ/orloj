@@ -6,7 +6,7 @@ Detailed contracts and schemas for API consumers, runtime integrators, and platf
 
 - [CLI Reference](./cli.md)
 - [API Reference](./api.md)
-- [Resource Reference](./crds.md)
+- [Resource Reference](./resources.md)
 - [Extension Contracts](./extensions.md)
 
 ## Runtime Contracts

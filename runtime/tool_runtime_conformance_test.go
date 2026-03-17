@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 	agentruntime "github.com/OrlojHQ/orloj/runtime"
 	"github.com/OrlojHQ/orloj/runtime/conformance"
 	conformancecases "github.com/OrlojHQ/orloj/runtime/conformance/cases"
@@ -26,11 +26,11 @@ func (r funcRuntime) Call(ctx context.Context, tool string, input string) (strin
 
 type denyAuthorizer struct{}
 
-func (a denyAuthorizer) Authorize(tool string, _ crds.ToolSpec) error {
+func (a denyAuthorizer) Authorize(tool string, _ resources.ToolSpec) (*agentruntime.AuthorizeResult, error) {
 	if !strings.EqualFold(strings.TrimSpace(tool), "vector_db") {
-		return nil
+		return &agentruntime.AuthorizeResult{Verdict: agentruntime.AuthorizeVerdictAllow}, nil
 	}
-	return agentruntime.NewToolDeniedError(
+	return nil, agentruntime.NewToolDeniedError(
 		"policy permission denied for tool=vector_db",
 		map[string]string{
 			"tool":     "vector_db",
@@ -106,11 +106,11 @@ func TestGovernedToolRuntimeConformanceSuite(t *testing.T) {
 			}
 		},
 	}
-	registry := agentruntime.NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := agentruntime.NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"web_search": {
-			Runtime: crds.ToolRuntimePolicy{
+			Runtime: resources.ToolRuntimePolicy{
 				Timeout: "100ms",
-				Retry: crds.ToolRetryPolicy{
+				Retry: resources.ToolRetryPolicy{
 					MaxAttempts: 1,
 					Backoff:     "0s",
 					MaxBackoff:  "1s",
@@ -119,9 +119,9 @@ func TestGovernedToolRuntimeConformanceSuite(t *testing.T) {
 			},
 		},
 		"vector_db": {
-			Runtime: crds.ToolRuntimePolicy{
+			Runtime: resources.ToolRuntimePolicy{
 				Timeout: "100ms",
-				Retry: crds.ToolRetryPolicy{
+				Retry: resources.ToolRetryPolicy{
 					MaxAttempts: 1,
 					Backoff:     "0s",
 					MaxBackoff:  "1s",
@@ -130,9 +130,9 @@ func TestGovernedToolRuntimeConformanceSuite(t *testing.T) {
 			},
 		},
 		"timeout_tool": {
-			Runtime: crds.ToolRuntimePolicy{
+			Runtime: resources.ToolRuntimePolicy{
 				Timeout: "1ms",
-				Retry: crds.ToolRetryPolicy{
+				Retry: resources.ToolRetryPolicy{
 					MaxAttempts: 1,
 					Backoff:     "0s",
 					MaxBackoff:  "1s",
@@ -141,9 +141,9 @@ func TestGovernedToolRuntimeConformanceSuite(t *testing.T) {
 			},
 		},
 		"stuck_tool": {
-			Runtime: crds.ToolRuntimePolicy{
+			Runtime: resources.ToolRuntimePolicy{
 				Timeout: "10ms",
-				Retry: crds.ToolRetryPolicy{
+				Retry: resources.ToolRetryPolicy{
 					MaxAttempts: 1,
 					Backoff:     "0s",
 					MaxBackoff:  "1s",
@@ -226,7 +226,7 @@ func TestGovernedToolRuntimeConformanceSuite(t *testing.T) {
 }
 
 func TestContainerToolRuntimeConformanceSuite(t *testing.T) {
-	registry := agentruntime.NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := agentruntime.NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"web_search": {
 			Type:     "http",
 			Endpoint: "https://api.example/search",
@@ -241,7 +241,7 @@ func TestContainerToolRuntimeConformanceSuite(t *testing.T) {
 		"secret_lookup": {
 			Type:     "http",
 			Endpoint: "https://api.example/private",
-			Auth: crds.ToolAuth{
+			Auth: resources.ToolAuth{
 				SecretRef: "missing-secret",
 			},
 		},
@@ -333,7 +333,7 @@ func TestContainerToolRuntimeConformanceSuite(t *testing.T) {
 }
 
 func TestHTTPToolRuntimeConformanceSuite(t *testing.T) {
-	registry := agentruntime.NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := agentruntime.NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"web_search": {
 			Type:     "http",
 			Endpoint: "https://api.example/search",
@@ -344,7 +344,7 @@ func TestHTTPToolRuntimeConformanceSuite(t *testing.T) {
 		"secret_lookup": {
 			Type:     "http",
 			Endpoint: "https://api.example/private",
-			Auth: crds.ToolAuth{
+			Auth: resources.ToolAuth{
 				SecretRef: "missing-secret",
 			},
 		},
@@ -405,7 +405,7 @@ func TestHTTPToolRuntimeConformanceSuite(t *testing.T) {
 }
 
 func TestExternalToolRuntimeConformanceSuite(t *testing.T) {
-	registry := agentruntime.NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := agentruntime.NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"ext_tool": {
 			Type:     "external",
 			Endpoint: "https://ext.example/execute",
@@ -503,7 +503,7 @@ func TestWASMStubRuntimeFailsClosed(t *testing.T) {
 }
 
 func TestWASMRuntimeScaffoldConformanceSuite(t *testing.T) {
-	registry := agentruntime.NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := agentruntime.NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"wasm_tool": {
 			Type:      "custom",
 			RiskLevel: "high",

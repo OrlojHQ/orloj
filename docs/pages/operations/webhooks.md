@@ -121,5 +121,5 @@ Webhook-triggered run tasks include:
 ## Related Docs
 
 - [Task Webhook Examples](../../../examples/task-webhooks/README.md)
-- [CRD Reference (`TaskWebhook`)](../reference/crds.md)
+- [Resource Reference (`TaskWebhook`)](../reference/resources.md)
 - [API Reference (Webhook Delivery)](../reference/api.md)

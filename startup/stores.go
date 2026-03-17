@@ -21,8 +21,9 @@ type StoreSet struct {
 	Memories      *store.MemoryStore
 	Policies      *store.AgentPolicyStore
 	Roles         *store.AgentRoleStore
-	ToolPerms     *store.ToolPermissionStore
-	Tasks         *store.TaskStore
+	ToolPerms      *store.ToolPermissionStore
+	ToolApprovals  *store.ToolApprovalStore
+	Tasks          *store.TaskStore
 	TaskSchedules *store.TaskScheduleStore
 	TaskWebhooks  *store.TaskWebhookStore
 	WebhookDedupe *store.WebhookDedupeStore
@@ -61,8 +62,9 @@ func OpenStores(cfg StoreConfig, logger *log.Logger) (*StoreSet, error) {
 		Memories:     store.NewMemoryStore(),
 		Policies:     store.NewAgentPolicyStore(),
 		Roles:        store.NewAgentRoleStore(),
-		ToolPerms:    store.NewToolPermissionStore(),
-		Tasks:        store.NewTaskStore(),
+		ToolPerms:     store.NewToolPermissionStore(),
+		ToolApprovals: store.NewToolApprovalStore(),
+		Tasks:         store.NewTaskStore(),
 		Workers:      store.NewWorkerStore(),
 	}
 	if cfg.IncludeScheduleStores {
@@ -125,6 +127,7 @@ func OpenStores(cfg StoreConfig, logger *log.Logger) (*StoreSet, error) {
 		s.Policies = store.NewAgentPolicyStoreWithDB(db)
 		s.Roles = store.NewAgentRoleStoreWithDB(db)
 		s.ToolPerms = store.NewToolPermissionStoreWithDB(db)
+		s.ToolApprovals = store.NewToolApprovalStoreWithDB(db)
 		s.Tasks = store.NewTaskStoreWithDB(db)
 		s.Workers = store.NewWorkerStoreWithDB(db)
 		if cfg.IncludeScheduleStores {

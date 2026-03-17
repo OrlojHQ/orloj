@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/eventbus"
 	"github.com/OrlojHQ/orloj/frontend"
 	"github.com/OrlojHQ/orloj/runtime"
@@ -27,8 +27,9 @@ type Stores struct {
 	Memories      *store.MemoryStore
 	Policies      *store.AgentPolicyStore
 	AgentRoles    *store.AgentRoleStore
-	ToolPerms     *store.ToolPermissionStore
-	Tasks         *store.TaskStore
+	ToolPerms      *store.ToolPermissionStore
+	ToolApprovals  *store.ToolApprovalStore
+	Tasks          *store.TaskStore
 	TaskSchedules *store.TaskScheduleStore
 	TaskWebhooks  *store.TaskWebhookStore
 	WebhookDedupe *store.WebhookDedupeStore
@@ -149,6 +150,9 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/v1/tool-permissions", s.handleToolPermissions)
 	s.mux.HandleFunc("/v1/tool-permissions/", s.handleToolPermissionByName)
 
+	s.mux.HandleFunc("/v1/tool-approvals", s.handleToolApprovals)
+	s.mux.HandleFunc("/v1/tool-approvals/", s.handleToolApprovalByName)
+
 	s.mux.HandleFunc("/v1/tasks", s.handleTasks)
 	s.mux.HandleFunc("/v1/tasks/watch", s.watchTasks)
 	s.mux.HandleFunc("/v1/tasks/", s.handleTaskByName)
@@ -238,7 +242,7 @@ func (s *Server) handleAgentByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "failed to read request body", http.StatusBadRequest)
 			return
 		}
-		agent, err := crds.ParseAgentManifest(body)
+		agent, err := resources.ParseAgentManifest(body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -276,7 +280,7 @@ func (s *Server) createOrUpdateAgent(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to read request body", http.StatusBadRequest)
 		return
 	}
-	agent, err := crds.ParseAgentManifest(body)
+	agent, err := resources.ParseAgentManifest(body)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -307,7 +311,7 @@ func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if hasNS || len(selector) > 0 {
-		filtered := make([]crds.Agent, 0, len(agents))
+		filtered := make([]resources.Agent, 0, len(agents))
 		for _, agent := range agents {
 			if !matchMetadataFilters(agent.Metadata, ns, hasNS, selector) {
 				continue
@@ -319,7 +323,7 @@ func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
 	for i := range agents {
 		agents[i] = s.withRuntimeStatus(agents[i])
 	}
-	writeJSON(w, http.StatusOK, crds.AgentList{Items: agents})
+	writeJSON(w, http.StatusOK, resources.AgentList{Items: agents})
 }
 
 func (s *Server) getAgent(w http.ResponseWriter, key, name string) {
@@ -360,7 +364,7 @@ func (s *Server) handleAgentSystems(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if hasNS || len(selector) > 0 {
-			filtered := make([]crds.AgentSystem, 0, len(items))
+			filtered := make([]resources.AgentSystem, 0, len(items))
 			for _, item := range items {
 				if !matchMetadataFilters(item.Metadata, ns, hasNS, selector) {
 					continue
@@ -369,14 +373,14 @@ func (s *Server) handleAgentSystems(w http.ResponseWriter, r *http.Request) {
 			}
 			items = filtered
 		}
-		writeJSON(w, http.StatusOK, crds.AgentSystemList{Items: items})
+		writeJSON(w, http.StatusOK, resources.AgentSystemList{Items: items})
 	case http.MethodPost:
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, "failed to read request body", http.StatusBadRequest)
 			return
 		}
-		obj, err := crds.ParseAgentSystemManifest(body)
+		obj, err := resources.ParseAgentSystemManifest(body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -438,7 +442,7 @@ func (s *Server) handleAgentSystemByName(w http.ResponseWriter, r *http.Request)
 			http.Error(w, "failed to read request body", http.StatusBadRequest)
 			return
 		}
-		obj, err := crds.ParseAgentSystemManifest(body)
+		obj, err := resources.ParseAgentSystemManifest(body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -481,7 +485,7 @@ func (s *Server) handleModelEndpoints(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if hasNS || len(selector) > 0 {
-			filtered := make([]crds.ModelEndpoint, 0, len(items))
+			filtered := make([]resources.ModelEndpoint, 0, len(items))
 			for _, item := range items {
 				if !matchMetadataFilters(item.Metadata, ns, hasNS, selector) {
 					continue
@@ -490,14 +494,14 @@ func (s *Server) handleModelEndpoints(w http.ResponseWriter, r *http.Request) {
 			}
 			items = filtered
 		}
-		writeJSON(w, http.StatusOK, crds.ModelEndpointList{Items: items})
+		writeJSON(w, http.StatusOK, resources.ModelEndpointList{Items: items})
 	case http.MethodPost:
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, "failed to read request body", http.StatusBadRequest)
 			return
 		}
-		obj, err := crds.ParseModelEndpointManifest(body)
+		obj, err := resources.ParseModelEndpointManifest(body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -559,7 +563,7 @@ func (s *Server) handleModelEndpointByName(w http.ResponseWriter, r *http.Reques
 			http.Error(w, "failed to read request body", http.StatusBadRequest)
 			return
 		}
-		obj, err := crds.ParseModelEndpointManifest(body)
+		obj, err := resources.ParseModelEndpointManifest(body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -602,7 +606,7 @@ func (s *Server) handleTools(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if hasNS || len(selector) > 0 {
-			filtered := make([]crds.Tool, 0, len(items))
+			filtered := make([]resources.Tool, 0, len(items))
 			for _, item := range items {
 				if !matchMetadataFilters(item.Metadata, ns, hasNS, selector) {
 					continue
@@ -611,14 +615,14 @@ func (s *Server) handleTools(w http.ResponseWriter, r *http.Request) {
 			}
 			items = filtered
 		}
-		writeJSON(w, http.StatusOK, crds.ToolList{Items: items})
+		writeJSON(w, http.StatusOK, resources.ToolList{Items: items})
 	case http.MethodPost:
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, "failed to read request body", http.StatusBadRequest)
 			return
 		}
-		obj, err := crds.ParseToolManifest(body)
+		obj, err := resources.ParseToolManifest(body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -680,7 +684,7 @@ func (s *Server) handleToolByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "failed to read request body", http.StatusBadRequest)
 			return
 		}
-		obj, err := crds.ParseToolManifest(body)
+		obj, err := resources.ParseToolManifest(body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -723,7 +727,7 @@ func (s *Server) handleSecrets(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if hasNS || len(selector) > 0 {
-			filtered := make([]crds.Secret, 0, len(items))
+			filtered := make([]resources.Secret, 0, len(items))
 			for _, item := range items {
 				if !matchMetadataFilters(item.Metadata, ns, hasNS, selector) {
 					continue
@@ -732,14 +736,14 @@ func (s *Server) handleSecrets(w http.ResponseWriter, r *http.Request) {
 			}
 			items = filtered
 		}
-		writeJSON(w, http.StatusOK, crds.SecretList{Items: items})
+		writeJSON(w, http.StatusOK, resources.SecretList{Items: items})
 	case http.MethodPost:
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, "failed to read request body", http.StatusBadRequest)
 			return
 		}
-		obj, err := crds.ParseSecretManifest(body)
+		obj, err := resources.ParseSecretManifest(body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -792,7 +796,7 @@ func (s *Server) handleSecretByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "failed to read request body", http.StatusBadRequest)
 			return
 		}
-		obj, err := crds.ParseSecretManifest(body)
+		obj, err := resources.ParseSecretManifest(body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -835,7 +839,7 @@ func (s *Server) handleMemories(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if hasNS || len(selector) > 0 {
-			filtered := make([]crds.Memory, 0, len(items))
+			filtered := make([]resources.Memory, 0, len(items))
 			for _, item := range items {
 				if !matchMetadataFilters(item.Metadata, ns, hasNS, selector) {
 					continue
@@ -844,14 +848,14 @@ func (s *Server) handleMemories(w http.ResponseWriter, r *http.Request) {
 			}
 			items = filtered
 		}
-		writeJSON(w, http.StatusOK, crds.MemoryList{Items: items})
+		writeJSON(w, http.StatusOK, resources.MemoryList{Items: items})
 	case http.MethodPost:
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, "failed to read request body", http.StatusBadRequest)
 			return
 		}
-		obj, err := crds.ParseMemoryManifest(body)
+		obj, err := resources.ParseMemoryManifest(body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -913,7 +917,7 @@ func (s *Server) handleMemoryByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "failed to read request body", http.StatusBadRequest)
 			return
 		}
-		obj, err := crds.ParseMemoryManifest(body)
+		obj, err := resources.ParseMemoryManifest(body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -956,7 +960,7 @@ func (s *Server) handlePolicies(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if hasNS || len(selector) > 0 {
-			filtered := make([]crds.AgentPolicy, 0, len(items))
+			filtered := make([]resources.AgentPolicy, 0, len(items))
 			for _, item := range items {
 				if !matchMetadataFilters(item.Metadata, ns, hasNS, selector) {
 					continue
@@ -965,14 +969,14 @@ func (s *Server) handlePolicies(w http.ResponseWriter, r *http.Request) {
 			}
 			items = filtered
 		}
-		writeJSON(w, http.StatusOK, crds.AgentPolicyList{Items: items})
+		writeJSON(w, http.StatusOK, resources.AgentPolicyList{Items: items})
 	case http.MethodPost:
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, "failed to read request body", http.StatusBadRequest)
 			return
 		}
-		obj, err := crds.ParseAgentPolicyManifest(body)
+		obj, err := resources.ParseAgentPolicyManifest(body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -1034,7 +1038,7 @@ func (s *Server) handlePolicyByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "failed to read request body", http.StatusBadRequest)
 			return
 		}
-		obj, err := crds.ParseAgentPolicyManifest(body)
+		obj, err := resources.ParseAgentPolicyManifest(body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -1077,7 +1081,7 @@ func (s *Server) handleAgentRoles(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if hasNS || len(selector) > 0 {
-			filtered := make([]crds.AgentRole, 0, len(items))
+			filtered := make([]resources.AgentRole, 0, len(items))
 			for _, item := range items {
 				if !matchMetadataFilters(item.Metadata, ns, hasNS, selector) {
 					continue
@@ -1086,14 +1090,14 @@ func (s *Server) handleAgentRoles(w http.ResponseWriter, r *http.Request) {
 			}
 			items = filtered
 		}
-		writeJSON(w, http.StatusOK, crds.AgentRoleList{Items: items})
+		writeJSON(w, http.StatusOK, resources.AgentRoleList{Items: items})
 	case http.MethodPost:
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, "failed to read request body", http.StatusBadRequest)
 			return
 		}
-		obj, err := crds.ParseAgentRoleManifest(body)
+		obj, err := resources.ParseAgentRoleManifest(body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -1146,7 +1150,7 @@ func (s *Server) handleAgentRoleByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "failed to read request body", http.StatusBadRequest)
 			return
 		}
-		obj, err := crds.ParseAgentRoleManifest(body)
+		obj, err := resources.ParseAgentRoleManifest(body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -1189,7 +1193,7 @@ func (s *Server) handleToolPermissions(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if hasNS || len(selector) > 0 {
-			filtered := make([]crds.ToolPermission, 0, len(items))
+			filtered := make([]resources.ToolPermission, 0, len(items))
 			for _, item := range items {
 				if !matchMetadataFilters(item.Metadata, ns, hasNS, selector) {
 					continue
@@ -1198,14 +1202,14 @@ func (s *Server) handleToolPermissions(w http.ResponseWriter, r *http.Request) {
 			}
 			items = filtered
 		}
-		writeJSON(w, http.StatusOK, crds.ToolPermissionList{Items: items})
+		writeJSON(w, http.StatusOK, resources.ToolPermissionList{Items: items})
 	case http.MethodPost:
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, "failed to read request body", http.StatusBadRequest)
 			return
 		}
-		obj, err := crds.ParseToolPermissionManifest(body)
+		obj, err := resources.ParseToolPermissionManifest(body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -1258,7 +1262,7 @@ func (s *Server) handleToolPermissionByName(w http.ResponseWriter, r *http.Reque
 			http.Error(w, "failed to read request body", http.StatusBadRequest)
 			return
 		}
-		obj, err := crds.ParseToolPermissionManifest(body)
+		obj, err := resources.ParseToolPermissionManifest(body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -1290,6 +1294,136 @@ func (s *Server) handleToolPermissionByName(w http.ResponseWriter, r *http.Reque
 	}
 }
 
+func (s *Server) handleToolApprovals(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		items := s.stores.ToolApprovals.List()
+		ns, hasNS := namespaceFilter(r)
+		selector, err := labelSelectorFilter(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if hasNS || len(selector) > 0 {
+			filtered := make([]resources.ToolApproval, 0, len(items))
+			for _, item := range items {
+				if !matchMetadataFilters(item.Metadata, ns, hasNS, selector) {
+					continue
+				}
+				filtered = append(filtered, item)
+			}
+			items = filtered
+		}
+		writeJSON(w, http.StatusOK, resources.ToolApprovalList{Items: items})
+	case http.MethodPost:
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "failed to read request body", http.StatusBadRequest)
+			return
+		}
+		var obj resources.ToolApproval
+		if err := json.Unmarshal(body, &obj); err != nil {
+			http.Error(w, fmt.Sprintf("invalid JSON: %v", err), http.StatusBadRequest)
+			return
+		}
+		if err := applyRequestNamespace(r, &obj.Metadata); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if existing, ok := s.stores.ToolApprovals.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name)); ok {
+			obj.Status = existing.Status
+		}
+		obj, err = s.stores.ToolApprovals.Upsert(obj)
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		s.logApply("ToolApproval", obj.Metadata.Name)
+		s.publishResourceEvent("ToolApproval", obj.Metadata.Name, "created", obj)
+		writeJSON(w, http.StatusCreated, obj)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleToolApprovalByName(w http.ResponseWriter, r *http.Request) {
+	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/v1/tool-approvals/"), "/")
+	if path == "" {
+		http.Error(w, "tool approval name is required", http.StatusBadRequest)
+		return
+	}
+	if strings.HasSuffix(path, "/approve") {
+		name := strings.TrimSuffix(path, "/approve")
+		s.handleToolApprovalDecision(w, r, name, "Approved", "approved")
+		return
+	}
+	if strings.HasSuffix(path, "/deny") {
+		name := strings.TrimSuffix(path, "/deny")
+		s.handleToolApprovalDecision(w, r, name, "Denied", "denied")
+		return
+	}
+	name := path
+	key := scopedNameForRequest(r, name)
+	switch r.Method {
+	case http.MethodGet:
+		obj, ok := s.stores.ToolApprovals.Get(key)
+		if !ok {
+			http.Error(w, fmt.Sprintf("toolapproval %q not found", name), http.StatusNotFound)
+			return
+		}
+		writeJSON(w, http.StatusOK, obj)
+	case http.MethodDelete:
+		if err := s.stores.ToolApprovals.Delete(key); err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		s.publishResourceEvent("ToolApproval", name, "deleted", map[string]any{"metadata": map[string]string{"name": name, "namespace": requestNamespace(r)}})
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleToolApprovalDecision(w http.ResponseWriter, r *http.Request, name, phase, decision string) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	key := scopedNameForRequest(r, name)
+	obj, ok := s.stores.ToolApprovals.Get(key)
+	if !ok {
+		http.Error(w, fmt.Sprintf("toolapproval %q not found", name), http.StatusNotFound)
+		return
+	}
+	if obj.Status.Phase != "Pending" {
+		http.Error(w, fmt.Sprintf("toolapproval %q is already %s", name, obj.Status.Phase), http.StatusConflict)
+		return
+	}
+
+	var body struct {
+		DecidedBy string `json:"decided_by"`
+	}
+	if r.Body != nil {
+		raw, _ := io.ReadAll(r.Body)
+		if len(raw) > 0 {
+			_ = json.Unmarshal(raw, &body)
+		}
+	}
+
+	obj.Status.Phase = phase
+	obj.Status.Decision = decision
+	obj.Status.DecidedBy = body.DecidedBy
+	obj.Status.DecidedAt = time.Now().UTC().Format(time.RFC3339)
+
+	obj, err := s.stores.ToolApprovals.Upsert(obj)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	s.publishResourceEvent("ToolApproval", obj.Metadata.Name, decision, obj)
+	writeJSON(w, http.StatusOK, obj)
+}
+
 func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -1301,7 +1435,7 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if hasNS || len(selector) > 0 {
-			filtered := make([]crds.Task, 0, len(items))
+			filtered := make([]resources.Task, 0, len(items))
 			for _, item := range items {
 				if !matchMetadataFilters(item.Metadata, ns, hasNS, selector) {
 					continue
@@ -1310,14 +1444,14 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 			}
 			items = filtered
 		}
-		writeJSON(w, http.StatusOK, crds.TaskList{Items: items})
+		writeJSON(w, http.StatusOK, resources.TaskList{Items: items})
 	case http.MethodPost:
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, "failed to read request body", http.StatusBadRequest)
 			return
 		}
-		obj, err := crds.ParseTaskManifest(body)
+		obj, err := resources.ParseTaskManifest(body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -1428,7 +1562,7 @@ func (s *Server) handleTaskByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "failed to read request body", http.StatusBadRequest)
 			return
 		}
-		obj, err := crds.ParseTaskManifest(body)
+		obj, err := resources.ParseTaskManifest(body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -1483,7 +1617,7 @@ func (s *Server) handleTaskSchedules(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if hasNS || len(selector) > 0 {
-			filtered := make([]crds.TaskSchedule, 0, len(items))
+			filtered := make([]resources.TaskSchedule, 0, len(items))
 			for _, item := range items {
 				if !matchMetadataFilters(item.Metadata, ns, hasNS, selector) {
 					continue
@@ -1492,14 +1626,14 @@ func (s *Server) handleTaskSchedules(w http.ResponseWriter, r *http.Request) {
 			}
 			items = filtered
 		}
-		writeJSON(w, http.StatusOK, crds.TaskScheduleList{Items: items})
+		writeJSON(w, http.StatusOK, resources.TaskScheduleList{Items: items})
 	case http.MethodPost:
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, "failed to read request body", http.StatusBadRequest)
 			return
 		}
-		obj, err := crds.ParseTaskScheduleManifest(body)
+		obj, err := resources.ParseTaskScheduleManifest(body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -1571,7 +1705,7 @@ func (s *Server) handleTaskScheduleByName(w http.ResponseWriter, r *http.Request
 			http.Error(w, "failed to read request body", http.StatusBadRequest)
 			return
 		}
-		obj, err := crds.ParseTaskScheduleManifest(body)
+		obj, err := resources.ParseTaskScheduleManifest(body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -1614,7 +1748,7 @@ func (s *Server) handleWorkers(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if hasNS || len(selector) > 0 {
-			filtered := make([]crds.Worker, 0, len(items))
+			filtered := make([]resources.Worker, 0, len(items))
 			for _, item := range items {
 				if !matchMetadataFilters(item.Metadata, ns, hasNS, selector) {
 					continue
@@ -1623,14 +1757,14 @@ func (s *Server) handleWorkers(w http.ResponseWriter, r *http.Request) {
 			}
 			items = filtered
 		}
-		writeJSON(w, http.StatusOK, crds.WorkerList{Items: items})
+		writeJSON(w, http.StatusOK, resources.WorkerList{Items: items})
 	case http.MethodPost:
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, "failed to read request body", http.StatusBadRequest)
 			return
 		}
-		obj, err := crds.ParseWorkerManifest(body)
+		obj, err := resources.ParseWorkerManifest(body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -1692,7 +1826,7 @@ func (s *Server) handleWorkerByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "failed to read request body", http.StatusBadRequest)
 			return
 		}
-		obj, err := crds.ParseWorkerManifest(body)
+		obj, err := resources.ParseWorkerManifest(body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -1724,7 +1858,7 @@ func (s *Server) handleWorkerByName(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) withRuntimeStatus(agent crds.Agent) crds.Agent {
+func (s *Server) withRuntimeStatus(agent resources.Agent) resources.Agent {
 	if s.runtime.IsRunning(store.ScopedName(agent.Metadata.Namespace, agent.Metadata.Name)) {
 		agent.Status.Phase = "Running"
 	} else {

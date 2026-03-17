@@ -3,11 +3,11 @@ package agentruntime
 import (
 	"testing"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 func TestClassifyMessageRetryabilityUsesToolErrorMetadata(t *testing.T) {
-	policy := crds.TaskMessageRetryPolicy{}
+	policy := resources.TaskMessageRetryPolicy{}
 	err := NewToolDeniedError(
 		"policy permission denied for tool=vector_db required=tool:vector_db:invoke",
 		map[string]string{"tool": "vector_db"},

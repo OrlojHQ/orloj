@@ -90,6 +90,6 @@ Generated run tasks are labeled with schedule metadata:
 
 ## Related Docs
 
-- [CRD Reference (`TaskSchedule`)](../reference/crds.md)
+- [Resource Reference (`TaskSchedule`)](../reference/resources.md)
 - [API Reference](../reference/api.md)
 - [Troubleshooting](./troubleshooting.md)

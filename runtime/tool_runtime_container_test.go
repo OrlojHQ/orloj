@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 type captureContainerRunner struct {
@@ -52,7 +52,7 @@ func (r staticSecretResolver) Resolve(_ context.Context, secretRef string) (stri
 }
 
 func TestContainerToolRuntimeExecutesHTTPInContainer(t *testing.T) {
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"web_search": {
 			Type:     "http",
 			Endpoint: "https://api.example/search",
@@ -103,11 +103,11 @@ func TestContainerToolRuntimeExecutesHTTPInContainer(t *testing.T) {
 }
 
 func TestContainerToolRuntimeInjectsBearerSecretFromSecretRef(t *testing.T) {
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"web_search": {
 			Type:     "http",
 			Endpoint: "https://api.example/search",
-			Auth:     crds.ToolAuth{SecretRef: "search-key"},
+			Auth:     resources.ToolAuth{SecretRef: "search-key"},
 		},
 	})
 	runner := &captureContainerRunner{stdout: "ok"}
@@ -132,11 +132,11 @@ func TestContainerToolRuntimeInjectsBearerSecretFromSecretRef(t *testing.T) {
 }
 
 func TestContainerToolRuntimeFailsWhenSecretRefCannotResolve(t *testing.T) {
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"web_search": {
 			Type:     "http",
 			Endpoint: "https://api.example/search",
-			Auth:     crds.ToolAuth{SecretRef: "missing-secret"},
+			Auth:     resources.ToolAuth{SecretRef: "missing-secret"},
 		},
 	})
 	runtime := NewContainerToolRuntimeWithRunnerAndSecrets(
@@ -170,17 +170,17 @@ func TestContainerToolRuntimeFailsWhenSecretRefCannotResolve(t *testing.T) {
 
 func TestBuildGovernedToolRuntimeUsesContainerIsolationBackend(t *testing.T) {
 	lookup := staticToolLookup{
-		items: map[string]crds.Tool{
+		items: map[string]resources.Tool{
 			"default/danger_tool": {
-				Metadata: crds.ObjectMeta{Name: "danger_tool", Namespace: "default"},
-				Spec: crds.ToolSpec{
+				Metadata: resources.ObjectMeta{Name: "danger_tool", Namespace: "default"},
+				Spec: resources.ToolSpec{
 					Type:      "http",
 					Endpoint:  "https://api.example/danger",
 					RiskLevel: "high",
-					Runtime: crds.ToolRuntimePolicy{
+					Runtime: resources.ToolRuntimePolicy{
 						Timeout:       "1s",
 						IsolationMode: "sandboxed",
-						Retry: crds.ToolRetryPolicy{
+						Retry: resources.ToolRetryPolicy{
 							MaxAttempts: 1,
 							Backoff:     "0s",
 							MaxBackoff:  "1s",
@@ -215,7 +215,7 @@ func TestBuildGovernedToolRuntimeUsesContainerIsolationBackend(t *testing.T) {
 }
 
 func TestContainerToolRuntimeMapsContextDeadlineToTimeoutError(t *testing.T) {
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"web_search": {
 			Type:     "http",
 			Endpoint: "https://api.example/search",
@@ -254,7 +254,7 @@ func TestContainerToolRuntimeMapsContextDeadlineToTimeoutError(t *testing.T) {
 }
 
 func TestContainerToolRuntimeMapsCanceledContextToCanceledError(t *testing.T) {
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"web_search": {
 			Type:     "http",
 			Endpoint: "https://api.example/search",
@@ -311,7 +311,7 @@ func TestSandboxedContainerDefaultsAreSecure(t *testing.T) {
 		t.Fatalf("expected sandboxed user=65532:65532, got %q", cfg.User)
 	}
 
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"sandboxed_tool": {
 			Type:     "http",
 			Endpoint: "https://api.example/sandboxed",

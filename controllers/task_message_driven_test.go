@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 func TestTaskControllerMessageDrivenKickoff(t *testing.T) {
@@ -14,25 +14,25 @@ func TestTaskControllerMessageDrivenKickoff(t *testing.T) {
 	bus := &captureAgentMessageBus{}
 	controller.SetAgentMessageBus(bus)
 
-	for _, agent := range []crds.Agent{
+	for _, agent := range []resources.Agent{
 		{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Agent",
-			Metadata:   crds.ObjectMeta{Name: "planner-agent"},
-			Spec: crds.AgentSpec{
+			Metadata:   resources.ObjectMeta{Name: "planner-agent"},
+			Spec: resources.AgentSpec{
 				Model:  "gpt-4o",
 				Prompt: "plan",
-				Limits: crds.AgentLimits{MaxSteps: 1, Timeout: "1s"},
+				Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
 			},
 		},
 		{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Agent",
-			Metadata:   crds.ObjectMeta{Name: "writer-agent"},
-			Spec: crds.AgentSpec{
+			Metadata:   resources.ObjectMeta{Name: "writer-agent"},
+			Spec: resources.AgentSpec{
 				Model:  "gpt-4o",
 				Prompt: "write",
-				Limits: crds.AgentLimits{MaxSteps: 1, Timeout: "1s"},
+				Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
 			},
 		},
 	} {
@@ -41,13 +41,13 @@ func TestTaskControllerMessageDrivenKickoff(t *testing.T) {
 		}
 	}
 
-	if _, err := stores.agentSystemStore.Upsert(crds.AgentSystem{
+	if _, err := stores.agentSystemStore.Upsert(resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
-		Metadata:   crds.ObjectMeta{Name: "message-system"},
-		Spec: crds.AgentSystemSpec{
+		Metadata:   resources.ObjectMeta{Name: "message-system"},
+		Spec: resources.AgentSystemSpec{
 			Agents: []string{"planner-agent", "writer-agent"},
-			Graph: map[string]crds.GraphEdge{
+			Graph: map[string]resources.GraphEdge{
 				"planner-agent": {Next: "writer-agent"},
 			},
 		},
@@ -55,11 +55,11 @@ func TestTaskControllerMessageDrivenKickoff(t *testing.T) {
 		t.Fatalf("upsert system: %v", err)
 	}
 
-	if _, err := stores.taskStore.Upsert(crds.Task{
+	if _, err := stores.taskStore.Upsert(resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "message-driven-task"},
-		Spec:       crds.TaskSpec{System: "message-system", Input: map[string]string{"topic": "runtime"}},
+		Metadata:   resources.ObjectMeta{Name: "message-driven-task"},
+		Spec:       resources.TaskSpec{System: "message-system", Input: map[string]string{"topic": "runtime"}},
 	}); err != nil {
 		t.Fatalf("upsert task: %v", err)
 	}
@@ -106,7 +106,7 @@ func TestTaskControllerMessageDrivenKickoff(t *testing.T) {
 	}
 }
 
-func countHistoryEvents(history []crds.TaskHistoryEvent, eventType string) int {
+func countHistoryEvents(history []resources.TaskHistoryEvent, eventType string) int {
 	count := 0
 	for _, event := range history {
 		if event.Type == eventType {
@@ -121,18 +121,18 @@ func TestTaskControllerMessageDrivenRejectsCycleWithoutMaxTurns(t *testing.T) {
 	controller.SetExecutionMode("message-driven")
 	controller.SetAgentMessageBus(&captureAgentMessageBus{})
 
-	for _, agent := range []crds.Agent{
+	for _, agent := range []resources.Agent{
 		{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Agent",
-			Metadata:   crds.ObjectMeta{Name: "manager-agent"},
-			Spec:       crds.AgentSpec{Model: "gpt-4o", Prompt: "manage"},
+			Metadata:   resources.ObjectMeta{Name: "manager-agent"},
+			Spec:       resources.AgentSpec{Model: "gpt-4o", Prompt: "manage"},
 		},
 		{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Agent",
-			Metadata:   crds.ObjectMeta{Name: "research-agent"},
-			Spec:       crds.AgentSpec{Model: "gpt-4o", Prompt: "research"},
+			Metadata:   resources.ObjectMeta{Name: "research-agent"},
+			Spec:       resources.AgentSpec{Model: "gpt-4o", Prompt: "research"},
 		},
 	} {
 		if _, err := stores.agentStore.Upsert(agent); err != nil {
@@ -140,13 +140,13 @@ func TestTaskControllerMessageDrivenRejectsCycleWithoutMaxTurns(t *testing.T) {
 		}
 	}
 
-	if _, err := stores.agentSystemStore.Upsert(crds.AgentSystem{
+	if _, err := stores.agentSystemStore.Upsert(resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
-		Metadata:   crds.ObjectMeta{Name: "cycle-system"},
-		Spec: crds.AgentSystemSpec{
+		Metadata:   resources.ObjectMeta{Name: "cycle-system"},
+		Spec: resources.AgentSystemSpec{
 			Agents: []string{"manager-agent", "research-agent"},
-			Graph: map[string]crds.GraphEdge{
+			Graph: map[string]resources.GraphEdge{
 				"manager-agent":  {Next: "research-agent"},
 				"research-agent": {Next: "manager-agent"},
 			},
@@ -155,11 +155,11 @@ func TestTaskControllerMessageDrivenRejectsCycleWithoutMaxTurns(t *testing.T) {
 		t.Fatalf("upsert system: %v", err)
 	}
 
-	if _, err := stores.taskStore.Upsert(crds.Task{
+	if _, err := stores.taskStore.Upsert(resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "cycle-no-max-turns"},
-		Spec:       crds.TaskSpec{System: "cycle-system"},
+		Metadata:   resources.ObjectMeta{Name: "cycle-no-max-turns"},
+		Spec:       resources.TaskSpec{System: "cycle-system"},
 	}); err != nil {
 		t.Fatalf("upsert task: %v", err)
 	}
@@ -186,18 +186,18 @@ func TestTaskControllerMessageDrivenAllowsCycleWithMaxTurns(t *testing.T) {
 	bus := &captureAgentMessageBus{}
 	controller.SetAgentMessageBus(bus)
 
-	for _, agent := range []crds.Agent{
+	for _, agent := range []resources.Agent{
 		{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Agent",
-			Metadata:   crds.ObjectMeta{Name: "manager-agent"},
-			Spec:       crds.AgentSpec{Model: "gpt-4o", Prompt: "manage"},
+			Metadata:   resources.ObjectMeta{Name: "manager-agent"},
+			Spec:       resources.AgentSpec{Model: "gpt-4o", Prompt: "manage"},
 		},
 		{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Agent",
-			Metadata:   crds.ObjectMeta{Name: "research-agent"},
-			Spec:       crds.AgentSpec{Model: "gpt-4o", Prompt: "research"},
+			Metadata:   resources.ObjectMeta{Name: "research-agent"},
+			Spec:       resources.AgentSpec{Model: "gpt-4o", Prompt: "research"},
 		},
 	} {
 		if _, err := stores.agentStore.Upsert(agent); err != nil {
@@ -205,13 +205,13 @@ func TestTaskControllerMessageDrivenAllowsCycleWithMaxTurns(t *testing.T) {
 		}
 	}
 
-	if _, err := stores.agentSystemStore.Upsert(crds.AgentSystem{
+	if _, err := stores.agentSystemStore.Upsert(resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
-		Metadata:   crds.ObjectMeta{Name: "cycle-system"},
-		Spec: crds.AgentSystemSpec{
+		Metadata:   resources.ObjectMeta{Name: "cycle-system"},
+		Spec: resources.AgentSystemSpec{
 			Agents: []string{"manager-agent", "research-agent"},
-			Graph: map[string]crds.GraphEdge{
+			Graph: map[string]resources.GraphEdge{
 				"manager-agent":  {Next: "research-agent"},
 				"research-agent": {Next: "manager-agent"},
 			},
@@ -220,11 +220,11 @@ func TestTaskControllerMessageDrivenAllowsCycleWithMaxTurns(t *testing.T) {
 		t.Fatalf("upsert system: %v", err)
 	}
 
-	if _, err := stores.taskStore.Upsert(crds.Task{
+	if _, err := stores.taskStore.Upsert(resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "cycle-with-max-turns"},
-		Spec: crds.TaskSpec{
+		Metadata:   resources.ObjectMeta{Name: "cycle-with-max-turns"},
+		Spec: resources.TaskSpec{
 			System:   "cycle-system",
 			MaxTurns: 4,
 		},

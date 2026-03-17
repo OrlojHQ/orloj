@@ -237,6 +237,6 @@ In this configuration, `research-agent-governed` can invoke `web_search` (it hol
 
 ## Related Resources
 
-- [Resource Reference: AgentPolicy, AgentRole, ToolPermission](../reference/crds.md)
+- [Resource Reference: AgentPolicy, AgentRole, ToolPermission](../reference/resources.md)
 - [Security and Isolation](../operations/security.md)
 - [Guide: Set Up Multi-Agent Governance](../guides/setup-governance.md)

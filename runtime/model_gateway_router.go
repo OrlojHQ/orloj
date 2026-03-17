@@ -6,12 +6,12 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 // ModelEndpointLookup resolves namespaced ModelEndpoint resources.
 type ModelEndpointLookup interface {
-	Get(name string) (crds.ModelEndpoint, bool)
+	Get(name string) (resources.ModelEndpoint, bool)
 }
 
 // ModelRouterConfig configures model routing between default and referenced endpoints.
@@ -73,7 +73,7 @@ func (r *ModelRouter) Complete(ctx context.Context, req ModelRequest) (ModelResp
 
 	endpoint, endpointKey, ok := r.resolveEndpoint(req.Namespace, modelRef)
 	if !ok {
-		return ModelResponse{}, fmt.Errorf("model endpoint %q not found in namespace %q", modelRef, crds.NormalizeNamespace(req.Namespace))
+		return ModelResponse{}, fmt.Errorf("model endpoint %q not found in namespace %q", modelRef, resources.NormalizeNamespace(req.Namespace))
 	}
 	gateway, err := r.gatewayForEndpoint(ctx, endpoint, endpointKey)
 	if err != nil {
@@ -87,17 +87,17 @@ func (r *ModelRouter) Complete(ctx context.Context, req ModelRequest) (ModelResp
 	return gateway.Complete(ctx, routedReq)
 }
 
-func (r *ModelRouter) resolveEndpoint(namespace string, modelRef string) (crds.ModelEndpoint, string, bool) {
+func (r *ModelRouter) resolveEndpoint(namespace string, modelRef string) (resources.ModelEndpoint, string, bool) {
 	lookupNamespace, lookupName := parseModelEndpointRef(namespace, modelRef)
 	lookupKey := scopedName(lookupNamespace, lookupName)
 	endpoint, ok := r.endpoints.Get(lookupKey)
 	if ok {
 		return endpoint, lookupKey, true
 	}
-	return crds.ModelEndpoint{}, lookupKey, false
+	return resources.ModelEndpoint{}, lookupKey, false
 }
 
-func (r *ModelRouter) gatewayForEndpoint(ctx context.Context, endpoint crds.ModelEndpoint, endpointKey string) (ModelGateway, error) {
+func (r *ModelRouter) gatewayForEndpoint(ctx context.Context, endpoint resources.ModelEndpoint, endpointKey string) (ModelGateway, error) {
 	r.mu.RLock()
 	cached, ok := r.cache[endpointKey]
 	r.mu.RUnlock()
@@ -144,7 +144,7 @@ func (r *ModelRouter) gatewayForEndpoint(ctx context.Context, endpoint crds.Mode
 	return gateway, nil
 }
 
-func (r *ModelRouter) resolveEndpointAPIKey(ctx context.Context, endpoint crds.ModelEndpoint) (string, error) {
+func (r *ModelRouter) resolveEndpointAPIKey(ctx context.Context, endpoint resources.ModelEndpoint) (string, error) {
 	secretRef := strings.TrimSpace(endpoint.Spec.Auth.SecretRef)
 	if secretRef == "" {
 		if strings.TrimSpace(r.fallbackAPIKey) == "" {
@@ -168,10 +168,10 @@ func (r *ModelRouter) resolveEndpointAPIKey(ctx context.Context, endpoint crds.M
 
 func parseModelEndpointRef(namespace string, ref string) (string, string) {
 	ref = strings.TrimSpace(ref)
-	namespace = crds.NormalizeNamespace(namespace)
+	namespace = resources.NormalizeNamespace(namespace)
 	if strings.Contains(ref, "/") {
 		parts := strings.SplitN(ref, "/", 2)
-		ns := crds.NormalizeNamespace(strings.TrimSpace(parts[0]))
+		ns := resources.NormalizeNamespace(strings.TrimSpace(parts[0]))
 		name := strings.TrimSpace(parts[1])
 		return ns, name
 	}
@@ -179,5 +179,5 @@ func parseModelEndpointRef(namespace string, ref string) (string, string) {
 }
 
 func scopedName(namespace, name string) string {
-	return crds.NormalizeNamespace(namespace) + "/" + strings.TrimSpace(name)
+	return resources.NormalizeNamespace(namespace) + "/" + strings.TrimSpace(name)
 }

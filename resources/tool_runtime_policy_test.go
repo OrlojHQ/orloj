@@ -1,4 +1,4 @@
-package crds
+package resources
 
 import "testing"
 
@@ -288,5 +288,182 @@ func TestToolNormalizeRejectsInvalidRetryJitter(t *testing.T) {
 
 	if err := tool.Normalize(); err == nil {
 		t.Fatal("expected invalid jitter normalization error")
+	}
+}
+
+func TestToolNormalizeOperationClassesDefaults(t *testing.T) {
+	tests := []struct {
+		name      string
+		riskLevel string
+		expected  []string
+	}{
+		{"low risk defaults to read", "low", []string{"read"}},
+		{"medium risk defaults to read", "medium", []string{"read"}},
+		{"high risk defaults to write", "high", []string{"write"}},
+		{"critical risk defaults to write", "critical", []string{"write"}},
+		{"empty risk defaults to read (risk defaults to low)", "", []string{"read"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tool := Tool{Metadata: ObjectMeta{Name: "test"}, Spec: ToolSpec{RiskLevel: tt.riskLevel}}
+			if err := tool.Normalize(); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(tool.Spec.OperationClasses) != len(tt.expected) {
+				t.Fatalf("expected %v, got %v", tt.expected, tool.Spec.OperationClasses)
+			}
+			for i, v := range tt.expected {
+				if tool.Spec.OperationClasses[i] != v {
+					t.Errorf("index %d: expected %q, got %q", i, v, tool.Spec.OperationClasses[i])
+				}
+			}
+		})
+	}
+}
+
+func TestToolNormalizeOperationClassesValidation(t *testing.T) {
+	tool := Tool{Metadata: ObjectMeta{Name: "test"}, Spec: ToolSpec{OperationClasses: []string{"read", "execute"}}}
+	if err := tool.Normalize(); err == nil {
+		t.Fatal("expected invalid operation class error")
+	}
+}
+
+func TestToolNormalizeOperationClassesDeduplicates(t *testing.T) {
+	tool := Tool{Metadata: ObjectMeta{Name: "test"}, Spec: ToolSpec{OperationClasses: []string{"Read", "read", " READ "}}}
+	if err := tool.Normalize(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(tool.Spec.OperationClasses) != 1 || tool.Spec.OperationClasses[0] != "read" {
+		t.Fatalf("expected [read], got %v", tool.Spec.OperationClasses)
+	}
+}
+
+func TestToolNormalizeOperationClassesAcceptsAll(t *testing.T) {
+	tool := Tool{Metadata: ObjectMeta{Name: "test"}, Spec: ToolSpec{OperationClasses: []string{"read", "write", "delete", "admin"}}}
+	if err := tool.Normalize(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(tool.Spec.OperationClasses) != 4 {
+		t.Fatalf("expected 4 classes, got %d", len(tool.Spec.OperationClasses))
+	}
+}
+
+func TestToolPermissionOperationRulesNormalization(t *testing.T) {
+	p := ToolPermission{
+		Metadata: ObjectMeta{Name: "test"},
+		Spec: ToolPermissionSpec{
+			OperationRules: []OperationRule{
+				{OperationClass: " Write ", Verdict: " Deny "},
+				{OperationClass: "*", Verdict: "allow"},
+				{OperationClass: "", Verdict: ""},
+			},
+		},
+	}
+	if err := p.Normalize(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if p.Spec.OperationRules[0].OperationClass != "write" || p.Spec.OperationRules[0].Verdict != "deny" {
+		t.Errorf("rule 0: expected write/deny, got %s/%s", p.Spec.OperationRules[0].OperationClass, p.Spec.OperationRules[0].Verdict)
+	}
+	if p.Spec.OperationRules[1].OperationClass != "*" || p.Spec.OperationRules[1].Verdict != "allow" {
+		t.Errorf("rule 1: expected */allow, got %s/%s", p.Spec.OperationRules[1].OperationClass, p.Spec.OperationRules[1].Verdict)
+	}
+	if p.Spec.OperationRules[2].OperationClass != "*" || p.Spec.OperationRules[2].Verdict != "allow" {
+		t.Errorf("rule 2: expected */allow (defaults), got %s/%s", p.Spec.OperationRules[2].OperationClass, p.Spec.OperationRules[2].Verdict)
+	}
+}
+
+func TestToolPermissionOperationRulesRejectsInvalidClass(t *testing.T) {
+	p := ToolPermission{
+		Metadata: ObjectMeta{Name: "test"},
+		Spec: ToolPermissionSpec{
+			OperationRules: []OperationRule{
+				{OperationClass: "execute", Verdict: "allow"},
+			},
+		},
+	}
+	if err := p.Normalize(); err == nil {
+		t.Fatal("expected invalid operation class error")
+	}
+}
+
+func TestToolPermissionOperationRulesRejectsInvalidVerdict(t *testing.T) {
+	p := ToolPermission{
+		Metadata: ObjectMeta{Name: "test"},
+		Spec: ToolPermissionSpec{
+			OperationRules: []OperationRule{
+				{OperationClass: "write", Verdict: "block"},
+			},
+		},
+	}
+	if err := p.Normalize(); err == nil {
+		t.Fatal("expected invalid verdict error")
+	}
+}
+
+func TestToolApprovalNormalize(t *testing.T) {
+	a := ToolApproval{
+		Metadata: ObjectMeta{Name: "test-approval"},
+		Spec: ToolApprovalSpec{
+			TaskRef: "my-task",
+			Tool:    "my-tool",
+		},
+	}
+	if err := a.Normalize(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if a.APIVersion != "orloj.dev/v1" {
+		t.Errorf("expected apiVersion orloj.dev/v1, got %s", a.APIVersion)
+	}
+	if a.Kind != "ToolApproval" {
+		t.Errorf("expected kind ToolApproval, got %s", a.Kind)
+	}
+	if a.Spec.TTL != "10m" {
+		t.Errorf("expected ttl 10m, got %s", a.Spec.TTL)
+	}
+	if a.Status.Phase != "Pending" {
+		t.Errorf("expected phase Pending, got %s", a.Status.Phase)
+	}
+	if a.Status.ExpiresAt == "" {
+		t.Error("expected ExpiresAt to be set")
+	}
+}
+
+func TestToolApprovalNormalizeRequiresFields(t *testing.T) {
+	tests := []struct {
+		name string
+		spec ToolApprovalSpec
+	}{
+		{"missing task_ref", ToolApprovalSpec{Tool: "t"}},
+		{"missing tool", ToolApprovalSpec{TaskRef: "t"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := ToolApproval{Metadata: ObjectMeta{Name: "test"}, Spec: tt.spec}
+			if err := a.Normalize(); err == nil {
+				t.Fatal("expected validation error")
+			}
+		})
+	}
+}
+
+func TestToolApprovalNormalizeRejectsInvalidTTL(t *testing.T) {
+	a := ToolApproval{
+		Metadata: ObjectMeta{Name: "test"},
+		Spec:     ToolApprovalSpec{TaskRef: "t", Tool: "t", TTL: "invalid"},
+	}
+	if err := a.Normalize(); err == nil {
+		t.Fatal("expected invalid TTL error")
+	}
+}
+
+func TestToolApprovalNormalizeRejectsInvalidPhase(t *testing.T) {
+	a := ToolApproval{
+		Metadata: ObjectMeta{Name: "test"},
+		Spec:     ToolApprovalSpec{TaskRef: "t", Tool: "t"},
+		Status:   ToolApprovalStatus{Phase: "Unknown"},
+	}
+	if err := a.Normalize(); err == nil {
+		t.Fatal("expected invalid phase error")
 	}
 }

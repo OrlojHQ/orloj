@@ -18,7 +18,7 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/eventbus"
 )
 
@@ -77,7 +77,7 @@ func runApply(args []string) error {
 		return fmt.Errorf("failed to read %s: %w", *manifestPath, err)
 	}
 
-	kind, err := crds.DetectKind(raw)
+	kind, err := resources.DetectKind(raw)
 	if err != nil {
 		return err
 	}
@@ -153,11 +153,11 @@ func runCreateSecret(args []string) error {
 		stringData[strings.TrimSpace(parts[0])] = parts[1]
 	}
 
-	secret := crds.Secret{
+	secret := resources.Secret{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Secret",
-		Metadata:   crds.ObjectMeta{Name: name, Namespace: ns},
-		Spec:       crds.SecretSpec{StringData: stringData},
+		Metadata:   resources.ObjectMeta{Name: name, Namespace: ns},
+		Spec:       resources.SecretSpec{StringData: stringData},
 	}
 	if err := secret.Normalize(); err != nil {
 		return fmt.Errorf("invalid secret: %w", err)
@@ -185,91 +185,91 @@ func runCreateSecret(args []string) error {
 func buildApplyRequest(kind string, raw []byte) (string, []byte, string, error) {
 	switch strings.ToLower(strings.TrimSpace(kind)) {
 	case "agent":
-		obj, err := crds.ParseAgentManifest(raw)
+		obj, err := resources.ParseAgentManifest(raw)
 		if err != nil {
 			return "", nil, "", err
 		}
 		payload, err := json.Marshal(obj)
 		return "/v1/agents", payload, obj.Metadata.Name, err
 	case "agentsystem":
-		obj, err := crds.ParseAgentSystemManifest(raw)
+		obj, err := resources.ParseAgentSystemManifest(raw)
 		if err != nil {
 			return "", nil, "", err
 		}
 		payload, err := json.Marshal(obj)
 		return "/v1/agent-systems", payload, obj.Metadata.Name, err
 	case "modelendpoint":
-		obj, err := crds.ParseModelEndpointManifest(raw)
+		obj, err := resources.ParseModelEndpointManifest(raw)
 		if err != nil {
 			return "", nil, "", err
 		}
 		payload, err := json.Marshal(obj)
 		return "/v1/model-endpoints", payload, obj.Metadata.Name, err
 	case "tool":
-		obj, err := crds.ParseToolManifest(raw)
+		obj, err := resources.ParseToolManifest(raw)
 		if err != nil {
 			return "", nil, "", err
 		}
 		payload, err := json.Marshal(obj)
 		return "/v1/tools", payload, obj.Metadata.Name, err
 	case "secret":
-		obj, err := crds.ParseSecretManifest(raw)
+		obj, err := resources.ParseSecretManifest(raw)
 		if err != nil {
 			return "", nil, "", err
 		}
 		payload, err := json.Marshal(obj)
 		return "/v1/secrets", payload, obj.Metadata.Name, err
 	case "memory":
-		obj, err := crds.ParseMemoryManifest(raw)
+		obj, err := resources.ParseMemoryManifest(raw)
 		if err != nil {
 			return "", nil, "", err
 		}
 		payload, err := json.Marshal(obj)
 		return "/v1/memories", payload, obj.Metadata.Name, err
 	case "agentpolicy":
-		obj, err := crds.ParseAgentPolicyManifest(raw)
+		obj, err := resources.ParseAgentPolicyManifest(raw)
 		if err != nil {
 			return "", nil, "", err
 		}
 		payload, err := json.Marshal(obj)
 		return "/v1/agent-policies", payload, obj.Metadata.Name, err
 	case "agentrole":
-		obj, err := crds.ParseAgentRoleManifest(raw)
+		obj, err := resources.ParseAgentRoleManifest(raw)
 		if err != nil {
 			return "", nil, "", err
 		}
 		payload, err := json.Marshal(obj)
 		return "/v1/agent-roles", payload, obj.Metadata.Name, err
 	case "toolpermission":
-		obj, err := crds.ParseToolPermissionManifest(raw)
+		obj, err := resources.ParseToolPermissionManifest(raw)
 		if err != nil {
 			return "", nil, "", err
 		}
 		payload, err := json.Marshal(obj)
 		return "/v1/tool-permissions", payload, obj.Metadata.Name, err
 	case "task":
-		obj, err := crds.ParseTaskManifest(raw)
+		obj, err := resources.ParseTaskManifest(raw)
 		if err != nil {
 			return "", nil, "", err
 		}
 		payload, err := json.Marshal(obj)
 		return "/v1/tasks", payload, obj.Metadata.Name, err
 	case "taskschedule":
-		obj, err := crds.ParseTaskScheduleManifest(raw)
+		obj, err := resources.ParseTaskScheduleManifest(raw)
 		if err != nil {
 			return "", nil, "", err
 		}
 		payload, err := json.Marshal(obj)
 		return "/v1/task-schedules", payload, obj.Metadata.Name, err
 	case "taskwebhook":
-		obj, err := crds.ParseTaskWebhookManifest(raw)
+		obj, err := resources.ParseTaskWebhookManifest(raw)
 		if err != nil {
 			return "", nil, "", err
 		}
 		payload, err := json.Marshal(obj)
 		return "/v1/task-webhooks", payload, obj.Metadata.Name, err
 	case "worker":
-		obj, err := crds.ParseWorkerManifest(raw)
+		obj, err := resources.ParseWorkerManifest(raw)
 		if err != nil {
 			return "", nil, "", err
 		}
@@ -320,7 +320,7 @@ func runGet(args []string) error {
 
 	switch resource {
 	case "agents":
-		var list crds.AgentList
+		var list resources.AgentList
 		if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
 			return fmt.Errorf("failed to decode response: %w", err)
 		}
@@ -331,7 +331,7 @@ func runGet(args []string) error {
 		}
 		_ = tw.Flush()
 	case "agent-systems":
-		var list crds.AgentSystemList
+		var list resources.AgentSystemList
 		if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
 			return fmt.Errorf("failed to decode response: %w", err)
 		}
@@ -342,7 +342,7 @@ func runGet(args []string) error {
 		}
 		_ = tw.Flush()
 	case "model-endpoints":
-		var list crds.ModelEndpointList
+		var list resources.ModelEndpointList
 		if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
 			return fmt.Errorf("failed to decode response: %w", err)
 		}
@@ -359,7 +359,7 @@ func runGet(args []string) error {
 		}
 		_ = tw.Flush()
 	case "tools":
-		var list crds.ToolList
+		var list resources.ToolList
 		if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
 			return fmt.Errorf("failed to decode response: %w", err)
 		}
@@ -370,7 +370,7 @@ func runGet(args []string) error {
 		}
 		_ = tw.Flush()
 	case "secrets":
-		var list crds.SecretList
+		var list resources.SecretList
 		if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
 			return fmt.Errorf("failed to decode response: %w", err)
 		}
@@ -381,7 +381,7 @@ func runGet(args []string) error {
 		}
 		_ = tw.Flush()
 	case "memories":
-		var list crds.MemoryList
+		var list resources.MemoryList
 		if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
 			return fmt.Errorf("failed to decode response: %w", err)
 		}
@@ -392,7 +392,7 @@ func runGet(args []string) error {
 		}
 		_ = tw.Flush()
 	case "agent-policies":
-		var list crds.AgentPolicyList
+		var list resources.AgentPolicyList
 		if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
 			return fmt.Errorf("failed to decode response: %w", err)
 		}
@@ -412,7 +412,7 @@ func runGet(args []string) error {
 		}
 		_ = tw.Flush()
 	case "agent-roles":
-		var list crds.AgentRoleList
+		var list resources.AgentRoleList
 		if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
 			return fmt.Errorf("failed to decode response: %w", err)
 		}
@@ -427,7 +427,7 @@ func runGet(args []string) error {
 		}
 		_ = tw.Flush()
 	case "tool-permissions":
-		var list crds.ToolPermissionList
+		var list resources.ToolPermissionList
 		if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
 			return fmt.Errorf("failed to decode response: %w", err)
 		}
@@ -445,7 +445,7 @@ func runGet(args []string) error {
 		}
 		_ = tw.Flush()
 	case "tasks":
-		var list crds.TaskList
+		var list resources.TaskList
 		if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
 			return fmt.Errorf("failed to decode response: %w", err)
 		}
@@ -467,7 +467,7 @@ func runGet(args []string) error {
 		}
 		_ = tw.Flush()
 	case "task-schedules":
-		var list crds.TaskScheduleList
+		var list resources.TaskScheduleList
 		if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
 			return fmt.Errorf("failed to decode response: %w", err)
 		}
@@ -489,7 +489,7 @@ func runGet(args []string) error {
 		}
 		_ = tw.Flush()
 	case "task-webhooks":
-		var list crds.TaskWebhookList
+		var list resources.TaskWebhookList
 		if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
 			return fmt.Errorf("failed to decode response: %w", err)
 		}
@@ -511,7 +511,7 @@ func runGet(args []string) error {
 		}
 		_ = tw.Flush()
 	case "workers":
-		var list crds.WorkerList
+		var list resources.WorkerList
 		if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
 			return fmt.Errorf("failed to decode response: %w", err)
 		}
@@ -720,7 +720,7 @@ func runTrace(args []string) error {
 		body, _ := io.ReadAll(taskResp.Body)
 		return fmt.Errorf("trace task failed: %s", bytes.TrimSpace(body))
 	}
-	var task crds.Task
+	var task resources.Task
 	if err := json.NewDecoder(taskResp.Body).Decode(&task); err != nil {
 		return fmt.Errorf("failed to decode task response: %w", err)
 	}
@@ -831,7 +831,7 @@ func renderSystemGraph(server, name string) error {
 		return fmt.Errorf("graph system failed: %s", bytes.TrimSpace(body))
 	}
 
-	var system crds.AgentSystem
+	var system resources.AgentSystem
 	if err := json.NewDecoder(resp.Body).Decode(&system); err != nil {
 		return fmt.Errorf("failed to decode agentsystem response: %w", err)
 	}
@@ -860,18 +860,18 @@ func renderTaskGraph(server, name string) error {
 		return fmt.Errorf("graph task failed: %s", bytes.TrimSpace(body))
 	}
 
-	var task crds.Task
+	var task resources.Task
 	if err := json.NewDecoder(taskResp.Body).Decode(&task); err != nil {
 		return fmt.Errorf("failed to decode task response: %w", err)
 	}
 
-	var system *crds.AgentSystem
+	var system *resources.AgentSystem
 	if strings.TrimSpace(task.Spec.System) != "" {
 		systemResp, err := http.Get(server + "/v1/agent-systems/" + task.Spec.System)
 		if err == nil {
 			defer systemResp.Body.Close()
 			if systemResp.StatusCode < 300 {
-				var loaded crds.AgentSystem
+				var loaded resources.AgentSystem
 				if decodeErr := json.NewDecoder(systemResp.Body).Decode(&loaded); decodeErr == nil {
 					system = &loaded
 				}
@@ -931,7 +931,7 @@ func renderTaskGraph(server, name string) error {
 	return nil
 }
 
-func systemEntryPoints(system crds.AgentSystem) []string {
+func systemEntryPoints(system resources.AgentSystem) []string {
 	if len(system.Spec.Agents) == 0 {
 		return nil
 	}
@@ -940,7 +940,7 @@ func systemEntryPoints(system crds.AgentSystem) []string {
 		indegree[name] = 0
 	}
 	for _, node := range system.Spec.Graph {
-		for _, to := range crds.GraphOutgoingAgents(node) {
+		for _, to := range resources.GraphOutgoingAgents(node) {
 			if _, ok := indegree[to]; ok {
 				indegree[to]++
 			}
@@ -956,7 +956,7 @@ func systemEntryPoints(system crds.AgentSystem) []string {
 	return roots
 }
 
-func systemGraphLines(system crds.AgentSystem) []string {
+func systemGraphLines(system resources.AgentSystem) []string {
 	if len(system.Spec.Agents) == 0 {
 		return nil
 	}
@@ -969,7 +969,7 @@ func systemGraphLines(system crds.AgentSystem) []string {
 				targets = append(targets, system.Spec.Agents[idx+1])
 			}
 		} else if edge, ok := system.Spec.Graph[name]; ok {
-			targets = crds.GraphOutgoingAgents(edge)
+			targets = resources.GraphOutgoingAgents(edge)
 		}
 		if len(targets) == 0 {
 			lines = append(lines, fmt.Sprintf("%s -> (end)", name))
@@ -982,7 +982,7 @@ func systemGraphLines(system crds.AgentSystem) []string {
 	return lines
 }
 
-func taskExecutionOrder(task crds.Task, system *crds.AgentSystem) []string {
+func taskExecutionOrder(task resources.Task, system *resources.AgentSystem) []string {
 	if order := parseExecutionOrder(task.Status.Output); len(order) > 0 {
 		return order
 	}
@@ -1055,7 +1055,7 @@ func parseExecutionOrder(output map[string]string) []string {
 	return order
 }
 
-func taskOrderFromSystem(system crds.AgentSystem) []string {
+func taskOrderFromSystem(system resources.AgentSystem) []string {
 	if len(system.Spec.Agents) == 0 {
 		return nil
 	}
@@ -1071,7 +1071,7 @@ func taskOrderFromSystem(system crds.AgentSystem) []string {
 		indegree[agent] = 0
 	}
 	for _, node := range system.Spec.Graph {
-		for _, to := range crds.GraphOutgoingAgents(node) {
+		for _, to := range resources.GraphOutgoingAgents(node) {
 			if _, ok := indegree[to]; ok {
 				indegree[to]++
 			}
@@ -1100,7 +1100,7 @@ func taskOrderFromSystem(system crds.AgentSystem) []string {
 		if !ok {
 			continue
 		}
-		for _, to := range crds.GraphOutgoingAgents(node) {
+		for _, to := range resources.GraphOutgoingAgents(node) {
 			if _, tracked := indegree[to]; !tracked {
 				continue
 			}
@@ -1132,7 +1132,7 @@ type taskAgentMetrics struct {
 	MemoryWrites int
 }
 
-func taskGraphMetrics(task crds.Task, order []string) map[string]taskAgentMetrics {
+func taskGraphMetrics(task resources.Task, order []string) map[string]taskAgentMetrics {
 	metrics := make(map[string]taskAgentMetrics, len(order))
 	for _, name := range order {
 		metrics[name] = taskAgentMetrics{Status: "pending"}
@@ -1230,11 +1230,11 @@ func runRun(args []string) error {
 	}
 
 	taskName := fmt.Sprintf("run-%s-%d", *system, time.Now().UnixMilli())
-	task := crds.Task{
+	task := resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: taskName, Namespace: ns},
-		Spec: crds.TaskSpec{
+		Metadata:   resources.ObjectMeta{Name: taskName, Namespace: ns},
+		Spec: resources.TaskSpec{
 			System: *system,
 			Input:  input,
 		},
@@ -1281,7 +1281,7 @@ func runRun(args []string) error {
 				continue
 			}
 
-			var result crds.Task
+			var result resources.Task
 			if err := json.Unmarshal(body, &result); err != nil {
 				fmt.Fprintf(os.Stderr, "parse error: %v\n", err)
 				continue
@@ -1359,7 +1359,7 @@ func watchTasks(server string) error {
 		}
 		var event struct {
 			Type     string    `json:"type"`
-			Resource crds.Task `json:"resource"`
+			Resource resources.Task `json:"resource"`
 		}
 		if err := json.Unmarshal([]byte(payload), &event); err != nil {
 			fmt.Printf("%s event=decode_error payload=%s\n", time.Now().UTC().Format(time.RFC3339), payload)

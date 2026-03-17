@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 // HTTPToolClient executes tools via HTTP POST against Tool.spec.endpoint.
@@ -205,9 +205,9 @@ func (r *HTTPToolClient) Call(ctx context.Context, tool string, input string) (s
 	return strings.TrimSpace(string(body)), nil
 }
 
-func (r *HTTPToolClient) resolveSpec(tool string) (crds.ToolSpec, bool) {
+func (r *HTTPToolClient) resolveSpec(tool string) (resources.ToolSpec, bool) {
 	if r.registry == nil {
-		return crds.ToolSpec{}, false
+		return resources.ToolSpec{}, false
 	}
 	return r.registry.Resolve(tool)
 }

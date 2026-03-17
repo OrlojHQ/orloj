@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 func TestWebhookCallbackToolRuntimeImmediateResponse(t *testing.T) {
@@ -22,7 +22,7 @@ func TestWebhookCallbackToolRuntimeImmediateResponse(t *testing.T) {
 		Usage:               ToolExecutionUsage{Attempt: 1},
 	}
 	body, _ := json.Marshal(contractResp)
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"wh_tool": {
 			Type:     "webhook-callback",
 			Endpoint: "https://wh.example.com/execute",
@@ -77,7 +77,7 @@ func TestWebhookCallbackToolRuntimePollsForResult(t *testing.T) {
 			{statusCode: 200, body: string(respBody)},
 		},
 	}
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"wh_tool": {
 			Type:     "webhook-callback",
 			Endpoint: "https://wh.example.com/execute",
@@ -109,7 +109,7 @@ func TestWebhookCallbackToolRuntimeCallbackDelivery(t *testing.T) {
 			{statusCode: 202, body: ""},
 		},
 	}
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"wh_tool": {
 			Type:     "webhook-callback",
 			Endpoint: "https://wh.example.com/execute",
@@ -153,7 +153,7 @@ func TestWebhookCallbackToolRuntimeTimesOut(t *testing.T) {
 			{statusCode: 202, body: ""},
 		},
 	}
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"wh_tool": {
 			Type:     "webhook-callback",
 			Endpoint: "https://wh.example.com/execute",
@@ -175,7 +175,7 @@ func TestWebhookCallbackToolRuntimeTimesOut(t *testing.T) {
 }
 
 func TestWebhookCallbackToolRuntimeFailsOnMissingEndpoint(t *testing.T) {
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"wh_tool": {Type: "webhook-callback"},
 	})
 	runtime := NewWebhookCallbackToolRuntime(registry, nil, nil, 0)
@@ -191,7 +191,7 @@ func TestWebhookCallbackToolRuntimeFailsOnMissingEndpoint(t *testing.T) {
 }
 
 func TestWebhookCallbackToolRuntimeHTTPSubmitError(t *testing.T) {
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"wh_tool": {
 			Type:     "webhook-callback",
 			Endpoint: "https://wh.example.com/execute",
@@ -214,11 +214,11 @@ func TestWebhookCallbackToolRuntimeHTTPSubmitError(t *testing.T) {
 }
 
 func TestWebhookCallbackToolRuntimeSecretFailure(t *testing.T) {
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"wh_tool": {
 			Type:     "webhook-callback",
 			Endpoint: "https://wh.example.com/execute",
-			Auth:     crds.ToolAuth{SecretRef: "missing"},
+			Auth:     resources.ToolAuth{SecretRef: "missing"},
 		},
 	})
 	secrets := staticSecretResolver{values: map[string]string{}}

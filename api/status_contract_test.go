@@ -7,18 +7,18 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 func TestTaskStatusContractFields(t *testing.T) {
 	server := newTestServer(t)
 	defer server.Close()
 
-	postJSON(t, server.URL+"/v1/tasks", crds.Task{
+	postJSON(t, server.URL+"/v1/tasks", resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "contract-task"},
-		Spec:       crds.TaskSpec{System: "sys"},
+		Metadata:   resources.ObjectMeta{Name: "contract-task"},
+		Spec:       resources.TaskSpec{System: "sys"},
 	})
 	task := getTaskForContract(t, server.URL, "contract-task")
 
@@ -84,11 +84,11 @@ func TestWorkerStatusContractFields(t *testing.T) {
 	server := newTestServer(t)
 	defer server.Close()
 
-	postJSON(t, server.URL+"/v1/workers", crds.Worker{
+	postJSON(t, server.URL+"/v1/workers", resources.Worker{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Worker",
-		Metadata:   crds.ObjectMeta{Name: "contract-worker"},
-		Spec:       crds.WorkerSpec{Region: "default", MaxConcurrentTasks: 2},
+		Metadata:   resources.ObjectMeta{Name: "contract-worker"},
+		Spec:       resources.WorkerSpec{Region: "default", MaxConcurrentTasks: 2},
 	})
 	worker := getWorkerForContract(t, server.URL, "contract-worker")
 
@@ -115,11 +115,11 @@ func TestTaskScheduleStatusContractFields(t *testing.T) {
 	server := newTestServer(t)
 	defer server.Close()
 
-	postJSON(t, server.URL+"/v1/task-schedules", crds.TaskSchedule{
+	postJSON(t, server.URL+"/v1/task-schedules", resources.TaskSchedule{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "TaskSchedule",
-		Metadata:   crds.ObjectMeta{Name: "contract-schedule"},
-		Spec: crds.TaskScheduleSpec{
+		Metadata:   resources.ObjectMeta{Name: "contract-schedule"},
+		Spec: resources.TaskScheduleSpec{
 			TaskRef:  "template-task",
 			Schedule: "0 * * * *",
 			TimeZone: "UTC",
@@ -135,7 +135,7 @@ func TestTaskScheduleStatusContractFields(t *testing.T) {
 		b, _ := io.ReadAll(resp.Body)
 		t.Fatalf("get task schedule failed: %d body=%s", resp.StatusCode, string(b))
 	}
-	var schedule crds.TaskSchedule
+	var schedule resources.TaskSchedule
 	if err := json.NewDecoder(resp.Body).Decode(&schedule); err != nil {
 		t.Fatalf("decode task schedule failed: %v", err)
 	}
@@ -175,13 +175,13 @@ func TestTaskWebhookStatusContractFields(t *testing.T) {
 	server := newTestServer(t)
 	defer server.Close()
 
-	postJSON(t, server.URL+"/v1/task-webhooks", crds.TaskWebhook{
+	postJSON(t, server.URL+"/v1/task-webhooks", resources.TaskWebhook{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "TaskWebhook",
-		Metadata:   crds.ObjectMeta{Name: "contract-webhook"},
-		Spec: crds.TaskWebhookSpec{
+		Metadata:   resources.ObjectMeta{Name: "contract-webhook"},
+		Spec: resources.TaskWebhookSpec{
 			TaskRef: "template-task",
-			Auth: crds.TaskWebhookAuthSpec{
+			Auth: resources.TaskWebhookAuthSpec{
 				Profile:   "generic",
 				SecretRef: "webhook-secret",
 			},
@@ -197,7 +197,7 @@ func TestTaskWebhookStatusContractFields(t *testing.T) {
 		b, _ := io.ReadAll(resp.Body)
 		t.Fatalf("get task webhook failed: %d body=%s", resp.StatusCode, string(b))
 	}
-	var hook crds.TaskWebhook
+	var hook resources.TaskWebhook
 	if err := json.NewDecoder(resp.Body).Decode(&hook); err != nil {
 		t.Fatalf("decode task webhook failed: %v", err)
 	}
@@ -279,7 +279,7 @@ func getStatusPayload(t *testing.T, url string) map[string]any {
 	return payload
 }
 
-func getTaskForContract(t *testing.T, baseURL, name string) crds.Task {
+func getTaskForContract(t *testing.T, baseURL, name string) resources.Task {
 	t.Helper()
 	resp, err := http.Get(baseURL + "/v1/tasks/" + name)
 	if err != nil {
@@ -290,14 +290,14 @@ func getTaskForContract(t *testing.T, baseURL, name string) crds.Task {
 		b, _ := io.ReadAll(resp.Body)
 		t.Fatalf("get task failed: %d body=%s", resp.StatusCode, string(b))
 	}
-	var out crds.Task
+	var out resources.Task
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode task failed: %v", err)
 	}
 	return out
 }
 
-func getWorkerForContract(t *testing.T, baseURL, name string) crds.Worker {
+func getWorkerForContract(t *testing.T, baseURL, name string) resources.Worker {
 	t.Helper()
 	resp, err := http.Get(baseURL + "/v1/workers/" + name)
 	if err != nil {
@@ -308,7 +308,7 @@ func getWorkerForContract(t *testing.T, baseURL, name string) crds.Worker {
 		b, _ := io.ReadAll(resp.Body)
 		t.Fatalf("get worker failed: %d body=%s", resp.StatusCode, string(b))
 	}
-	var out crds.Worker
+	var out resources.Worker
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode worker failed: %v", err)
 	}

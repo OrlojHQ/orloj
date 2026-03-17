@@ -14,7 +14,7 @@ import (
 
 	"github.com/OrlojHQ/orloj/api"
 	"github.com/OrlojHQ/orloj/controllers"
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 	agentruntime "github.com/OrlojHQ/orloj/runtime"
 	"github.com/OrlojHQ/orloj/store"
 )
@@ -88,58 +88,58 @@ func TestTaskLifecycleApplyScheduleClaimRunTrace(t *testing.T) {
 	h := newPhase1Harness(t, "worker-a")
 	defer h.Close()
 
-	postJSON(t, h.url+"/v1/workers", crds.Worker{
+	postJSON(t, h.url+"/v1/workers", resources.Worker{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Worker",
-		Metadata:   crds.ObjectMeta{Name: "worker-a"},
-		Spec: crds.WorkerSpec{
+		Metadata:   resources.ObjectMeta{Name: "worker-a"},
+		Spec: resources.WorkerSpec{
 			Region:             "default",
 			MaxConcurrentTasks: 1,
-			Capabilities: crds.WorkerCapabilities{
+			Capabilities: resources.WorkerCapabilities{
 				SupportedModels: []string{"gpt-4o"},
 			},
 		},
 	})
-	patchWorkerStatus(t, h.url, "worker-a", crds.WorkerStatus{
+	patchWorkerStatus(t, h.url, "worker-a", resources.WorkerStatus{
 		Phase:         "Ready",
 		LastHeartbeat: time.Now().UTC().Format(time.RFC3339Nano),
 	})
 
-	postJSON(t, h.url+"/v1/tools", crds.Tool{
+	postJSON(t, h.url+"/v1/tools", resources.Tool{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Tool",
-		Metadata:   crds.ObjectMeta{Name: "web_search"},
-		Spec: crds.ToolSpec{
+		Metadata:   resources.ObjectMeta{Name: "web_search"},
+		Spec: resources.ToolSpec{
 			Type:     "http",
 			Endpoint: "https://api.search.example",
 		},
 	})
-	postJSON(t, h.url+"/v1/agents", crds.Agent{
+	postJSON(t, h.url+"/v1/agents", resources.Agent{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
-		Metadata:   crds.ObjectMeta{Name: "research-agent"},
-		Spec: crds.AgentSpec{
+		Metadata:   resources.ObjectMeta{Name: "research-agent"},
+		Spec: resources.AgentSpec{
 			Model:  "gpt-4o",
 			Prompt: "You are a research assistant.",
 			Tools:  []string{"web_search"},
-			Limits: crds.AgentLimits{MaxSteps: 2, Timeout: "1s"},
+			Limits: resources.AgentLimits{MaxSteps: 2, Timeout: "1s"},
 		},
 	})
-	postJSON(t, h.url+"/v1/agent-systems", crds.AgentSystem{
+	postJSON(t, h.url+"/v1/agent-systems", resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
-		Metadata:   crds.ObjectMeta{Name: "report-system"},
-		Spec:       crds.AgentSystemSpec{Agents: []string{"research-agent"}},
+		Metadata:   resources.ObjectMeta{Name: "report-system"},
+		Spec:       resources.AgentSystemSpec{Agents: []string{"research-agent"}},
 	})
-	postJSON(t, h.url+"/v1/tasks", crds.Task{
+	postJSON(t, h.url+"/v1/tasks", resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "weekly-report"},
-		Spec: crds.TaskSpec{
+		Metadata:   resources.ObjectMeta{Name: "weekly-report"},
+		Spec: resources.TaskSpec{
 			System:   "report-system",
 			Priority: "high",
 			Input:    map[string]string{"topic": "AI startups"},
-			Requirements: crds.TaskRequirements{
+			Requirements: resources.TaskRequirements{
 				Region: "default",
 				Model:  "gpt-4o",
 			},
@@ -188,50 +188,50 @@ func TestTaskLifecycleRetryThenDeadLetterWithTrace(t *testing.T) {
 	h := newPhase1Harness(t, "worker-a")
 	defer h.Close()
 
-	postJSON(t, h.url+"/v1/workers", crds.Worker{
+	postJSON(t, h.url+"/v1/workers", resources.Worker{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Worker",
-		Metadata:   crds.ObjectMeta{Name: "worker-a"},
-		Spec: crds.WorkerSpec{
+		Metadata:   resources.ObjectMeta{Name: "worker-a"},
+		Spec: resources.WorkerSpec{
 			Region:             "default",
 			MaxConcurrentTasks: 1,
-			Capabilities: crds.WorkerCapabilities{
+			Capabilities: resources.WorkerCapabilities{
 				SupportedModels: []string{"gpt-4o"},
 			},
 		},
 	})
-	patchWorkerStatus(t, h.url, "worker-a", crds.WorkerStatus{
+	patchWorkerStatus(t, h.url, "worker-a", resources.WorkerStatus{
 		Phase:         "Ready",
 		LastHeartbeat: time.Now().UTC().Format(time.RFC3339Nano),
 	})
 
-	postJSON(t, h.url+"/v1/agents", crds.Agent{
+	postJSON(t, h.url+"/v1/agents", resources.Agent{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
-		Metadata:   crds.ObjectMeta{Name: "timeout-agent"},
-		Spec: crds.AgentSpec{
+		Metadata:   resources.ObjectMeta{Name: "timeout-agent"},
+		Spec: resources.AgentSpec{
 			Model:  "gpt-4o",
 			Prompt: "Timeout test.",
-			Limits: crds.AgentLimits{MaxSteps: 5, Timeout: "1ms"},
+			Limits: resources.AgentLimits{MaxSteps: 5, Timeout: "1ms"},
 		},
 	})
-	postJSON(t, h.url+"/v1/agent-systems", crds.AgentSystem{
+	postJSON(t, h.url+"/v1/agent-systems", resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
-		Metadata:   crds.ObjectMeta{Name: "timeout-system"},
-		Spec:       crds.AgentSystemSpec{Agents: []string{"timeout-agent"}},
+		Metadata:   resources.ObjectMeta{Name: "timeout-system"},
+		Spec:       resources.AgentSystemSpec{Agents: []string{"timeout-agent"}},
 	})
-	postJSON(t, h.url+"/v1/tasks", crds.Task{
+	postJSON(t, h.url+"/v1/tasks", resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "timeout-task"},
-		Spec: crds.TaskSpec{
+		Metadata:   resources.ObjectMeta{Name: "timeout-task"},
+		Spec: resources.TaskSpec{
 			System: "timeout-system",
-			Retry: crds.TaskRetryPolicy{
+			Retry: resources.TaskRetryPolicy{
 				MaxAttempts: 2,
 				Backoff:     "1ms",
 			},
-			Requirements: crds.TaskRequirements{
+			Requirements: resources.TaskRequirements{
 				Region: "default",
 				Model:  "gpt-4o",
 			},
@@ -271,7 +271,7 @@ func TestTaskLifecycleRetryThenDeadLetterWithTrace(t *testing.T) {
 	mustContainLog(t, logs, "task moved to DeadLetter")
 }
 
-func patchWorkerStatus(t *testing.T, baseURL, workerName string, status crds.WorkerStatus) {
+func patchWorkerStatus(t *testing.T, baseURL, workerName string, status resources.WorkerStatus) {
 	t.Helper()
 	worker := getWorkerResource(t, baseURL, workerName)
 	patch := map[string]any{
@@ -300,7 +300,7 @@ func patchWorkerStatus(t *testing.T, baseURL, workerName string, status crds.Wor
 	}
 }
 
-func getWorkerResource(t *testing.T, baseURL, workerName string) crds.Worker {
+func getWorkerResource(t *testing.T, baseURL, workerName string) resources.Worker {
 	t.Helper()
 	resp, err := http.Get(baseURL + "/v1/workers/" + workerName)
 	if err != nil {
@@ -311,14 +311,14 @@ func getWorkerResource(t *testing.T, baseURL, workerName string) crds.Worker {
 		b, _ := io.ReadAll(resp.Body)
 		t.Fatalf("get worker status=%d body=%s", resp.StatusCode, string(b))
 	}
-	var out crds.Worker
+	var out resources.Worker
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode worker failed: %v", err)
 	}
 	return out
 }
 
-func getTaskResource(t *testing.T, baseURL, taskName string) crds.Task {
+func getTaskResource(t *testing.T, baseURL, taskName string) resources.Task {
 	t.Helper()
 	resp, err := http.Get(baseURL + "/v1/tasks/" + taskName)
 	if err != nil {
@@ -329,7 +329,7 @@ func getTaskResource(t *testing.T, baseURL, taskName string) crds.Task {
 		b, _ := io.ReadAll(resp.Body)
 		t.Fatalf("get task status=%d body=%s", resp.StatusCode, string(b))
 	}
-	var out crds.Task
+	var out resources.Task
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode task failed: %v", err)
 	}
@@ -360,7 +360,7 @@ func getTaskLogs(t *testing.T, baseURL, taskName string) []string {
 	return payload.Logs
 }
 
-func assertHistoryContainsType(t *testing.T, history []crds.TaskHistoryEvent, eventType string) {
+func assertHistoryContainsType(t *testing.T, history []resources.TaskHistoryEvent, eventType string) {
 	t.Helper()
 	for _, item := range history {
 		if strings.EqualFold(item.Type, eventType) {
@@ -370,7 +370,7 @@ func assertHistoryContainsType(t *testing.T, history []crds.TaskHistoryEvent, ev
 	t.Fatalf("expected history to contain type=%q, history=%+v", eventType, history)
 }
 
-func assertTraceContainsType(t *testing.T, trace []crds.TaskTraceEvent, eventType string) {
+func assertTraceContainsType(t *testing.T, trace []resources.TaskTraceEvent, eventType string) {
 	t.Helper()
 	for _, item := range trace {
 		if strings.EqualFold(item.Type, eventType) {
@@ -380,7 +380,7 @@ func assertTraceContainsType(t *testing.T, trace []crds.TaskTraceEvent, eventTyp
 	t.Fatalf("expected trace to contain type=%q, trace=%+v", eventType, trace)
 }
 
-func assertTraceHasStepIDs(t *testing.T, trace []crds.TaskTraceEvent) {
+func assertTraceHasStepIDs(t *testing.T, trace []resources.TaskTraceEvent) {
 	t.Helper()
 	if len(trace) == 0 {
 		t.Fatal("expected trace entries")

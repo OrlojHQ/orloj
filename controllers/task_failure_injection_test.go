@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/store"
 )
 
@@ -17,36 +17,36 @@ func TestFailureInjectionStaleHeartbeatReassignsPendingTask(t *testing.T) {
 	taskStore := store.NewTaskStore()
 	workerStore := store.NewWorkerStore()
 
-	if _, err := workerStore.Upsert(crds.Worker{
+	if _, err := workerStore.Upsert(resources.Worker{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Worker",
-		Metadata:   crds.ObjectMeta{Name: "worker-a"},
-		Spec:       crds.WorkerSpec{Region: "default", MaxConcurrentTasks: 1},
-		Status: crds.WorkerStatus{
+		Metadata:   resources.ObjectMeta{Name: "worker-a"},
+		Spec:       resources.WorkerSpec{Region: "default", MaxConcurrentTasks: 1},
+		Status: resources.WorkerStatus{
 			Phase:         "Ready",
 			LastHeartbeat: time.Now().UTC().Add(-5 * time.Second).Format(time.RFC3339Nano),
 		},
 	}); err != nil {
 		t.Fatalf("upsert worker-a failed: %v", err)
 	}
-	if _, err := workerStore.Upsert(crds.Worker{
+	if _, err := workerStore.Upsert(resources.Worker{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Worker",
-		Metadata:   crds.ObjectMeta{Name: "worker-b"},
-		Spec:       crds.WorkerSpec{Region: "default", MaxConcurrentTasks: 1},
-		Status: crds.WorkerStatus{
+		Metadata:   resources.ObjectMeta{Name: "worker-b"},
+		Spec:       resources.WorkerSpec{Region: "default", MaxConcurrentTasks: 1},
+		Status: resources.WorkerStatus{
 			Phase:         "Ready",
 			LastHeartbeat: time.Now().UTC().Format(time.RFC3339Nano),
 		},
 	}); err != nil {
 		t.Fatalf("upsert worker-b failed: %v", err)
 	}
-	if _, err := taskStore.Upsert(crds.Task{
+	if _, err := taskStore.Upsert(resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "stale-task"},
-		Spec:       crds.TaskSpec{System: "unused", Requirements: crds.TaskRequirements{Region: "default"}},
-		Status:     crds.TaskStatus{AssignedWorker: "worker-a", Phase: "Pending"},
+		Metadata:   resources.ObjectMeta{Name: "stale-task"},
+		Spec:       resources.TaskSpec{System: "unused", Requirements: resources.TaskRequirements{Region: "default"}},
+		Status:     resources.TaskStatus{AssignedWorker: "worker-a", Phase: "Pending"},
 	}); err != nil {
 		t.Fatalf("upsert task failed: %v", err)
 	}
@@ -91,64 +91,64 @@ func TestFailureInjectionWorkerCrashLeaseTakeover(t *testing.T) {
 	taskStore := store.NewTaskStore()
 	workerStore := store.NewWorkerStore()
 
-	if _, err := toolStore.Upsert(crds.Tool{
+	if _, err := toolStore.Upsert(resources.Tool{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Tool",
-		Metadata:   crds.ObjectMeta{Name: "web_search"},
-		Spec:       crds.ToolSpec{Type: "http", Endpoint: "https://example"},
+		Metadata:   resources.ObjectMeta{Name: "web_search"},
+		Spec:       resources.ToolSpec{Type: "http", Endpoint: "https://example"},
 	}); err != nil {
 		t.Fatalf("upsert tool failed: %v", err)
 	}
-	if _, err := agentStore.Upsert(crds.Agent{
+	if _, err := agentStore.Upsert(resources.Agent{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
-		Metadata:   crds.ObjectMeta{Name: "agent-a"},
-		Spec: crds.AgentSpec{
+		Metadata:   resources.ObjectMeta{Name: "agent-a"},
+		Spec: resources.AgentSpec{
 			Model:  "gpt-4o",
 			Prompt: "run",
 			Tools:  []string{"web_search"},
-			Limits: crds.AgentLimits{MaxSteps: 2, Timeout: "1s"},
+			Limits: resources.AgentLimits{MaxSteps: 2, Timeout: "1s"},
 		},
 	}); err != nil {
 		t.Fatalf("upsert agent failed: %v", err)
 	}
-	if _, err := systemStore.Upsert(crds.AgentSystem{
+	if _, err := systemStore.Upsert(resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
-		Metadata:   crds.ObjectMeta{Name: "sys-a"},
-		Spec:       crds.AgentSystemSpec{Agents: []string{"agent-a"}},
+		Metadata:   resources.ObjectMeta{Name: "sys-a"},
+		Spec:       resources.AgentSystemSpec{Agents: []string{"agent-a"}},
 	}); err != nil {
 		t.Fatalf("upsert system failed: %v", err)
 	}
-	if _, err := taskStore.Upsert(crds.Task{
+	if _, err := taskStore.Upsert(resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "lease-takeover-task"},
-		Spec:       crds.TaskSpec{System: "sys-a", Input: map[string]string{"topic": "x"}},
-		Status:     crds.TaskStatus{AssignedWorker: "worker-a", Phase: "Pending"},
+		Metadata:   resources.ObjectMeta{Name: "lease-takeover-task"},
+		Spec:       resources.TaskSpec{System: "sys-a", Input: map[string]string{"topic": "x"}},
+		Status:     resources.TaskStatus{AssignedWorker: "worker-a", Phase: "Pending"},
 	}); err != nil {
 		t.Fatalf("upsert task failed: %v", err)
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	if _, err := workerStore.Upsert(crds.Worker{
+	if _, err := workerStore.Upsert(resources.Worker{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Worker",
-		Metadata:   crds.ObjectMeta{Name: "worker-a"},
-		Spec:       crds.WorkerSpec{Region: "default", MaxConcurrentTasks: 1},
-		Status: crds.WorkerStatus{
+		Metadata:   resources.ObjectMeta{Name: "worker-a"},
+		Spec:       resources.WorkerSpec{Region: "default", MaxConcurrentTasks: 1},
+		Status: resources.WorkerStatus{
 			Phase:         "Ready",
 			LastHeartbeat: now,
 		},
 	}); err != nil {
 		t.Fatalf("upsert worker-a failed: %v", err)
 	}
-	if _, err := workerStore.Upsert(crds.Worker{
+	if _, err := workerStore.Upsert(resources.Worker{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Worker",
-		Metadata:   crds.ObjectMeta{Name: "worker-b"},
-		Spec:       crds.WorkerSpec{Region: "default", MaxConcurrentTasks: 1},
-		Status: crds.WorkerStatus{
+		Metadata:   resources.ObjectMeta{Name: "worker-b"},
+		Spec:       resources.WorkerSpec{Region: "default", MaxConcurrentTasks: 1},
+		Status: resources.WorkerStatus{
 			Phase:         "Ready",
 			LastHeartbeat: now,
 		},
@@ -211,7 +211,7 @@ func TestFailureInjectionWorkerCrashLeaseTakeover(t *testing.T) {
 	}
 }
 
-func assertHistoryType(t *testing.T, history []crds.TaskHistoryEvent, eventType string) {
+func assertHistoryType(t *testing.T, history []resources.TaskHistoryEvent, eventType string) {
 	t.Helper()
 	for _, item := range history {
 		if strings.EqualFold(item.Type, eventType) {

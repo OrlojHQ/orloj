@@ -7,12 +7,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 // ExecutionEngine orchestrates one agent execution loop.
 type ExecutionEngine interface {
-	Execute(ctx context.Context, agent crds.Agent, input map[string]string) (AgentExecutionResult, error)
+	Execute(ctx context.Context, agent resources.Agent, input map[string]string) (AgentExecutionResult, error)
 }
 
 // ReActExecutionEngine is the default runtime engine: model call + optional tool actions in bounded steps.
@@ -49,7 +49,7 @@ func NewReActExecutionEngine(
 	}
 }
 
-func (e *ReActExecutionEngine) Execute(ctx context.Context, agent crds.Agent, input map[string]string) (AgentExecutionResult, error) {
+func (e *ReActExecutionEngine) Execute(ctx context.Context, agent resources.Agent, input map[string]string) (AgentExecutionResult, error) {
 	if err := agent.Normalize(); err != nil {
 		return AgentExecutionResult{}, err
 	}
@@ -136,7 +136,7 @@ func (e *ReActExecutionEngine) Execute(ctx context.Context, agent crds.Agent, in
 	return result, nil
 }
 
-func estimateTokens(agent crds.Agent, steps int, toolCalls int) int {
+func estimateTokens(agent resources.Agent, steps int, toolCalls int) int {
 	promptTokens := 1 + len([]rune(agent.Spec.Prompt))/4
 	stepTokens := steps * 120
 	toolTokens := toolCalls * 40

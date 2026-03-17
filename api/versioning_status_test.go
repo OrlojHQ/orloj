@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/OrlojHQ/orloj/api"
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/runtime"
 	"github.com/OrlojHQ/orloj/store"
 )
@@ -19,18 +19,18 @@ func TestPutRequiresResourceVersionPrecondition(t *testing.T) {
 	server := newTestServer(t)
 	defer server.Close()
 
-	postJSON(t, server.URL+"/v1/tools", crds.Tool{
+	postJSON(t, server.URL+"/v1/tools", resources.Tool{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Tool",
-		Metadata:   crds.ObjectMeta{Name: "web"},
-		Spec:       crds.ToolSpec{Type: "http", Endpoint: "https://example"},
+		Metadata:   resources.ObjectMeta{Name: "web"},
+		Spec:       resources.ToolSpec{Type: "http", Endpoint: "https://example"},
 	})
 
-	body, _ := json.Marshal(crds.Tool{
+	body, _ := json.Marshal(resources.Tool{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Tool",
-		Metadata:   crds.ObjectMeta{Name: "web"},
-		Spec:       crds.ToolSpec{Type: "http", Endpoint: "https://example/v2"},
+		Metadata:   resources.ObjectMeta{Name: "web"},
+		Spec:       resources.ToolSpec{Type: "http", Endpoint: "https://example/v2"},
 	})
 	req, err := http.NewRequest(http.MethodPut, server.URL+"/v1/tools/web", bytes.NewReader(body))
 	if err != nil {
@@ -52,11 +52,11 @@ func TestToolStatusSubresourceAndConflict(t *testing.T) {
 	server := newTestServer(t)
 	defer server.Close()
 
-	postJSON(t, server.URL+"/v1/tools", crds.Tool{
+	postJSON(t, server.URL+"/v1/tools", resources.Tool{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Tool",
-		Metadata:   crds.ObjectMeta{Name: "web"},
-		Spec:       crds.ToolSpec{Type: "http", Endpoint: "https://example"},
+		Metadata:   resources.ObjectMeta{Name: "web"},
+		Spec:       resources.ToolSpec{Type: "http", Endpoint: "https://example"},
 	})
 
 	tool := getTool(t, server.URL+"/v1/tools/web")
@@ -134,7 +134,7 @@ func newTestServer(t *testing.T) *httptest.Server {
 	return httptest.NewServer(server.Handler())
 }
 
-func getTool(t *testing.T, url string) crds.Tool {
+func getTool(t *testing.T, url string) resources.Tool {
 	t.Helper()
 	resp, err := http.Get(url)
 	if err != nil {
@@ -145,7 +145,7 @@ func getTool(t *testing.T, url string) crds.Tool {
 		b, _ := io.ReadAll(resp.Body)
 		t.Fatalf("get tool status=%d body=%s", resp.StatusCode, string(b))
 	}
-	var out crds.Tool
+	var out resources.Tool
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("decode tool failed: %v", err)
 	}

@@ -6,35 +6,35 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 func TestLabelSelectorFiltersListEndpoints(t *testing.T) {
 	server := newTestServer(t)
 	defer server.Close()
 
-	postJSON(t, server.URL+"/v1/agent-systems", crds.AgentSystem{
+	postJSON(t, server.URL+"/v1/agent-systems", resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
-		Metadata: crds.ObjectMeta{
+		Metadata: resources.ObjectMeta{
 			Name: "report-system",
 			Labels: map[string]string{
 				"orloj.dev/env":     "dev",
 				"orloj.dev/usecase": "reporting",
 			},
 		},
-		Spec: crds.AgentSystemSpec{Agents: []string{"research-agent"}},
+		Spec: resources.AgentSystemSpec{Agents: []string{"research-agent"}},
 	})
-	postJSON(t, server.URL+"/v1/agent-systems", crds.AgentSystem{
+	postJSON(t, server.URL+"/v1/agent-systems", resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
-		Metadata: crds.ObjectMeta{
+		Metadata: resources.ObjectMeta{
 			Name: "chat-system",
 			Labels: map[string]string{
 				"orloj.dev/env": "prod",
 			},
 		},
-		Spec: crds.AgentSystemSpec{Agents: []string{"chat-agent"}},
+		Spec: resources.AgentSystemSpec{Agents: []string{"chat-agent"}},
 	})
 
 	resp, err := http.Get(server.URL + "/v1/agent-systems?labelSelector=orloj.dev/env=dev")
@@ -46,7 +46,7 @@ func TestLabelSelectorFiltersListEndpoints(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("expected 200, got %d body=%s", resp.StatusCode, string(body))
 	}
-	var list crds.AgentSystemList
+	var list resources.AgentSystemList
 	if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
 		t.Fatalf("decode list failed: %v", err)
 	}

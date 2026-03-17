@@ -7,30 +7,30 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 func TestAgentRoleCRUDAndNamespaceScoping(t *testing.T) {
 	server := newTestServer(t)
 	defer server.Close()
 
-	postJSON(t, server.URL+"/v1/agent-roles", crds.AgentRole{
+	postJSON(t, server.URL+"/v1/agent-roles", resources.AgentRole{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentRole",
-		Metadata: crds.ObjectMeta{
+		Metadata: resources.ObjectMeta{
 			Name:      "analyst",
 			Namespace: "team-a",
 		},
-		Spec: crds.AgentRoleSpec{Permissions: []string{"tool:web_search:invoke"}},
+		Spec: resources.AgentRoleSpec{Permissions: []string{"tool:web_search:invoke"}},
 	})
-	postJSON(t, server.URL+"/v1/agent-roles", crds.AgentRole{
+	postJSON(t, server.URL+"/v1/agent-roles", resources.AgentRole{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentRole",
-		Metadata: crds.ObjectMeta{
+		Metadata: resources.ObjectMeta{
 			Name:      "analyst",
 			Namespace: "team-b",
 		},
-		Spec: crds.AgentRoleSpec{Permissions: []string{"tool:db_read:invoke"}},
+		Spec: resources.AgentRoleSpec{Permissions: []string{"tool:db_read:invoke"}},
 	})
 
 	resp, err := http.Get(server.URL + "/v1/agent-roles/analyst?namespace=team-b")
@@ -42,7 +42,7 @@ func TestAgentRoleCRUDAndNamespaceScoping(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("expected 200, got %d body=%s", resp.StatusCode, string(body))
 	}
-	var role crds.AgentRole
+	var role resources.AgentRole
 	if err := json.NewDecoder(resp.Body).Decode(&role); err != nil {
 		t.Fatalf("decode role failed: %v", err)
 	}
@@ -58,14 +58,14 @@ func TestToolPermissionCreateRejectsInvalidScopedSpec(t *testing.T) {
 	server := newTestServer(t)
 	defer server.Close()
 
-	payload := crds.ToolPermission{
+	payload := resources.ToolPermission{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "ToolPermission",
-		Metadata: crds.ObjectMeta{
+		Metadata: resources.ObjectMeta{
 			Name:      "db-write",
 			Namespace: "team-a",
 		},
-		Spec: crds.ToolPermissionSpec{
+		Spec: resources.ToolPermissionSpec{
 			ToolRef:   "db_write",
 			ApplyMode: "scoped",
 			Action:    "invoke",

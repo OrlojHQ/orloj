@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 func TestExternalToolRuntimeDelegatesContractRequest(t *testing.T) {
@@ -23,7 +23,7 @@ func TestExternalToolRuntimeDelegatesContractRequest(t *testing.T) {
 	}
 	body, _ := json.Marshal(contractResp)
 
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"ext_tool": {
 			Type:     "external",
 			Endpoint: "https://ext.example.com/execute",
@@ -79,7 +79,7 @@ func TestExternalToolRuntimePropagatesContractError(t *testing.T) {
 		},
 	}
 	body, _ := json.Marshal(contractResp)
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"ext_tool": {Type: "external", Endpoint: "https://ext.example.com/execute"},
 	})
 	doer := &fakeHTTPDoer{statusCode: 200, body: string(body)}
@@ -109,11 +109,11 @@ func TestExternalToolRuntimeInjectsAuth(t *testing.T) {
 		Usage:               ToolExecutionUsage{Attempt: 1},
 	}
 	body, _ := json.Marshal(contractResp)
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"ext_tool": {
 			Type:     "external",
 			Endpoint: "https://ext.example.com/execute",
-			Auth:     crds.ToolAuth{SecretRef: "ext-secret"},
+			Auth:     resources.ToolAuth{SecretRef: "ext-secret"},
 		},
 	})
 	doer := &fakeHTTPDoer{statusCode: 200, body: string(body)}
@@ -131,7 +131,7 @@ func TestExternalToolRuntimeInjectsAuth(t *testing.T) {
 }
 
 func TestExternalToolRuntimeFailsOnMissingEndpoint(t *testing.T) {
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"ext_tool": {Type: "external"},
 	})
 	runtime := NewExternalToolRuntime(registry, nil, nil)
@@ -147,7 +147,7 @@ func TestExternalToolRuntimeFailsOnMissingEndpoint(t *testing.T) {
 }
 
 func TestExternalToolRuntimeFailsOnInvalidContractResponse(t *testing.T) {
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"ext_tool": {Type: "external", Endpoint: "https://ext.example.com/execute"},
 	})
 	doer := &fakeHTTPDoer{statusCode: 200, body: "not-json"}
@@ -164,7 +164,7 @@ func TestExternalToolRuntimeFailsOnInvalidContractResponse(t *testing.T) {
 }
 
 func TestExternalToolRuntimeMapsHTTPTimeout(t *testing.T) {
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"ext_tool": {Type: "external", Endpoint: "https://ext.example.com/execute"},
 	})
 	doer := &fakeHTTPDoer{err: context.DeadlineExceeded}
@@ -181,7 +181,7 @@ func TestExternalToolRuntimeMapsHTTPTimeout(t *testing.T) {
 }
 
 func TestExternalToolRuntimeMapsHTTPCanceled(t *testing.T) {
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"ext_tool": {Type: "external", Endpoint: "https://ext.example.com/execute"},
 	})
 	doer := &fakeHTTPDoer{err: context.Canceled}
@@ -213,7 +213,7 @@ func TestExternalToolRuntimeRegisteredInDefaultRegistry(t *testing.T) {
 }
 
 func TestExternalToolRuntimeHTTPErrorMapping(t *testing.T) {
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"ext_tool": {Type: "external", Endpoint: "https://ext.example.com/execute"},
 	})
 
@@ -256,11 +256,11 @@ func init() {
 }
 
 func TestExternalToolRuntimeSecretResolutionFailure(t *testing.T) {
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"ext_tool": {
 			Type:     "external",
 			Endpoint: "https://ext.example.com/execute",
-			Auth:     crds.ToolAuth{SecretRef: "missing"},
+			Auth:     resources.ToolAuth{SecretRef: "missing"},
 		},
 	})
 	secrets := staticSecretResolver{values: map[string]string{}}
@@ -301,7 +301,7 @@ func TestExternalToolRuntimeSendsContractPayload(t *testing.T) {
 	inner := &fakeHTTPDoer{statusCode: 200, body: string(body)}
 	doer := &bodyCapturingDoer{inner: inner}
 
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"ext_tool": {
 			Type:         "external",
 			Endpoint:     "https://ext.example.com/execute",

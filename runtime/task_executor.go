@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 var stepRegex = regexp.MustCompile(`step=([0-9]+)`)                     //nolint:gochecknoglobals
@@ -108,13 +108,13 @@ func NewTaskExecutorWithRuntime(
 	}
 }
 
-func (e *TaskExecutor) ExecuteAgent(ctx context.Context, agent crds.Agent, input map[string]string) (AgentExecutionResult, error) {
+func (e *TaskExecutor) ExecuteAgent(ctx context.Context, agent resources.Agent, input map[string]string) (AgentExecutionResult, error) {
 	return e.ExecuteAgentWithRuntime(ctx, agent, input, nil)
 }
 
 func (e *TaskExecutor) ExecuteAgentWithRuntime(
 	ctx context.Context,
-	agent crds.Agent,
+	agent resources.Agent,
 	input map[string]string,
 	override ToolRuntime,
 ) (AgentExecutionResult, error) {
@@ -213,6 +213,9 @@ func classifyAgentStepEvent(msg string) string {
 		return "tool_permission_denied"
 	case strings.Contains(msg, "tool=") && strings.Contains(strings.ToLower(msg), "permission denied"):
 		return "tool_permission_denied"
+	case strings.Contains(strings.ToLower(msg), "approval required"),
+		strings.Contains(strings.ToLower(msg), "approval_pending"):
+		return "tool_approval_pending"
 	case strings.Contains(msg, "tool=") && strings.Contains(msg, " error="):
 		return "tool_error"
 	case strings.Contains(msg, "no tools configured"):

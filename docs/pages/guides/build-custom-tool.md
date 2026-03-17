@@ -77,6 +77,9 @@ spec:
   endpoint: https://your-tool-service.internal/invoke
   capabilities:
     - custom.query.invoke
+  operation_classes:
+    - read
+    - write
   risk_level: medium
   runtime:
     timeout: 10s
@@ -99,6 +102,8 @@ orlojctl apply -f my-custom-tool.yaml
 **`risk_level`** -- Determines the default isolation mode:
 - `low` / `medium`: defaults to `none` (direct execution)
 - `high` / `critical`: defaults to `sandboxed`
+
+**`operation_classes`** -- Declares the types of operations this tool performs. Valid values: `read`, `write`, `delete`, `admin`. Policy rules in `ToolPermission.operation_rules` can define per-class verdicts (`allow`, `deny`, `approval_required`). When omitted, defaults to `["read"]` for low/medium risk or `["write"]` for high/critical risk.
 
 **`runtime.timeout`** -- How long the runtime waits for your tool to respond before treating the invocation as failed. Choose based on your tool's expected latency.
 

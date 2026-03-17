@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 type fakeHTTPDoer struct {
@@ -33,7 +33,7 @@ func (d *fakeHTTPDoer) Do(req *http.Request) (*http.Response, error) {
 }
 
 func TestHTTPToolClientExecutesHTTPToolEndpoint(t *testing.T) {
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"web_search": {
 			Type:     "http",
 			Endpoint: "https://api.example.com/search",
@@ -68,7 +68,7 @@ func TestHTTPToolClientParsesToolContractResponse(t *testing.T) {
 		Output:              ToolExecutionOutput{Result: "contract output"},
 	}
 	body, _ := json.Marshal(contractResp)
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"web_search": {Endpoint: "https://api.example.com/search"},
 	})
 	doer := &fakeHTTPDoer{statusCode: 200, body: string(body)}
@@ -96,7 +96,7 @@ func TestHTTPToolClientParsesToolContractErrorResponse(t *testing.T) {
 		},
 	}
 	body, _ := json.Marshal(contractResp)
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"web_search": {Endpoint: "https://api.example.com/search"},
 	})
 	doer := &fakeHTTPDoer{statusCode: 200, body: string(body)}
@@ -122,10 +122,10 @@ func TestHTTPToolClientParsesToolContractErrorResponse(t *testing.T) {
 }
 
 func TestHTTPToolClientInjectsAuthBearer(t *testing.T) {
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"web_search": {
 			Endpoint: "https://api.example.com/search",
-			Auth:     crds.ToolAuth{SecretRef: "search-key"},
+			Auth:     resources.ToolAuth{SecretRef: "search-key"},
 		},
 	})
 	doer := &fakeHTTPDoer{statusCode: 200, body: "ok"}
@@ -146,10 +146,10 @@ func TestHTTPToolClientInjectsAuthBearer(t *testing.T) {
 }
 
 func TestHTTPToolClientFailsWhenSecretResolutionFails(t *testing.T) {
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"web_search": {
 			Endpoint: "https://api.example.com/search",
-			Auth:     crds.ToolAuth{SecretRef: "missing"},
+			Auth:     resources.ToolAuth{SecretRef: "missing"},
 		},
 	})
 	doer := &fakeHTTPDoer{statusCode: 200, body: "ok"}
@@ -170,7 +170,7 @@ func TestHTTPToolClientFailsWhenSecretResolutionFails(t *testing.T) {
 }
 
 func TestHTTPToolClientFailsOnMissingEndpoint(t *testing.T) {
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"web_search": {Type: "http"},
 	})
 	client := NewHTTPToolClient(registry, nil, nil)
@@ -198,7 +198,7 @@ func TestHTTPToolClientFailsOnUnsupportedTool(t *testing.T) {
 }
 
 func TestHTTPToolClientMapsHTTPErrorCodes(t *testing.T) {
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"web_search": {Endpoint: "https://api.example.com/search"},
 	})
 
@@ -234,7 +234,7 @@ func TestHTTPToolClientMapsHTTPErrorCodes(t *testing.T) {
 }
 
 func TestHTTPToolClientMaps401ToAuthInvalid(t *testing.T) {
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"web_search": {Endpoint: "https://api.example.com/search"},
 	})
 	doer := &fakeHTTPDoer{statusCode: 401, body: "unauthorized"}
@@ -260,7 +260,7 @@ func TestHTTPToolClientMaps401ToAuthInvalid(t *testing.T) {
 }
 
 func TestHTTPToolClientMaps403ToAuthForbidden(t *testing.T) {
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"web_search": {Endpoint: "https://api.example.com/search"},
 	})
 	doer := &fakeHTTPDoer{statusCode: 403, body: "forbidden"}
@@ -286,7 +286,7 @@ func TestHTTPToolClientMaps403ToAuthForbidden(t *testing.T) {
 }
 
 func TestHTTPToolClientMapsContextTimeout(t *testing.T) {
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"web_search": {Endpoint: "https://api.example.com/search"},
 	})
 	doer := &fakeHTTPDoer{err: context.DeadlineExceeded}
@@ -309,7 +309,7 @@ func TestHTTPToolClientMapsContextTimeout(t *testing.T) {
 }
 
 func TestHTTPToolClientMapsContextCanceled(t *testing.T) {
-	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"web_search": {Endpoint: "https://api.example.com/search"},
 	})
 	doer := &fakeHTTPDoer{err: context.Canceled}

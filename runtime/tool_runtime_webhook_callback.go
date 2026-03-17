@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 // WebhookCallbackToolRuntime implements an async tool pattern: fire a
@@ -112,7 +112,7 @@ func (r *WebhookCallbackToolRuntime) WithNamespace(namespace string) ToolRuntime
 		return NewWebhookCallbackToolRuntime(nil, nil, nil, 0)
 	}
 	copy := *r
-	copy.namespace = crds.NormalizeNamespace(strings.TrimSpace(namespace))
+	copy.namespace = resources.NormalizeNamespace(strings.TrimSpace(namespace))
 	if aware, ok := copy.secrets.(namespaceAwareSecretResolver); ok {
 		copy.secrets = aware.WithNamespace(copy.namespace)
 	}

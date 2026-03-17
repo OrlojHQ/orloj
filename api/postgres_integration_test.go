@@ -13,7 +13,7 @@ import (
 
 	"github.com/OrlojHQ/orloj/api"
 	"github.com/OrlojHQ/orloj/controllers"
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 	agentruntime "github.com/OrlojHQ/orloj/runtime"
 	"github.com/OrlojHQ/orloj/store"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -23,58 +23,58 @@ func TestPostgresTaskLifecycleApplyScheduleRunTrace(t *testing.T) {
 	h := newPostgresPhase1Harness(t, "worker-a")
 	defer h.Close()
 
-	postJSON(t, h.url+"/v1/workers", crds.Worker{
+	postJSON(t, h.url+"/v1/workers", resources.Worker{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Worker",
-		Metadata:   crds.ObjectMeta{Name: "worker-a"},
-		Spec: crds.WorkerSpec{
+		Metadata:   resources.ObjectMeta{Name: "worker-a"},
+		Spec: resources.WorkerSpec{
 			Region:             "default",
 			MaxConcurrentTasks: 1,
-			Capabilities: crds.WorkerCapabilities{
+			Capabilities: resources.WorkerCapabilities{
 				SupportedModels: []string{"gpt-4o"},
 			},
 		},
 	})
-	patchWorkerStatus(t, h.url, "worker-a", crds.WorkerStatus{
+	patchWorkerStatus(t, h.url, "worker-a", resources.WorkerStatus{
 		Phase:         "Ready",
 		LastHeartbeat: time.Now().UTC().Format(time.RFC3339Nano),
 	})
 
-	postJSON(t, h.url+"/v1/tools", crds.Tool{
+	postJSON(t, h.url+"/v1/tools", resources.Tool{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Tool",
-		Metadata:   crds.ObjectMeta{Name: "web_search"},
-		Spec: crds.ToolSpec{
+		Metadata:   resources.ObjectMeta{Name: "web_search"},
+		Spec: resources.ToolSpec{
 			Type:     "http",
 			Endpoint: "https://api.search.example",
 		},
 	})
-	postJSON(t, h.url+"/v1/agents", crds.Agent{
+	postJSON(t, h.url+"/v1/agents", resources.Agent{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
-		Metadata:   crds.ObjectMeta{Name: "research-agent"},
-		Spec: crds.AgentSpec{
+		Metadata:   resources.ObjectMeta{Name: "research-agent"},
+		Spec: resources.AgentSpec{
 			Model:  "gpt-4o",
 			Prompt: "You are a research assistant.",
 			Tools:  []string{"web_search"},
-			Limits: crds.AgentLimits{MaxSteps: 2, Timeout: "1s"},
+			Limits: resources.AgentLimits{MaxSteps: 2, Timeout: "1s"},
 		},
 	})
-	postJSON(t, h.url+"/v1/agent-systems", crds.AgentSystem{
+	postJSON(t, h.url+"/v1/agent-systems", resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
-		Metadata:   crds.ObjectMeta{Name: "report-system"},
-		Spec:       crds.AgentSystemSpec{Agents: []string{"research-agent"}},
+		Metadata:   resources.ObjectMeta{Name: "report-system"},
+		Spec:       resources.AgentSystemSpec{Agents: []string{"research-agent"}},
 	})
-	postJSON(t, h.url+"/v1/tasks", crds.Task{
+	postJSON(t, h.url+"/v1/tasks", resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "weekly-report-pg"},
-		Spec: crds.TaskSpec{
+		Metadata:   resources.ObjectMeta{Name: "weekly-report-pg"},
+		Spec: resources.TaskSpec{
 			System:   "report-system",
 			Priority: "high",
 			Input:    map[string]string{"topic": "AI startups"},
-			Requirements: crds.TaskRequirements{
+			Requirements: resources.TaskRequirements{
 				Region: "default",
 				Model:  "gpt-4o",
 			},
@@ -109,64 +109,64 @@ func TestPostgresMultiWorkerSingleExecutionWithAssignment(t *testing.T) {
 	h := newPostgresPhase1Harness(t, "worker-east")
 	defer h.Close()
 
-	postJSON(t, h.url+"/v1/workers", crds.Worker{
+	postJSON(t, h.url+"/v1/workers", resources.Worker{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Worker",
-		Metadata:   crds.ObjectMeta{Name: "worker-east"},
-		Spec: crds.WorkerSpec{
+		Metadata:   resources.ObjectMeta{Name: "worker-east"},
+		Spec: resources.WorkerSpec{
 			Region:             "us-east",
 			MaxConcurrentTasks: 1,
-			Capabilities: crds.WorkerCapabilities{
+			Capabilities: resources.WorkerCapabilities{
 				SupportedModels: []string{"gpt-4o"},
 			},
 		},
 	})
-	patchWorkerStatus(t, h.url, "worker-east", crds.WorkerStatus{Phase: "Ready", LastHeartbeat: time.Now().UTC().Format(time.RFC3339Nano)})
+	patchWorkerStatus(t, h.url, "worker-east", resources.WorkerStatus{Phase: "Ready", LastHeartbeat: time.Now().UTC().Format(time.RFC3339Nano)})
 
-	postJSON(t, h.url+"/v1/workers", crds.Worker{
+	postJSON(t, h.url+"/v1/workers", resources.Worker{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Worker",
-		Metadata:   crds.ObjectMeta{Name: "worker-west"},
-		Spec: crds.WorkerSpec{
+		Metadata:   resources.ObjectMeta{Name: "worker-west"},
+		Spec: resources.WorkerSpec{
 			Region:             "us-west",
 			MaxConcurrentTasks: 1,
-			Capabilities: crds.WorkerCapabilities{
+			Capabilities: resources.WorkerCapabilities{
 				SupportedModels: []string{"gpt-4o"},
 			},
 		},
 	})
-	patchWorkerStatus(t, h.url, "worker-west", crds.WorkerStatus{Phase: "Ready", LastHeartbeat: time.Now().UTC().Format(time.RFC3339Nano)})
+	patchWorkerStatus(t, h.url, "worker-west", resources.WorkerStatus{Phase: "Ready", LastHeartbeat: time.Now().UTC().Format(time.RFC3339Nano)})
 
-	postJSON(t, h.url+"/v1/tools", crds.Tool{
+	postJSON(t, h.url+"/v1/tools", resources.Tool{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Tool",
-		Metadata:   crds.ObjectMeta{Name: "web_search"},
-		Spec:       crds.ToolSpec{Type: "http", Endpoint: "https://example"},
+		Metadata:   resources.ObjectMeta{Name: "web_search"},
+		Spec:       resources.ToolSpec{Type: "http", Endpoint: "https://example"},
 	})
-	postJSON(t, h.url+"/v1/agents", crds.Agent{
+	postJSON(t, h.url+"/v1/agents", resources.Agent{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
-		Metadata:   crds.ObjectMeta{Name: "research-agent"},
-		Spec: crds.AgentSpec{
+		Metadata:   resources.ObjectMeta{Name: "research-agent"},
+		Spec: resources.AgentSpec{
 			Model:  "gpt-4o",
 			Prompt: "run",
 			Tools:  []string{"web_search"},
-			Limits: crds.AgentLimits{MaxSteps: 2, Timeout: "1s"},
+			Limits: resources.AgentLimits{MaxSteps: 2, Timeout: "1s"},
 		},
 	})
-	postJSON(t, h.url+"/v1/agent-systems", crds.AgentSystem{
+	postJSON(t, h.url+"/v1/agent-systems", resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
-		Metadata:   crds.ObjectMeta{Name: "report-system"},
-		Spec:       crds.AgentSystemSpec{Agents: []string{"research-agent"}},
+		Metadata:   resources.ObjectMeta{Name: "report-system"},
+		Spec:       resources.AgentSystemSpec{Agents: []string{"research-agent"}},
 	})
-	postJSON(t, h.url+"/v1/tasks", crds.Task{
+	postJSON(t, h.url+"/v1/tasks", resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "multi-worker-task-pg"},
-		Spec: crds.TaskSpec{
+		Metadata:   resources.ObjectMeta{Name: "multi-worker-task-pg"},
+		Spec: resources.TaskSpec{
 			System: "report-system",
-			Requirements: crds.TaskRequirements{
+			Requirements: resources.TaskRequirements{
 				Region: "us-west",
 				Model:  "gpt-4o",
 			},

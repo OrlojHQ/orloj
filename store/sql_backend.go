@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 const (
@@ -25,6 +25,7 @@ const (
 	tableTaskSchedules   = "task_schedules"
 	tableTaskWebhooks    = "task_webhooks"
 	tableWorkers         = "workers"
+	tableToolApprovals   = "tool_approvals"
 )
 
 // EnsurePostgresSchema runs all pending database migrations. New schema changes
@@ -96,7 +97,7 @@ func deleteFromTable(db *sql.DB, table, name string) (bool, error) {
 // Per-type upsert functions -- extract typed columns for indexing/filtering.
 // ---------------------------------------------------------------------------
 
-func upsertAgentSQL(db *sql.DB, name string, item crds.Agent) error {
+func upsertAgentSQL(db *sql.DB, name string, item resources.Agent) error {
 	payload, err := json.Marshal(item)
 	if err != nil {
 		return err
@@ -110,14 +111,14 @@ func upsertAgentSQL(db *sql.DB, name string, item crds.Agent) error {
 		     payload = EXCLUDED.payload,
 		     updated_at = NOW()`,
 		name,
-		crds.NormalizeNamespace(item.Metadata.Namespace),
+		resources.NormalizeNamespace(item.Metadata.Namespace),
 		strings.ToLower(strings.TrimSpace(item.Status.Phase)),
 		string(payload),
 	)
 	return err
 }
 
-func upsertAgentSystemSQL(db *sql.DB, name string, item crds.AgentSystem) error {
+func upsertAgentSystemSQL(db *sql.DB, name string, item resources.AgentSystem) error {
 	payload, err := json.Marshal(item)
 	if err != nil {
 		return err
@@ -131,14 +132,14 @@ func upsertAgentSystemSQL(db *sql.DB, name string, item crds.AgentSystem) error 
 		     payload = EXCLUDED.payload,
 		     updated_at = NOW()`,
 		name,
-		crds.NormalizeNamespace(item.Metadata.Namespace),
+		resources.NormalizeNamespace(item.Metadata.Namespace),
 		strings.ToLower(strings.TrimSpace(item.Status.Phase)),
 		string(payload),
 	)
 	return err
 }
 
-func upsertModelEndpointSQL(db *sql.DB, name string, item crds.ModelEndpoint) error {
+func upsertModelEndpointSQL(db *sql.DB, name string, item resources.ModelEndpoint) error {
 	payload, err := json.Marshal(item)
 	if err != nil {
 		return err
@@ -153,7 +154,7 @@ func upsertModelEndpointSQL(db *sql.DB, name string, item crds.ModelEndpoint) er
 		     payload = EXCLUDED.payload,
 		     updated_at = NOW()`,
 		name,
-		crds.NormalizeNamespace(item.Metadata.Namespace),
+		resources.NormalizeNamespace(item.Metadata.Namespace),
 		strings.ToLower(strings.TrimSpace(item.Spec.Provider)),
 		strings.ToLower(strings.TrimSpace(item.Status.Phase)),
 		string(payload),
@@ -161,7 +162,7 @@ func upsertModelEndpointSQL(db *sql.DB, name string, item crds.ModelEndpoint) er
 	return err
 }
 
-func upsertToolSQL(db *sql.DB, name string, item crds.Tool) error {
+func upsertToolSQL(db *sql.DB, name string, item resources.Tool) error {
 	payload, err := json.Marshal(item)
 	if err != nil {
 		return err
@@ -177,7 +178,7 @@ func upsertToolSQL(db *sql.DB, name string, item crds.Tool) error {
 		     payload = EXCLUDED.payload,
 		     updated_at = NOW()`,
 		name,
-		crds.NormalizeNamespace(item.Metadata.Namespace),
+		resources.NormalizeNamespace(item.Metadata.Namespace),
 		strings.ToLower(strings.TrimSpace(item.Spec.RiskLevel)),
 		strings.ToLower(strings.TrimSpace(item.Spec.Runtime.IsolationMode)),
 		strings.ToLower(strings.TrimSpace(item.Status.Phase)),
@@ -186,7 +187,7 @@ func upsertToolSQL(db *sql.DB, name string, item crds.Tool) error {
 	return err
 }
 
-func upsertSecretSQL(db *sql.DB, name string, item crds.Secret) error {
+func upsertSecretSQL(db *sql.DB, name string, item resources.Secret) error {
 	payload, err := json.Marshal(item)
 	if err != nil {
 		return err
@@ -200,14 +201,14 @@ func upsertSecretSQL(db *sql.DB, name string, item crds.Secret) error {
 		     payload = EXCLUDED.payload,
 		     updated_at = NOW()`,
 		name,
-		crds.NormalizeNamespace(item.Metadata.Namespace),
+		resources.NormalizeNamespace(item.Metadata.Namespace),
 		strings.ToLower(strings.TrimSpace(item.Status.Phase)),
 		string(payload),
 	)
 	return err
 }
 
-func upsertMemorySQL(db *sql.DB, name string, item crds.Memory) error {
+func upsertMemorySQL(db *sql.DB, name string, item resources.Memory) error {
 	payload, err := json.Marshal(item)
 	if err != nil {
 		return err
@@ -221,14 +222,14 @@ func upsertMemorySQL(db *sql.DB, name string, item crds.Memory) error {
 		     payload = EXCLUDED.payload,
 		     updated_at = NOW()`,
 		name,
-		crds.NormalizeNamespace(item.Metadata.Namespace),
+		resources.NormalizeNamespace(item.Metadata.Namespace),
 		strings.ToLower(strings.TrimSpace(item.Status.Phase)),
 		string(payload),
 	)
 	return err
 }
 
-func upsertAgentPolicySQL(db *sql.DB, name string, item crds.AgentPolicy) error {
+func upsertAgentPolicySQL(db *sql.DB, name string, item resources.AgentPolicy) error {
 	payload, err := json.Marshal(item)
 	if err != nil {
 		return err
@@ -243,7 +244,7 @@ func upsertAgentPolicySQL(db *sql.DB, name string, item crds.AgentPolicy) error 
 		     payload = EXCLUDED.payload,
 		     updated_at = NOW()`,
 		name,
-		crds.NormalizeNamespace(item.Metadata.Namespace),
+		resources.NormalizeNamespace(item.Metadata.Namespace),
 		strings.ToLower(strings.TrimSpace(item.Spec.ApplyMode)),
 		strings.ToLower(strings.TrimSpace(item.Status.Phase)),
 		string(payload),
@@ -251,7 +252,7 @@ func upsertAgentPolicySQL(db *sql.DB, name string, item crds.AgentPolicy) error 
 	return err
 }
 
-func upsertAgentRoleSQL(db *sql.DB, name string, item crds.AgentRole) error {
+func upsertAgentRoleSQL(db *sql.DB, name string, item resources.AgentRole) error {
 	payload, err := json.Marshal(item)
 	if err != nil {
 		return err
@@ -265,14 +266,14 @@ func upsertAgentRoleSQL(db *sql.DB, name string, item crds.AgentRole) error {
 		     payload = EXCLUDED.payload,
 		     updated_at = NOW()`,
 		name,
-		crds.NormalizeNamespace(item.Metadata.Namespace),
+		resources.NormalizeNamespace(item.Metadata.Namespace),
 		strings.ToLower(strings.TrimSpace(item.Status.Phase)),
 		string(payload),
 	)
 	return err
 }
 
-func upsertToolPermissionSQL(db *sql.DB, name string, item crds.ToolPermission) error {
+func upsertToolPermissionSQL(db *sql.DB, name string, item resources.ToolPermission) error {
 	payload, err := json.Marshal(item)
 	if err != nil {
 		return err
@@ -287,7 +288,7 @@ func upsertToolPermissionSQL(db *sql.DB, name string, item crds.ToolPermission) 
 		     payload = EXCLUDED.payload,
 		     updated_at = NOW()`,
 		name,
-		crds.NormalizeNamespace(item.Metadata.Namespace),
+		resources.NormalizeNamespace(item.Metadata.Namespace),
 		strings.TrimSpace(item.Spec.ToolRef),
 		strings.ToLower(strings.TrimSpace(item.Status.Phase)),
 		string(payload),
@@ -295,7 +296,32 @@ func upsertToolPermissionSQL(db *sql.DB, name string, item crds.ToolPermission) 
 	return err
 }
 
-func upsertTaskSQL(db *sql.DB, name string, item crds.Task) error {
+func upsertToolApprovalSQL(db *sql.DB, name string, item resources.ToolApproval) error {
+	payload, err := json.Marshal(item)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(
+		`INSERT INTO tool_approvals(name, namespace, task_ref, tool, status_phase, payload, updated_at)
+		 VALUES($1, $2, $3, $4, $5, $6::jsonb, NOW())
+		 ON CONFLICT(name) DO UPDATE SET
+		     namespace = EXCLUDED.namespace,
+		     task_ref = EXCLUDED.task_ref,
+		     tool = EXCLUDED.tool,
+		     status_phase = EXCLUDED.status_phase,
+		     payload = EXCLUDED.payload,
+		     updated_at = NOW()`,
+		name,
+		resources.NormalizeNamespace(item.Metadata.Namespace),
+		strings.TrimSpace(item.Spec.TaskRef),
+		strings.TrimSpace(item.Spec.Tool),
+		strings.ToLower(strings.TrimSpace(item.Status.Phase)),
+		string(payload),
+	)
+	return err
+}
+
+func upsertTaskSQL(db *sql.DB, name string, item resources.Task) error {
 	payload, err := json.Marshal(item)
 	if err != nil {
 		return err
@@ -319,7 +345,7 @@ func upsertTaskSQL(db *sql.DB, name string, item crds.Task) error {
 		     payload = EXCLUDED.payload,
 		     updated_at = NOW()`,
 		name,
-		crds.NormalizeNamespace(item.Metadata.Namespace),
+		resources.NormalizeNamespace(item.Metadata.Namespace),
 		strings.TrimSpace(item.Spec.System),
 		strings.ToLower(strings.TrimSpace(item.Spec.Mode)),
 		strings.ToLower(strings.TrimSpace(item.Status.Phase)),
@@ -333,7 +359,7 @@ func upsertTaskSQL(db *sql.DB, name string, item crds.Task) error {
 	return err
 }
 
-func upsertTaskScheduleSQL(db *sql.DB, name string, item crds.TaskSchedule) error {
+func upsertTaskScheduleSQL(db *sql.DB, name string, item resources.TaskSchedule) error {
 	payload, err := json.Marshal(item)
 	if err != nil {
 		return err
@@ -350,7 +376,7 @@ func upsertTaskScheduleSQL(db *sql.DB, name string, item crds.TaskSchedule) erro
 		     payload = EXCLUDED.payload,
 		     updated_at = NOW()`,
 		name,
-		crds.NormalizeNamespace(item.Metadata.Namespace),
+		resources.NormalizeNamespace(item.Metadata.Namespace),
 		strings.TrimSpace(item.Spec.TaskRef),
 		strings.TrimSpace(item.Spec.Schedule),
 		item.Spec.Suspend,
@@ -360,7 +386,7 @@ func upsertTaskScheduleSQL(db *sql.DB, name string, item crds.TaskSchedule) erro
 	return err
 }
 
-func upsertTaskWebhookSQL(db *sql.DB, name string, item crds.TaskWebhook) error {
+func upsertTaskWebhookSQL(db *sql.DB, name string, item resources.TaskWebhook) error {
 	payload, err := json.Marshal(item)
 	if err != nil {
 		return err
@@ -375,7 +401,7 @@ func upsertTaskWebhookSQL(db *sql.DB, name string, item crds.TaskWebhook) error 
 		     payload = EXCLUDED.payload,
 		     updated_at = NOW()`,
 		name,
-		crds.NormalizeNamespace(item.Metadata.Namespace),
+		resources.NormalizeNamespace(item.Metadata.Namespace),
 		strings.TrimSpace(item.Spec.TaskRef),
 		strings.ToLower(strings.TrimSpace(item.Status.Phase)),
 		string(payload),
@@ -383,7 +409,7 @@ func upsertTaskWebhookSQL(db *sql.DB, name string, item crds.TaskWebhook) error 
 	return err
 }
 
-func upsertWorkerSQL(db *sql.DB, name string, item crds.Worker) error {
+func upsertWorkerSQL(db *sql.DB, name string, item resources.Worker) error {
 	payload, err := json.Marshal(item)
 	if err != nil {
 		return err
@@ -400,7 +426,7 @@ func upsertWorkerSQL(db *sql.DB, name string, item crds.Worker) error {
 		     payload = EXCLUDED.payload,
 		     updated_at = NOW()`,
 		name,
-		crds.NormalizeNamespace(item.Metadata.Namespace),
+		resources.NormalizeNamespace(item.Metadata.Namespace),
 		strings.TrimSpace(item.Spec.Region),
 		strings.ToLower(strings.TrimSpace(item.Status.Phase)),
 		item.Status.CurrentTasks,
@@ -415,7 +441,7 @@ func upsertWorkerSQL(db *sql.DB, name string, item crds.Worker) error {
 // ---------------------------------------------------------------------------
 
 // updateTaskInTx writes both typed columns and payload within an open tx.
-func updateTaskInTx(tx *sql.Tx, name string, task crds.Task) error {
+func updateTaskInTx(tx *sql.Tx, name string, task resources.Task) error {
 	payload, err := json.Marshal(task)
 	if err != nil {
 		return err
@@ -441,58 +467,58 @@ func updateTaskInTx(tx *sql.Tx, name string, task crds.Task) error {
 	return err
 }
 
-func claimTaskSQL(db *sql.DB, name, workerID string, lease time.Duration) (crds.Task, bool, error) {
+func claimTaskSQL(db *sql.DB, name, workerID string, lease time.Duration) (resources.Task, bool, error) {
 	if lease <= 0 {
 		lease = 30 * time.Second
 	}
 	now := time.Now().UTC()
 	tx, err := db.BeginTx(context.Background(), nil)
 	if err != nil {
-		return crds.Task{}, false, err
+		return resources.Task{}, false, err
 	}
 	defer tx.Rollback()
 
 	var payload []byte
 	err = tx.QueryRow(`SELECT payload FROM tasks WHERE name = $1 FOR UPDATE`, name).Scan(&payload)
 	if err == sql.ErrNoRows {
-		return crds.Task{}, false, nil
+		return resources.Task{}, false, nil
 	}
 	if err != nil {
-		return crds.Task{}, false, err
+		return resources.Task{}, false, err
 	}
 
-	var task crds.Task
+	var task resources.Task
 	if err := json.Unmarshal(payload, &task); err != nil {
-		return crds.Task{}, false, err
+		return resources.Task{}, false, err
 	}
 	if !isTaskClaimable(task, workerID, now) {
 		if err := tx.Commit(); err != nil {
-			return crds.Task{}, false, err
+			return resources.Task{}, false, err
 		}
-		return crds.Task{}, false, nil
+		return resources.Task{}, false, nil
 	}
 
 	task, err = applyTaskClaim(task, workerID, lease, now)
 	if err != nil {
-		return crds.Task{}, false, err
+		return resources.Task{}, false, err
 	}
 	if err := updateTaskInTx(tx, name, task); err != nil {
-		return crds.Task{}, false, err
+		return resources.Task{}, false, err
 	}
 	if err := tx.Commit(); err != nil {
-		return crds.Task{}, false, err
+		return resources.Task{}, false, err
 	}
 	return task, true, nil
 }
 
-func claimNextDueTaskSQL(db *sql.DB, workerID string, lease time.Duration, matches func(crds.Task) bool) (crds.Task, bool, error) {
+func claimNextDueTaskSQL(db *sql.DB, workerID string, lease time.Duration, matches func(resources.Task) bool) (resources.Task, bool, error) {
 	if lease <= 0 {
 		lease = 30 * time.Second
 	}
 	now := time.Now().UTC()
 	tx, err := db.BeginTx(context.Background(), nil)
 	if err != nil {
-		return crds.Task{}, false, err
+		return resources.Task{}, false, err
 	}
 	defer tx.Rollback()
 
@@ -513,13 +539,13 @@ func claimNextDueTaskSQL(db *sql.DB, workerID string, lease time.Duration, match
 		 LIMIT 64`,
 	)
 	if err != nil {
-		return crds.Task{}, false, err
+		return resources.Task{}, false, err
 	}
 	defer rows.Close()
 
 	var (
 		selectedName string
-		selectedTask crds.Task
+		selectedTask resources.Task
 		found        bool
 	)
 	for rows.Next() {
@@ -528,11 +554,11 @@ func claimNextDueTaskSQL(db *sql.DB, workerID string, lease time.Duration, match
 			payload []byte
 		)
 		if err := rows.Scan(&rName, &payload); err != nil {
-			return crds.Task{}, false, err
+			return resources.Task{}, false, err
 		}
-		var task crds.Task
+		var task resources.Task
 		if err := json.Unmarshal(payload, &task); err != nil {
-			return crds.Task{}, false, err
+			return resources.Task{}, false, err
 		}
 		if !isTaskClaimable(task, workerID, now) {
 			continue
@@ -546,24 +572,24 @@ func claimNextDueTaskSQL(db *sql.DB, workerID string, lease time.Duration, match
 		break
 	}
 	if err := rows.Err(); err != nil {
-		return crds.Task{}, false, err
+		return resources.Task{}, false, err
 	}
 	if !found {
 		if err := tx.Commit(); err != nil {
-			return crds.Task{}, false, err
+			return resources.Task{}, false, err
 		}
-		return crds.Task{}, false, nil
+		return resources.Task{}, false, nil
 	}
 
 	task, err := applyTaskClaim(selectedTask, workerID, lease, now)
 	if err != nil {
-		return crds.Task{}, false, err
+		return resources.Task{}, false, err
 	}
 	if err := updateTaskInTx(tx, selectedName, task); err != nil {
-		return crds.Task{}, false, err
+		return resources.Task{}, false, err
 	}
 	if err := tx.Commit(); err != nil {
-		return crds.Task{}, false, err
+		return resources.Task{}, false, err
 	}
 	return task, true, nil
 }
@@ -588,7 +614,7 @@ func renewTaskLeaseSQL(db *sql.DB, name, workerID string, lease time.Duration) e
 		return err
 	}
 
-	var task crds.Task
+	var task resources.Task
 	if err := json.Unmarshal(payload, &task); err != nil {
 		return err
 	}
@@ -669,7 +695,7 @@ func deleteTaskLogsSQL(db *sql.DB, taskName string) error {
 // Worker slot management
 // ---------------------------------------------------------------------------
 
-func updateWorkerInTx(tx *sql.Tx, name string, worker crds.Worker) error {
+func updateWorkerInTx(tx *sql.Tx, name string, worker resources.Worker) error {
 	payload, err := json.Marshal(worker)
 	if err != nil {
 		return err
@@ -691,30 +717,30 @@ func updateWorkerInTx(tx *sql.Tx, name string, worker crds.Worker) error {
 	return err
 }
 
-func tryAcquireWorkerSlotSQL(db *sql.DB, name string) (crds.Worker, bool, error) {
+func tryAcquireWorkerSlotSQL(db *sql.DB, name string) (resources.Worker, bool, error) {
 	tx, err := db.BeginTx(context.Background(), nil)
 	if err != nil {
-		return crds.Worker{}, false, err
+		return resources.Worker{}, false, err
 	}
 	defer tx.Rollback()
 
 	var payload []byte
 	err = tx.QueryRow(`SELECT payload FROM workers WHERE name = $1 FOR UPDATE`, name).Scan(&payload)
 	if err == sql.ErrNoRows {
-		return crds.Worker{}, false, nil
+		return resources.Worker{}, false, nil
 	}
 	if err != nil {
-		return crds.Worker{}, false, err
+		return resources.Worker{}, false, err
 	}
 
-	var worker crds.Worker
+	var worker resources.Worker
 	if err := json.Unmarshal(payload, &worker); err != nil {
-		return crds.Worker{}, false, err
+		return resources.Worker{}, false, err
 	}
 	phase := strings.ToLower(strings.TrimSpace(worker.Status.Phase))
 	if phase != "ready" && phase != "pending" {
 		if err := tx.Commit(); err != nil {
-			return crds.Worker{}, false, err
+			return resources.Worker{}, false, err
 		}
 		return worker, false, nil
 	}
@@ -725,7 +751,7 @@ func tryAcquireWorkerSlotSQL(db *sql.DB, name string) (crds.Worker, bool, error)
 	}
 	if worker.Status.CurrentTasks >= maxConcurrent {
 		if err := tx.Commit(); err != nil {
-			return crds.Worker{}, false, err
+			return resources.Worker{}, false, err
 		}
 		return worker, false, nil
 	}
@@ -734,14 +760,14 @@ func tryAcquireWorkerSlotSQL(db *sql.DB, name string) (crds.Worker, bool, error)
 	worker.Status.CurrentTasks++
 	worker.Status.ObservedGeneration = worker.Metadata.Generation
 	if err := initializeUpdateMetadata("Worker", &worker.Metadata, current, false); err != nil {
-		return crds.Worker{}, false, err
+		return resources.Worker{}, false, err
 	}
 
 	if err := updateWorkerInTx(tx, name, worker); err != nil {
-		return crds.Worker{}, false, err
+		return resources.Worker{}, false, err
 	}
 	if err := tx.Commit(); err != nil {
-		return crds.Worker{}, false, err
+		return resources.Worker{}, false, err
 	}
 	return worker, true, nil
 }
@@ -762,7 +788,7 @@ func releaseWorkerSlotSQL(db *sql.DB, name string) error {
 		return err
 	}
 
-	var worker crds.Worker
+	var worker resources.Worker
 	if err := json.Unmarshal(payload, &worker); err != nil {
 		return err
 	}

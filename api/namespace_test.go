@@ -6,30 +6,30 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 func TestNamespaceScopedResourceLookup(t *testing.T) {
 	server := newTestServer(t)
 	defer server.Close()
 
-	postJSON(t, server.URL+"/v1/tools", crds.Tool{
+	postJSON(t, server.URL+"/v1/tools", resources.Tool{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Tool",
-		Metadata: crds.ObjectMeta{
+		Metadata: resources.ObjectMeta{
 			Name:      "shared-tool",
 			Namespace: "team-a",
 		},
-		Spec: crds.ToolSpec{Type: "http", Endpoint: "https://a.example"},
+		Spec: resources.ToolSpec{Type: "http", Endpoint: "https://a.example"},
 	})
-	postJSON(t, server.URL+"/v1/tools", crds.Tool{
+	postJSON(t, server.URL+"/v1/tools", resources.Tool{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Tool",
-		Metadata: crds.ObjectMeta{
+		Metadata: resources.ObjectMeta{
 			Name:      "shared-tool",
 			Namespace: "team-b",
 		},
-		Spec: crds.ToolSpec{Type: "http", Endpoint: "https://b.example"},
+		Spec: resources.ToolSpec{Type: "http", Endpoint: "https://b.example"},
 	})
 
 	respA, err := http.Get(server.URL + "/v1/tools/shared-tool?namespace=team-a")
@@ -41,7 +41,7 @@ func TestNamespaceScopedResourceLookup(t *testing.T) {
 		body, _ := io.ReadAll(respA.Body)
 		t.Fatalf("expected 200 for team-a lookup, got %d body=%s", respA.StatusCode, string(body))
 	}
-	var toolA crds.Tool
+	var toolA resources.Tool
 	if err := json.NewDecoder(respA.Body).Decode(&toolA); err != nil {
 		t.Fatalf("decode team-a tool failed: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestNamespaceScopedResourceLookup(t *testing.T) {
 		body, _ := io.ReadAll(respB.Body)
 		t.Fatalf("expected 200 for team-b list, got %d body=%s", respB.StatusCode, string(body))
 	}
-	var list crds.ToolList
+	var list resources.ToolList
 	if err := json.NewDecoder(respB.Body).Decode(&list); err != nil {
 		t.Fatalf("decode team-b list failed: %v", err)
 	}

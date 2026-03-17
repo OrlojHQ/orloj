@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/telemetry"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -21,19 +21,19 @@ var hopPattern = regexp.MustCompile(`/h([0-9]+)(?:/|$)`) //nolint:gochecknogloba
 
 // AgentRegistry lists and resolves declared agents for message consumer subscriptions/execution.
 type AgentRegistry interface {
-	List() []crds.Agent
-	Get(name string) (crds.Agent, bool)
+	List() []resources.Agent
+	Get(name string) (resources.Agent, bool)
 }
 
 // AgentSystemRegistry resolves AgentSystem resources for next-hop routing.
 type AgentSystemRegistry interface {
-	Get(name string) (crds.AgentSystem, bool)
+	Get(name string) (resources.AgentSystem, bool)
 }
 
 // TaskStateStore stores task status updates produced by message consumers.
 type TaskStateStore interface {
-	Get(name string) (crds.Task, bool)
-	Upsert(item crds.Task) (crds.Task, error)
+	Get(name string) (resources.Task, bool)
+	Upsert(item resources.Task) (resources.Task, error)
 	AppendLog(name, message string) error
 }
 
@@ -156,7 +156,7 @@ func (m *AgentMessageConsumerManager) reconcileConsumers(ctx context.Context) {
 		if name == "" {
 			continue
 		}
-		namespace := crds.NormalizeNamespace(agent.Metadata.Namespace)
+		namespace := resources.NormalizeNamespace(agent.Metadata.Namespace)
 		if strings.TrimSpace(m.namespace) != "" && !strings.EqualFold(namespace, m.namespace) {
 			continue
 		}
@@ -454,7 +454,7 @@ type joinGateDecision struct {
 	SkipExecution bool
 	JoinMode      string
 	Required      int
-	Sources       []crds.TaskJoinSource
+	Sources       []resources.TaskJoinSource
 }
 
 func (d joinGateDecision) SourceAgents() string {
@@ -494,7 +494,7 @@ func (d joinGateDecision) SourcePayloads() string {
 	return strings.Join(values, " | ")
 }
 
-func (m *AgentMessageConsumerManager) applyJoinGate(taskKey string, msg AgentMessage, system crds.AgentSystem) (joinGateDecision, error) {
+func (m *AgentMessageConsumerManager) applyJoinGate(taskKey string, msg AgentMessage, system resources.AgentSystem) (joinGateDecision, error) {
 	joinMode, expected, required, enabled := joinRequirements(system, strings.TrimSpace(msg.ToAgent))
 	if !enabled {
 		return joinGateDecision{}, nil
@@ -519,7 +519,7 @@ func (m *AgentMessageConsumerManager) applyJoinGate(taskKey string, msg AgentMes
 		now := time.Now().UTC().Format(time.RFC3339Nano)
 		stateIdx := ensureTaskJoinState(&task, msg.Attempt, msg.ToAgent, joinMode, expected, required)
 		state := task.Status.JoinStates[stateIdx]
-		source := crds.TaskJoinSource{
+		source := resources.TaskJoinSource{
 			MessageID: strings.TrimSpace(msg.MessageID),
 			FromAgent: strings.TrimSpace(msg.FromAgent),
 			BranchID:  strings.TrimSpace(msg.BranchID),
@@ -596,7 +596,7 @@ func (m *AgentMessageConsumerManager) applyJoinGate(taskKey string, msg AgentMes
 	return joinGateDecision{}, nil
 }
 
-func (m *AgentMessageConsumerManager) completeTaskSuccess(taskKey string, msg AgentMessage, record crds.TaskMessage, result AgentExecutionResult) error {
+func (m *AgentMessageConsumerManager) completeTaskSuccess(taskKey string, msg AgentMessage, record resources.TaskMessage, result AgentExecutionResult) error {
 	var lastErr error
 	for attempt := 0; attempt < 5; attempt++ {
 		task, ok := m.tasks.Get(taskKey)
@@ -640,7 +640,7 @@ func (m *AgentMessageConsumerManager) completeTaskSuccess(taskKey string, msg Ag
 			task.Status.ClaimedBy = ""
 			task.Status.LeaseUntil = ""
 			task.Status.LastHeartbeat = ""
-			task.Status.History = append(task.Status.History, crds.TaskHistoryEvent{
+			task.Status.History = append(task.Status.History, resources.TaskHistoryEvent{
 				Timestamp: now,
 				Type:      "succeeded",
 				Worker:    m.workerID,
@@ -695,7 +695,7 @@ func (m *AgentMessageConsumerManager) completeTaskSuccess(taskKey string, msg Ag
 	return lastErr
 }
 
-func (m *AgentMessageConsumerManager) recordForward(taskKey string, msg AgentMessage, record crds.TaskMessage, result AgentExecutionResult, nextMessages []AgentMessage) error {
+func (m *AgentMessageConsumerManager) recordForward(taskKey string, msg AgentMessage, record resources.TaskMessage, result AgentExecutionResult, nextMessages []AgentMessage) error {
 	var lastErr error
 	for attempt := 0; attempt < 5; attempt++ {
 		task, ok := m.tasks.Get(taskKey)
@@ -800,15 +800,15 @@ func (m *AgentMessageConsumerManager) recordForward(taskKey string, msg AgentMes
 	return lastErr
 }
 
-func (m *AgentMessageConsumerManager) beginMessageAttempt(taskKey string, msg AgentMessage) (crds.Task, crds.TaskMessage, bool, time.Duration, error) {
+func (m *AgentMessageConsumerManager) beginMessageAttempt(taskKey string, msg AgentMessage) (resources.Task, resources.TaskMessage, bool, time.Duration, error) {
 	var lastErr error
 	for attempt := 0; attempt < 5; attempt++ {
 		task, ok := m.tasks.Get(taskKey)
 		if !ok {
-			return crds.Task{}, crds.TaskMessage{}, true, 0, nil
+			return resources.Task{}, resources.TaskMessage{}, true, 0, nil
 		}
 		if isTerminalTaskPhase(task.Status.Phase) {
-			return task, crds.TaskMessage{}, true, 0, nil
+			return task, resources.TaskMessage{}, true, 0, nil
 		}
 		index := ensureTaskMessageRecord(&task, msg)
 		record := task.Status.Messages[index]
@@ -900,10 +900,10 @@ func (m *AgentMessageConsumerManager) beginMessageAttempt(taskKey string, msg Ag
 		})
 		return task, record, false, 0, nil
 	}
-	return crds.Task{}, crds.TaskMessage{}, false, 0, lastErr
+	return resources.Task{}, resources.TaskMessage{}, false, 0, lastErr
 }
 
-func (m *AgentMessageConsumerManager) recordRetryOrDeadLetter(taskKey string, msg AgentMessage, record crds.TaskMessage, processErr error) (bool, time.Duration, error) {
+func (m *AgentMessageConsumerManager) recordRetryOrDeadLetter(taskKey string, msg AgentMessage, record resources.TaskMessage, processErr error) (bool, time.Duration, error) {
 	var lastErr error
 	for attempt := 0; attempt < 5; attempt++ {
 		task, ok := m.tasks.Get(taskKey)
@@ -1004,7 +1004,7 @@ func (m *AgentMessageConsumerManager) recordRetryOrDeadLetter(taskKey string, ms
 		task.Status.LeaseUntil = ""
 		task.Status.LastHeartbeat = ""
 		task.Status.ObservedGeneration = task.Metadata.Generation
-		task.Status.History = append(task.Status.History, crds.TaskHistoryEvent{
+		task.Status.History = append(task.Status.History, resources.TaskHistoryEvent{
 			Timestamp: now,
 			Type:      "deadletter",
 			Worker:    m.workerID,
@@ -1078,7 +1078,7 @@ func (m *AgentMessageConsumerManager) isDuplicate(msg AgentMessage) bool {
 	return false
 }
 
-func appendIncomingMessage(task *crds.Task, msg AgentMessage) {
+func appendIncomingMessage(task *resources.Task, msg AgentMessage) {
 	if task == nil {
 		return
 	}
@@ -1086,11 +1086,11 @@ func appendIncomingMessage(task *crds.Task, msg AgentMessage) {
 	trimTaskMessages(task)
 }
 
-func appendOutgoingMessage(task *crds.Task, msg AgentMessage) {
+func appendOutgoingMessage(task *resources.Task, msg AgentMessage) {
 	appendIncomingMessage(task, msg)
 }
 
-func ensureTaskMessageRecord(task *crds.Task, msg AgentMessage) int {
+func ensureTaskMessageRecord(task *resources.Task, msg AgentMessage) int {
 	if task == nil {
 		return -1
 	}
@@ -1121,7 +1121,7 @@ func ensureTaskMessageRecord(task *crds.Task, msg AgentMessage) int {
 			return idx
 		}
 	}
-	record := crds.TaskMessage{
+	record := resources.TaskMessage{
 		Timestamp:      normalizeMessageTimestamp(msg.Timestamp),
 		MessageID:      strings.TrimSpace(msg.MessageID),
 		IdempotencyKey: strings.TrimSpace(msg.IdempotencyKey),
@@ -1146,7 +1146,7 @@ func ensureTaskMessageRecord(task *crds.Task, msg AgentMessage) int {
 	return len(task.Status.Messages) - 1
 }
 
-func defaultMessageMaxAttempts(task crds.Task) int {
+func defaultMessageMaxAttempts(task resources.Task) int {
 	if task.Spec.MessageRetry.MaxAttempts > 0 {
 		return task.Spec.MessageRetry.MaxAttempts
 	}
@@ -1165,7 +1165,7 @@ func isTerminalMessagePhase(phase string) bool {
 	}
 }
 
-func allTaskMessagesTerminal(messages []crds.TaskMessage) bool {
+func allTaskMessagesTerminal(messages []resources.TaskMessage) bool {
 	if len(messages) == 0 {
 		return true
 	}
@@ -1177,14 +1177,14 @@ func allTaskMessagesTerminal(messages []crds.TaskMessage) bool {
 	return true
 }
 
-func appendMessageTrace(task *crds.Task, msg AgentMessage, eventType, message string) {
+func appendMessageTrace(task *resources.Task, msg AgentMessage, eventType, message string) {
 	if task == nil {
 		return
 	}
 	if hasTraceMarker(task.Status.Trace, eventType, msg.MessageID) {
 		return
 	}
-	task.Status.Trace = append(task.Status.Trace, crds.TaskTraceEvent{
+	task.Status.Trace = append(task.Status.Trace, resources.TaskTraceEvent{
 		Timestamp: normalizeMessageTimestamp(msg.Timestamp),
 		Attempt:   max(msg.Attempt, task.Status.Attempts),
 		BranchID:  strings.TrimSpace(msg.BranchID),
@@ -1195,12 +1195,12 @@ func appendMessageTrace(task *crds.Task, msg AgentMessage, eventType, message st
 	trimTaskTrace(task)
 }
 
-func appendRuntimeStepTrace(task *crds.Task, agentName string, events []AgentStepEvent) {
+func appendRuntimeStepTrace(task *resources.Task, agentName string, events []AgentStepEvent) {
 	if task == nil || len(events) == 0 {
 		return
 	}
 	for _, runtimeEvent := range events {
-		traceEvent := crds.TaskTraceEvent{
+		traceEvent := resources.TaskTraceEvent{
 			Timestamp:           runtimeEvent.Timestamp,
 			Type:                runtimeEvent.Type,
 			Agent:               strings.TrimSpace(agentName),
@@ -1231,7 +1231,7 @@ func appendRuntimeStepTrace(task *crds.Task, agentName string, events []AgentSte
 	trimTaskTrace(task)
 }
 
-func updateTaskOutput(task *crds.Task, result AgentExecutionResult, mode string) {
+func updateTaskOutput(task *resources.Task, result AgentExecutionResult, mode string) {
 	if task == nil {
 		return
 	}
@@ -1258,16 +1258,16 @@ func updateTaskOutput(task *crds.Task, result AgentExecutionResult, mode string)
 	task.Status.Output = cloned
 }
 
-func tokenBudget(task crds.Task) int {
+func tokenBudget(task resources.Task) int {
 	return parsePositiveInt(task.Status.Output["token_budget"])
 }
 
-func tokenUsageTotal(task crds.Task, result AgentExecutionResult) int {
+func tokenUsageTotal(task resources.Task, result AgentExecutionResult) int {
 	current := parsePositiveInt(task.Status.Output["tokens_used_total"])
 	return current + max(0, result.TokensUsed)
 }
 
-func tokenBudgetExceeded(task crds.Task, result AgentExecutionResult) bool {
+func tokenBudgetExceeded(task resources.Task, result AgentExecutionResult) bool {
 	budget := tokenBudget(task)
 	if budget <= 0 {
 		return false
@@ -1283,7 +1283,7 @@ func parsePositiveInt(raw string) int {
 	return value
 }
 
-func shouldStopForTurnLimit(task crds.Task, msg AgentMessage) (bool, int, int) {
+func shouldStopForTurnLimit(task resources.Task, msg AgentMessage) (bool, int, int) {
 	maxTurns := task.Spec.MaxTurns
 	if maxTurns <= 0 {
 		return false, 0, 0
@@ -1295,7 +1295,7 @@ func shouldStopForTurnLimit(task crds.Task, msg AgentMessage) (bool, int, int) {
 	return turns >= maxTurns, turns, maxTurns
 }
 
-func countBranchMessages(messages []crds.TaskMessage, branchID string) int {
+func countBranchMessages(messages []resources.TaskMessage, branchID string) int {
 	branch := strings.TrimSpace(branchID)
 	if branch == "" {
 		branch = "b001"
@@ -1313,7 +1313,7 @@ func countBranchMessages(messages []crds.TaskMessage, branchID string) int {
 	return count
 }
 
-func extendWorkerLease(task *crds.Task, workerID string, duration time.Duration) {
+func extendWorkerLease(task *resources.Task, workerID string, duration time.Duration) {
 	if task == nil {
 		return
 	}
@@ -1331,7 +1331,7 @@ func extendWorkerLease(task *crds.Task, workerID string, duration time.Duration)
 	task.Status.LeaseUntil = now.Add(duration).Format(time.RFC3339Nano)
 }
 
-func hasTaskMessage(messages []crds.TaskMessage, messageID string) bool {
+func hasTaskMessage(messages []resources.TaskMessage, messageID string) bool {
 	messageID = strings.TrimSpace(messageID)
 	if messageID == "" {
 		return false
@@ -1344,7 +1344,7 @@ func hasTaskMessage(messages []crds.TaskMessage, messageID string) bool {
 	return false
 }
 
-func hasTraceMarker(trace []crds.TaskTraceEvent, eventType, messageID string) bool {
+func hasTraceMarker(trace []resources.TaskTraceEvent, eventType, messageID string) bool {
 	messageID = strings.TrimSpace(messageID)
 	if messageID == "" {
 		return false
@@ -1361,7 +1361,7 @@ func hasTraceMarker(trace []crds.TaskTraceEvent, eventType, messageID string) bo
 	return false
 }
 
-func isMessageProcessed(trace []crds.TaskTraceEvent, messageID string) bool {
+func isMessageProcessed(trace []resources.TaskTraceEvent, messageID string) bool {
 	return hasTraceMarker(trace, "agent_message_processed", messageID)
 }
 
@@ -1389,7 +1389,7 @@ func retryWaitDuration(nextAttemptAt string) time.Duration {
 	return wait
 }
 
-func computeMessageRetryDelay(policy crds.TaskMessageRetryPolicy, msg AgentMessage, messageAttempts int) time.Duration {
+func computeMessageRetryDelay(policy resources.TaskMessageRetryPolicy, msg AgentMessage, messageAttempts int) time.Duration {
 	base := parseDurationOrDefault(policy.Backoff, 0)
 	if base <= 0 {
 		return 0
@@ -1439,7 +1439,7 @@ type messageRetryClassification struct {
 	Reason    string
 }
 
-func classifyMessageRetryability(policy crds.TaskMessageRetryPolicy, processErr error) messageRetryClassification {
+func classifyMessageRetryability(policy resources.TaskMessageRetryPolicy, processErr error) messageRetryClassification {
 	if processErr == nil {
 		return messageRetryClassification{Retryable: true, Reason: "none"}
 	}
@@ -1485,7 +1485,7 @@ func classifyMessageRetryability(policy crds.TaskMessageRetryPolicy, processErr 
 	}
 }
 
-func effectiveMessageRetryPolicy(task crds.Task) crds.TaskMessageRetryPolicy {
+func effectiveMessageRetryPolicy(task resources.Task) resources.TaskMessageRetryPolicy {
 	policy := task.Spec.MessageRetry
 	if policy.MaxAttempts <= 0 {
 		policy.MaxAttempts = task.Spec.Retry.MaxAttempts
@@ -1538,7 +1538,7 @@ func messageRetryJitterUnit(msg AgentMessage, messageAttempts int) float64 {
 	return float64(hasher.Sum64()%1_000_000) / 1_000_000.0
 }
 
-func (m *AgentMessageConsumerManager) acquireMessageOwnership(task *crds.Task, msg AgentMessage) (owned bool, retryAfter time.Duration, changed bool, takeover bool) {
+func (m *AgentMessageConsumerManager) acquireMessageOwnership(task *resources.Task, msg AgentMessage) (owned bool, retryAfter time.Duration, changed bool, takeover bool) {
 	if task == nil {
 		return false, 0, false, false
 	}
@@ -1577,7 +1577,7 @@ func (m *AgentMessageConsumerManager) acquireMessageOwnership(task *crds.Task, m
 	task.Status.AssignedWorker = worker
 	task.Status.LastHeartbeat = now.Format(time.RFC3339Nano)
 	task.Status.LeaseUntil = now.Add(lease).Format(time.RFC3339Nano)
-	task.Status.History = append(task.Status.History, crds.TaskHistoryEvent{
+	task.Status.History = append(task.Status.History, resources.TaskHistoryEvent{
 		Timestamp: now.Format(time.RFC3339Nano),
 		Type:      "takeover",
 		Worker:    worker,
@@ -1616,15 +1616,15 @@ func messageTaskKey(msg AgentMessage) (string, bool) {
 }
 
 func scopedTaskName(namespace, name string) string {
-	return crds.NormalizeNamespace(namespace) + "/" + strings.TrimSpace(name)
+	return resources.NormalizeNamespace(namespace) + "/" + strings.TrimSpace(name)
 }
 
 func splitTaskKey(taskKey string) (string, string) {
 	if strings.Contains(taskKey, "/") {
 		parts := strings.SplitN(taskKey, "/", 2)
-		return crds.NormalizeNamespace(parts[0]), strings.TrimSpace(parts[1])
+		return resources.NormalizeNamespace(parts[0]), strings.TrimSpace(parts[1])
 	}
-	return crds.DefaultNamespace, strings.TrimSpace(taskKey)
+	return resources.DefaultNamespace, strings.TrimSpace(taskKey)
 }
 
 func durableName(workerID, namespace, agent string) string {
@@ -1635,13 +1635,13 @@ func durableName(workerID, namespace, agent string) string {
 	return sanitizeSubjectToken(base) + "-" + sanitizeSubjectToken(namespace) + "-" + sanitizeSubjectToken(agent)
 }
 
-func nextAgentsFromSystem(system crds.AgentSystem, current string) []string {
+func nextAgentsFromSystem(system resources.AgentSystem, current string) []string {
 	current = strings.TrimSpace(current)
 	if current == "" {
 		return nil
 	}
 	if edge, ok := system.Spec.Graph[current]; ok {
-		if targets := crds.GraphOutgoingAgents(edge); len(targets) > 0 {
+		if targets := resources.GraphOutgoingAgents(edge); len(targets) > 0 {
 			return targets
 		}
 	}
@@ -1662,11 +1662,11 @@ func nextAgentsFromSystem(system crds.AgentSystem, current string) []string {
 	return nil
 }
 
-func buildNextAgentMessages(task crds.Task, current AgentMessage, result AgentExecutionResult, nextAgents []string) []AgentMessage {
+func buildNextAgentMessages(task resources.Task, current AgentMessage, result AgentExecutionResult, nextAgents []string) []AgentMessage {
 	if len(nextAgents) == 0 {
 		return nil
 	}
-	ns := crds.NormalizeNamespace(task.Metadata.Namespace)
+	ns := resources.NormalizeNamespace(task.Metadata.Namespace)
 	attempt := task.Status.Attempts
 	if attempt <= 0 {
 		attempt = max(1, current.Attempt)
@@ -1731,7 +1731,7 @@ func deterministicMessageID(namespace, taskName string, attempt int, hop int, fr
 	}
 	return fmt.Sprintf(
 		"%s/%s/a%03d/h%03d/%s/%s",
-		crds.NormalizeNamespace(namespace),
+		resources.NormalizeNamespace(namespace),
 		strings.TrimSpace(taskName),
 		attempt,
 		hop,
@@ -1756,7 +1756,7 @@ func hopFromMessageID(messageID string) int {
 	return hop
 }
 
-func trimTaskMessages(task *crds.Task) {
+func trimTaskMessages(task *resources.Task) {
 	if task == nil {
 		return
 	}
@@ -1765,7 +1765,7 @@ func trimTaskMessages(task *crds.Task) {
 	}
 }
 
-func trimTaskTrace(task *crds.Task) {
+func trimTaskTrace(task *resources.Task) {
 	if task == nil {
 		return
 	}
@@ -1774,7 +1774,7 @@ func trimTaskTrace(task *crds.Task) {
 	}
 }
 
-func trimTaskHistory(task *crds.Task) {
+func trimTaskHistory(task *resources.Task) {
 	if task == nil {
 		return
 	}
@@ -1783,7 +1783,7 @@ func trimTaskHistory(task *crds.Task) {
 	}
 }
 
-func trimTaskIdempotency(task *crds.Task) {
+func trimTaskIdempotency(task *resources.Task) {
 	if task == nil {
 		return
 	}
@@ -1792,7 +1792,7 @@ func trimTaskIdempotency(task *crds.Task) {
 	}
 }
 
-func trimTaskJoinStates(task *crds.Task) {
+func trimTaskJoinStates(task *resources.Task) {
 	if task == nil {
 		return
 	}
@@ -1812,7 +1812,7 @@ func messageIdempotencyKey(msg AgentMessage) string {
 	return fmt.Sprintf("%s|%s|%s|%d", strings.TrimSpace(msg.TaskID), strings.TrimSpace(msg.FromAgent), strings.TrimSpace(msg.ToAgent), msg.Attempt)
 }
 
-func isMessageIdempotent(records []crds.TaskMessageIdempotency, key string) bool {
+func isMessageIdempotent(records []resources.TaskMessageIdempotency, key string) bool {
 	key = strings.TrimSpace(key)
 	if key == "" {
 		return false
@@ -1837,7 +1837,7 @@ func isMessageIdempotent(records []crds.TaskMessageIdempotency, key string) bool
 	return false
 }
 
-func markMessageIdempotency(task *crds.Task, msg AgentMessage, state, worker string) {
+func markMessageIdempotency(task *resources.Task, msg AgentMessage, state, worker string) {
 	if task == nil {
 		return
 	}
@@ -1846,7 +1846,7 @@ func markMessageIdempotency(task *crds.Task, msg AgentMessage, state, worker str
 		return
 	}
 	now := time.Now().UTC()
-	updated := crds.TaskMessageIdempotency{
+	updated := resources.TaskMessageIdempotency{
 		Key:       key,
 		MessageID: strings.TrimSpace(msg.MessageID),
 		State:     strings.ToLower(strings.TrimSpace(state)),
@@ -1863,7 +1863,7 @@ func markMessageIdempotency(task *crds.Task, msg AgentMessage, state, worker str
 	task.Status.MessageIdempotency = append(task.Status.MessageIdempotency, updated)
 }
 
-func ensureTaskJoinState(task *crds.Task, attempt int, node, mode string, expected, required int) int {
+func ensureTaskJoinState(task *resources.Task, attempt int, node, mode string, expected, required int) int {
 	if task == nil {
 		return -1
 	}
@@ -1884,19 +1884,19 @@ func ensureTaskJoinState(task *crds.Task, attempt int, node, mode string, expect
 		task.Status.JoinStates[idx] = state
 		return idx
 	}
-	state := crds.TaskJoinState{
+	state := resources.TaskJoinState{
 		Attempt:        attempt,
 		Node:           node,
 		Mode:           strings.TrimSpace(mode),
 		Expected:       expected,
 		QuorumRequired: required,
-		Sources:        make([]crds.TaskJoinSource, 0, expected),
+		Sources:        make([]resources.TaskJoinSource, 0, expected),
 	}
 	task.Status.JoinStates = append(task.Status.JoinStates, state)
 	return len(task.Status.JoinStates) - 1
 }
 
-func appendJoinSource(state crds.TaskJoinState, source crds.TaskJoinSource) crds.TaskJoinState {
+func appendJoinSource(state resources.TaskJoinState, source resources.TaskJoinSource) resources.TaskJoinState {
 	for idx, existing := range state.Sources {
 		if strings.EqualFold(strings.TrimSpace(existing.MessageID), strings.TrimSpace(source.MessageID)) {
 			state.Sources[idx] = source
@@ -1907,7 +1907,7 @@ func appendJoinSource(state crds.TaskJoinState, source crds.TaskJoinSource) crds
 	return state
 }
 
-func joinRequirements(system crds.AgentSystem, target string) (mode string, expected int, required int, enabled bool) {
+func joinRequirements(system resources.AgentSystem, target string) (mode string, expected int, required int, enabled bool) {
 	target = strings.TrimSpace(target)
 	if target == "" {
 		return "", 0, 0, false
@@ -1920,7 +1920,7 @@ func joinRequirements(system crds.AgentSystem, target string) (mode string, expe
 
 	mode = "wait_for_all"
 	if node, ok := system.Spec.Graph[target]; ok {
-		normalized := crds.NormalizeGraphJoin(node.Join)
+		normalized := resources.NormalizeGraphJoin(node.Join)
 		mode = normalized.Mode
 		if mode == "" {
 			mode = "wait_for_all"
@@ -1970,7 +1970,7 @@ func quorumRequired(expected, absolute, percent int) int {
 	return required
 }
 
-func incomingAgentsForNode(system crds.AgentSystem, target string) []string {
+func incomingAgentsForNode(system resources.AgentSystem, target string) []string {
 	target = strings.TrimSpace(target)
 	if target == "" {
 		return nil
@@ -1994,7 +1994,7 @@ func incomingAgentsForNode(system crds.AgentSystem, target string) []string {
 	seen := make(map[string]struct{}, 4)
 	out := make([]string, 0, 4)
 	for from, node := range system.Spec.Graph {
-		for _, to := range crds.GraphOutgoingAgents(node) {
+		for _, to := range resources.GraphOutgoingAgents(node) {
 			if !strings.EqualFold(strings.TrimSpace(to), target) {
 				continue
 			}

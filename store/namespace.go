@@ -3,29 +3,29 @@ package store
 import (
 	"strings"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 func scopedName(namespace, name string) string {
-	ns := crds.NormalizeNamespace(namespace)
+	ns := resources.NormalizeNamespace(namespace)
 	n := strings.TrimSpace(name)
 	return ns + "/" + n
 }
 
-func scopedNameFromMeta(meta crds.ObjectMeta) string {
+func scopedNameFromMeta(meta resources.ObjectMeta) string {
 	return scopedName(meta.Namespace, meta.Name)
 }
 
 func normalizeLookupName(name string) string {
 	n := strings.TrimSpace(name)
 	if n == "" {
-		return scopedName(crds.DefaultNamespace, "")
+		return scopedName(resources.DefaultNamespace, "")
 	}
 	if strings.Contains(n, "/") {
 		parts := strings.SplitN(n, "/", 2)
 		return scopedName(parts[0], parts[1])
 	}
-	return scopedName(crds.DefaultNamespace, n)
+	return scopedName(resources.DefaultNamespace, n)
 }
 
 // ScopedName builds a namespaced key expected by store Get/Delete methods.

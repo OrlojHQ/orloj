@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/eventbus"
 	"github.com/OrlojHQ/orloj/runtime"
 	"github.com/OrlojHQ/orloj/store"
@@ -32,6 +32,7 @@ type TaskController struct {
 	modelEPStore     *store.ModelEndpointStore
 	roleStore        *store.AgentRoleStore
 	toolPermStore    *store.ToolPermissionStore
+	toolApprovalStore *store.ToolApprovalStore
 	workerStore      *store.WorkerStore
 	executor         *agentruntime.TaskExecutor
 	reconcileEvery   time.Duration
@@ -116,6 +117,10 @@ func (c *TaskController) SetGovernanceStores(roleStore *store.AgentRoleStore, to
 	c.toolPermStore = toolPermStore
 }
 
+func (c *TaskController) SetToolApprovalStore(s *store.ToolApprovalStore) {
+	c.toolApprovalStore = s
+}
+
 func (c *TaskController) SetModelEndpointStore(modelEPStore *store.ModelEndpointStore) {
 	c.modelEPStore = modelEPStore
 }
@@ -194,7 +199,7 @@ func (c *TaskController) ReconcileOnce(ctx context.Context) error {
 			Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 			Component: "task-controller",
 			Type:      "task.attempt_started",
-			Namespace: crds.NormalizeNamespace(task.Metadata.Namespace),
+			Namespace: resources.NormalizeNamespace(task.Metadata.Namespace),
 			Task:      task.Metadata.Name,
 			System:    task.Spec.System,
 			Worker:    c.workerID,
@@ -206,7 +211,7 @@ func (c *TaskController) ReconcileOnce(ctx context.Context) error {
 			Component:    "task-controller",
 			Action:       "task.attempt_started",
 			Outcome:      "success",
-			Namespace:    crds.NormalizeNamespace(task.Metadata.Namespace),
+			Namespace:    resources.NormalizeNamespace(task.Metadata.Namespace),
 			ResourceKind: "Task",
 			ResourceName: task.Metadata.Name,
 			Principal:    c.workerID,
@@ -227,7 +232,7 @@ func (c *TaskController) ReconcileOnce(ctx context.Context) error {
 	}
 }
 
-func (c *TaskController) reconcileTask(ctx context.Context, task crds.Task) error {
+func (c *TaskController) reconcileTask(ctx context.Context, task resources.Task) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
@@ -251,6 +256,8 @@ func (c *TaskController) reconcileTask(ctx context.Context, task crds.Task) erro
 		return nil
 	case "running":
 		return c.reconcileRunning(ctx, task)
+	case "waitingapproval":
+		return c.reconcileWaitingApproval(task)
 	case "succeeded", "failed":
 		return nil
 	default:
@@ -269,7 +276,7 @@ func (c *TaskController) reconcileTask(ctx context.Context, task crds.Task) erro
 	}
 }
 
-func (c *TaskController) reconcilePending(task crds.Task) error {
+func (c *TaskController) reconcilePending(task resources.Task) error {
 	system, errs := c.validateTask(task)
 	if len(errs) > 0 {
 		return c.markFailed(task, strings.Join(errs, "; "))
@@ -303,7 +310,7 @@ func (c *TaskController) reconcilePending(task crds.Task) error {
 	return nil
 }
 
-func (c *TaskController) reconcileRunning(ctx context.Context, task crds.Task) error {
+func (c *TaskController) reconcileRunning(ctx context.Context, task resources.Task) error {
 	system, errs := c.validateTask(task)
 	if len(errs) > 0 {
 		return c.handleExecutionFailure(task, strings.Join(errs, "; "))
@@ -315,6 +322,9 @@ func (c *TaskController) reconcileRunning(ctx context.Context, task crds.Task) e
 
 	output, err := c.executeTask(ctx, &task, system)
 	if err != nil {
+		if agentruntime.IsApprovalRequiredError(err) {
+			return c.transitionToWaitingApproval(task, err.Error())
+		}
 		return c.handleExecutionFailure(task, err.Error())
 	}
 
@@ -331,7 +341,7 @@ func (c *TaskController) reconcileRunning(ctx context.Context, task crds.Task) e
 	task.Status.LeaseUntil = ""
 	task.Status.LastHeartbeat = ""
 	if startT, parseErr := time.Parse(time.RFC3339Nano, task.Status.StartedAt); parseErr == nil {
-		telemetry.RecordTaskCompletion(crds.NormalizeNamespace(task.Metadata.Namespace), task.Spec.System, "succeeded", time.Since(startT).Seconds())
+		telemetry.RecordTaskCompletion(resources.NormalizeNamespace(task.Metadata.Namespace), task.Spec.System, "succeeded", time.Since(startT).Seconds())
 	}
 	c.appendTaskHistory(&task, "succeeded", "task execution completed successfully")
 	_, err = c.upsertTask(task)
@@ -354,7 +364,7 @@ func (c *TaskController) reconcileRunning(ctx context.Context, task crds.Task) e
 		Timestamp:       time.Now().UTC().Format(time.RFC3339Nano),
 		Component:       "task-controller",
 		Type:            "task.completed",
-		Namespace:       crds.NormalizeNamespace(task.Metadata.Namespace),
+		Namespace:       resources.NormalizeNamespace(task.Metadata.Namespace),
 		Task:            task.Metadata.Name,
 		System:          system.Metadata.Name,
 		Worker:          c.workerID,
@@ -368,7 +378,7 @@ func (c *TaskController) reconcileRunning(ctx context.Context, task crds.Task) e
 		Component:    "task-controller",
 		Action:       "task.completed",
 		Outcome:      "success",
-		Namespace:    crds.NormalizeNamespace(task.Metadata.Namespace),
+		Namespace:    resources.NormalizeNamespace(task.Metadata.Namespace),
 		ResourceKind: "Task",
 		ResourceName: task.Metadata.Name,
 		Principal:    c.workerID,
@@ -382,7 +392,76 @@ func (c *TaskController) reconcileRunning(ctx context.Context, task crds.Task) e
 	return nil
 }
 
-func (c *TaskController) reconcileRunningMessageDriven(ctx context.Context, task crds.Task, system crds.AgentSystem) error {
+func (c *TaskController) transitionToWaitingApproval(task resources.Task, reason string) error {
+	task.Status.Phase = "WaitingApproval"
+	task.Status.LastError = agentruntime.RedactSensitive(reason)
+	task.Status.ObservedGeneration = task.Metadata.Generation
+	c.appendTaskHistory(&task, "waiting_approval", fmt.Sprintf("task paused pending approval: %s", reason))
+	if _, err := c.upsertTask(task); err != nil {
+		return err
+	}
+	if c.logger != nil {
+		c.logger.Printf("task=%s transitioned Running->WaitingApproval", task.Metadata.Name)
+	}
+	c.publishTaskEvent(task, "task.waiting_approval", "task paused pending tool approval")
+	c.appendTaskLog(taskScopedName(task), fmt.Sprintf("task transitioned Running->WaitingApproval reason=%s", reason))
+	return nil
+}
+
+func (c *TaskController) reconcileWaitingApproval(task resources.Task) error {
+	if c.toolApprovalStore == nil {
+		return nil
+	}
+
+	taskKey := taskScopedName(task)
+	var approval resources.ToolApproval
+	found := false
+	for _, a := range c.toolApprovalStore.List() {
+		if strings.TrimSpace(a.Spec.TaskRef) == taskKey || strings.TrimSpace(a.Spec.TaskRef) == task.Metadata.Name {
+			approval = a
+			found = true
+			break
+		}
+	}
+	if !found {
+		return nil
+	}
+
+	if approval.Status.ExpiresAt != "" {
+		if expiresAt, err := time.Parse(time.RFC3339, approval.Status.ExpiresAt); err == nil {
+			if time.Now().UTC().After(expiresAt) && approval.Status.Phase == "Pending" {
+				approval.Status.Phase = "Expired"
+				_, _ = c.toolApprovalStore.Upsert(approval)
+			}
+		}
+	}
+
+	switch approval.Status.Phase {
+	case "Approved":
+		task.Status.Phase = "Running"
+		task.Status.LastError = ""
+		task.Status.AssignedWorker = c.workerID
+		task.Status.ClaimedBy = c.workerID
+		task.Status.LeaseUntil = time.Now().UTC().Add(c.leaseDuration).Format(time.RFC3339Nano)
+		task.Status.LastHeartbeat = time.Now().UTC().Format(time.RFC3339Nano)
+		c.appendTaskHistory(&task, "running", "tool approval granted, task resumed")
+		if _, err := c.upsertTask(task); err != nil {
+			return err
+		}
+		if c.logger != nil {
+			c.logger.Printf("task=%s transitioned WaitingApproval->Running (approved)", task.Metadata.Name)
+		}
+		c.publishTaskEvent(task, "task.running", "tool approval granted, task resumed")
+		c.appendTaskLog(taskKey, "task transitioned WaitingApproval->Running (approved)")
+	case "Denied":
+		return c.markFailed(task, "tool approval denied")
+	case "Expired":
+		return c.markFailed(task, "tool approval expired")
+	}
+	return nil
+}
+
+func (c *TaskController) reconcileRunningMessageDriven(ctx context.Context, task resources.Task, system resources.AgentSystem) error {
 	if c.agentMessageBus == nil {
 		return c.handleExecutionFailure(task, "task execution mode message-driven requires configured agent message bus")
 	}
@@ -397,7 +476,7 @@ func (c *TaskController) reconcileRunningMessageDriven(ctx context.Context, task
 	if task.Status.Output == nil {
 		task.Status.Output = map[string]string{}
 	}
-	allPolicies := []crds.AgentPolicy{}
+	allPolicies := []resources.AgentPolicy{}
 	if c.policyStore != nil {
 		allPolicies = c.policyStore.List()
 	}
@@ -430,7 +509,7 @@ func (c *TaskController) reconcileRunningMessageDriven(ctx context.Context, task
 		if hasKickoffMessage(task.Status.Messages, task.Status.Attempts, entry) {
 			continue
 		}
-		kickoff := crds.TaskMessage{
+		kickoff := resources.TaskMessage{
 			Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 			FromAgent: "system",
 			ToAgent:   entry,
@@ -443,7 +522,7 @@ func (c *TaskController) reconcileRunningMessageDriven(ctx context.Context, task
 		if err := c.publishAgentMessage(ctx, &task, kickoff); err != nil {
 			return c.handleExecutionFailure(task, err.Error())
 		}
-		c.appendTaskTrace(&task, crds.TaskTraceEvent{
+		c.appendTaskTrace(&task, resources.TaskTraceEvent{
 			Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 			Type:      "task_runtime_kickoff",
 			Attempt:   task.Status.Attempts,
@@ -465,7 +544,7 @@ func (c *TaskController) reconcileRunningMessageDriven(ctx context.Context, task
 	return nil
 }
 
-func (c *TaskController) markFailed(task crds.Task, reason string) error {
+func (c *TaskController) markFailed(task resources.Task, reason string) error {
 	task.Status.Phase = "Failed"
 	task.Status.LastError = reason
 	if task.Status.StartedAt == "" {
@@ -480,7 +559,7 @@ func (c *TaskController) markFailed(task crds.Task, reason string) error {
 	task.Status.LeaseUntil = ""
 	task.Status.LastHeartbeat = ""
 	if startT, parseErr := time.Parse(time.RFC3339Nano, task.Status.StartedAt); parseErr == nil {
-		telemetry.RecordTaskCompletion(crds.NormalizeNamespace(task.Metadata.Namespace), task.Spec.System, "failed", time.Since(startT).Seconds())
+		telemetry.RecordTaskCompletion(resources.NormalizeNamespace(task.Metadata.Namespace), task.Spec.System, "failed", time.Since(startT).Seconds())
 	}
 	c.appendTaskHistory(&task, "failed", reason)
 	_, err := c.upsertTask(task)
@@ -496,7 +575,7 @@ func (c *TaskController) markFailed(task crds.Task, reason string) error {
 		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 		Component: "task-controller",
 		Type:      "task.completed",
-		Namespace: crds.NormalizeNamespace(task.Metadata.Namespace),
+		Namespace: resources.NormalizeNamespace(task.Metadata.Namespace),
 		Task:      task.Metadata.Name,
 		System:    task.Spec.System,
 		Worker:    c.workerID,
@@ -508,7 +587,7 @@ func (c *TaskController) markFailed(task crds.Task, reason string) error {
 		Component:    "task-controller",
 		Action:       "task.completed",
 		Outcome:      "failure",
-		Namespace:    crds.NormalizeNamespace(task.Metadata.Namespace),
+		Namespace:    resources.NormalizeNamespace(task.Metadata.Namespace),
 		ResourceKind: "Task",
 		ResourceName: task.Metadata.Name,
 		Principal:    c.workerID,
@@ -517,7 +596,7 @@ func (c *TaskController) markFailed(task crds.Task, reason string) error {
 	return nil
 }
 
-func (c *TaskController) handleExecutionFailure(task crds.Task, reason string) error {
+func (c *TaskController) handleExecutionFailure(task resources.Task, reason string) error {
 	reason = agentruntime.RedactSensitive(reason)
 	if task.Spec.Retry.MaxAttempts > 0 && task.Status.Attempts >= task.Spec.Retry.MaxAttempts && isRetryableError(reason) {
 		return c.markDeadLetter(task, reason)
@@ -555,7 +634,7 @@ func (c *TaskController) handleExecutionFailure(task crds.Task, reason string) e
 			Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 			Component: "task-controller",
 			Type:      "task.retry_scheduled",
-			Namespace: crds.NormalizeNamespace(task.Metadata.Namespace),
+			Namespace: resources.NormalizeNamespace(task.Metadata.Namespace),
 			Task:      task.Metadata.Name,
 			System:    task.Spec.System,
 			Worker:    c.workerID,
@@ -571,7 +650,7 @@ func (c *TaskController) handleExecutionFailure(task crds.Task, reason string) e
 			Component:    "task-controller",
 			Action:       "task.retry_scheduled",
 			Outcome:      "success",
-			Namespace:    crds.NormalizeNamespace(task.Metadata.Namespace),
+			Namespace:    resources.NormalizeNamespace(task.Metadata.Namespace),
 			ResourceKind: "Task",
 			ResourceName: task.Metadata.Name,
 			Principal:    c.workerID,
@@ -585,7 +664,7 @@ func (c *TaskController) handleExecutionFailure(task crds.Task, reason string) e
 	return c.markFailed(task, reason)
 }
 
-func (c *TaskController) markDeadLetter(task crds.Task, reason string) error {
+func (c *TaskController) markDeadLetter(task resources.Task, reason string) error {
 	task.Status.Phase = "DeadLetter"
 	task.Status.LastError = reason
 	if task.Status.StartedAt == "" {
@@ -613,7 +692,7 @@ func (c *TaskController) markDeadLetter(task crds.Task, reason string) error {
 		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 		Component: "task-controller",
 		Type:      "task.completed",
-		Namespace: crds.NormalizeNamespace(task.Metadata.Namespace),
+		Namespace: resources.NormalizeNamespace(task.Metadata.Namespace),
 		Task:      task.Metadata.Name,
 		System:    task.Spec.System,
 		Worker:    c.workerID,
@@ -625,7 +704,7 @@ func (c *TaskController) markDeadLetter(task crds.Task, reason string) error {
 		Component:    "task-controller",
 		Action:       "task.completed",
 		Outcome:      "deadletter",
-		Namespace:    crds.NormalizeNamespace(task.Metadata.Namespace),
+		Namespace:    resources.NormalizeNamespace(task.Metadata.Namespace),
 		ResourceKind: "Task",
 		ResourceName: task.Metadata.Name,
 		Principal:    c.workerID,
@@ -634,17 +713,17 @@ func (c *TaskController) markDeadLetter(task crds.Task, reason string) error {
 	return nil
 }
 
-func (c *TaskController) validateTask(task crds.Task) (crds.AgentSystem, []string) {
+func (c *TaskController) validateTask(task resources.Task) (resources.AgentSystem, []string) {
 	errs := make([]string, 0)
 	if strings.TrimSpace(task.Spec.System) == "" {
 		errs = append(errs, "spec.system is required")
-		return crds.AgentSystem{}, errs
+		return resources.AgentSystem{}, errs
 	}
 
 	system, ok := c.agentSystemStore.Get(store.ScopedName(task.Metadata.Namespace, task.Spec.System))
 	if !ok {
 		errs = append(errs, fmt.Sprintf("agentsystem %q not found", task.Spec.System))
-		return crds.AgentSystem{}, errs
+		return resources.AgentSystem{}, errs
 	}
 
 	if len(system.Spec.Agents) == 0 {
@@ -713,7 +792,7 @@ func (c *TaskController) validateTask(task crds.Task) (crds.AgentSystem, []strin
 	return system, errs
 }
 
-func validateGraph(system crds.AgentSystem, agentSet map[string]struct{}) []string {
+func validateGraph(system resources.AgentSystem, agentSet map[string]struct{}) []string {
 	errs := make([]string, 0)
 	graph := system.Spec.Graph
 	if len(graph) == 0 {
@@ -738,7 +817,7 @@ func validateGraph(system crds.AgentSystem, agentSet map[string]struct{}) []stri
 		if onFailure != "" && onFailure != "deadletter" && onFailure != "skip" && onFailure != "continue_partial" {
 			errs = append(errs, fmt.Sprintf("graph node %q has unsupported join.on_failure %q", node, edge.Join.OnFailure))
 		}
-		for _, to := range crds.GraphOutgoingAgents(edge) {
+		for _, to := range resources.GraphOutgoingAgents(edge) {
 			if _, ok := agentSet[to]; !ok {
 				errs = append(errs, fmt.Sprintf("graph edge %q -> %q points to unknown agent", node, to))
 			}
@@ -748,7 +827,7 @@ func validateGraph(system crds.AgentSystem, agentSet map[string]struct{}) []stri
 	return errs
 }
 
-func hasGraphCycle(graph map[string]crds.GraphEdge) bool {
+func hasGraphCycle(graph map[string]resources.GraphEdge) bool {
 	const (
 		white = 0
 		gray  = 1
@@ -763,7 +842,7 @@ func hasGraphCycle(graph map[string]crds.GraphEdge) bool {
 	var visit func(string) bool
 	visit = func(node string) bool {
 		color[node] = gray
-		for _, next := range crds.GraphOutgoingAgents(graph[node]) {
+		for _, next := range resources.GraphOutgoingAgents(graph[node]) {
 			c, ok := color[next]
 			if !ok {
 				continue
@@ -789,7 +868,7 @@ func hasGraphCycle(graph map[string]crds.GraphEdge) bool {
 	return false
 }
 
-func hasGraphEntrypoint(system crds.AgentSystem, agentSet map[string]struct{}) bool {
+func hasGraphEntrypoint(system resources.AgentSystem, agentSet map[string]struct{}) bool {
 	if len(system.Spec.Graph) == 0 {
 		return len(system.Spec.Agents) > 0
 	}
@@ -798,7 +877,7 @@ func hasGraphEntrypoint(system crds.AgentSystem, agentSet map[string]struct{}) b
 		indegree[name] = 0
 	}
 	for _, edge := range system.Spec.Graph {
-		for _, to := range crds.GraphOutgoingAgents(edge) {
+		for _, to := range resources.GraphOutgoingAgents(edge) {
 			if _, ok := indegree[to]; ok {
 				indegree[to]++
 			}
@@ -814,15 +893,15 @@ func hasGraphEntrypoint(system crds.AgentSystem, agentSet map[string]struct{}) b
 
 func parseModelEndpointRef(defaultNamespace string, ref string) (namespace string, name string) {
 	ref = strings.TrimSpace(ref)
-	namespace = crds.NormalizeNamespace(defaultNamespace)
+	namespace = resources.NormalizeNamespace(defaultNamespace)
 	if strings.Contains(ref, "/") {
 		parts := strings.SplitN(ref, "/", 2)
-		return crds.NormalizeNamespace(strings.TrimSpace(parts[0])), strings.TrimSpace(parts[1])
+		return resources.NormalizeNamespace(strings.TrimSpace(parts[0])), strings.TrimSpace(parts[1])
 	}
 	return namespace, ref
 }
 
-func executionOrder(system crds.AgentSystem) []string {
+func executionOrder(system resources.AgentSystem) []string {
 	if len(system.Spec.Agents) == 0 {
 		return nil
 	}
@@ -839,7 +918,7 @@ func executionOrder(system crds.AgentSystem) []string {
 		indegree[agent] = 0
 	}
 	for _, node := range system.Spec.Graph {
-		for _, to := range crds.GraphOutgoingAgents(node) {
+		for _, to := range resources.GraphOutgoingAgents(node) {
 			if _, ok := indegree[to]; ok {
 				indegree[to]++
 			}
@@ -876,7 +955,7 @@ func executionOrder(system crds.AgentSystem) []string {
 		if !ok {
 			continue
 		}
-		for _, to := range crds.GraphOutgoingAgents(node) {
+		for _, to := range resources.GraphOutgoingAgents(node) {
 			if _, tracked := indegree[to]; !tracked {
 				continue
 			}
@@ -900,7 +979,7 @@ func executionOrder(system crds.AgentSystem) []string {
 	return order
 }
 
-func entryAgentsFromSystem(system crds.AgentSystem) []string {
+func entryAgentsFromSystem(system resources.AgentSystem) []string {
 	if len(system.Spec.Agents) == 0 {
 		return nil
 	}
@@ -917,7 +996,7 @@ func entryAgentsFromSystem(system crds.AgentSystem) []string {
 		indegree[agent] = 0
 	}
 	for _, edge := range system.Spec.Graph {
-		for _, to := range crds.GraphOutgoingAgents(edge) {
+		for _, to := range resources.GraphOutgoingAgents(edge) {
 			if _, ok := indegree[to]; ok {
 				indegree[to]++
 			}
@@ -932,7 +1011,7 @@ func entryAgentsFromSystem(system crds.AgentSystem) []string {
 	return out
 }
 
-func (c *TaskController) executeTask(ctx context.Context, task *crds.Task, system crds.AgentSystem) (map[string]string, error) {
+func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, system resources.AgentSystem) (map[string]string, error) {
 	if task == nil {
 		return nil, fmt.Errorf("task is required")
 	}
@@ -942,10 +1021,10 @@ func (c *TaskController) executeTask(ctx context.Context, task *crds.Task, syste
 	}
 
 	ctx, taskSpan := telemetry.StartTaskSpan(ctx, task.Metadata.Name, system.Metadata.Name,
-		crds.NormalizeNamespace(task.Metadata.Namespace), task.Status.Attempts)
+		resources.NormalizeNamespace(task.Metadata.Namespace), task.Status.Attempts)
 	defer taskSpan.End()
 
-	c.appendTaskTrace(task, crds.TaskTraceEvent{
+	c.appendTaskTrace(task, resources.TaskTraceEvent{
 		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 		Type:      "task_start",
 		Message:   fmt.Sprintf("system=%s agents=%d", system.Metadata.Name, len(order)),
@@ -989,7 +1068,7 @@ func (c *TaskController) executeTask(ctx context.Context, task *crds.Task, syste
 		agent, ok := c.agentStore.Get(store.ScopedName(task.Metadata.Namespace, agentName))
 		if !ok {
 			c.appendTaskLog(taskScopedName(*task), fmt.Sprintf("agent missing before execution: %s", agentName))
-			c.appendTaskTrace(task, crds.TaskTraceEvent{
+			c.appendTaskTrace(task, resources.TaskTraceEvent{
 				Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 				Type:      "agent_missing",
 				Agent:     agentName,
@@ -998,7 +1077,7 @@ func (c *TaskController) executeTask(ctx context.Context, task *crds.Task, syste
 			return nil, fmt.Errorf("agent %q not found", agentName)
 		}
 		c.appendTaskLog(taskScopedName(*task), fmt.Sprintf("agent start: %s model=%s tools=%d", agent.Metadata.Name, agent.Spec.Model, len(agent.Spec.Tools)))
-		c.appendTaskTrace(task, crds.TaskTraceEvent{
+		c.appendTaskTrace(task, resources.TaskTraceEvent{
 			Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 			Type:      "agent_start",
 			Agent:     agent.Metadata.Name,
@@ -1010,7 +1089,7 @@ func (c *TaskController) executeTask(ctx context.Context, task *crds.Task, syste
 
 		if err := enforcePoliciesForAgent(agent, policies); err != nil {
 			c.appendTaskLog(taskScopedName(*task), fmt.Sprintf("agent policy violation: %s error=%s", agent.Metadata.Name, err))
-			c.appendTaskTrace(task, crds.TaskTraceEvent{
+			c.appendTaskTrace(task, resources.TaskTraceEvent{
 				Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 				Type:      "policy_violation",
 				Agent:     agent.Metadata.Name,
@@ -1036,7 +1115,7 @@ func (c *TaskController) executeTask(ctx context.Context, task *crds.Task, syste
 				category = "timeout"
 			}
 			c.appendTaskLog(taskScopedName(*task), fmt.Sprintf("agent %s: %s error=%s", agentName, category, err))
-			c.appendTaskTrace(task, crds.TaskTraceEvent{
+			c.appendTaskTrace(task, resources.TaskTraceEvent{
 				Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 				Type:      "agent_error",
 				Agent:     agentName,
@@ -1055,7 +1134,7 @@ func (c *TaskController) executeTask(ctx context.Context, task *crds.Task, syste
 			result.EstimatedTokens,
 			result.Duration.Milliseconds(),
 		))
-		c.appendTaskTrace(task, crds.TaskTraceEvent{
+		c.appendTaskTrace(task, resources.TaskTraceEvent{
 			Timestamp:        time.Now().UTC().Format(time.RFC3339Nano),
 			Type:             "agent_end",
 			Agent:            result.Agent,
@@ -1070,7 +1149,7 @@ func (c *TaskController) executeTask(ctx context.Context, task *crds.Task, syste
 			Timestamp:       time.Now().UTC().Format(time.RFC3339Nano),
 			Component:       "task-controller",
 			Type:            "agent.execution",
-			Namespace:       crds.NormalizeNamespace(task.Metadata.Namespace),
+			Namespace:       resources.NormalizeNamespace(task.Metadata.Namespace),
 			Task:            task.Metadata.Name,
 			System:          system.Metadata.Name,
 			Agent:           result.Agent,
@@ -1086,7 +1165,7 @@ func (c *TaskController) executeTask(ctx context.Context, task *crds.Task, syste
 			Component:    "task-controller",
 			Action:       "agent.execution",
 			Outcome:      "success",
-			Namespace:    crds.NormalizeNamespace(task.Metadata.Namespace),
+			Namespace:    resources.NormalizeNamespace(task.Metadata.Namespace),
 			ResourceKind: "Agent",
 			ResourceName: result.Agent,
 			Principal:    c.workerID,
@@ -1111,7 +1190,7 @@ func (c *TaskController) executeTask(ctx context.Context, task *crds.Task, syste
 		totalUsedTokens += result.TokensUsed
 		if tokenBudget > 0 && totalUsedTokens > tokenBudget {
 			c.appendTaskLog(taskScopedName(*task), fmt.Sprintf("token budget exceeded after %s: used=%d source=%s budget=%d estimated=%d", agentName, totalUsedTokens, result.TokenSource, tokenBudget, totalEstimatedTokens))
-			c.appendTaskTrace(task, crds.TaskTraceEvent{
+			c.appendTaskTrace(task, resources.TaskTraceEvent{
 				Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 				Type:      "token_budget_exceeded",
 				Agent:     agentName,
@@ -1138,7 +1217,7 @@ func (c *TaskController) executeTask(ctx context.Context, task *crds.Task, syste
 			if content == "" {
 				content = fmt.Sprintf("steps=%d tool_calls=%d tokens=%d usage_source=%s", result.Steps, result.ToolCalls, result.TokensUsed, strings.TrimSpace(result.TokenSource))
 			}
-			message := crds.TaskMessage{
+			message := resources.TaskMessage{
 				Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 				FromAgent: result.Agent,
 				ToAgent:   nextAgent,
@@ -1148,7 +1227,7 @@ func (c *TaskController) executeTask(ctx context.Context, task *crds.Task, syste
 			c.populateTaskMessageMetadata(task, &message, idx)
 			c.appendTaskMessage(task, message)
 			if err := c.publishAgentMessage(ctx, task, message); err != nil {
-				c.appendTaskTrace(task, crds.TaskTraceEvent{
+				c.appendTaskTrace(task, resources.TaskTraceEvent{
 					Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 					Type:      "agent_message_error",
 					Agent:     result.Agent,
@@ -1156,7 +1235,7 @@ func (c *TaskController) executeTask(ctx context.Context, task *crds.Task, syste
 				})
 				return nil, err
 			}
-			c.appendTaskTrace(task, crds.TaskTraceEvent{
+			c.appendTaskTrace(task, resources.TaskTraceEvent{
 				Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 				Type:      "agent_message",
 				Agent:     result.Agent,
@@ -1195,7 +1274,7 @@ func (c *TaskController) executeTask(ctx context.Context, task *crds.Task, syste
 		totalEstimatedTokens,
 		output["token_budget"],
 	))
-	c.appendTaskTrace(task, crds.TaskTraceEvent{
+	c.appendTaskTrace(task, resources.TaskTraceEvent{
 		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 		Type:      "task_summary",
 		Message:   fmt.Sprintf("agents=%s tokens_used_total=%d tokens_estimated_total=%d", output["agents_executed"], totalUsedTokens, totalEstimatedTokens),
@@ -1204,7 +1283,7 @@ func (c *TaskController) executeTask(ctx context.Context, task *crds.Task, syste
 	return output, nil
 }
 
-func enforcePoliciesForAgent(agent crds.Agent, policies []crds.AgentPolicy) error {
+func enforcePoliciesForAgent(agent resources.Agent, policies []resources.AgentPolicy) error {
 	for _, policy := range policies {
 		if len(policy.Spec.AllowedModels) > 0 && !containsFold(policy.Spec.AllowedModels, agent.Spec.Model) {
 			return fmt.Errorf("policy %q disallows model %q for agent %q", policy.Metadata.Name, agent.Spec.Model, agent.Metadata.Name)
@@ -1218,8 +1297,8 @@ func enforcePoliciesForAgent(agent crds.Agent, policies []crds.AgentPolicy) erro
 	return nil
 }
 
-func matchedPolicies(task crds.Task, system crds.AgentSystem, all []crds.AgentPolicy) []crds.AgentPolicy {
-	out := make([]crds.AgentPolicy, 0, len(all))
+func matchedPolicies(task resources.Task, system resources.AgentSystem, all []resources.AgentPolicy) []resources.AgentPolicy {
+	out := make([]resources.AgentPolicy, 0, len(all))
 	for _, policy := range all {
 		if policyAppliesTo(policy, task, system) {
 			out = append(out, policy)
@@ -1228,7 +1307,7 @@ func matchedPolicies(task crds.Task, system crds.AgentSystem, all []crds.AgentPo
 	return out
 }
 
-func policyAppliesTo(policy crds.AgentPolicy, task crds.Task, system crds.AgentSystem) bool {
+func policyAppliesTo(policy resources.AgentPolicy, task resources.Task, system resources.AgentSystem) bool {
 	mode := strings.ToLower(strings.TrimSpace(policy.Spec.ApplyMode))
 	if mode == "" {
 		mode = "scoped"
@@ -1247,7 +1326,7 @@ func policyAppliesTo(policy crds.AgentPolicy, task crds.Task, system crds.AgentS
 	return false
 }
 
-func minimumTokenBudget(policies []crds.AgentPolicy) int {
+func minimumTokenBudget(policies []resources.AgentPolicy) int {
 	min := 0
 	for _, policy := range policies {
 		if policy.Spec.MaxTokensPerRun <= 0 {
@@ -1269,7 +1348,7 @@ func containsFold(values []string, needle string) bool {
 	return false
 }
 
-func isAttemptDue(task crds.Task) bool {
+func isAttemptDue(task resources.Task) bool {
 	if strings.TrimSpace(task.Status.NextAttemptAt) == "" {
 		return true
 	}
@@ -1280,7 +1359,7 @@ func isAttemptDue(task crds.Task) bool {
 	return !time.Now().UTC().Before(next)
 }
 
-func shouldRetryTask(task crds.Task, reason string) bool {
+func shouldRetryTask(task resources.Task, reason string) bool {
 	if task.Spec.Retry.MaxAttempts <= 0 {
 		return false
 	}
@@ -1337,7 +1416,7 @@ func isRetryableError(reason string) bool {
 	return false
 }
 
-func retryDelay(task crds.Task) (time.Duration, error) {
+func retryDelay(task resources.Task) (time.Duration, error) {
 	base, err := time.ParseDuration(task.Spec.Retry.Backoff)
 	if err != nil {
 		return 0, err
@@ -1372,11 +1451,11 @@ func copyStringMap(in map[string]string) map[string]string {
 	return out
 }
 
-func taskScopedName(task crds.Task) string {
+func taskScopedName(task resources.Task) string {
 	return store.ScopedName(task.Metadata.Namespace, task.Metadata.Name)
 }
 
-func (c *TaskController) taskMatchesWorker(task crds.Task) bool {
+func (c *TaskController) taskMatchesWorker(task resources.Task) bool {
 	if strings.EqualFold(strings.TrimSpace(task.Spec.Mode), "template") {
 		return false
 	}
@@ -1435,11 +1514,11 @@ func (c *TaskController) tryAcquireWorkerSlot() (bool, error) {
 	return true, nil
 }
 
-func (c *TaskController) appendTaskHistory(task *crds.Task, eventType string, message string) {
+func (c *TaskController) appendTaskHistory(task *resources.Task, eventType string, message string) {
 	if task == nil {
 		return
 	}
-	task.Status.History = append(task.Status.History, crds.TaskHistoryEvent{
+	task.Status.History = append(task.Status.History, resources.TaskHistoryEvent{
 		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 		Type:      eventType,
 		Worker:    c.workerID,
@@ -1450,7 +1529,7 @@ func (c *TaskController) appendTaskHistory(task *crds.Task, eventType string, me
 	}
 }
 
-func (c *TaskController) appendTaskMessage(task *crds.Task, message crds.TaskMessage) {
+func (c *TaskController) appendTaskMessage(task *resources.Task, message resources.TaskMessage) {
 	if task == nil {
 		return
 	}
@@ -1475,11 +1554,11 @@ func (c *TaskController) appendTaskMessage(task *crds.Task, message crds.TaskMes
 	}
 }
 
-func (c *TaskController) populateTaskMessageMetadata(task *crds.Task, message *crds.TaskMessage, hopIndex int) {
+func (c *TaskController) populateTaskMessageMetadata(task *resources.Task, message *resources.TaskMessage, hopIndex int) {
 	if task == nil || message == nil {
 		return
 	}
-	namespace := crds.NormalizeNamespace(task.Metadata.Namespace)
+	namespace := resources.NormalizeNamespace(task.Metadata.Namespace)
 	attempt := task.Status.Attempts
 	if attempt <= 0 {
 		attempt = 1
@@ -1516,7 +1595,7 @@ func deterministicTaskMessageID(namespace, taskName string, attempt int, hop int
 	}
 	return fmt.Sprintf(
 		"%s/%s/a%03d/h%03d/%s/%s",
-		crds.NormalizeNamespace(namespace),
+		resources.NormalizeNamespace(namespace),
 		strings.TrimSpace(taskName),
 		attempt,
 		hop,
@@ -1534,7 +1613,7 @@ func sanitizeMessageToken(raw string) string {
 	return replacer.Replace(token)
 }
 
-func (c *TaskController) publishAgentMessage(ctx context.Context, task *crds.Task, message crds.TaskMessage) error {
+func (c *TaskController) publishAgentMessage(ctx context.Context, task *resources.Task, message resources.TaskMessage) error {
 	if c == nil || c.agentMessageBus == nil || task == nil {
 		return nil
 	}
@@ -1564,12 +1643,12 @@ func (c *TaskController) publishAgentMessage(ctx context.Context, task *crds.Tas
 	return nil
 }
 
-func (c *TaskController) appendRuntimeStepTrace(task *crds.Task, agentName string, events []agentruntime.AgentStepEvent) {
+func (c *TaskController) appendRuntimeStepTrace(task *resources.Task, agentName string, events []agentruntime.AgentStepEvent) {
 	if task == nil || len(events) == 0 {
 		return
 	}
 	for _, runtimeEvent := range events {
-		traceEvent := crds.TaskTraceEvent{
+		traceEvent := resources.TaskTraceEvent{
 			Timestamp:           runtimeEvent.Timestamp,
 			Type:                runtimeEvent.Type,
 			Agent:               strings.TrimSpace(agentName),
@@ -1599,7 +1678,7 @@ func (c *TaskController) appendRuntimeStepTrace(task *crds.Task, agentName strin
 	}
 }
 
-func (c *TaskController) appendTaskTrace(task *crds.Task, event crds.TaskTraceEvent) {
+func (c *TaskController) appendTaskTrace(task *resources.Task, event resources.TaskTraceEvent) {
 	if task == nil {
 		return
 	}
@@ -1624,7 +1703,7 @@ func (c *TaskController) appendTaskTrace(task *crds.Task, event crds.TaskTraceEv
 	}
 }
 
-func hasTraceEventForType(trace []crds.TaskTraceEvent, eventType string, attempt int) bool {
+func hasTraceEventForType(trace []resources.TaskTraceEvent, eventType string, attempt int) bool {
 	for _, event := range trace {
 		if !strings.EqualFold(strings.TrimSpace(event.Type), strings.TrimSpace(eventType)) {
 			continue
@@ -1636,7 +1715,7 @@ func hasTraceEventForType(trace []crds.TaskTraceEvent, eventType string, attempt
 	return false
 }
 
-func countTraceEventsForType(trace []crds.TaskTraceEvent, eventType string, attempt int) int {
+func countTraceEventsForType(trace []resources.TaskTraceEvent, eventType string, attempt int) int {
 	count := 0
 	for _, event := range trace {
 		if !strings.EqualFold(strings.TrimSpace(event.Type), strings.TrimSpace(eventType)) {
@@ -1649,7 +1728,7 @@ func countTraceEventsForType(trace []crds.TaskTraceEvent, eventType string, atte
 	return count
 }
 
-func hasKickoffMessage(messages []crds.TaskMessage, attempt int, agent string) bool {
+func hasKickoffMessage(messages []resources.TaskMessage, attempt int, agent string) bool {
 	target := strings.TrimSpace(agent)
 	if target == "" {
 		return false
@@ -1668,7 +1747,7 @@ func hasKickoffMessage(messages []crds.TaskMessage, attempt int, agent string) b
 	return false
 }
 
-func nextTraceStepID(trace []crds.TaskTraceEvent, attempt int) string {
+func nextTraceStepID(trace []resources.TaskTraceEvent, attempt int) string {
 	if attempt <= 0 {
 		attempt = 1
 	}
@@ -1716,7 +1795,7 @@ func parseTraceStepID(stepID string) (attempt int, sequence int, ok bool) {
 	return parsedAttempt, parsedSequence, true
 }
 
-func (c *TaskController) upsertTask(task crds.Task) (crds.Task, error) {
+func (c *TaskController) upsertTask(task resources.Task) (resources.Task, error) {
 	var lastErr error
 	for i := 0; i < 5; i++ {
 		updated, err := c.taskStore.Upsert(task)
@@ -1724,12 +1803,12 @@ func (c *TaskController) upsertTask(task crds.Task) (crds.Task, error) {
 			return updated, nil
 		}
 		if !store.IsConflict(err) {
-			return crds.Task{}, err
+			return resources.Task{}, err
 		}
 		lastErr = err
 		current, ok := c.taskStore.Get(taskScopedName(task))
 		if !ok {
-			return crds.Task{}, err
+			return resources.Task{}, err
 		}
 		task.Metadata.ResourceVersion = current.Metadata.ResourceVersion
 		task.Metadata.Generation = current.Metadata.Generation
@@ -1737,7 +1816,7 @@ func (c *TaskController) upsertTask(task crds.Task) (crds.Task, error) {
 		task.Spec = current.Spec
 	}
 	if lastErr != nil {
-		return crds.Task{}, lastErr
+		return resources.Task{}, lastErr
 	}
 	return c.taskStore.Upsert(task)
 }
@@ -1790,7 +1869,7 @@ func (c *TaskController) startHeartbeat(ctx context.Context, taskName string) fu
 	return cancel
 }
 
-func (c *TaskController) publishTaskEvent(task crds.Task, eventType string, message string) {
+func (c *TaskController) publishTaskEvent(task resources.Task, eventType string, message string) {
 	if c.eventBus == nil {
 		return
 	}
@@ -1799,7 +1878,7 @@ func (c *TaskController) publishTaskEvent(task crds.Task, eventType string, mess
 		Type:      strings.TrimSpace(eventType),
 		Kind:      "Task",
 		Name:      task.Metadata.Name,
-		Namespace: crds.NormalizeNamespace(task.Metadata.Namespace),
+		Namespace: resources.NormalizeNamespace(task.Metadata.Namespace),
 		Action:    strings.ToLower(strings.TrimSpace(task.Status.Phase)),
 		Message:   strings.TrimSpace(message),
 		Data: map[string]any{

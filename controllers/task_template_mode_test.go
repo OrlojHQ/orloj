@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/store"
 )
 
@@ -16,19 +16,19 @@ func TestTaskSchedulerSkipsTemplateTasks(t *testing.T) {
 	workerStore := store.NewWorkerStore()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
-	if _, err := workerStore.Upsert(crds.Worker{
+	if _, err := workerStore.Upsert(resources.Worker{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Worker",
-		Metadata:   crds.ObjectMeta{Name: "worker-a"},
-		Status:     crds.WorkerStatus{Phase: "Ready", LastHeartbeat: now},
+		Metadata:   resources.ObjectMeta{Name: "worker-a"},
+		Status:     resources.WorkerStatus{Phase: "Ready", LastHeartbeat: now},
 	}); err != nil {
 		t.Fatalf("upsert worker failed: %v", err)
 	}
-	if _, err := taskStore.Upsert(crds.Task{
+	if _, err := taskStore.Upsert(resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "template-task"},
-		Spec:       crds.TaskSpec{Mode: "template"},
+		Metadata:   resources.ObjectMeta{Name: "template-task"},
+		Spec:       resources.TaskSpec{Mode: "template"},
 	}); err != nil {
 		t.Fatalf("upsert task failed: %v", err)
 	}
@@ -49,7 +49,7 @@ func TestTaskSchedulerSkipsTemplateTasks(t *testing.T) {
 
 func TestTaskControllerTaskMatchesWorkerRejectsTemplate(t *testing.T) {
 	controller := NewTaskController(nil, nil, nil, nil, nil, nil, nil, log.New(io.Discard, "", 0), time.Second)
-	task := crds.Task{Spec: crds.TaskSpec{Mode: "template"}}
+	task := resources.Task{Spec: resources.TaskSpec{Mode: "template"}}
 	if controller.taskMatchesWorker(task) {
 		t.Fatal("expected template task to be rejected by worker matcher")
 	}

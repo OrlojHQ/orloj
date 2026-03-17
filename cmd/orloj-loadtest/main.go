@@ -18,7 +18,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 type loadConfig struct {
@@ -34,7 +34,7 @@ type loadConfig struct {
 	taskPriority       string
 	taskRetryAttempts  int
 	taskRetryBackoff   string
-	messageRetryPolicy crds.TaskMessageRetryPolicy
+	messageRetryPolicy resources.TaskMessageRetryPolicy
 	setup              bool
 	minReadyWorkers    int
 	workerReadyTimeout time.Duration
@@ -537,7 +537,7 @@ func applyBaseline(ctx context.Context, client *apiClient, namespace string) err
 		if err != nil {
 			return fmt.Errorf("read manifest %s failed: %w", relPath, err)
 		}
-		kind, err := crds.DetectKind(data)
+		kind, err := resources.DetectKind(data)
 		if err != nil {
 			return fmt.Errorf("detect kind %s failed: %w", relPath, err)
 		}
@@ -554,27 +554,27 @@ func applyBaseline(ctx context.Context, client *apiClient, namespace string) err
 }
 
 func ensureTimeoutScenarioResources(ctx context.Context, client *apiClient, cfg loadConfig) error {
-	agent := crds.Agent{
+	agent := resources.Agent{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
-		Metadata: crds.ObjectMeta{
+		Metadata: resources.ObjectMeta{
 			Name:      cfg.timeoutAgentName,
 			Namespace: cfg.namespace,
 		},
-		Spec: crds.AgentSpec{
+		Spec: resources.AgentSpec{
 			Model:  "gpt-4o",
 			Prompt: "Retry stress agent intentionally times out to exercise retry/deadletter behavior.",
-			Limits: crds.AgentLimits{MaxSteps: 2, Timeout: cfg.timeoutAgentDuration},
+			Limits: resources.AgentLimits{MaxSteps: 2, Timeout: cfg.timeoutAgentDuration},
 		},
 	}
-	system := crds.AgentSystem{
+	system := resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
-		Metadata: crds.ObjectMeta{
+		Metadata: resources.ObjectMeta{
 			Name:      cfg.timeoutSystemName,
 			Namespace: cfg.namespace,
 		},
-		Spec: crds.AgentSystemSpec{
+		Spec: resources.AgentSystemSpec{
 			Agents: []string{cfg.timeoutAgentName},
 		},
 	}
@@ -702,25 +702,25 @@ func createTasks(ctx context.Context, client *apiClient, cfg loadConfig, runID s
 					injectRetryStress = true
 				}
 
-				task := crds.Task{
+				task := resources.Task{
 					APIVersion: "orloj.dev/v1",
 					Kind:       "Task",
-					Metadata: crds.ObjectMeta{
+					Metadata: resources.ObjectMeta{
 						Name:      name,
 						Namespace: cfg.namespace,
 					},
-					Spec: crds.TaskSpec{
+					Spec: resources.TaskSpec{
 						System:   system,
 						Priority: cfg.taskPriority,
 						Input: map[string]string{
 							"topic": fmt.Sprintf("%s-%04d", cfg.topicPrefix, idx+1),
 						},
-						Retry: crds.TaskRetryPolicy{
+						Retry: resources.TaskRetryPolicy{
 							MaxAttempts: cfg.taskRetryAttempts,
 							Backoff:     cfg.taskRetryBackoff,
 						},
 						MessageRetry: cfg.messageRetryPolicy,
-						Requirements: crds.TaskRequirements{Region: "default", Model: "gpt-4o"},
+						Requirements: resources.TaskRequirements{Region: "default", Model: "gpt-4o"},
 					},
 				}
 				if err := client.createTask(ctx, cfg.namespace, task); err != nil {
@@ -865,7 +865,7 @@ func monitorTasks(ctx context.Context, client *apiClient, cfg loadConfig, runs [
 
 		type polled struct {
 			name string
-			task crds.Task
+			task resources.Task
 			err  error
 		}
 		polledCh := make(chan polled, len(names))
@@ -920,7 +920,7 @@ func monitorTasks(ctx context.Context, client *apiClient, cfg loadConfig, runs [
 	return results, timedOut
 }
 
-func summarizeTaskMessages(messages []crds.TaskMessage) (int, int) {
+func summarizeTaskMessages(messages []resources.TaskMessage) (int, int) {
 	retries := 0
 	deadletters := 0
 	for _, msg := range messages {
@@ -934,7 +934,7 @@ func summarizeTaskMessages(messages []crds.TaskMessage) (int, int) {
 	return retries, deadletters
 }
 
-func countHistoryType(history []crds.TaskHistoryEvent, eventType string) int {
+func countHistoryType(history []resources.TaskHistoryEvent, eventType string) int {
 	count := 0
 	for _, item := range history {
 		if strings.EqualFold(strings.TrimSpace(item.Type), strings.TrimSpace(eventType)) {
@@ -1156,7 +1156,7 @@ func maxInt(a, b int) int {
 	return b
 }
 
-func (c *apiClient) createTask(ctx context.Context, namespace string, task crds.Task) error {
+func (c *apiClient) createTask(ctx context.Context, namespace string, task resources.Task) error {
 	payload, err := json.Marshal(task)
 	if err != nil {
 		return fmt.Errorf("marshal task failed: %w", err)
@@ -1164,17 +1164,17 @@ func (c *apiClient) createTask(ctx context.Context, namespace string, task crds.
 	return c.postRaw(ctx, "tasks", namespace, payload)
 }
 
-func (c *apiClient) getTask(ctx context.Context, namespace string, name string) (crds.Task, error) {
+func (c *apiClient) getTask(ctx context.Context, namespace string, name string) (resources.Task, error) {
 	path := fmt.Sprintf("tasks/%s", url.PathEscape(strings.TrimSpace(name)))
-	var out crds.Task
+	var out resources.Task
 	if err := c.getJSON(ctx, path, namespace, &out); err != nil {
-		return crds.Task{}, err
+		return resources.Task{}, err
 	}
 	return out, nil
 }
 
 func (c *apiClient) countReadyWorkers(ctx context.Context, namespace string) (int, int, error) {
-	var out crds.WorkerList
+	var out resources.WorkerList
 	if err := c.getJSON(ctx, "workers", namespace, &out); err != nil {
 		return 0, 0, err
 	}
@@ -1206,7 +1206,7 @@ func (c *apiClient) injectExpiredLease(ctx context.Context, namespace, taskName,
 		if status.Attempts <= 0 {
 			status.Attempts = 1
 		}
-		status.History = append(status.History, crds.TaskHistoryEvent{
+		status.History = append(status.History, resources.TaskHistoryEvent{
 			Timestamp: now.Format(time.RFC3339Nano),
 			Type:      "failure_injection",
 			Worker:    owner,
@@ -1227,7 +1227,7 @@ func (c *apiClient) injectExpiredLease(ctx context.Context, namespace, taskName,
 	return fmt.Errorf("task %s status update conflicted after retries", taskName)
 }
 
-func (c *apiClient) putTaskStatus(ctx context.Context, namespace, name, resourceVersion string, status crds.TaskStatus) error {
+func (c *apiClient) putTaskStatus(ctx context.Context, namespace, name, resourceVersion string, status resources.TaskStatus) error {
 	path := fmt.Sprintf("tasks/%s/status", url.PathEscape(strings.TrimSpace(name)))
 	body := map[string]any{
 		"metadata": map[string]any{

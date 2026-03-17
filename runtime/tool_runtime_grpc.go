@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -84,7 +84,7 @@ func (r *GRPCToolRuntime) WithNamespace(namespace string) ToolRuntime {
 		return NewGRPCToolRuntime(nil, nil, nil)
 	}
 	copy := *r
-	copy.namespace = crds.NormalizeNamespace(strings.TrimSpace(namespace))
+	copy.namespace = resources.NormalizeNamespace(strings.TrimSpace(namespace))
 	if aware, ok := copy.secrets.(namespaceAwareSecretResolver); ok {
 		copy.secrets = aware.WithNamespace(copy.namespace)
 	}

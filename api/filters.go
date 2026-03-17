@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 func labelSelectorFilter(r *http.Request) (map[string]string, error) {
@@ -41,8 +41,8 @@ func labelSelectorFilter(r *http.Request) (map[string]string, error) {
 	return req, nil
 }
 
-func matchMetadataFilters(meta crds.ObjectMeta, namespace string, hasNamespace bool, labels map[string]string) bool {
-	if hasNamespace && !strings.EqualFold(crds.NormalizeNamespace(meta.Namespace), namespace) {
+func matchMetadataFilters(meta resources.ObjectMeta, namespace string, hasNamespace bool, labels map[string]string) bool {
+	if hasNamespace && !strings.EqualFold(resources.NormalizeNamespace(meta.Namespace), namespace) {
 		return false
 	}
 	if len(labels) == 0 {

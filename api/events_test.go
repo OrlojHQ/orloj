@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/OrlojHQ/orloj/api"
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/eventbus"
 	agentruntime "github.com/OrlojHQ/orloj/runtime"
 	"github.com/OrlojHQ/orloj/store"
@@ -38,11 +38,11 @@ func TestAPIEmitsResourceEventsToBus(t *testing.T) {
 	httpServer := httptest.NewServer(server.Handler())
 	defer httpServer.Close()
 
-	postJSON(t, httpServer.URL+"/v1/tools", crds.Tool{
+	postJSON(t, httpServer.URL+"/v1/tools", resources.Tool{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Tool",
-		Metadata:   crds.ObjectMeta{Name: "web-search"},
-		Spec:       crds.ToolSpec{Type: "http", Endpoint: "https://example"},
+		Metadata:   resources.ObjectMeta{Name: "web-search"},
+		Spec:       resources.ToolSpec{Type: "http", Endpoint: "https://example"},
 	})
 
 	select {
@@ -87,11 +87,11 @@ func TestEventsWatchStreamReceivesPublishedEvents(t *testing.T) {
 		t.Fatalf("events watch failed status=%d body=%s", resp.StatusCode, string(b))
 	}
 
-	postJSON(t, httpServer.URL+"/v1/tasks", crds.Task{
+	postJSON(t, httpServer.URL+"/v1/tasks", resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "stream-task"},
-		Spec:       crds.TaskSpec{System: "sys"},
+		Metadata:   resources.ObjectMeta{Name: "stream-task"},
+		Spec:       resources.TaskSpec{System: "sys"},
 	})
 
 	scanner := bufio.NewScanner(resp.Body)

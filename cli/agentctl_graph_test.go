@@ -4,13 +4,13 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 func TestSystemGraphLines(t *testing.T) {
 	t.Run("declared order without graph", func(t *testing.T) {
-		system := crds.AgentSystem{
-			Spec: crds.AgentSystemSpec{
+		system := resources.AgentSystem{
+			Spec: resources.AgentSystemSpec{
 				Agents: []string{"planner", "researcher", "writer"},
 			},
 		}
@@ -26,10 +26,10 @@ func TestSystemGraphLines(t *testing.T) {
 	})
 
 	t.Run("explicit graph", func(t *testing.T) {
-		system := crds.AgentSystem{
-			Spec: crds.AgentSystemSpec{
+		system := resources.AgentSystem{
+			Spec: resources.AgentSystemSpec{
 				Agents: []string{"planner", "researcher", "writer"},
-				Graph: map[string]crds.GraphEdge{
+				Graph: map[string]resources.GraphEdge{
 					"planner":    {Next: "researcher"},
 					"researcher": {Next: "writer"},
 				},
@@ -47,18 +47,18 @@ func TestSystemGraphLines(t *testing.T) {
 	})
 
 	t.Run("fan-out graph edges", func(t *testing.T) {
-		system := crds.AgentSystem{
-			Spec: crds.AgentSystemSpec{
+		system := resources.AgentSystem{
+			Spec: resources.AgentSystemSpec{
 				Agents: []string{"planner", "researcher", "reviewer", "writer"},
-				Graph: map[string]crds.GraphEdge{
+				Graph: map[string]resources.GraphEdge{
 					"planner": {
-						Edges: []crds.GraphRoute{
+						Edges: []resources.GraphRoute{
 							{To: "researcher"},
 							{To: "reviewer"},
 						},
 					},
-					"researcher": {Edges: []crds.GraphRoute{{To: "writer"}}},
-					"reviewer":   {Edges: []crds.GraphRoute{{To: "writer"}}},
+					"researcher": {Edges: []resources.GraphRoute{{To: "writer"}}},
+					"reviewer":   {Edges: []resources.GraphRoute{{To: "writer"}}},
 				},
 			},
 		}
@@ -78,8 +78,8 @@ func TestSystemGraphLines(t *testing.T) {
 
 func TestTaskExecutionOrder(t *testing.T) {
 	t.Run("from execution_order output", func(t *testing.T) {
-		task := crds.Task{
-			Status: crds.TaskStatus{
+		task := resources.Task{
+			Status: resources.TaskStatus{
 				Output: map[string]string{
 					"execution_order": "planner -> researcher -> writer",
 				},
@@ -93,8 +93,8 @@ func TestTaskExecutionOrder(t *testing.T) {
 	})
 
 	t.Run("from indexed output", func(t *testing.T) {
-		task := crds.Task{
-			Status: crds.TaskStatus{
+		task := resources.Task{
+			Status: resources.TaskStatus{
 				Output: map[string]string{
 					"agent.2.name": "researcher",
 					"agent.1.name": "planner",
@@ -109,9 +109,9 @@ func TestTaskExecutionOrder(t *testing.T) {
 	})
 
 	t.Run("falls back to system when output is absent", func(t *testing.T) {
-		task := crds.Task{}
-		system := &crds.AgentSystem{
-			Spec: crds.AgentSystemSpec{
+		task := resources.Task{}
+		system := &resources.AgentSystem{
+			Spec: resources.AgentSystemSpec{
 				Agents: []string{"planner", "researcher", "writer"},
 			},
 		}
@@ -124,9 +124,9 @@ func TestTaskExecutionOrder(t *testing.T) {
 }
 
 func TestTaskGraphMetrics(t *testing.T) {
-	task := crds.Task{
-		Status: crds.TaskStatus{
-			Trace: []crds.TaskTraceEvent{
+	task := resources.Task{
+		Status: resources.TaskStatus{
+			Trace: []resources.TaskTraceEvent{
 				{Type: "agent_start", Agent: "planner"},
 				{
 					Type:         "agent_end",

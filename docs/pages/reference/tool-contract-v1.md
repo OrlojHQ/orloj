@@ -211,6 +211,16 @@ Auth is declarative and secret-referenced via `Tool.spec.auth`:
 | Token expired (OAuth2) | `auth_expired` | `tool_auth_expired` | true (one retry) |
 | Secret not found | `secret_resolution_failed` | `tool_secret_resolution_failed` | false |
 
+### Approval Error Codes
+
+| Condition | `tool_code` | `tool_reason` | Retryable |
+|---|---|---|---|
+| Tool call awaiting approval | `approval_pending` | `tool_approval_pending` | false (pause) |
+| Approval denied | `approval_denied` | `tool_approval_denied` | false |
+| Approval TTL expired | `approval_timeout` | `tool_approval_timeout` | false |
+
+All approval-related error codes are non-retryable and do not consume retry budget.
+
 ### Rules
 
 - Do not persist resolved secrets in status/logs

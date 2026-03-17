@@ -1,4 +1,4 @@
-package crds
+package resources
 
 import (
 	"crypto/sha256"
@@ -111,12 +111,13 @@ type Tool struct {
 }
 
 type ToolSpec struct {
-	Type         string            `json:"type,omitempty"`
-	Endpoint     string            `json:"endpoint,omitempty"`
-	Capabilities []string          `json:"capabilities,omitempty"`
-	RiskLevel    string            `json:"risk_level,omitempty"`
-	Runtime      ToolRuntimePolicy `json:"runtime,omitempty"`
-	Auth         ToolAuth          `json:"auth,omitempty"`
+	Type             string            `json:"type,omitempty"`
+	Endpoint         string            `json:"endpoint,omitempty"`
+	Capabilities     []string          `json:"capabilities,omitempty"`
+	OperationClasses []string          `json:"operation_classes,omitempty"`
+	RiskLevel        string            `json:"risk_level,omitempty"`
+	Runtime          ToolRuntimePolicy `json:"runtime,omitempty"`
+	Auth             ToolAuth          `json:"auth,omitempty"`
 }
 
 type ToolAuth struct {
@@ -215,6 +216,26 @@ func (t *Tool) Normalize() error {
 	}
 	t.Spec.Capabilities = normalizedCaps
 
+	normalizedOps := make([]string, 0, len(t.Spec.OperationClasses))
+	seenOps := make(map[string]struct{}, len(t.Spec.OperationClasses))
+	for _, op := range t.Spec.OperationClasses {
+		op = strings.ToLower(strings.TrimSpace(op))
+		if op == "" {
+			continue
+		}
+		switch op {
+		case "read", "write", "delete", "admin":
+		default:
+			return fmt.Errorf("invalid spec.operation_classes value %q: expected read, write, delete, or admin", op)
+		}
+		if _, exists := seenOps[op]; exists {
+			continue
+		}
+		seenOps[op] = struct{}{}
+		normalizedOps = append(normalizedOps, op)
+	}
+	t.Spec.OperationClasses = normalizedOps
+
 	risk := strings.ToLower(strings.TrimSpace(t.Spec.RiskLevel))
 	if risk == "" {
 		risk = "low"
@@ -224,6 +245,14 @@ func (t *Tool) Normalize() error {
 		t.Spec.RiskLevel = risk
 	default:
 		return fmt.Errorf("invalid spec.risk_level %q: expected low, medium, high, or critical", t.Spec.RiskLevel)
+	}
+
+	if len(t.Spec.OperationClasses) == 0 {
+		if t.Spec.RiskLevel == "high" || t.Spec.RiskLevel == "critical" {
+			t.Spec.OperationClasses = []string{"write"}
+		} else {
+			t.Spec.OperationClasses = []string{"read"}
+		}
 	}
 
 	if strings.TrimSpace(t.Spec.Runtime.Timeout) == "" {
@@ -526,12 +555,18 @@ type ToolPermission struct {
 }
 
 type ToolPermissionSpec struct {
-	ToolRef             string   `json:"tool_ref,omitempty"`
-	Action              string   `json:"action,omitempty"`
-	RequiredPermissions []string `json:"required_permissions,omitempty"`
-	MatchMode           string   `json:"match_mode,omitempty"`
-	ApplyMode           string   `json:"apply_mode,omitempty"`
-	TargetAgents        []string `json:"target_agents,omitempty"`
+	ToolRef             string          `json:"tool_ref,omitempty"`
+	Action              string          `json:"action,omitempty"`
+	RequiredPermissions []string        `json:"required_permissions,omitempty"`
+	MatchMode           string          `json:"match_mode,omitempty"`
+	ApplyMode           string          `json:"apply_mode,omitempty"`
+	TargetAgents        []string        `json:"target_agents,omitempty"`
+	OperationRules      []OperationRule `json:"operation_rules,omitempty"`
+}
+
+type OperationRule struct {
+	OperationClass string `json:"operation_class,omitempty"`
+	Verdict        string `json:"verdict,omitempty"`
 }
 
 type ToolPermissionStatus struct {
@@ -628,8 +663,116 @@ func (p *ToolPermission) Normalize() error {
 	if p.Spec.ApplyMode == "scoped" && len(p.Spec.TargetAgents) == 0 {
 		return fmt.Errorf("spec.target_agents is required when spec.apply_mode=scoped")
 	}
+
+	for i, rule := range p.Spec.OperationRules {
+		opClass := strings.ToLower(strings.TrimSpace(rule.OperationClass))
+		if opClass == "" {
+			opClass = "*"
+		}
+		switch opClass {
+		case "read", "write", "delete", "admin", "*":
+			p.Spec.OperationRules[i].OperationClass = opClass
+		default:
+			return fmt.Errorf("invalid operation_rules[%d].operation_class %q: expected read, write, delete, admin, or *", i, rule.OperationClass)
+		}
+		verdict := strings.ToLower(strings.TrimSpace(rule.Verdict))
+		if verdict == "" {
+			verdict = "allow"
+		}
+		switch verdict {
+		case "allow", "deny", "approval_required":
+			p.Spec.OperationRules[i].Verdict = verdict
+		default:
+			return fmt.Errorf("invalid operation_rules[%d].verdict %q: expected allow, deny, or approval_required", i, rule.Verdict)
+		}
+	}
+
 	if p.Status.Phase == "" {
 		p.Status.Phase = "Pending"
+	}
+	return nil
+}
+
+// ToolApproval captures a pending human/system approval request for a tool invocation.
+type ToolApproval struct {
+	APIVersion string             `json:"apiVersion"`
+	Kind       string             `json:"kind"`
+	Metadata   ObjectMeta         `json:"metadata"`
+	Spec       ToolApprovalSpec   `json:"spec"`
+	Status     ToolApprovalStatus `json:"status,omitempty"`
+}
+
+type ToolApprovalSpec struct {
+	TaskRef        string `json:"task_ref"`
+	Tool           string `json:"tool"`
+	OperationClass string `json:"operation_class,omitempty"`
+	Agent          string `json:"agent,omitempty"`
+	Input          string `json:"input,omitempty"`
+	Reason         string `json:"reason,omitempty"`
+	TTL            string `json:"ttl,omitempty"`
+}
+
+type ToolApprovalStatus struct {
+	Phase     string `json:"phase,omitempty"`
+	Decision  string `json:"decision,omitempty"`
+	DecidedBy string `json:"decided_by,omitempty"`
+	DecidedAt string `json:"decided_at,omitempty"`
+	ExpiresAt string `json:"expires_at,omitempty"`
+}
+
+type ToolApprovalList struct {
+	Items []ToolApproval `json:"items"`
+}
+
+func (a *ToolApproval) Normalize() error {
+	if a.APIVersion == "" {
+		a.APIVersion = "orloj.dev/v1"
+	}
+	if a.Kind == "" {
+		a.Kind = "ToolApproval"
+	}
+	if !strings.EqualFold(a.Kind, "ToolApproval") {
+		return fmt.Errorf("unsupported kind %q for ToolApproval", a.Kind)
+	}
+	NormalizeObjectMetaNamespace(&a.Metadata)
+	if a.Metadata.Name == "" {
+		return fmt.Errorf("metadata.name is required")
+	}
+	a.Spec.TaskRef = strings.TrimSpace(a.Spec.TaskRef)
+	if a.Spec.TaskRef == "" {
+		return fmt.Errorf("spec.task_ref is required")
+	}
+	a.Spec.Tool = strings.TrimSpace(a.Spec.Tool)
+	if a.Spec.Tool == "" {
+		return fmt.Errorf("spec.tool is required")
+	}
+	a.Spec.OperationClass = strings.ToLower(strings.TrimSpace(a.Spec.OperationClass))
+	a.Spec.Agent = strings.TrimSpace(a.Spec.Agent)
+	a.Spec.Reason = strings.TrimSpace(a.Spec.Reason)
+
+	ttl := strings.TrimSpace(a.Spec.TTL)
+	if ttl == "" {
+		ttl = "10m"
+	}
+	if _, err := time.ParseDuration(ttl); err != nil {
+		return fmt.Errorf("invalid spec.ttl %q: %w", a.Spec.TTL, err)
+	}
+	a.Spec.TTL = ttl
+
+	phase := strings.TrimSpace(a.Status.Phase)
+	if phase == "" {
+		phase = "Pending"
+	}
+	switch phase {
+	case "Pending", "Approved", "Denied", "Expired":
+		a.Status.Phase = phase
+	default:
+		return fmt.Errorf("invalid status.phase %q for ToolApproval: expected Pending, Approved, Denied, or Expired", a.Status.Phase)
+	}
+
+	if a.Status.Phase == "Pending" && a.Status.ExpiresAt == "" {
+		dur, _ := time.ParseDuration(a.Spec.TTL)
+		a.Status.ExpiresAt = time.Now().UTC().Add(dur).Format(time.RFC3339)
 	}
 	return nil
 }

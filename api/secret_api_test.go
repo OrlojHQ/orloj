@@ -7,34 +7,34 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 func TestSecretCRUDAndNamespaceScoping(t *testing.T) {
 	server := newTestServer(t)
 	defer server.Close()
 
-	postJSON(t, server.URL+"/v1/secrets", crds.Secret{
+	postJSON(t, server.URL+"/v1/secrets", resources.Secret{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Secret",
-		Metadata: crds.ObjectMeta{
+		Metadata: resources.ObjectMeta{
 			Name:      "openai-key",
 			Namespace: "team-a",
 		},
-		Spec: crds.SecretSpec{
+		Spec: resources.SecretSpec{
 			StringData: map[string]string{
 				"value": "sk-a",
 			},
 		},
 	})
-	postJSON(t, server.URL+"/v1/secrets", crds.Secret{
+	postJSON(t, server.URL+"/v1/secrets", resources.Secret{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Secret",
-		Metadata: crds.ObjectMeta{
+		Metadata: resources.ObjectMeta{
 			Name:      "openai-key",
 			Namespace: "team-b",
 		},
-		Spec: crds.SecretSpec{
+		Spec: resources.SecretSpec{
 			StringData: map[string]string{
 				"value": "sk-b",
 			},
@@ -50,7 +50,7 @@ func TestSecretCRUDAndNamespaceScoping(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("expected 200 for team-a secret, got %d body=%s", resp.StatusCode, string(body))
 	}
-	var secret crds.Secret
+	var secret resources.Secret
 	if err := json.NewDecoder(resp.Body).Decode(&secret); err != nil {
 		t.Fatalf("decode secret failed: %v", err)
 	}

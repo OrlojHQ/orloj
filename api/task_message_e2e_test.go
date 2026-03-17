@@ -12,7 +12,7 @@ import (
 
 	"github.com/OrlojHQ/orloj/api"
 	"github.com/OrlojHQ/orloj/controllers"
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 	agentruntime "github.com/OrlojHQ/orloj/runtime"
 	"github.com/OrlojHQ/orloj/store"
 )
@@ -52,53 +52,53 @@ func TestTaskExecutionPublishesAgentMessages(t *testing.T) {
 		5*time.Millisecond,
 	)
 
-	postJSON(t, httpServer.URL+"/v1/tools", crds.Tool{
+	postJSON(t, httpServer.URL+"/v1/tools", resources.Tool{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Tool",
-		Metadata:   crds.ObjectMeta{Name: "web-search"},
-		Spec:       crds.ToolSpec{Type: "http", Endpoint: "https://search.example"},
+		Metadata:   resources.ObjectMeta{Name: "web-search"},
+		Spec:       resources.ToolSpec{Type: "http", Endpoint: "https://search.example"},
 	})
 
-	postJSON(t, httpServer.URL+"/v1/agents", crds.Agent{
+	postJSON(t, httpServer.URL+"/v1/agents", resources.Agent{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
-		Metadata:   crds.ObjectMeta{Name: "planner"},
-		Spec: crds.AgentSpec{
+		Metadata:   resources.ObjectMeta{Name: "planner"},
+		Spec: resources.AgentSpec{
 			Model:  "gpt-4o",
 			Prompt: "Plan steps.",
 			Tools:  []string{"web-search"},
-			Limits: crds.AgentLimits{MaxSteps: 1, Timeout: "1s"},
+			Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
 		},
 	})
-	postJSON(t, httpServer.URL+"/v1/agents", crds.Agent{
+	postJSON(t, httpServer.URL+"/v1/agents", resources.Agent{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
-		Metadata:   crds.ObjectMeta{Name: "writer"},
-		Spec: crds.AgentSpec{
+		Metadata:   resources.ObjectMeta{Name: "writer"},
+		Spec: resources.AgentSpec{
 			Model:  "gpt-4o",
 			Prompt: "Write output.",
 			Tools:  []string{"web-search"},
-			Limits: crds.AgentLimits{MaxSteps: 1, Timeout: "1s"},
+			Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
 		},
 	})
 
-	postJSON(t, httpServer.URL+"/v1/agent-systems", crds.AgentSystem{
+	postJSON(t, httpServer.URL+"/v1/agent-systems", resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
-		Metadata:   crds.ObjectMeta{Name: "report-system"},
-		Spec: crds.AgentSystemSpec{
+		Metadata:   resources.ObjectMeta{Name: "report-system"},
+		Spec: resources.AgentSystemSpec{
 			Agents: []string{"planner", "writer"},
-			Graph: map[string]crds.GraphEdge{
+			Graph: map[string]resources.GraphEdge{
 				"planner": {Next: "writer"},
 			},
 		},
 	})
 
-	postJSON(t, httpServer.URL+"/v1/tasks", crds.Task{
+	postJSON(t, httpServer.URL+"/v1/tasks", resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "task-with-messages"},
-		Spec:       crds.TaskSpec{System: "report-system"},
+		Metadata:   resources.ObjectMeta{Name: "task-with-messages"},
+		Spec:       resources.TaskSpec{System: "report-system"},
 	})
 
 	if err := controller.ReconcileOnce(context.Background()); err != nil {
@@ -117,7 +117,7 @@ func TestTaskExecutionPublishesAgentMessages(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("get task status=%d body=%s", resp.StatusCode, string(body))
 	}
-	var task crds.Task
+	var task resources.Task
 	if err := json.NewDecoder(resp.Body).Decode(&task); err != nil {
 		t.Fatalf("decode task failed: %v", err)
 	}

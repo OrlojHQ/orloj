@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 type taskMessageFilter struct {
@@ -28,7 +28,7 @@ type taskMessageListResponse struct {
 	Total           int                `json:"total"`
 	FilteredFrom    int                `json:"filtered_from"`
 	LifecycleCounts map[string]int     `json:"lifecycle_counts"`
-	Messages        []crds.TaskMessage `json:"messages"`
+	Messages        []resources.TaskMessage `json:"messages"`
 }
 
 type taskMessageTotals struct {
@@ -108,7 +108,7 @@ func (s *Server) getTaskMessages(w http.ResponseWriter, r *http.Request, name st
 	}
 	resp := taskMessageListResponse{
 		Name:            task.Metadata.Name,
-		Namespace:       crds.NormalizeNamespace(task.Metadata.Namespace),
+		Namespace:       resources.NormalizeNamespace(task.Metadata.Namespace),
 		Total:           len(selected),
 		FilteredFrom:    len(base),
 		LifecycleCounts: buildLifecycleCounts(base),
@@ -241,7 +241,7 @@ func (s *Server) getTaskMessageMetrics(w http.ResponseWriter, r *http.Request, n
 
 	resp := taskMessageMetricsResponse{
 		Name:      task.Metadata.Name,
-		Namespace: crds.NormalizeNamespace(task.Metadata.Namespace),
+		Namespace: resources.NormalizeNamespace(task.Metadata.Namespace),
 		Generated: time.Now().UTC().Format(time.RFC3339Nano),
 		Totals:    totals,
 		PerAgent:  perAgent,
@@ -318,11 +318,11 @@ func parseTaskMessageFilter(r *http.Request) (taskMessageFilter, error) {
 	return filter, nil
 }
 
-func filterTaskMessages(messages []crds.TaskMessage, filter taskMessageFilter, phaseOnly bool) []crds.TaskMessage {
+func filterTaskMessages(messages []resources.TaskMessage, filter taskMessageFilter, phaseOnly bool) []resources.TaskMessage {
 	if len(messages) == 0 {
-		return []crds.TaskMessage{}
+		return []resources.TaskMessage{}
 	}
-	out := make([]crds.TaskMessage, 0, len(messages))
+	out := make([]resources.TaskMessage, 0, len(messages))
 	for _, msg := range messages {
 		if !phaseOnly {
 			if filter.fromAgent != "" && !strings.EqualFold(strings.TrimSpace(msg.FromAgent), filter.fromAgent) {
@@ -352,7 +352,7 @@ func filterTaskMessages(messages []crds.TaskMessage, filter taskMessageFilter, p
 	return out
 }
 
-func buildLifecycleCounts(messages []crds.TaskMessage) map[string]int {
+func buildLifecycleCounts(messages []resources.TaskMessage) map[string]int {
 	counts := map[string]int{
 		"queued":       0,
 		"running":      0,
@@ -413,7 +413,7 @@ func recordPhase(queued, running, retryPending, succeeded, deadletter *int, phas
 	}
 }
 
-func taskMessageLatencyMS(msg crds.TaskMessage) (int64, bool) {
+func taskMessageLatencyMS(msg resources.TaskMessage) (int64, bool) {
 	start, ok := parseTaskMessageTime(msg.Timestamp)
 	if !ok {
 		return 0, false

@@ -8,49 +8,49 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 // AgentStore keeps desired Agent state in memory for MVP.
 type AgentStore struct {
 	mu     sync.RWMutex
-	agents map[string]crds.Agent
+	agents map[string]resources.Agent
 	db     *sql.DB
 }
 
 func NewAgentStore() *AgentStore {
-	return &AgentStore{agents: make(map[string]crds.Agent)}
+	return &AgentStore{agents: make(map[string]resources.Agent)}
 }
 
 func NewAgentStoreWithDB(db *sql.DB) *AgentStore {
 	return &AgentStore{
-		agents: make(map[string]crds.Agent),
+		agents: make(map[string]resources.Agent),
 		db:     db,
 	}
 }
 
-func (s *AgentStore) Upsert(agent crds.Agent) (crds.Agent, error) {
+func (s *AgentStore) Upsert(agent resources.Agent) (resources.Agent, error) {
 	if err := agent.Normalize(); err != nil {
-		return crds.Agent{}, err
+		return resources.Agent{}, err
 	}
 	key := scopedNameFromMeta(agent.Metadata)
 	if s.db != nil {
 		existing, found, err := s.getWithErr(key)
 		if err != nil {
-			return crds.Agent{}, err
+			return resources.Agent{}, err
 		}
 		if !found {
 			if err := initializeCreateMetadata("Agent", &agent.Metadata); err != nil {
-				return crds.Agent{}, err
+				return resources.Agent{}, err
 			}
 		} else {
 			specChanged := !reflect.DeepEqual(existing.Spec, agent.Spec)
 			if err := initializeUpdateMetadata("Agent", &agent.Metadata, existing.Metadata, specChanged); err != nil {
-				return crds.Agent{}, err
+				return resources.Agent{}, err
 			}
 		}
 		if err := upsertAgentSQL(s.db, key, agent); err != nil {
-			return crds.Agent{}, err
+			return resources.Agent{}, err
 		}
 		return agent, nil
 	}
@@ -61,21 +61,21 @@ func (s *AgentStore) Upsert(agent crds.Agent) (crds.Agent, error) {
 	existing, found := s.agents[key]
 	if !found {
 		if err := initializeCreateMetadata("Agent", &agent.Metadata); err != nil {
-			return crds.Agent{}, err
+			return resources.Agent{}, err
 		}
 	} else {
 		specChanged := !reflect.DeepEqual(existing.Spec, agent.Spec)
 		if err := initializeUpdateMetadata("Agent", &agent.Metadata, existing.Metadata, specChanged); err != nil {
-			return crds.Agent{}, err
+			return resources.Agent{}, err
 		}
 	}
 	s.agents[key] = agent
 	return agent, nil
 }
 
-func (s *AgentStore) getWithErr(name string) (crds.Agent, bool, error) {
+func (s *AgentStore) getWithErr(name string) (resources.Agent, bool, error) {
 	if s.db != nil {
-		return getFromTable[crds.Agent](s.db, tableAgents, name)
+		return getFromTable[resources.Agent](s.db, tableAgents, name)
 	}
 
 	s.mu.RLock()
@@ -84,19 +84,19 @@ func (s *AgentStore) getWithErr(name string) (crds.Agent, bool, error) {
 	return agent, ok, nil
 }
 
-func (s *AgentStore) Get(name string) (crds.Agent, bool) {
+func (s *AgentStore) Get(name string) (resources.Agent, bool) {
 	agent, ok, err := s.getWithErr(normalizeLookupName(name))
 	if err != nil {
-		return crds.Agent{}, false
+		return resources.Agent{}, false
 	}
 	return agent, ok
 }
 
-func (s *AgentStore) List() []crds.Agent {
+func (s *AgentStore) List() []resources.Agent {
 	if s.db != nil {
-		items, err := listFromTable[crds.Agent](s.db, tableAgents)
+		items, err := listFromTable[resources.Agent](s.db, tableAgents)
 		if err != nil {
-			return []crds.Agent{}
+			return []resources.Agent{}
 		}
 		return items
 	}
@@ -104,7 +104,7 @@ func (s *AgentStore) List() []crds.Agent {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	out := make([]crds.Agent, 0, len(s.agents))
+	out := make([]resources.Agent, 0, len(s.agents))
 	for _, agent := range s.agents {
 		out = append(out, agent)
 	}

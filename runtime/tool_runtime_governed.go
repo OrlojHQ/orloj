@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 var (
@@ -16,16 +16,17 @@ var (
 	ErrToolIsolationUnavailable = errors.New("tool isolation runtime unavailable")
 	ErrInvalidToolRuntimePolicy = errors.New("invalid tool runtime policy")
 	ErrToolPermissionDenied     = errors.New("tool permission denied")
+	ErrToolApprovalRequired     = errors.New("tool approval required")
 )
 
 // ToolCapabilityRegistry resolves runtime policy/capability metadata for tools.
 type ToolCapabilityRegistry interface {
-	Resolve(tool string) (crds.ToolSpec, bool)
+	Resolve(tool string) (resources.ToolSpec, bool)
 }
 
 // ToolResourceLookup resolves Tool CRDs by name (optionally namespace scoped).
 type ToolResourceLookup interface {
-	Get(name string) (crds.Tool, bool)
+	Get(name string) (resources.Tool, bool)
 }
 
 type registryAwareToolRuntime interface {
@@ -38,11 +39,11 @@ type namespaceAwareToolRuntime interface {
 
 // StaticToolCapabilityRegistry stores tool policies in-memory for runtime checks.
 type StaticToolCapabilityRegistry struct {
-	specs map[string]crds.ToolSpec
+	specs map[string]resources.ToolSpec
 }
 
-func NewStaticToolCapabilityRegistry(specs map[string]crds.ToolSpec) *StaticToolCapabilityRegistry {
-	out := make(map[string]crds.ToolSpec, len(specs))
+func NewStaticToolCapabilityRegistry(specs map[string]resources.ToolSpec) *StaticToolCapabilityRegistry {
+	out := make(map[string]resources.ToolSpec, len(specs))
 	for name, spec := range specs {
 		key := normalizeToolKey(name)
 		if key == "" {
@@ -53,8 +54,8 @@ func NewStaticToolCapabilityRegistry(specs map[string]crds.ToolSpec) *StaticTool
 	return &StaticToolCapabilityRegistry{specs: out}
 }
 
-func NewToolCapabilityRegistryFromTools(tools []crds.Tool) *StaticToolCapabilityRegistry {
-	specs := make(map[string]crds.ToolSpec, len(tools))
+func NewToolCapabilityRegistryFromTools(tools []resources.Tool) *StaticToolCapabilityRegistry {
+	specs := make(map[string]resources.ToolSpec, len(tools))
 	for _, tool := range tools {
 		key := normalizeToolKey(tool.Metadata.Name)
 		if key == "" {
@@ -65,9 +66,9 @@ func NewToolCapabilityRegistryFromTools(tools []crds.Tool) *StaticToolCapability
 	return NewStaticToolCapabilityRegistry(specs)
 }
 
-func (r *StaticToolCapabilityRegistry) Resolve(tool string) (crds.ToolSpec, bool) {
+func (r *StaticToolCapabilityRegistry) Resolve(tool string) (resources.ToolSpec, bool) {
 	if r == nil {
-		return crds.ToolSpec{}, false
+		return resources.ToolSpec{}, false
 	}
 	spec, ok := r.specs[normalizeToolKey(tool)]
 	return spec, ok
@@ -144,7 +145,7 @@ func BuildGovernedToolRuntimeForAgentWithGovernance(
 	roleLookup AgentRoleLookup,
 	permissionLookup ToolPermissionLookup,
 	namespace string,
-	agent crds.Agent,
+	agent resources.Agent,
 ) ToolRuntime {
 	return buildGovernedToolRuntime(
 		baseRuntime,
@@ -167,7 +168,7 @@ func buildGovernedToolRuntime(
 	if len(toolNames) == 0 {
 		return nil
 	}
-	specs := make(map[string]crds.ToolSpec, len(toolNames))
+	specs := make(map[string]resources.ToolSpec, len(toolNames))
 	seen := make(map[string]struct{}, len(toolNames))
 	for _, name := range toolNames {
 		trimmed := strings.TrimSpace(name)
@@ -232,7 +233,8 @@ func (r *GovernedToolRuntime) Call(ctx context.Context, tool string, input strin
 		return r.baseRuntime.Call(ctx, tool, input)
 	}
 	if r.authorizer != nil {
-		if err := r.authorizer.Authorize(tool, spec); err != nil {
+		result, err := r.authorizer.Authorize(tool, spec)
+		if err != nil {
 			if IsToolDeniedError(err) {
 				return "", err
 			}
@@ -245,18 +247,21 @@ func (r *GovernedToolRuntime) Call(ctx context.Context, tool string, input strin
 			}
 			return "", err
 		}
+		if result != nil && result.Verdict == AuthorizeVerdictApprovalRequired {
+			return "", fmt.Errorf("%w: tool=%s reason=%s", ErrToolApprovalRequired, tool, result.Reason)
+		}
 	}
 	return r.callWithPolicy(ctx, tool, input, spec)
 }
 
-func (r *GovernedToolRuntime) resolve(tool string) (crds.ToolSpec, bool) {
+func (r *GovernedToolRuntime) resolve(tool string) (resources.ToolSpec, bool) {
 	if r.registry == nil {
-		return crds.ToolSpec{}, false
+		return resources.ToolSpec{}, false
 	}
 	return r.registry.Resolve(tool)
 }
 
-func (r *GovernedToolRuntime) callWithPolicy(ctx context.Context, tool string, input string, spec crds.ToolSpec) (string, error) {
+func (r *GovernedToolRuntime) callWithPolicy(ctx context.Context, tool string, input string, spec resources.ToolSpec) (string, error) {
 	target := r.baseRuntime
 	mode := strings.ToLower(strings.TrimSpace(spec.Runtime.IsolationMode))
 	if mode == "" {
@@ -397,7 +402,7 @@ func shouldRetryToolError(err error) bool {
 	if errors.Is(err, context.Canceled) {
 		return false
 	}
-	if errors.Is(err, ErrUnsupportedTool) || errors.Is(err, ErrToolIsolationUnavailable) || errors.Is(err, ErrInvalidToolRuntimePolicy) || errors.Is(err, ErrToolPermissionDenied) {
+	if errors.Is(err, ErrUnsupportedTool) || errors.Is(err, ErrToolIsolationUnavailable) || errors.Is(err, ErrInvalidToolRuntimePolicy) || errors.Is(err, ErrToolPermissionDenied) || errors.Is(err, ErrToolApprovalRequired) {
 		return false
 	}
 	lower := strings.ToLower(err.Error())
@@ -409,6 +414,10 @@ func shouldRetryToolError(err error) bool {
 		"isolation runtime unavailable",
 		"auth_invalid",
 		"auth_forbidden",
+		"approval_pending",
+		"approval_denied",
+		"approval_timeout",
+		"approval required",
 	}
 	for _, marker := range nonRetryableMarkers {
 		if strings.Contains(lower, marker) {
@@ -470,7 +479,7 @@ func normalizeToolError(err error, tool string, timeout time.Duration) error {
 	)
 }
 
-func computeToolRetryDelay(policy crds.ToolRetryPolicy, tool string, attempt int) time.Duration {
+func computeToolRetryDelay(policy resources.ToolRetryPolicy, tool string, attempt int) time.Duration {
 	if attempt < 1 {
 		attempt = 1
 	}
@@ -544,5 +553,5 @@ func normalizeToolKey(name string) string {
 }
 
 func scopedRuntimeName(namespace string, name string) string {
-	return crds.NormalizeNamespace(namespace) + "/" + strings.TrimSpace(name)
+	return resources.NormalizeNamespace(namespace) + "/" + strings.TrimSpace(name)
 }

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/eventbus"
 	"github.com/OrlojHQ/orloj/store"
 )
@@ -83,7 +83,7 @@ func (c *TaskSchedulerController) ReconcileOnce() error {
 		return nil
 	}
 
-	eligible := make(map[string]crds.Worker, len(workers))
+	eligible := make(map[string]resources.Worker, len(workers))
 	for _, worker := range workers {
 		if c.workerEligible(worker) {
 			eligible[worker.Metadata.Name] = worker
@@ -116,7 +116,7 @@ func (c *TaskSchedulerController) ReconcileOnce() error {
 	return nil
 }
 
-func (c *TaskSchedulerController) reconcileTaskAssignment(task crds.Task, eligible map[string]crds.Worker, newAssignments map[string]int) (bool, error) {
+func (c *TaskSchedulerController) reconcileTaskAssignment(task resources.Task, eligible map[string]resources.Worker, newAssignments map[string]int) (bool, error) {
 	current := strings.TrimSpace(task.Status.AssignedWorker)
 	if current != "" {
 		worker, ok := eligible[current]
@@ -148,7 +148,7 @@ func (c *TaskSchedulerController) reconcileTaskAssignment(task crds.Task, eligib
 	return true, nil
 }
 
-func (c *TaskSchedulerController) selectWorker(task crds.Task, eligible map[string]crds.Worker, newAssignments map[string]int) (string, bool) {
+func (c *TaskSchedulerController) selectWorker(task resources.Task, eligible map[string]resources.Worker, newAssignments map[string]int) (string, bool) {
 	names := make([]string, 0, len(eligible))
 	for name := range eligible {
 		names = append(names, name)
@@ -181,7 +181,7 @@ func (c *TaskSchedulerController) selectWorker(task crds.Task, eligible map[stri
 	return selected, true
 }
 
-func (c *TaskSchedulerController) workerEligible(worker crds.Worker) bool {
+func (c *TaskSchedulerController) workerEligible(worker resources.Worker) bool {
 	phase := strings.ToLower(strings.TrimSpace(worker.Status.Phase))
 	if phase != "ready" && phase != "pending" {
 		return false
@@ -199,7 +199,7 @@ func (c *TaskSchedulerController) workerEligible(worker crds.Worker) bool {
 	return true
 }
 
-func taskFitsWorkerRequirements(task crds.Task, worker crds.Worker) bool {
+func taskFitsWorkerRequirements(task resources.Task, worker resources.Worker) bool {
 	req := task.Spec.Requirements
 	if strings.TrimSpace(req.Region) != "" && !strings.EqualFold(strings.TrimSpace(req.Region), strings.TrimSpace(worker.Spec.Region)) {
 		return false
@@ -213,7 +213,7 @@ func taskFitsWorkerRequirements(task crds.Task, worker crds.Worker) bool {
 	return true
 }
 
-func taskPendingForScheduling(task crds.Task) bool {
+func taskPendingForScheduling(task resources.Task) bool {
 	if strings.EqualFold(strings.TrimSpace(task.Spec.Mode), "template") {
 		return false
 	}
@@ -231,11 +231,11 @@ func taskPendingForScheduling(task crds.Task) bool {
 	return !time.Now().UTC().Before(next)
 }
 
-func appendHistoryWithWorker(task *crds.Task, eventType, worker, message string) {
+func appendHistoryWithWorker(task *resources.Task, eventType, worker, message string) {
 	if task == nil {
 		return
 	}
-	task.Status.History = append(task.Status.History, crds.TaskHistoryEvent{
+	task.Status.History = append(task.Status.History, resources.TaskHistoryEvent{
 		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 		Type:      eventType,
 		Worker:    worker,
@@ -246,7 +246,7 @@ func appendHistoryWithWorker(task *crds.Task, eventType, worker, message string)
 	}
 }
 
-func (c *TaskSchedulerController) upsertTask(task crds.Task) (crds.Task, error) {
+func (c *TaskSchedulerController) upsertTask(task resources.Task) (resources.Task, error) {
 	var lastErr error
 	for i := 0; i < 5; i++ {
 		updated, err := c.taskStore.Upsert(task)
@@ -254,12 +254,12 @@ func (c *TaskSchedulerController) upsertTask(task crds.Task) (crds.Task, error) 
 			return updated, nil
 		}
 		if !store.IsConflict(err) {
-			return crds.Task{}, err
+			return resources.Task{}, err
 		}
 		lastErr = err
 		current, ok := c.taskStore.Get(store.ScopedName(task.Metadata.Namespace, task.Metadata.Name))
 		if !ok {
-			return crds.Task{}, err
+			return resources.Task{}, err
 		}
 		task.Metadata.ResourceVersion = current.Metadata.ResourceVersion
 		task.Metadata.Generation = current.Metadata.Generation
@@ -267,12 +267,12 @@ func (c *TaskSchedulerController) upsertTask(task crds.Task) (crds.Task, error) 
 		task.Spec = current.Spec
 	}
 	if lastErr != nil {
-		return crds.Task{}, lastErr
+		return resources.Task{}, lastErr
 	}
 	return c.taskStore.Upsert(task)
 }
 
-func (c *TaskSchedulerController) publishAssignmentEvent(task crds.Task, eventType string, message string) {
+func (c *TaskSchedulerController) publishAssignmentEvent(task resources.Task, eventType string, message string) {
 	if c.eventBus == nil {
 		return
 	}
@@ -281,7 +281,7 @@ func (c *TaskSchedulerController) publishAssignmentEvent(task crds.Task, eventTy
 		Type:      strings.TrimSpace(eventType),
 		Kind:      "Task",
 		Name:      task.Metadata.Name,
-		Namespace: crds.NormalizeNamespace(task.Metadata.Namespace),
+		Namespace: resources.NormalizeNamespace(task.Metadata.Namespace),
 		Action:    "assignment",
 		Message:   strings.TrimSpace(message),
 		Data: map[string]any{

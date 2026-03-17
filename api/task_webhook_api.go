@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/eventbus"
 	"github.com/OrlojHQ/orloj/store"
 )
@@ -45,7 +45,7 @@ func (s *Server) handleTaskWebhooks(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if hasNS || len(selector) > 0 {
-			filtered := make([]crds.TaskWebhook, 0, len(items))
+			filtered := make([]resources.TaskWebhook, 0, len(items))
 			for _, item := range items {
 				if !matchMetadataFilters(item.Metadata, ns, hasNS, selector) {
 					continue
@@ -54,14 +54,14 @@ func (s *Server) handleTaskWebhooks(w http.ResponseWriter, r *http.Request) {
 			}
 			items = filtered
 		}
-		writeJSON(w, http.StatusOK, crds.TaskWebhookList{Items: items})
+		writeJSON(w, http.StatusOK, resources.TaskWebhookList{Items: items})
 	case http.MethodPost:
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, "failed to read request body", http.StatusBadRequest)
 			return
 		}
-		obj, err := crds.ParseTaskWebhookManifest(body)
+		obj, err := resources.ParseTaskWebhookManifest(body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -133,7 +133,7 @@ func (s *Server) handleTaskWebhookByName(w http.ResponseWriter, r *http.Request)
 			http.Error(w, "failed to read request body", http.StatusBadRequest)
 			return
 		}
-		obj, err := crds.ParseTaskWebhookManifest(body)
+		obj, err := resources.ParseTaskWebhookManifest(body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -256,16 +256,16 @@ func (s *Server) handleWebhookDelivery(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) findTaskWebhookByEndpointID(endpointID string) (crds.TaskWebhook, bool) {
+func (s *Server) findTaskWebhookByEndpointID(endpointID string) (resources.TaskWebhook, bool) {
 	for _, item := range s.stores.TaskWebhooks.List() {
 		if strings.TrimSpace(item.Status.EndpointID) == strings.TrimSpace(endpointID) {
 			return item, true
 		}
 	}
-	return crds.TaskWebhook{}, false
+	return resources.TaskWebhook{}, false
 }
 
-func (s *Server) resolveWebhookSecret(hook crds.TaskWebhook) ([]byte, error) {
+func (s *Server) resolveWebhookSecret(hook resources.TaskWebhook) ([]byte, error) {
 	secretNS, secretName, err := resolveRef(hook.Metadata.Namespace, hook.Spec.Auth.SecretRef)
 	if err != nil {
 		return nil, err
@@ -296,7 +296,7 @@ func (s *Server) resolveWebhookSecret(hook crds.TaskWebhook) ([]byte, error) {
 	return decoded, nil
 }
 
-func verifyWebhookSignature(hook crds.TaskWebhook, r *http.Request, body []byte, secret []byte, now time.Time) error {
+func verifyWebhookSignature(hook resources.TaskWebhook, r *http.Request, body []byte, secret []byte, now time.Time) error {
 	sigHeaderName := strings.TrimSpace(hook.Spec.Auth.SignatureHeader)
 	if sigHeaderName == "" {
 		return fmt.Errorf("signature header is empty")
@@ -402,7 +402,7 @@ func trimCaseInsensitivePrefix(value, prefix string) (string, bool) {
 	return value[len(prefix):], true
 }
 
-func (s *Server) createTaskFromWebhook(hook crds.TaskWebhook, eventID string, body []byte, now time.Time) (string, error) {
+func (s *Server) createTaskFromWebhook(hook resources.TaskWebhook, eventID string, body []byte, now time.Time) (string, error) {
 	templateNS, templateName, err := resolveRef(hook.Metadata.Namespace, hook.Spec.TaskRef)
 	if err != nil {
 		return "", err
@@ -424,7 +424,7 @@ func (s *Server) createTaskFromWebhook(hook crds.TaskWebhook, eventID string, bo
 		labels := existing.Metadata.Labels
 		if labels != nil &&
 			strings.EqualFold(strings.TrimSpace(labels[taskWebhookNameLabel]), strings.TrimSpace(hook.Metadata.Name)) &&
-			strings.EqualFold(strings.TrimSpace(labels[taskWebhookNamespaceLabel]), crds.NormalizeNamespace(hook.Metadata.Namespace)) {
+			strings.EqualFold(strings.TrimSpace(labels[taskWebhookNamespaceLabel]), resources.NormalizeNamespace(hook.Metadata.Namespace)) {
 			return runKey, nil
 		}
 		return "", fmt.Errorf("webhook run task name conflict for %q", runKey)
@@ -435,7 +435,7 @@ func (s *Server) createTaskFromWebhook(hook crds.TaskWebhook, eventID string, bo
 		labels = make(map[string]string)
 	}
 	labels[taskWebhookNameLabel] = hook.Metadata.Name
-	labels[taskWebhookNamespaceLabel] = crds.NormalizeNamespace(hook.Metadata.Namespace)
+	labels[taskWebhookNamespaceLabel] = resources.NormalizeNamespace(hook.Metadata.Namespace)
 	labels[taskWebhookEventIDLabel] = eventIDHash
 
 	spec := cloneTaskSpecForWebhook(template.Spec)
@@ -448,10 +448,10 @@ func (s *Server) createTaskFromWebhook(hook crds.TaskWebhook, eventID string, bo
 	spec.Input["webhook_received_at"] = now.UTC().Format(time.RFC3339Nano)
 	spec.Input["webhook_source"] = strings.TrimSpace(hook.Spec.Auth.Profile)
 
-	runTask := crds.Task{
+	runTask := resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata: crds.ObjectMeta{
+		Metadata: resources.ObjectMeta{
 			Name:      runName,
 			Namespace: runNamespace,
 			Labels:    labels,
@@ -469,7 +469,7 @@ func (s *Server) createTaskFromWebhook(hook crds.TaskWebhook, eventID string, bo
 	return runKey, nil
 }
 
-func cloneTaskSpecForWebhook(spec crds.TaskSpec) crds.TaskSpec {
+func cloneTaskSpecForWebhook(spec resources.TaskSpec) resources.TaskSpec {
 	cloned := spec
 	cloned.Input = copyStringMap(spec.Input)
 	if cloned.Input == nil {
@@ -503,14 +503,14 @@ func resolveRef(defaultNamespace, ref string) (string, string, error) {
 	}
 	if strings.Contains(ref, "/") {
 		parts := strings.SplitN(ref, "/", 2)
-		ns := crds.NormalizeNamespace(parts[0])
+		ns := resources.NormalizeNamespace(parts[0])
 		name := strings.TrimSpace(parts[1])
 		if ns == "" || name == "" {
 			return "", "", fmt.Errorf("invalid reference %q: expected name or namespace/name", ref)
 		}
 		return ns, name, nil
 	}
-	return crds.NormalizeNamespace(defaultNamespace), ref, nil
+	return resources.NormalizeNamespace(defaultNamespace), ref, nil
 }
 
 func copyStringMap(src map[string]string) map[string]string {
@@ -524,7 +524,7 @@ func copyStringMap(src map[string]string) map[string]string {
 	return out
 }
 
-func (s *Server) recordTaskWebhookDeliveryResult(hook crds.TaskWebhook, eventID, task, eventType string, rejected bool, duplicate bool, lastError string) {
+func (s *Server) recordTaskWebhookDeliveryResult(hook resources.TaskWebhook, eventID, task, eventType string, rejected bool, duplicate bool, lastError string) {
 	reason := strings.ToLower(strings.TrimSpace(eventType))
 	deliveryType := "accepted"
 	if duplicate {
@@ -533,7 +533,7 @@ func (s *Server) recordTaskWebhookDeliveryResult(hook crds.TaskWebhook, eventID,
 		deliveryType = "rejected"
 	}
 
-	updated, err := s.updateTaskWebhookStatus(hook.Metadata.Namespace, hook.Metadata.Name, func(status *crds.TaskWebhookStatus) {
+	updated, err := s.updateTaskWebhookStatus(hook.Metadata.Namespace, hook.Metadata.Name, func(status *resources.TaskWebhookStatus) {
 		status.LastDeliveryTime = time.Now().UTC().Format(time.RFC3339Nano)
 		status.LastEventID = strings.TrimSpace(eventID)
 		if task != "" {
@@ -575,12 +575,12 @@ func (s *Server) recordTaskWebhookDeliveryResult(hook crds.TaskWebhook, eventID,
 	s.publishTaskWebhookEvent("taskwebhook.delivery."+deliveryType, updated, msg, payload)
 }
 
-func (s *Server) updateTaskWebhookStatus(namespace, name string, mutate func(*crds.TaskWebhookStatus)) (crds.TaskWebhook, error) {
+func (s *Server) updateTaskWebhookStatus(namespace, name string, mutate func(*resources.TaskWebhookStatus)) (resources.TaskWebhook, error) {
 	key := store.ScopedName(namespace, name)
 	for i := 0; i < 3; i++ {
 		item, ok := s.stores.TaskWebhooks.Get(key)
 		if !ok {
-			return crds.TaskWebhook{}, fmt.Errorf("taskwebhook %q not found", name)
+			return resources.TaskWebhook{}, fmt.Errorf("taskwebhook %q not found", name)
 		}
 		mutate(&item.Status)
 		if item.Status.ObservedGeneration == 0 {
@@ -592,13 +592,13 @@ func (s *Server) updateTaskWebhookStatus(namespace, name string, mutate func(*cr
 			return updated, nil
 		}
 		if !store.IsConflict(err) {
-			return crds.TaskWebhook{}, err
+			return resources.TaskWebhook{}, err
 		}
 	}
-	return crds.TaskWebhook{}, fmt.Errorf("failed to update task webhook status after retries")
+	return resources.TaskWebhook{}, fmt.Errorf("failed to update task webhook status after retries")
 }
 
-func (s *Server) publishTaskWebhookEvent(eventType string, hook crds.TaskWebhook, message string, data map[string]any) {
+func (s *Server) publishTaskWebhookEvent(eventType string, hook resources.TaskWebhook, message string, data map[string]any) {
 	if s == nil || s.bus == nil {
 		return
 	}
@@ -607,7 +607,7 @@ func (s *Server) publishTaskWebhookEvent(eventType string, hook crds.TaskWebhook
 		Type:      strings.TrimSpace(eventType),
 		Kind:      "TaskWebhook",
 		Name:      strings.TrimSpace(hook.Metadata.Name),
-		Namespace: crds.NormalizeNamespace(hook.Metadata.Namespace),
+		Namespace: resources.NormalizeNamespace(hook.Metadata.Namespace),
 		Action:    strings.TrimSpace(eventType),
 		Message:   strings.TrimSpace(message),
 		Data:      data,

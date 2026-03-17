@@ -183,6 +183,6 @@ spec:
 
 ## Related Resources
 
-- [Resource Reference: Task, TaskSchedule, TaskWebhook, Worker](../reference/crds.md)
+- [Resource Reference: Task, TaskSchedule, TaskWebhook, Worker](../reference/resources.md)
 - [Execution and Messaging](../architecture/execution-model.md)
 - [Troubleshooting](../operations/troubleshooting.md)

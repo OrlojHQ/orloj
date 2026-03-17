@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 // ExternalToolRuntime delegates tool execution to an external HTTP service.
@@ -55,7 +55,7 @@ func (r *ExternalToolRuntime) WithNamespace(namespace string) ToolRuntime {
 		return NewExternalToolRuntime(nil, nil, nil)
 	}
 	copy := *r
-	copy.namespace = crds.NormalizeNamespace(strings.TrimSpace(namespace))
+	copy.namespace = resources.NormalizeNamespace(strings.TrimSpace(namespace))
 	if aware, ok := copy.secrets.(namespaceAwareSecretResolver); ok {
 		copy.secrets = aware.WithNamespace(copy.namespace)
 	}

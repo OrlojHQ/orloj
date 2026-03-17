@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/cronexpr"
 	"github.com/OrlojHQ/orloj/eventbus"
 	"github.com/OrlojHQ/orloj/store"
@@ -95,7 +95,7 @@ func (c *TaskScheduleController) ReconcileOnce() error {
 	return nil
 }
 
-func (c *TaskScheduleController) reconcileSchedule(item crds.TaskSchedule) error {
+func (c *TaskScheduleController) reconcileSchedule(item resources.TaskSchedule) error {
 	now := time.Now().UTC()
 	expr, loc, err := parseScheduleSpec(item)
 	if err != nil {
@@ -178,7 +178,7 @@ func (c *TaskScheduleController) reconcileSchedule(item crds.TaskSchedule) error
 	return c.refreshScheduleStatus(item)
 }
 
-func parseScheduleSpec(item crds.TaskSchedule) (cronexpr.Expression, *time.Location, error) {
+func parseScheduleSpec(item resources.TaskSchedule) (cronexpr.Expression, *time.Location, error) {
 	expr, err := cronexpr.Parse(item.Spec.Schedule)
 	if err != nil {
 		return cronexpr.Expression{}, nil, fmt.Errorf("invalid schedule: %w", err)
@@ -190,7 +190,7 @@ func parseScheduleSpec(item crds.TaskSchedule) (cronexpr.Expression, *time.Locat
 	return expr, loc, nil
 }
 
-func evaluateDueSlot(item crds.TaskSchedule, expr cronexpr.Expression, loc *time.Location, now time.Time) (time.Time, bool, bool, error) {
+func evaluateDueSlot(item resources.TaskSchedule, expr cronexpr.Expression, loc *time.Location, now time.Time) (time.Time, bool, bool, error) {
 	latestLocal, ok := expr.Prev(now.In(loc))
 	if !ok {
 		return time.Time{}, false, false, nil
@@ -214,7 +214,7 @@ func evaluateDueSlot(item crds.TaskSchedule, expr cronexpr.Expression, loc *time
 	return latestUTC, true, withinDeadline, nil
 }
 
-func (c *TaskScheduleController) ensureRunTask(item crds.TaskSchedule, slot time.Time) (string, error) {
+func (c *TaskScheduleController) ensureRunTask(item resources.TaskSchedule, slot time.Time) (string, error) {
 	templateNS, templateName, err := resolveTaskRef(item.Metadata.Namespace, item.Spec.TaskRef)
 	if err != nil {
 		return "", err
@@ -248,15 +248,15 @@ func (c *TaskScheduleController) ensureRunTask(item crds.TaskSchedule, slot time
 		labels = make(map[string]string)
 	}
 	labels[taskScheduleNameLabel] = item.Metadata.Name
-	labels[taskScheduleNamespaceLabel] = crds.NormalizeNamespace(item.Metadata.Namespace)
+	labels[taskScheduleNamespaceLabel] = resources.NormalizeNamespace(item.Metadata.Namespace)
 	labels[taskScheduleSlotLabel] = slot.UTC().Format(time.RFC3339Nano)
 
 	spec := cloneTaskSpec(template.Spec)
 	spec.Mode = "run"
-	runTask := crds.Task{
+	runTask := resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata: crds.ObjectMeta{
+		Metadata: resources.ObjectMeta{
 			Name:      runName,
 			Namespace: runNamespace,
 			Labels:    labels,
@@ -269,10 +269,10 @@ func (c *TaskScheduleController) ensureRunTask(item crds.TaskSchedule, slot time
 	return runKey, nil
 }
 
-func (c *TaskScheduleController) cleanupHistory(item crds.TaskSchedule) (int, error) {
+func (c *TaskScheduleController) cleanupHistory(item resources.TaskSchedule) (int, error) {
 	generated := c.generatedTasks(item)
-	successes := make([]crds.Task, 0, len(generated))
-	failures := make([]crds.Task, 0, len(generated))
+	successes := make([]resources.Task, 0, len(generated))
+	failures := make([]resources.Task, 0, len(generated))
 	for _, task := range generated {
 		switch strings.ToLower(strings.TrimSpace(task.Status.Phase)) {
 		case "succeeded":
@@ -304,9 +304,9 @@ func (c *TaskScheduleController) cleanupHistory(item crds.TaskSchedule) (int, er
 	return deleted, nil
 }
 
-func (c *TaskScheduleController) generatedTasks(item crds.TaskSchedule) []crds.Task {
+func (c *TaskScheduleController) generatedTasks(item resources.TaskSchedule) []resources.Task {
 	all := c.taskStore.List()
-	out := make([]crds.Task, 0, len(all))
+	out := make([]resources.Task, 0, len(all))
 	for _, task := range all {
 		labels := task.Metadata.Labels
 		if labels == nil {
@@ -315,7 +315,7 @@ func (c *TaskScheduleController) generatedTasks(item crds.TaskSchedule) []crds.T
 		if !strings.EqualFold(strings.TrimSpace(labels[taskScheduleNameLabel]), strings.TrimSpace(item.Metadata.Name)) {
 			continue
 		}
-		if !strings.EqualFold(strings.TrimSpace(labels[taskScheduleNamespaceLabel]), crds.NormalizeNamespace(item.Metadata.Namespace)) {
+		if !strings.EqualFold(strings.TrimSpace(labels[taskScheduleNamespaceLabel]), resources.NormalizeNamespace(item.Metadata.Namespace)) {
 			continue
 		}
 		out = append(out, task)
@@ -323,7 +323,7 @@ func (c *TaskScheduleController) generatedTasks(item crds.TaskSchedule) []crds.T
 	return out
 }
 
-func listActiveRuns(tasks []crds.Task) []string {
+func listActiveRuns(tasks []resources.Task) []string {
 	out := make([]string, 0, len(tasks))
 	for _, task := range tasks {
 		switch strings.ToLower(strings.TrimSpace(task.Status.Phase)) {
@@ -335,7 +335,7 @@ func listActiveRuns(tasks []crds.Task) []string {
 	return out
 }
 
-func taskTerminalTime(task crds.Task) time.Time {
+func taskTerminalTime(task resources.Task) time.Time {
 	candidates := []string{
 		task.Status.CompletedAt,
 		task.Status.StartedAt,
@@ -352,7 +352,7 @@ func taskTerminalTime(task crds.Task) time.Time {
 	return time.Time{}
 }
 
-func (c *TaskScheduleController) refreshScheduleStatus(item crds.TaskSchedule) error {
+func (c *TaskScheduleController) refreshScheduleStatus(item resources.TaskSchedule) error {
 	generated := c.generatedTasks(item)
 	item.Status.ActiveRuns = listActiveRuns(generated)
 
@@ -379,7 +379,7 @@ func (c *TaskScheduleController) refreshScheduleStatus(item crds.TaskSchedule) e
 	return c.upsertTaskSchedule(item)
 }
 
-func (c *TaskScheduleController) upsertTaskSchedule(item crds.TaskSchedule) error {
+func (c *TaskScheduleController) upsertTaskSchedule(item resources.TaskSchedule) error {
 	var lastErr error
 	for i := 0; i < 5; i++ {
 		if _, err := c.taskScheduleStore.Upsert(item); err == nil {
@@ -407,7 +407,7 @@ func (c *TaskScheduleController) upsertTaskSchedule(item crds.TaskSchedule) erro
 	return err
 }
 
-func (c *TaskScheduleController) publishScheduleEvent(item crds.TaskSchedule, eventType string, message string, data map[string]any) {
+func (c *TaskScheduleController) publishScheduleEvent(item resources.TaskSchedule, eventType string, message string, data map[string]any) {
 	if c.eventBus == nil {
 		return
 	}
@@ -421,7 +421,7 @@ func (c *TaskScheduleController) publishScheduleEvent(item crds.TaskSchedule, ev
 		Type:      strings.TrimSpace(eventType),
 		Kind:      "TaskSchedule",
 		Name:      item.Metadata.Name,
-		Namespace: crds.NormalizeNamespace(item.Metadata.Namespace),
+		Namespace: resources.NormalizeNamespace(item.Metadata.Namespace),
 		Action:    strings.ToLower(strings.TrimSpace(item.Status.Phase)),
 		Message:   strings.TrimSpace(message),
 		Data:      data,
@@ -434,10 +434,10 @@ func resolveTaskRef(scheduleNamespace, taskRef string) (string, string, error) {
 		return "", "", fmt.Errorf("spec.task_ref is required")
 	}
 	if !strings.Contains(ref, "/") {
-		return crds.NormalizeNamespace(scheduleNamespace), ref, nil
+		return resources.NormalizeNamespace(scheduleNamespace), ref, nil
 	}
 	parts := strings.SplitN(ref, "/", 2)
-	ns := crds.NormalizeNamespace(parts[0])
+	ns := resources.NormalizeNamespace(parts[0])
 	name := strings.TrimSpace(parts[1])
 	if name == "" {
 		return "", "", fmt.Errorf("invalid spec.task_ref %q", taskRef)
@@ -479,7 +479,7 @@ func sanitizeName(value string) string {
 	return strings.Trim(builder.String(), "-")
 }
 
-func cloneTaskSpec(spec crds.TaskSpec) crds.TaskSpec {
+func cloneTaskSpec(spec resources.TaskSpec) resources.TaskSpec {
 	out := spec
 	out.Input = copyStringMap(spec.Input)
 	out.MessageRetry.NonRetryable = append([]string(nil), spec.MessageRetry.NonRetryable...)

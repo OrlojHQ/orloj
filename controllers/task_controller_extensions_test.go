@@ -5,7 +5,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/runtime"
 )
 
@@ -56,33 +56,33 @@ func TestTaskControllerEmitsExtensionEventsSequential(t *testing.T) {
 		Audit:    audit,
 	})
 
-	if _, err := stores.agentStore.Upsert(crds.Agent{
+	if _, err := stores.agentStore.Upsert(resources.Agent{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
-		Metadata:   crds.ObjectMeta{Name: "planner-agent"},
-		Spec: crds.AgentSpec{
+		Metadata:   resources.ObjectMeta{Name: "planner-agent"},
+		Spec: resources.AgentSpec{
 			Model:  "gpt-4o-mini",
 			Prompt: "plan a short update",
-			Limits: crds.AgentLimits{MaxSteps: 1, Timeout: "1s"},
+			Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
 		},
 	}); err != nil {
 		t.Fatalf("upsert agent failed: %v", err)
 	}
-	if _, err := stores.agentSystemStore.Upsert(crds.AgentSystem{
+	if _, err := stores.agentSystemStore.Upsert(resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
-		Metadata:   crds.ObjectMeta{Name: "report-system"},
-		Spec: crds.AgentSystemSpec{
+		Metadata:   resources.ObjectMeta{Name: "report-system"},
+		Spec: resources.AgentSystemSpec{
 			Agents: []string{"planner-agent"},
 		},
 	}); err != nil {
 		t.Fatalf("upsert agentsystem failed: %v", err)
 	}
-	if _, err := stores.taskStore.Upsert(crds.Task{
+	if _, err := stores.taskStore.Upsert(resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "report-task"},
-		Spec:       crds.TaskSpec{System: "report-system", Input: map[string]string{"topic": "status"}},
+		Metadata:   resources.ObjectMeta{Name: "report-task"},
+		Spec:       resources.TaskSpec{System: "report-system", Input: map[string]string{"topic": "status"}},
 	}); err != nil {
 		t.Fatalf("upsert task failed: %v", err)
 	}

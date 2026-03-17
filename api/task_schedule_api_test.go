@@ -10,18 +10,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 func TestTaskScheduleCRUDAndStatusPreconditions(t *testing.T) {
 	server := newTestServer(t)
 	defer server.Close()
 
-	postJSON(t, server.URL+"/v1/task-schedules", crds.TaskSchedule{
+	postJSON(t, server.URL+"/v1/task-schedules", resources.TaskSchedule{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "TaskSchedule",
-		Metadata:   crds.ObjectMeta{Name: "hourly"},
-		Spec: crds.TaskScheduleSpec{
+		Metadata:   resources.ObjectMeta{Name: "hourly"},
+		Spec: resources.TaskScheduleSpec{
 			TaskRef:  "template-task",
 			Schedule: "0 * * * *",
 			TimeZone: "UTC",
@@ -38,7 +38,7 @@ func TestTaskScheduleCRUDAndStatusPreconditions(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("get task schedule status=%d body=%s", resp.StatusCode, string(body))
 	}
-	var schedule crds.TaskSchedule
+	var schedule resources.TaskSchedule
 	if err := json.NewDecoder(resp.Body).Decode(&schedule); err != nil {
 		t.Fatalf("decode task schedule failed: %v", err)
 	}
@@ -122,11 +122,11 @@ func TestTaskScheduleWatchEndpoint(t *testing.T) {
 	server := newTestServer(t)
 	defer server.Close()
 
-	postJSON(t, server.URL+"/v1/task-schedules", crds.TaskSchedule{
+	postJSON(t, server.URL+"/v1/task-schedules", resources.TaskSchedule{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "TaskSchedule",
-		Metadata:   crds.ObjectMeta{Name: "watch-schedule"},
-		Spec: crds.TaskScheduleSpec{
+		Metadata:   resources.ObjectMeta{Name: "watch-schedule"},
+		Spec: resources.TaskScheduleSpec{
 			TaskRef:  "template-task",
 			Schedule: "* * * * *",
 			TimeZone: "UTC",

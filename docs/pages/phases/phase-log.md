@@ -301,7 +301,7 @@
   - auth injection via `Authorization: Bearer` header from secret-resolved `Tool.spec.auth.secretRef`
   - HTTP status code mapping to canonical tool error taxonomy (429/5xx retryable, 4xx non-retryable)
   - contract-aware response parsing: detects `ToolExecutionResponse` envelopes vs raw output
-- added `Tool.spec.type` validation at apply time in `crds/resource_types.go`:
+- added `Tool.spec.type` validation at apply time in `resources/resource_types.go`:
   - allowed values: `http`, `external`, `grpc`, `queue`, `webhook-callback`
   - unknown types rejected with deterministic validation error
 - added external tool executor runtime (`runtime/tool_runtime_external.go`):
@@ -328,7 +328,7 @@
 
 ### Tool Platform 3: Tool Auth and Secret Binding
 
-- expanded `ToolAuth` CRD to support four auth profiles:
+- expanded `ToolAuth` resource to support four auth profiles:
   - `bearer` (default, backward-compatible)
   - `api_key_header` with custom header name
   - `basic` with base64-encoded `username:password`
@@ -363,13 +363,59 @@
   - `TestAuthInjector*`: all four profiles, error cases, edge cases (14 tests)
   - `TestOAuth2TokenCache*`: caching, eviction, expiry, errors (5 tests)
   - `TestHTTPToolClientMaps401ToAuthInvalid`, `TestHTTPToolClientMaps403ToAuthForbidden`
-  - `TestToolNormalizeAuth*`: CRD validation for profiles, constraints, scopes (7 tests)
+  - `TestToolNormalizeAuth*`: resource validation for profiles, constraints, scopes (7 tests)
 - updated user-facing documentation:
   - `build-custom-tool.md`: examples for all four auth profiles
-  - `crds.md`: full auth field reference and validation rules
+  - `resources.md`: full auth field reference and validation rules
   - `security.md`: auth profile guidance, container auth, error handling, audit trail
   - `tool-contract-v1.md`: expanded auth binding section with rotation semantics
   - `tools-and-isolation.md`: auth profiles section with rotation details
+
+## Tool Platform 4: Policy Hooks and Risk-Tier Routing
+
+- added `OperationClasses` field to `ToolSpec` in `resources/resource_types.go`:
+  - allowed values: `read`, `write`, `delete`, `admin`
+  - normalization: trim, lowercase, deduplicate
+  - validation: rejects unknown values
+  - defaults: `["read"]` for low/medium risk, `["write"]` for high/critical risk
+  - manifest parser support in `resources/manifest_parser_ext.go`
+- added `OperationRule` struct and `OperationRules` to `ToolPermissionSpec`:
+  - each rule has `operation_class` (or `*` wildcard) and `verdict` (`allow`/`deny`/`approval_required`)
+  - normalization: trim, lowercase, validates both fields
+  - manifest parser support for constrained YAML
+- refactored `ToolCallAuthorizer` interface to tri-state:
+  - `Authorize()` now returns `(*AuthorizeResult, error)` instead of `error`
+  - `AuthorizeResult.Verdict`: `allow`, `deny`, `approval_required`
+  - `AgentToolAuthorizer` evaluates `OperationRules` when present, computes aggregate verdict
+  - most-restrictive-wins: `deny` > `approval_required` > `allow`
+  - backward compatible: no operation rules = original binary allow/deny behavior
+- added `ToolApproval` resource in `resources/resource_types.go`:
+  - `Spec`: `task_ref`, `tool`, `operation_class`, `agent`, `input`, `reason`, `ttl`
+  - `Status`: `phase` (Pending/Approved/Denied/Expired), `decision`, `decided_by`, `decided_at`, `expires_at`
+  - `Normalize()` with validation, TTL defaulting (10m), and auto-computed `expires_at`
+  - `ToolApprovalStore` with in-memory and Postgres backends
+  - SQL migration: `store/migrations/002_tool_approvals.up.sql`
+  - API endpoints: CRUD + `POST .../approve` and `POST .../deny`
+- added `WaitingApproval` task phase:
+  - `ErrToolApprovalRequired` sentinel error in governed runtime
+  - task controller transitions Running -> WaitingApproval on approval required
+  - `reconcileWaitingApproval`: checks ToolApproval status (Approved -> Running, Denied -> Failed, Expired -> Failed)
+  - wired `ToolApprovalStore` into task controller via `SetToolApprovalStore`
+- added approval error taxonomy:
+  - `approval_pending`, `approval_denied`, `approval_timeout` codes and reasons
+  - all three are non-retryable in `shouldRetryToolError`
+  - trace event classification for `tool_approval_pending`
+- comprehensive test coverage:
+  - resource normalization: operation classes defaults, validation, deduplication; operation rules normalization, invalid class/verdict rejection; ToolApproval normalization, validation, invalid TTL/phase
+  - authorizer: allow/deny/approval_required verdicts, deny-overrides-approval, wildcard rules, backward compatibility, nil authorizer, most-restrictive-verdict unit tests
+  - governed runtime: approval required sentinel error, non-retryable verification
+  - approval error codes: all three are non-retryable; `IsApprovalRequiredError` helper
+- updated user-facing documentation:
+  - `resources.md`: `operation_classes` on Tool, `operation_rules` on ToolPermission, new ToolApproval resource with API endpoints, WaitingApproval task phase
+  - `tools-and-isolation.md`: operation classes section, approval workflow
+  - `security.md`: risk-tier routing guidance, approval workflow operational considerations
+  - `build-custom-tool.md`: annotating tools with operation classes
+  - `tool-contract-v1.md`: approval error codes table
 
 ## Documentation Process
 

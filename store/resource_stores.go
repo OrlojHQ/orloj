@@ -9,45 +9,45 @@ import (
 	"sync"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 type AgentSystemStore struct {
 	mu    sync.RWMutex
-	items map[string]crds.AgentSystem
+	items map[string]resources.AgentSystem
 	db    *sql.DB
 }
 
 func NewAgentSystemStore() *AgentSystemStore {
-	return &AgentSystemStore{items: make(map[string]crds.AgentSystem)}
+	return &AgentSystemStore{items: make(map[string]resources.AgentSystem)}
 }
 
 func NewAgentSystemStoreWithDB(db *sql.DB) *AgentSystemStore {
-	return &AgentSystemStore{items: make(map[string]crds.AgentSystem), db: db}
+	return &AgentSystemStore{items: make(map[string]resources.AgentSystem), db: db}
 }
 
-func (s *AgentSystemStore) Upsert(item crds.AgentSystem) (crds.AgentSystem, error) {
+func (s *AgentSystemStore) Upsert(item resources.AgentSystem) (resources.AgentSystem, error) {
 	if err := item.Normalize(); err != nil {
-		return crds.AgentSystem{}, err
+		return resources.AgentSystem{}, err
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		existing, found, err := getFromTable[crds.AgentSystem](s.db, tableAgentSystems, key)
+		existing, found, err := getFromTable[resources.AgentSystem](s.db, tableAgentSystems, key)
 		if err != nil {
-			return crds.AgentSystem{}, err
+			return resources.AgentSystem{}, err
 		}
 		if !found {
 			if err := initializeCreateMetadata("AgentSystem", &item.Metadata); err != nil {
-				return crds.AgentSystem{}, err
+				return resources.AgentSystem{}, err
 			}
 		} else {
 			specChanged := !reflect.DeepEqual(existing.Spec, item.Spec)
 			if err := initializeUpdateMetadata("AgentSystem", &item.Metadata, existing.Metadata, specChanged); err != nil {
-				return crds.AgentSystem{}, err
+				return resources.AgentSystem{}, err
 			}
 		}
 		if err := upsertAgentSystemSQL(s.db, key, item); err != nil {
-			return crds.AgentSystem{}, err
+			return resources.AgentSystem{}, err
 		}
 		return item, nil
 	}
@@ -56,13 +56,13 @@ func (s *AgentSystemStore) Upsert(item crds.AgentSystem) (crds.AgentSystem, erro
 	if !found {
 		if err := initializeCreateMetadata("AgentSystem", &item.Metadata); err != nil {
 			s.mu.Unlock()
-			return crds.AgentSystem{}, err
+			return resources.AgentSystem{}, err
 		}
 	} else {
 		specChanged := !reflect.DeepEqual(existing.Spec, item.Spec)
 		if err := initializeUpdateMetadata("AgentSystem", &item.Metadata, existing.Metadata, specChanged); err != nil {
 			s.mu.Unlock()
-			return crds.AgentSystem{}, err
+			return resources.AgentSystem{}, err
 		}
 	}
 	s.items[key] = item
@@ -70,12 +70,12 @@ func (s *AgentSystemStore) Upsert(item crds.AgentSystem) (crds.AgentSystem, erro
 	return item, nil
 }
 
-func (s *AgentSystemStore) Get(name string) (crds.AgentSystem, bool) {
+func (s *AgentSystemStore) Get(name string) (resources.AgentSystem, bool) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		item, ok, err := getFromTable[crds.AgentSystem](s.db, tableAgentSystems, key)
+		item, ok, err := getFromTable[resources.AgentSystem](s.db, tableAgentSystems, key)
 		if err != nil {
-			return crds.AgentSystem{}, false
+			return resources.AgentSystem{}, false
 		}
 		return item, ok
 	}
@@ -86,18 +86,18 @@ func (s *AgentSystemStore) Get(name string) (crds.AgentSystem, bool) {
 	return item, ok
 }
 
-func (s *AgentSystemStore) List() []crds.AgentSystem {
+func (s *AgentSystemStore) List() []resources.AgentSystem {
 	if s.db != nil {
-		items, err := listFromTable[crds.AgentSystem](s.db, tableAgentSystems)
+		items, err := listFromTable[resources.AgentSystem](s.db, tableAgentSystems)
 		if err != nil {
-			return []crds.AgentSystem{}
+			return []resources.AgentSystem{}
 		}
 		return items
 	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := make([]crds.AgentSystem, 0, len(s.items))
+	out := make([]resources.AgentSystem, 0, len(s.items))
 	for _, item := range s.items {
 		out = append(out, item)
 	}
@@ -131,40 +131,40 @@ func (s *AgentSystemStore) Delete(name string) error {
 
 type ModelEndpointStore struct {
 	mu    sync.RWMutex
-	items map[string]crds.ModelEndpoint
+	items map[string]resources.ModelEndpoint
 	db    *sql.DB
 }
 
 func NewModelEndpointStore() *ModelEndpointStore {
-	return &ModelEndpointStore{items: make(map[string]crds.ModelEndpoint)}
+	return &ModelEndpointStore{items: make(map[string]resources.ModelEndpoint)}
 }
 
 func NewModelEndpointStoreWithDB(db *sql.DB) *ModelEndpointStore {
-	return &ModelEndpointStore{items: make(map[string]crds.ModelEndpoint), db: db}
+	return &ModelEndpointStore{items: make(map[string]resources.ModelEndpoint), db: db}
 }
 
-func (s *ModelEndpointStore) Upsert(item crds.ModelEndpoint) (crds.ModelEndpoint, error) {
+func (s *ModelEndpointStore) Upsert(item resources.ModelEndpoint) (resources.ModelEndpoint, error) {
 	if err := item.Normalize(); err != nil {
-		return crds.ModelEndpoint{}, err
+		return resources.ModelEndpoint{}, err
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		existing, found, err := getFromTable[crds.ModelEndpoint](s.db, tableModelEndpoints, key)
+		existing, found, err := getFromTable[resources.ModelEndpoint](s.db, tableModelEndpoints, key)
 		if err != nil {
-			return crds.ModelEndpoint{}, err
+			return resources.ModelEndpoint{}, err
 		}
 		if !found {
 			if err := initializeCreateMetadata("ModelEndpoint", &item.Metadata); err != nil {
-				return crds.ModelEndpoint{}, err
+				return resources.ModelEndpoint{}, err
 			}
 		} else {
 			specChanged := !reflect.DeepEqual(existing.Spec, item.Spec)
 			if err := initializeUpdateMetadata("ModelEndpoint", &item.Metadata, existing.Metadata, specChanged); err != nil {
-				return crds.ModelEndpoint{}, err
+				return resources.ModelEndpoint{}, err
 			}
 		}
 		if err := upsertModelEndpointSQL(s.db, key, item); err != nil {
-			return crds.ModelEndpoint{}, err
+			return resources.ModelEndpoint{}, err
 		}
 		return item, nil
 	}
@@ -173,13 +173,13 @@ func (s *ModelEndpointStore) Upsert(item crds.ModelEndpoint) (crds.ModelEndpoint
 	if !found {
 		if err := initializeCreateMetadata("ModelEndpoint", &item.Metadata); err != nil {
 			s.mu.Unlock()
-			return crds.ModelEndpoint{}, err
+			return resources.ModelEndpoint{}, err
 		}
 	} else {
 		specChanged := !reflect.DeepEqual(existing.Spec, item.Spec)
 		if err := initializeUpdateMetadata("ModelEndpoint", &item.Metadata, existing.Metadata, specChanged); err != nil {
 			s.mu.Unlock()
-			return crds.ModelEndpoint{}, err
+			return resources.ModelEndpoint{}, err
 		}
 	}
 	s.items[key] = item
@@ -187,12 +187,12 @@ func (s *ModelEndpointStore) Upsert(item crds.ModelEndpoint) (crds.ModelEndpoint
 	return item, nil
 }
 
-func (s *ModelEndpointStore) Get(name string) (crds.ModelEndpoint, bool) {
+func (s *ModelEndpointStore) Get(name string) (resources.ModelEndpoint, bool) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		item, ok, err := getFromTable[crds.ModelEndpoint](s.db, tableModelEndpoints, key)
+		item, ok, err := getFromTable[resources.ModelEndpoint](s.db, tableModelEndpoints, key)
 		if err != nil {
-			return crds.ModelEndpoint{}, false
+			return resources.ModelEndpoint{}, false
 		}
 		return item, ok
 	}
@@ -203,18 +203,18 @@ func (s *ModelEndpointStore) Get(name string) (crds.ModelEndpoint, bool) {
 	return item, ok
 }
 
-func (s *ModelEndpointStore) List() []crds.ModelEndpoint {
+func (s *ModelEndpointStore) List() []resources.ModelEndpoint {
 	if s.db != nil {
-		items, err := listFromTable[crds.ModelEndpoint](s.db, tableModelEndpoints)
+		items, err := listFromTable[resources.ModelEndpoint](s.db, tableModelEndpoints)
 		if err != nil {
-			return []crds.ModelEndpoint{}
+			return []resources.ModelEndpoint{}
 		}
 		return items
 	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := make([]crds.ModelEndpoint, 0, len(s.items))
+	out := make([]resources.ModelEndpoint, 0, len(s.items))
 	for _, item := range s.items {
 		out = append(out, item)
 	}
@@ -248,40 +248,40 @@ func (s *ModelEndpointStore) Delete(name string) error {
 
 type ToolStore struct {
 	mu    sync.RWMutex
-	items map[string]crds.Tool
+	items map[string]resources.Tool
 	db    *sql.DB
 }
 
 func NewToolStore() *ToolStore {
-	return &ToolStore{items: make(map[string]crds.Tool)}
+	return &ToolStore{items: make(map[string]resources.Tool)}
 }
 
 func NewToolStoreWithDB(db *sql.DB) *ToolStore {
-	return &ToolStore{items: make(map[string]crds.Tool), db: db}
+	return &ToolStore{items: make(map[string]resources.Tool), db: db}
 }
 
-func (s *ToolStore) Upsert(item crds.Tool) (crds.Tool, error) {
+func (s *ToolStore) Upsert(item resources.Tool) (resources.Tool, error) {
 	if err := item.Normalize(); err != nil {
-		return crds.Tool{}, err
+		return resources.Tool{}, err
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		existing, found, err := getFromTable[crds.Tool](s.db, tableTools, key)
+		existing, found, err := getFromTable[resources.Tool](s.db, tableTools, key)
 		if err != nil {
-			return crds.Tool{}, err
+			return resources.Tool{}, err
 		}
 		if !found {
 			if err := initializeCreateMetadata("Tool", &item.Metadata); err != nil {
-				return crds.Tool{}, err
+				return resources.Tool{}, err
 			}
 		} else {
 			specChanged := !reflect.DeepEqual(existing.Spec, item.Spec)
 			if err := initializeUpdateMetadata("Tool", &item.Metadata, existing.Metadata, specChanged); err != nil {
-				return crds.Tool{}, err
+				return resources.Tool{}, err
 			}
 		}
 		if err := upsertToolSQL(s.db, key, item); err != nil {
-			return crds.Tool{}, err
+			return resources.Tool{}, err
 		}
 		return item, nil
 	}
@@ -290,13 +290,13 @@ func (s *ToolStore) Upsert(item crds.Tool) (crds.Tool, error) {
 	if !found {
 		if err := initializeCreateMetadata("Tool", &item.Metadata); err != nil {
 			s.mu.Unlock()
-			return crds.Tool{}, err
+			return resources.Tool{}, err
 		}
 	} else {
 		specChanged := !reflect.DeepEqual(existing.Spec, item.Spec)
 		if err := initializeUpdateMetadata("Tool", &item.Metadata, existing.Metadata, specChanged); err != nil {
 			s.mu.Unlock()
-			return crds.Tool{}, err
+			return resources.Tool{}, err
 		}
 	}
 	s.items[key] = item
@@ -304,12 +304,12 @@ func (s *ToolStore) Upsert(item crds.Tool) (crds.Tool, error) {
 	return item, nil
 }
 
-func (s *ToolStore) Get(name string) (crds.Tool, bool) {
+func (s *ToolStore) Get(name string) (resources.Tool, bool) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		item, ok, err := getFromTable[crds.Tool](s.db, tableTools, key)
+		item, ok, err := getFromTable[resources.Tool](s.db, tableTools, key)
 		if err != nil {
-			return crds.Tool{}, false
+			return resources.Tool{}, false
 		}
 		return item, ok
 	}
@@ -320,18 +320,18 @@ func (s *ToolStore) Get(name string) (crds.Tool, bool) {
 	return item, ok
 }
 
-func (s *ToolStore) List() []crds.Tool {
+func (s *ToolStore) List() []resources.Tool {
 	if s.db != nil {
-		items, err := listFromTable[crds.Tool](s.db, tableTools)
+		items, err := listFromTable[resources.Tool](s.db, tableTools)
 		if err != nil {
-			return []crds.Tool{}
+			return []resources.Tool{}
 		}
 		return items
 	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := make([]crds.Tool, 0, len(s.items))
+	out := make([]resources.Tool, 0, len(s.items))
 	for _, item := range s.items {
 		out = append(out, item)
 	}
@@ -365,55 +365,55 @@ func (s *ToolStore) Delete(name string) error {
 
 type SecretStore struct {
 	mu            sync.RWMutex
-	items         map[string]crds.Secret
+	items         map[string]resources.Secret
 	db            *sql.DB
 	encryptionKey []byte
 }
 
 func NewSecretStore() *SecretStore {
-	return &SecretStore{items: make(map[string]crds.Secret)}
+	return &SecretStore{items: make(map[string]resources.Secret)}
 }
 
 func NewSecretStoreWithDB(db *sql.DB) *SecretStore {
-	return &SecretStore{items: make(map[string]crds.Secret), db: db}
+	return &SecretStore{items: make(map[string]resources.Secret), db: db}
 }
 
 func NewSecretStoreWithEncryption(db *sql.DB, key []byte) *SecretStore {
-	return &SecretStore{items: make(map[string]crds.Secret), db: db, encryptionKey: key}
+	return &SecretStore{items: make(map[string]resources.Secret), db: db, encryptionKey: key}
 }
 
 func (s *SecretStore) SetEncryptionKey(key []byte) { s.encryptionKey = key }
 
-func (s *SecretStore) Upsert(item crds.Secret) (crds.Secret, error) {
+func (s *SecretStore) Upsert(item resources.Secret) (resources.Secret, error) {
 	if err := item.Normalize(); err != nil {
-		return crds.Secret{}, err
+		return resources.Secret{}, err
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
 		existing, found, err := s.getDecrypted(key)
 		if err != nil {
-			return crds.Secret{}, err
+			return resources.Secret{}, err
 		}
 		if !found {
 			if err := initializeCreateMetadata("Secret", &item.Metadata); err != nil {
-				return crds.Secret{}, err
+				return resources.Secret{}, err
 			}
 		} else {
 			specChanged := !reflect.DeepEqual(existing.Spec, item.Spec)
 			if err := initializeUpdateMetadata("Secret", &item.Metadata, existing.Metadata, specChanged); err != nil {
-				return crds.Secret{}, err
+				return resources.Secret{}, err
 			}
 		}
 		toStore := item
 		if len(s.encryptionKey) > 0 && len(toStore.Spec.Data) > 0 {
 			enc, err := encryptSecretData(s.encryptionKey, toStore.Spec.Data)
 			if err != nil {
-				return crds.Secret{}, err
+				return resources.Secret{}, err
 			}
 			toStore.Spec.Data = enc
 		}
 		if err := upsertSecretSQL(s.db, key, toStore); err != nil {
-			return crds.Secret{}, err
+			return resources.Secret{}, err
 		}
 		return item, nil
 	}
@@ -422,13 +422,13 @@ func (s *SecretStore) Upsert(item crds.Secret) (crds.Secret, error) {
 	if !found {
 		if err := initializeCreateMetadata("Secret", &item.Metadata); err != nil {
 			s.mu.Unlock()
-			return crds.Secret{}, err
+			return resources.Secret{}, err
 		}
 	} else {
 		specChanged := !reflect.DeepEqual(existing.Spec, item.Spec)
 		if err := initializeUpdateMetadata("Secret", &item.Metadata, existing.Metadata, specChanged); err != nil {
 			s.mu.Unlock()
-			return crds.Secret{}, err
+			return resources.Secret{}, err
 		}
 	}
 	s.items[key] = item
@@ -436,27 +436,27 @@ func (s *SecretStore) Upsert(item crds.Secret) (crds.Secret, error) {
 	return item, nil
 }
 
-func (s *SecretStore) getDecrypted(key string) (crds.Secret, bool, error) {
-	item, ok, err := getFromTable[crds.Secret](s.db, tableSecrets, key)
+func (s *SecretStore) getDecrypted(key string) (resources.Secret, bool, error) {
+	item, ok, err := getFromTable[resources.Secret](s.db, tableSecrets, key)
 	if err != nil || !ok {
 		return item, ok, err
 	}
 	if len(s.encryptionKey) > 0 && len(item.Spec.Data) > 0 {
 		dec, err := decryptSecretData(s.encryptionKey, item.Spec.Data)
 		if err != nil {
-			return crds.Secret{}, false, err
+			return resources.Secret{}, false, err
 		}
 		item.Spec.Data = dec
 	}
 	return item, true, nil
 }
 
-func (s *SecretStore) Get(name string) (crds.Secret, bool) {
+func (s *SecretStore) Get(name string) (resources.Secret, bool) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
 		item, ok, err := s.getDecrypted(key)
 		if err != nil {
-			return crds.Secret{}, false
+			return resources.Secret{}, false
 		}
 		return item, ok
 	}
@@ -467,18 +467,18 @@ func (s *SecretStore) Get(name string) (crds.Secret, bool) {
 	return item, ok
 }
 
-func (s *SecretStore) List() []crds.Secret {
+func (s *SecretStore) List() []resources.Secret {
 	if s.db != nil {
-		items, err := listFromTable[crds.Secret](s.db, tableSecrets)
+		items, err := listFromTable[resources.Secret](s.db, tableSecrets)
 		if err != nil {
-			return []crds.Secret{}
+			return []resources.Secret{}
 		}
 		if len(s.encryptionKey) > 0 {
 			for i := range items {
 				if len(items[i].Spec.Data) > 0 {
 					dec, err := decryptSecretData(s.encryptionKey, items[i].Spec.Data)
 					if err != nil {
-						return []crds.Secret{}
+						return []resources.Secret{}
 					}
 					items[i].Spec.Data = dec
 				}
@@ -489,7 +489,7 @@ func (s *SecretStore) List() []crds.Secret {
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := make([]crds.Secret, 0, len(s.items))
+	out := make([]resources.Secret, 0, len(s.items))
 	for _, item := range s.items {
 		out = append(out, item)
 	}
@@ -523,40 +523,40 @@ func (s *SecretStore) Delete(name string) error {
 
 type MemoryStore struct {
 	mu    sync.RWMutex
-	items map[string]crds.Memory
+	items map[string]resources.Memory
 	db    *sql.DB
 }
 
 func NewMemoryStore() *MemoryStore {
-	return &MemoryStore{items: make(map[string]crds.Memory)}
+	return &MemoryStore{items: make(map[string]resources.Memory)}
 }
 
 func NewMemoryStoreWithDB(db *sql.DB) *MemoryStore {
-	return &MemoryStore{items: make(map[string]crds.Memory), db: db}
+	return &MemoryStore{items: make(map[string]resources.Memory), db: db}
 }
 
-func (s *MemoryStore) Upsert(item crds.Memory) (crds.Memory, error) {
+func (s *MemoryStore) Upsert(item resources.Memory) (resources.Memory, error) {
 	if err := item.Normalize(); err != nil {
-		return crds.Memory{}, err
+		return resources.Memory{}, err
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		existing, found, err := getFromTable[crds.Memory](s.db, tableMemories, key)
+		existing, found, err := getFromTable[resources.Memory](s.db, tableMemories, key)
 		if err != nil {
-			return crds.Memory{}, err
+			return resources.Memory{}, err
 		}
 		if !found {
 			if err := initializeCreateMetadata("Memory", &item.Metadata); err != nil {
-				return crds.Memory{}, err
+				return resources.Memory{}, err
 			}
 		} else {
 			specChanged := !reflect.DeepEqual(existing.Spec, item.Spec)
 			if err := initializeUpdateMetadata("Memory", &item.Metadata, existing.Metadata, specChanged); err != nil {
-				return crds.Memory{}, err
+				return resources.Memory{}, err
 			}
 		}
 		if err := upsertMemorySQL(s.db, key, item); err != nil {
-			return crds.Memory{}, err
+			return resources.Memory{}, err
 		}
 		return item, nil
 	}
@@ -565,13 +565,13 @@ func (s *MemoryStore) Upsert(item crds.Memory) (crds.Memory, error) {
 	if !found {
 		if err := initializeCreateMetadata("Memory", &item.Metadata); err != nil {
 			s.mu.Unlock()
-			return crds.Memory{}, err
+			return resources.Memory{}, err
 		}
 	} else {
 		specChanged := !reflect.DeepEqual(existing.Spec, item.Spec)
 		if err := initializeUpdateMetadata("Memory", &item.Metadata, existing.Metadata, specChanged); err != nil {
 			s.mu.Unlock()
-			return crds.Memory{}, err
+			return resources.Memory{}, err
 		}
 	}
 	s.items[key] = item
@@ -579,12 +579,12 @@ func (s *MemoryStore) Upsert(item crds.Memory) (crds.Memory, error) {
 	return item, nil
 }
 
-func (s *MemoryStore) Get(name string) (crds.Memory, bool) {
+func (s *MemoryStore) Get(name string) (resources.Memory, bool) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		item, ok, err := getFromTable[crds.Memory](s.db, tableMemories, key)
+		item, ok, err := getFromTable[resources.Memory](s.db, tableMemories, key)
 		if err != nil {
-			return crds.Memory{}, false
+			return resources.Memory{}, false
 		}
 		return item, ok
 	}
@@ -595,18 +595,18 @@ func (s *MemoryStore) Get(name string) (crds.Memory, bool) {
 	return item, ok
 }
 
-func (s *MemoryStore) List() []crds.Memory {
+func (s *MemoryStore) List() []resources.Memory {
 	if s.db != nil {
-		items, err := listFromTable[crds.Memory](s.db, tableMemories)
+		items, err := listFromTable[resources.Memory](s.db, tableMemories)
 		if err != nil {
-			return []crds.Memory{}
+			return []resources.Memory{}
 		}
 		return items
 	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := make([]crds.Memory, 0, len(s.items))
+	out := make([]resources.Memory, 0, len(s.items))
 	for _, item := range s.items {
 		out = append(out, item)
 	}
@@ -640,40 +640,40 @@ func (s *MemoryStore) Delete(name string) error {
 
 type AgentPolicyStore struct {
 	mu    sync.RWMutex
-	items map[string]crds.AgentPolicy
+	items map[string]resources.AgentPolicy
 	db    *sql.DB
 }
 
 func NewAgentPolicyStore() *AgentPolicyStore {
-	return &AgentPolicyStore{items: make(map[string]crds.AgentPolicy)}
+	return &AgentPolicyStore{items: make(map[string]resources.AgentPolicy)}
 }
 
 func NewAgentPolicyStoreWithDB(db *sql.DB) *AgentPolicyStore {
-	return &AgentPolicyStore{items: make(map[string]crds.AgentPolicy), db: db}
+	return &AgentPolicyStore{items: make(map[string]resources.AgentPolicy), db: db}
 }
 
-func (s *AgentPolicyStore) Upsert(item crds.AgentPolicy) (crds.AgentPolicy, error) {
+func (s *AgentPolicyStore) Upsert(item resources.AgentPolicy) (resources.AgentPolicy, error) {
 	if err := item.Normalize(); err != nil {
-		return crds.AgentPolicy{}, err
+		return resources.AgentPolicy{}, err
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		existing, found, err := getFromTable[crds.AgentPolicy](s.db, tableAgentPolicies, key)
+		existing, found, err := getFromTable[resources.AgentPolicy](s.db, tableAgentPolicies, key)
 		if err != nil {
-			return crds.AgentPolicy{}, err
+			return resources.AgentPolicy{}, err
 		}
 		if !found {
 			if err := initializeCreateMetadata("AgentPolicy", &item.Metadata); err != nil {
-				return crds.AgentPolicy{}, err
+				return resources.AgentPolicy{}, err
 			}
 		} else {
 			specChanged := !reflect.DeepEqual(existing.Spec, item.Spec)
 			if err := initializeUpdateMetadata("AgentPolicy", &item.Metadata, existing.Metadata, specChanged); err != nil {
-				return crds.AgentPolicy{}, err
+				return resources.AgentPolicy{}, err
 			}
 		}
 		if err := upsertAgentPolicySQL(s.db, key, item); err != nil {
-			return crds.AgentPolicy{}, err
+			return resources.AgentPolicy{}, err
 		}
 		return item, nil
 	}
@@ -682,13 +682,13 @@ func (s *AgentPolicyStore) Upsert(item crds.AgentPolicy) (crds.AgentPolicy, erro
 	if !found {
 		if err := initializeCreateMetadata("AgentPolicy", &item.Metadata); err != nil {
 			s.mu.Unlock()
-			return crds.AgentPolicy{}, err
+			return resources.AgentPolicy{}, err
 		}
 	} else {
 		specChanged := !reflect.DeepEqual(existing.Spec, item.Spec)
 		if err := initializeUpdateMetadata("AgentPolicy", &item.Metadata, existing.Metadata, specChanged); err != nil {
 			s.mu.Unlock()
-			return crds.AgentPolicy{}, err
+			return resources.AgentPolicy{}, err
 		}
 	}
 	s.items[key] = item
@@ -696,12 +696,12 @@ func (s *AgentPolicyStore) Upsert(item crds.AgentPolicy) (crds.AgentPolicy, erro
 	return item, nil
 }
 
-func (s *AgentPolicyStore) Get(name string) (crds.AgentPolicy, bool) {
+func (s *AgentPolicyStore) Get(name string) (resources.AgentPolicy, bool) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		item, ok, err := getFromTable[crds.AgentPolicy](s.db, tableAgentPolicies, key)
+		item, ok, err := getFromTable[resources.AgentPolicy](s.db, tableAgentPolicies, key)
 		if err != nil {
-			return crds.AgentPolicy{}, false
+			return resources.AgentPolicy{}, false
 		}
 		return item, ok
 	}
@@ -712,18 +712,18 @@ func (s *AgentPolicyStore) Get(name string) (crds.AgentPolicy, bool) {
 	return item, ok
 }
 
-func (s *AgentPolicyStore) List() []crds.AgentPolicy {
+func (s *AgentPolicyStore) List() []resources.AgentPolicy {
 	if s.db != nil {
-		items, err := listFromTable[crds.AgentPolicy](s.db, tableAgentPolicies)
+		items, err := listFromTable[resources.AgentPolicy](s.db, tableAgentPolicies)
 		if err != nil {
-			return []crds.AgentPolicy{}
+			return []resources.AgentPolicy{}
 		}
 		return items
 	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := make([]crds.AgentPolicy, 0, len(s.items))
+	out := make([]resources.AgentPolicy, 0, len(s.items))
 	for _, item := range s.items {
 		out = append(out, item)
 	}
@@ -757,40 +757,40 @@ func (s *AgentPolicyStore) Delete(name string) error {
 
 type AgentRoleStore struct {
 	mu    sync.RWMutex
-	items map[string]crds.AgentRole
+	items map[string]resources.AgentRole
 	db    *sql.DB
 }
 
 func NewAgentRoleStore() *AgentRoleStore {
-	return &AgentRoleStore{items: make(map[string]crds.AgentRole)}
+	return &AgentRoleStore{items: make(map[string]resources.AgentRole)}
 }
 
 func NewAgentRoleStoreWithDB(db *sql.DB) *AgentRoleStore {
-	return &AgentRoleStore{items: make(map[string]crds.AgentRole), db: db}
+	return &AgentRoleStore{items: make(map[string]resources.AgentRole), db: db}
 }
 
-func (s *AgentRoleStore) Upsert(item crds.AgentRole) (crds.AgentRole, error) {
+func (s *AgentRoleStore) Upsert(item resources.AgentRole) (resources.AgentRole, error) {
 	if err := item.Normalize(); err != nil {
-		return crds.AgentRole{}, err
+		return resources.AgentRole{}, err
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		existing, found, err := getFromTable[crds.AgentRole](s.db, tableAgentRoles, key)
+		existing, found, err := getFromTable[resources.AgentRole](s.db, tableAgentRoles, key)
 		if err != nil {
-			return crds.AgentRole{}, err
+			return resources.AgentRole{}, err
 		}
 		if !found {
 			if err := initializeCreateMetadata("AgentRole", &item.Metadata); err != nil {
-				return crds.AgentRole{}, err
+				return resources.AgentRole{}, err
 			}
 		} else {
 			specChanged := !reflect.DeepEqual(existing.Spec, item.Spec)
 			if err := initializeUpdateMetadata("AgentRole", &item.Metadata, existing.Metadata, specChanged); err != nil {
-				return crds.AgentRole{}, err
+				return resources.AgentRole{}, err
 			}
 		}
 		if err := upsertAgentRoleSQL(s.db, key, item); err != nil {
-			return crds.AgentRole{}, err
+			return resources.AgentRole{}, err
 		}
 		return item, nil
 	}
@@ -799,13 +799,13 @@ func (s *AgentRoleStore) Upsert(item crds.AgentRole) (crds.AgentRole, error) {
 	if !found {
 		if err := initializeCreateMetadata("AgentRole", &item.Metadata); err != nil {
 			s.mu.Unlock()
-			return crds.AgentRole{}, err
+			return resources.AgentRole{}, err
 		}
 	} else {
 		specChanged := !reflect.DeepEqual(existing.Spec, item.Spec)
 		if err := initializeUpdateMetadata("AgentRole", &item.Metadata, existing.Metadata, specChanged); err != nil {
 			s.mu.Unlock()
-			return crds.AgentRole{}, err
+			return resources.AgentRole{}, err
 		}
 	}
 	s.items[key] = item
@@ -813,12 +813,12 @@ func (s *AgentRoleStore) Upsert(item crds.AgentRole) (crds.AgentRole, error) {
 	return item, nil
 }
 
-func (s *AgentRoleStore) Get(name string) (crds.AgentRole, bool) {
+func (s *AgentRoleStore) Get(name string) (resources.AgentRole, bool) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		item, ok, err := getFromTable[crds.AgentRole](s.db, tableAgentRoles, key)
+		item, ok, err := getFromTable[resources.AgentRole](s.db, tableAgentRoles, key)
 		if err != nil {
-			return crds.AgentRole{}, false
+			return resources.AgentRole{}, false
 		}
 		return item, ok
 	}
@@ -829,18 +829,18 @@ func (s *AgentRoleStore) Get(name string) (crds.AgentRole, bool) {
 	return item, ok
 }
 
-func (s *AgentRoleStore) List() []crds.AgentRole {
+func (s *AgentRoleStore) List() []resources.AgentRole {
 	if s.db != nil {
-		items, err := listFromTable[crds.AgentRole](s.db, tableAgentRoles)
+		items, err := listFromTable[resources.AgentRole](s.db, tableAgentRoles)
 		if err != nil {
-			return []crds.AgentRole{}
+			return []resources.AgentRole{}
 		}
 		return items
 	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := make([]crds.AgentRole, 0, len(s.items))
+	out := make([]resources.AgentRole, 0, len(s.items))
 	for _, item := range s.items {
 		out = append(out, item)
 	}
@@ -874,40 +874,40 @@ func (s *AgentRoleStore) Delete(name string) error {
 
 type ToolPermissionStore struct {
 	mu    sync.RWMutex
-	items map[string]crds.ToolPermission
+	items map[string]resources.ToolPermission
 	db    *sql.DB
 }
 
 func NewToolPermissionStore() *ToolPermissionStore {
-	return &ToolPermissionStore{items: make(map[string]crds.ToolPermission)}
+	return &ToolPermissionStore{items: make(map[string]resources.ToolPermission)}
 }
 
 func NewToolPermissionStoreWithDB(db *sql.DB) *ToolPermissionStore {
-	return &ToolPermissionStore{items: make(map[string]crds.ToolPermission), db: db}
+	return &ToolPermissionStore{items: make(map[string]resources.ToolPermission), db: db}
 }
 
-func (s *ToolPermissionStore) Upsert(item crds.ToolPermission) (crds.ToolPermission, error) {
+func (s *ToolPermissionStore) Upsert(item resources.ToolPermission) (resources.ToolPermission, error) {
 	if err := item.Normalize(); err != nil {
-		return crds.ToolPermission{}, err
+		return resources.ToolPermission{}, err
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		existing, found, err := getFromTable[crds.ToolPermission](s.db, tableToolPermissions, key)
+		existing, found, err := getFromTable[resources.ToolPermission](s.db, tableToolPermissions, key)
 		if err != nil {
-			return crds.ToolPermission{}, err
+			return resources.ToolPermission{}, err
 		}
 		if !found {
 			if err := initializeCreateMetadata("ToolPermission", &item.Metadata); err != nil {
-				return crds.ToolPermission{}, err
+				return resources.ToolPermission{}, err
 			}
 		} else {
 			specChanged := !reflect.DeepEqual(existing.Spec, item.Spec)
 			if err := initializeUpdateMetadata("ToolPermission", &item.Metadata, existing.Metadata, specChanged); err != nil {
-				return crds.ToolPermission{}, err
+				return resources.ToolPermission{}, err
 			}
 		}
 		if err := upsertToolPermissionSQL(s.db, key, item); err != nil {
-			return crds.ToolPermission{}, err
+			return resources.ToolPermission{}, err
 		}
 		return item, nil
 	}
@@ -916,13 +916,13 @@ func (s *ToolPermissionStore) Upsert(item crds.ToolPermission) (crds.ToolPermiss
 	if !found {
 		if err := initializeCreateMetadata("ToolPermission", &item.Metadata); err != nil {
 			s.mu.Unlock()
-			return crds.ToolPermission{}, err
+			return resources.ToolPermission{}, err
 		}
 	} else {
 		specChanged := !reflect.DeepEqual(existing.Spec, item.Spec)
 		if err := initializeUpdateMetadata("ToolPermission", &item.Metadata, existing.Metadata, specChanged); err != nil {
 			s.mu.Unlock()
-			return crds.ToolPermission{}, err
+			return resources.ToolPermission{}, err
 		}
 	}
 	s.items[key] = item
@@ -930,12 +930,12 @@ func (s *ToolPermissionStore) Upsert(item crds.ToolPermission) (crds.ToolPermiss
 	return item, nil
 }
 
-func (s *ToolPermissionStore) Get(name string) (crds.ToolPermission, bool) {
+func (s *ToolPermissionStore) Get(name string) (resources.ToolPermission, bool) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		item, ok, err := getFromTable[crds.ToolPermission](s.db, tableToolPermissions, key)
+		item, ok, err := getFromTable[resources.ToolPermission](s.db, tableToolPermissions, key)
 		if err != nil {
-			return crds.ToolPermission{}, false
+			return resources.ToolPermission{}, false
 		}
 		return item, ok
 	}
@@ -946,18 +946,18 @@ func (s *ToolPermissionStore) Get(name string) (crds.ToolPermission, bool) {
 	return item, ok
 }
 
-func (s *ToolPermissionStore) List() []crds.ToolPermission {
+func (s *ToolPermissionStore) List() []resources.ToolPermission {
 	if s.db != nil {
-		items, err := listFromTable[crds.ToolPermission](s.db, tableToolPermissions)
+		items, err := listFromTable[resources.ToolPermission](s.db, tableToolPermissions)
 		if err != nil {
-			return []crds.ToolPermission{}
+			return []resources.ToolPermission{}
 		}
 		return items
 	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := make([]crds.ToolPermission, 0, len(s.items))
+	out := make([]resources.ToolPermission, 0, len(s.items))
 	for _, item := range s.items {
 		out = append(out, item)
 	}
@@ -989,85 +989,57 @@ func (s *ToolPermissionStore) Delete(name string) error {
 	return nil
 }
 
-type TaskStore struct {
+type ToolApprovalStore struct {
 	mu    sync.RWMutex
-	items map[string]crds.Task
-	logs  map[string][]string
+	items map[string]resources.ToolApproval
 	db    *sql.DB
 }
 
-type TaskScheduleStore struct {
-	mu    sync.RWMutex
-	items map[string]crds.TaskSchedule
-	db    *sql.DB
+func NewToolApprovalStore() *ToolApprovalStore {
+	return &ToolApprovalStore{items: make(map[string]resources.ToolApproval)}
 }
 
-type TaskWebhookStore struct {
-	mu    sync.RWMutex
-	items map[string]crds.TaskWebhook
-	db    *sql.DB
+func NewToolApprovalStoreWithDB(db *sql.DB) *ToolApprovalStore {
+	return &ToolApprovalStore{items: make(map[string]resources.ToolApproval), db: db}
 }
 
-type WorkerStore struct {
-	mu    sync.RWMutex
-	items map[string]crds.Worker
-	db    *sql.DB
-}
-
-func NewTaskScheduleStore() *TaskScheduleStore {
-	return &TaskScheduleStore{items: make(map[string]crds.TaskSchedule)}
-}
-
-func NewTaskScheduleStoreWithDB(db *sql.DB) *TaskScheduleStore {
-	return &TaskScheduleStore{items: make(map[string]crds.TaskSchedule), db: db}
-}
-
-func NewTaskWebhookStore() *TaskWebhookStore {
-	return &TaskWebhookStore{items: make(map[string]crds.TaskWebhook)}
-}
-
-func NewTaskWebhookStoreWithDB(db *sql.DB) *TaskWebhookStore {
-	return &TaskWebhookStore{items: make(map[string]crds.TaskWebhook), db: db}
-}
-
-func (s *TaskScheduleStore) Upsert(item crds.TaskSchedule) (crds.TaskSchedule, error) {
+func (s *ToolApprovalStore) Upsert(item resources.ToolApproval) (resources.ToolApproval, error) {
 	if err := item.Normalize(); err != nil {
-		return crds.TaskSchedule{}, err
+		return resources.ToolApproval{}, err
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		existing, found, err := getFromTable[crds.TaskSchedule](s.db, tableTaskSchedules, key)
+		existing, found, err := getFromTable[resources.ToolApproval](s.db, tableToolApprovals, key)
 		if err != nil {
-			return crds.TaskSchedule{}, err
+			return resources.ToolApproval{}, err
 		}
 		if !found {
-			if err := initializeCreateMetadata("TaskSchedule", &item.Metadata); err != nil {
-				return crds.TaskSchedule{}, err
+			if err := initializeCreateMetadata("ToolApproval", &item.Metadata); err != nil {
+				return resources.ToolApproval{}, err
 			}
 		} else {
 			specChanged := !reflect.DeepEqual(existing.Spec, item.Spec)
-			if err := initializeUpdateMetadata("TaskSchedule", &item.Metadata, existing.Metadata, specChanged); err != nil {
-				return crds.TaskSchedule{}, err
+			if err := initializeUpdateMetadata("ToolApproval", &item.Metadata, existing.Metadata, specChanged); err != nil {
+				return resources.ToolApproval{}, err
 			}
 		}
-		if err := upsertTaskScheduleSQL(s.db, key, item); err != nil {
-			return crds.TaskSchedule{}, err
+		if err := upsertToolApprovalSQL(s.db, key, item); err != nil {
+			return resources.ToolApproval{}, err
 		}
 		return item, nil
 	}
-
 	s.mu.Lock()
 	existing, found := s.items[key]
 	if !found {
-		if err := initializeCreateMetadata("TaskSchedule", &item.Metadata); err != nil {
+		if err := initializeCreateMetadata("ToolApproval", &item.Metadata); err != nil {
 			s.mu.Unlock()
-			return crds.TaskSchedule{}, err
+			return resources.ToolApproval{}, err
 		}
 	} else {
 		specChanged := !reflect.DeepEqual(existing.Spec, item.Spec)
-		if err := initializeUpdateMetadata("TaskSchedule", &item.Metadata, existing.Metadata, specChanged); err != nil {
+		if err := initializeUpdateMetadata("ToolApproval", &item.Metadata, existing.Metadata, specChanged); err != nil {
 			s.mu.Unlock()
-			return crds.TaskSchedule{}, err
+			return resources.ToolApproval{}, err
 		}
 	}
 	s.items[key] = item
@@ -1075,12 +1047,12 @@ func (s *TaskScheduleStore) Upsert(item crds.TaskSchedule) (crds.TaskSchedule, e
 	return item, nil
 }
 
-func (s *TaskScheduleStore) Get(name string) (crds.TaskSchedule, bool) {
+func (s *ToolApprovalStore) Get(name string) (resources.ToolApproval, bool) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		item, ok, err := getFromTable[crds.TaskSchedule](s.db, tableTaskSchedules, key)
+		item, ok, err := getFromTable[resources.ToolApproval](s.db, tableToolApprovals, key)
 		if err != nil {
-			return crds.TaskSchedule{}, false
+			return resources.ToolApproval{}, false
 		}
 		return item, ok
 	}
@@ -1091,18 +1063,163 @@ func (s *TaskScheduleStore) Get(name string) (crds.TaskSchedule, bool) {
 	return item, ok
 }
 
-func (s *TaskScheduleStore) List() []crds.TaskSchedule {
+func (s *ToolApprovalStore) List() []resources.ToolApproval {
 	if s.db != nil {
-		items, err := listFromTable[crds.TaskSchedule](s.db, tableTaskSchedules)
+		items, err := listFromTable[resources.ToolApproval](s.db, tableToolApprovals)
 		if err != nil {
-			return []crds.TaskSchedule{}
+			return []resources.ToolApproval{}
 		}
 		return items
 	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := make([]crds.TaskSchedule, 0, len(s.items))
+	out := make([]resources.ToolApproval, 0, len(s.items))
+	for _, item := range s.items {
+		out = append(out, item)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Metadata.Name < out[j].Metadata.Name
+	})
+	return out
+}
+
+func (s *ToolApprovalStore) Delete(name string) error {
+	key := normalizeLookupName(name)
+	if s.db != nil {
+		deleted, err := deleteFromTable(s.db, tableToolApprovals, key)
+		if err != nil {
+			return err
+		}
+		if !deleted {
+			return fmt.Errorf("toolapproval %q not found", name)
+		}
+		return nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.items[key]; !ok {
+		return fmt.Errorf("toolapproval %q not found", name)
+	}
+	delete(s.items, key)
+	return nil
+}
+
+type TaskStore struct {
+	mu    sync.RWMutex
+	items map[string]resources.Task
+	logs  map[string][]string
+	db    *sql.DB
+}
+
+type TaskScheduleStore struct {
+	mu    sync.RWMutex
+	items map[string]resources.TaskSchedule
+	db    *sql.DB
+}
+
+type TaskWebhookStore struct {
+	mu    sync.RWMutex
+	items map[string]resources.TaskWebhook
+	db    *sql.DB
+}
+
+type WorkerStore struct {
+	mu    sync.RWMutex
+	items map[string]resources.Worker
+	db    *sql.DB
+}
+
+func NewTaskScheduleStore() *TaskScheduleStore {
+	return &TaskScheduleStore{items: make(map[string]resources.TaskSchedule)}
+}
+
+func NewTaskScheduleStoreWithDB(db *sql.DB) *TaskScheduleStore {
+	return &TaskScheduleStore{items: make(map[string]resources.TaskSchedule), db: db}
+}
+
+func NewTaskWebhookStore() *TaskWebhookStore {
+	return &TaskWebhookStore{items: make(map[string]resources.TaskWebhook)}
+}
+
+func NewTaskWebhookStoreWithDB(db *sql.DB) *TaskWebhookStore {
+	return &TaskWebhookStore{items: make(map[string]resources.TaskWebhook), db: db}
+}
+
+func (s *TaskScheduleStore) Upsert(item resources.TaskSchedule) (resources.TaskSchedule, error) {
+	if err := item.Normalize(); err != nil {
+		return resources.TaskSchedule{}, err
+	}
+	key := scopedNameFromMeta(item.Metadata)
+	if s.db != nil {
+		existing, found, err := getFromTable[resources.TaskSchedule](s.db, tableTaskSchedules, key)
+		if err != nil {
+			return resources.TaskSchedule{}, err
+		}
+		if !found {
+			if err := initializeCreateMetadata("TaskSchedule", &item.Metadata); err != nil {
+				return resources.TaskSchedule{}, err
+			}
+		} else {
+			specChanged := !reflect.DeepEqual(existing.Spec, item.Spec)
+			if err := initializeUpdateMetadata("TaskSchedule", &item.Metadata, existing.Metadata, specChanged); err != nil {
+				return resources.TaskSchedule{}, err
+			}
+		}
+		if err := upsertTaskScheduleSQL(s.db, key, item); err != nil {
+			return resources.TaskSchedule{}, err
+		}
+		return item, nil
+	}
+
+	s.mu.Lock()
+	existing, found := s.items[key]
+	if !found {
+		if err := initializeCreateMetadata("TaskSchedule", &item.Metadata); err != nil {
+			s.mu.Unlock()
+			return resources.TaskSchedule{}, err
+		}
+	} else {
+		specChanged := !reflect.DeepEqual(existing.Spec, item.Spec)
+		if err := initializeUpdateMetadata("TaskSchedule", &item.Metadata, existing.Metadata, specChanged); err != nil {
+			s.mu.Unlock()
+			return resources.TaskSchedule{}, err
+		}
+	}
+	s.items[key] = item
+	s.mu.Unlock()
+	return item, nil
+}
+
+func (s *TaskScheduleStore) Get(name string) (resources.TaskSchedule, bool) {
+	key := normalizeLookupName(name)
+	if s.db != nil {
+		item, ok, err := getFromTable[resources.TaskSchedule](s.db, tableTaskSchedules, key)
+		if err != nil {
+			return resources.TaskSchedule{}, false
+		}
+		return item, ok
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	item, ok := s.items[key]
+	return item, ok
+}
+
+func (s *TaskScheduleStore) List() []resources.TaskSchedule {
+	if s.db != nil {
+		items, err := listFromTable[resources.TaskSchedule](s.db, tableTaskSchedules)
+		if err != nil {
+			return []resources.TaskSchedule{}
+		}
+		return items
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]resources.TaskSchedule, 0, len(s.items))
 	for _, item := range s.items {
 		out = append(out, item)
 	}
@@ -1134,28 +1251,28 @@ func (s *TaskScheduleStore) Delete(name string) error {
 	return nil
 }
 
-func (s *TaskWebhookStore) Upsert(item crds.TaskWebhook) (crds.TaskWebhook, error) {
+func (s *TaskWebhookStore) Upsert(item resources.TaskWebhook) (resources.TaskWebhook, error) {
 	if err := item.Normalize(); err != nil {
-		return crds.TaskWebhook{}, err
+		return resources.TaskWebhook{}, err
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		existing, found, err := getFromTable[crds.TaskWebhook](s.db, tableTaskWebhooks, key)
+		existing, found, err := getFromTable[resources.TaskWebhook](s.db, tableTaskWebhooks, key)
 		if err != nil {
-			return crds.TaskWebhook{}, err
+			return resources.TaskWebhook{}, err
 		}
 		if !found {
 			if err := initializeCreateMetadata("TaskWebhook", &item.Metadata); err != nil {
-				return crds.TaskWebhook{}, err
+				return resources.TaskWebhook{}, err
 			}
 		} else {
 			specChanged := !reflect.DeepEqual(existing.Spec, item.Spec)
 			if err := initializeUpdateMetadata("TaskWebhook", &item.Metadata, existing.Metadata, specChanged); err != nil {
-				return crds.TaskWebhook{}, err
+				return resources.TaskWebhook{}, err
 			}
 		}
 		if err := upsertTaskWebhookSQL(s.db, key, item); err != nil {
-			return crds.TaskWebhook{}, err
+			return resources.TaskWebhook{}, err
 		}
 		return item, nil
 	}
@@ -1165,13 +1282,13 @@ func (s *TaskWebhookStore) Upsert(item crds.TaskWebhook) (crds.TaskWebhook, erro
 	if !found {
 		if err := initializeCreateMetadata("TaskWebhook", &item.Metadata); err != nil {
 			s.mu.Unlock()
-			return crds.TaskWebhook{}, err
+			return resources.TaskWebhook{}, err
 		}
 	} else {
 		specChanged := !reflect.DeepEqual(existing.Spec, item.Spec)
 		if err := initializeUpdateMetadata("TaskWebhook", &item.Metadata, existing.Metadata, specChanged); err != nil {
 			s.mu.Unlock()
-			return crds.TaskWebhook{}, err
+			return resources.TaskWebhook{}, err
 		}
 	}
 	s.items[key] = item
@@ -1179,12 +1296,12 @@ func (s *TaskWebhookStore) Upsert(item crds.TaskWebhook) (crds.TaskWebhook, erro
 	return item, nil
 }
 
-func (s *TaskWebhookStore) Get(name string) (crds.TaskWebhook, bool) {
+func (s *TaskWebhookStore) Get(name string) (resources.TaskWebhook, bool) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		item, ok, err := getFromTable[crds.TaskWebhook](s.db, tableTaskWebhooks, key)
+		item, ok, err := getFromTable[resources.TaskWebhook](s.db, tableTaskWebhooks, key)
 		if err != nil {
-			return crds.TaskWebhook{}, false
+			return resources.TaskWebhook{}, false
 		}
 		return item, ok
 	}
@@ -1195,18 +1312,18 @@ func (s *TaskWebhookStore) Get(name string) (crds.TaskWebhook, bool) {
 	return item, ok
 }
 
-func (s *TaskWebhookStore) List() []crds.TaskWebhook {
+func (s *TaskWebhookStore) List() []resources.TaskWebhook {
 	if s.db != nil {
-		items, err := listFromTable[crds.TaskWebhook](s.db, tableTaskWebhooks)
+		items, err := listFromTable[resources.TaskWebhook](s.db, tableTaskWebhooks)
 		if err != nil {
-			return []crds.TaskWebhook{}
+			return []resources.TaskWebhook{}
 		}
 		return items
 	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := make([]crds.TaskWebhook, 0, len(s.items))
+	out := make([]resources.TaskWebhook, 0, len(s.items))
 	for _, item := range s.items {
 		out = append(out, item)
 	}
@@ -1239,35 +1356,35 @@ func (s *TaskWebhookStore) Delete(name string) error {
 }
 
 func NewWorkerStore() *WorkerStore {
-	return &WorkerStore{items: make(map[string]crds.Worker)}
+	return &WorkerStore{items: make(map[string]resources.Worker)}
 }
 
 func NewWorkerStoreWithDB(db *sql.DB) *WorkerStore {
-	return &WorkerStore{items: make(map[string]crds.Worker), db: db}
+	return &WorkerStore{items: make(map[string]resources.Worker), db: db}
 }
 
-func (s *WorkerStore) Upsert(item crds.Worker) (crds.Worker, error) {
+func (s *WorkerStore) Upsert(item resources.Worker) (resources.Worker, error) {
 	if err := item.Normalize(); err != nil {
-		return crds.Worker{}, err
+		return resources.Worker{}, err
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		existing, found, err := getFromTable[crds.Worker](s.db, tableWorkers, key)
+		existing, found, err := getFromTable[resources.Worker](s.db, tableWorkers, key)
 		if err != nil {
-			return crds.Worker{}, err
+			return resources.Worker{}, err
 		}
 		if !found {
 			if err := initializeCreateMetadata("Worker", &item.Metadata); err != nil {
-				return crds.Worker{}, err
+				return resources.Worker{}, err
 			}
 		} else {
 			specChanged := !reflect.DeepEqual(existing.Spec, item.Spec)
 			if err := initializeUpdateMetadata("Worker", &item.Metadata, existing.Metadata, specChanged); err != nil {
-				return crds.Worker{}, err
+				return resources.Worker{}, err
 			}
 		}
 		if err := upsertWorkerSQL(s.db, key, item); err != nil {
-			return crds.Worker{}, err
+			return resources.Worker{}, err
 		}
 		return item, nil
 	}
@@ -1277,13 +1394,13 @@ func (s *WorkerStore) Upsert(item crds.Worker) (crds.Worker, error) {
 	if !found {
 		if err := initializeCreateMetadata("Worker", &item.Metadata); err != nil {
 			s.mu.Unlock()
-			return crds.Worker{}, err
+			return resources.Worker{}, err
 		}
 	} else {
 		specChanged := !reflect.DeepEqual(existing.Spec, item.Spec)
 		if err := initializeUpdateMetadata("Worker", &item.Metadata, existing.Metadata, specChanged); err != nil {
 			s.mu.Unlock()
-			return crds.Worker{}, err
+			return resources.Worker{}, err
 		}
 	}
 	s.items[key] = item
@@ -1291,12 +1408,12 @@ func (s *WorkerStore) Upsert(item crds.Worker) (crds.Worker, error) {
 	return item, nil
 }
 
-func (s *WorkerStore) Get(name string) (crds.Worker, bool) {
+func (s *WorkerStore) Get(name string) (resources.Worker, bool) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		item, ok, err := getFromTable[crds.Worker](s.db, tableWorkers, key)
+		item, ok, err := getFromTable[resources.Worker](s.db, tableWorkers, key)
 		if err != nil {
-			return crds.Worker{}, false
+			return resources.Worker{}, false
 		}
 		return item, ok
 	}
@@ -1307,18 +1424,18 @@ func (s *WorkerStore) Get(name string) (crds.Worker, bool) {
 	return item, ok
 }
 
-func (s *WorkerStore) List() []crds.Worker {
+func (s *WorkerStore) List() []resources.Worker {
 	if s.db != nil {
-		items, err := listFromTable[crds.Worker](s.db, tableWorkers)
+		items, err := listFromTable[resources.Worker](s.db, tableWorkers)
 		if err != nil {
-			return []crds.Worker{}
+			return []resources.Worker{}
 		}
 		return items
 	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := make([]crds.Worker, 0, len(s.items))
+	out := make([]resources.Worker, 0, len(s.items))
 	for _, item := range s.items {
 		out = append(out, item)
 	}
@@ -1350,7 +1467,7 @@ func (s *WorkerStore) Delete(name string) error {
 	return nil
 }
 
-func (s *WorkerStore) TryAcquireSlot(name string) (crds.Worker, bool, error) {
+func (s *WorkerStore) TryAcquireSlot(name string) (resources.Worker, bool, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
 		return tryAcquireWorkerSlotSQL(s.db, key)
@@ -1361,7 +1478,7 @@ func (s *WorkerStore) TryAcquireSlot(name string) (crds.Worker, bool, error) {
 
 	worker, ok := s.items[key]
 	if !ok {
-		return crds.Worker{}, false, nil
+		return resources.Worker{}, false, nil
 	}
 	phase := strings.ToLower(strings.TrimSpace(worker.Status.Phase))
 	if phase != "ready" && phase != "pending" {
@@ -1379,7 +1496,7 @@ func (s *WorkerStore) TryAcquireSlot(name string) (crds.Worker, bool, error) {
 	worker.Status.CurrentTasks++
 	worker.Status.ObservedGeneration = worker.Metadata.Generation
 	if err := initializeUpdateMetadata("Worker", &worker.Metadata, current, false); err != nil {
-		return crds.Worker{}, false, err
+		return resources.Worker{}, false, err
 	}
 	s.items[key] = worker
 	return worker, true, nil
@@ -1417,41 +1534,41 @@ func (s *WorkerStore) ReleaseSlot(name string) error {
 
 func NewTaskStore() *TaskStore {
 	return &TaskStore{
-		items: make(map[string]crds.Task),
+		items: make(map[string]resources.Task),
 		logs:  make(map[string][]string),
 	}
 }
 
 func NewTaskStoreWithDB(db *sql.DB) *TaskStore {
 	return &TaskStore{
-		items: make(map[string]crds.Task),
+		items: make(map[string]resources.Task),
 		logs:  make(map[string][]string),
 		db:    db,
 	}
 }
 
-func (s *TaskStore) Upsert(item crds.Task) (crds.Task, error) {
+func (s *TaskStore) Upsert(item resources.Task) (resources.Task, error) {
 	if err := item.Normalize(); err != nil {
-		return crds.Task{}, err
+		return resources.Task{}, err
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		existing, found, err := getFromTable[crds.Task](s.db, tableTasks, key)
+		existing, found, err := getFromTable[resources.Task](s.db, tableTasks, key)
 		if err != nil {
-			return crds.Task{}, err
+			return resources.Task{}, err
 		}
 		if !found {
 			if err := initializeCreateMetadata("Task", &item.Metadata); err != nil {
-				return crds.Task{}, err
+				return resources.Task{}, err
 			}
 		} else {
 			specChanged := !reflect.DeepEqual(existing.Spec, item.Spec)
 			if err := initializeUpdateMetadata("Task", &item.Metadata, existing.Metadata, specChanged); err != nil {
-				return crds.Task{}, err
+				return resources.Task{}, err
 			}
 		}
 		if err := upsertTaskSQL(s.db, key, item); err != nil {
-			return crds.Task{}, err
+			return resources.Task{}, err
 		}
 		return item, nil
 	}
@@ -1461,13 +1578,13 @@ func (s *TaskStore) Upsert(item crds.Task) (crds.Task, error) {
 	if !found {
 		if err := initializeCreateMetadata("Task", &item.Metadata); err != nil {
 			s.mu.Unlock()
-			return crds.Task{}, err
+			return resources.Task{}, err
 		}
 	} else {
 		specChanged := !reflect.DeepEqual(existing.Spec, item.Spec)
 		if err := initializeUpdateMetadata("Task", &item.Metadata, existing.Metadata, specChanged); err != nil {
 			s.mu.Unlock()
-			return crds.Task{}, err
+			return resources.Task{}, err
 		}
 	}
 	s.items[key] = item
@@ -1475,12 +1592,12 @@ func (s *TaskStore) Upsert(item crds.Task) (crds.Task, error) {
 	return item, nil
 }
 
-func (s *TaskStore) Get(name string) (crds.Task, bool) {
+func (s *TaskStore) Get(name string) (resources.Task, bool) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		item, ok, err := getFromTable[crds.Task](s.db, tableTasks, key)
+		item, ok, err := getFromTable[resources.Task](s.db, tableTasks, key)
 		if err != nil {
-			return crds.Task{}, false
+			return resources.Task{}, false
 		}
 		return item, ok
 	}
@@ -1491,18 +1608,18 @@ func (s *TaskStore) Get(name string) (crds.Task, bool) {
 	return item, ok
 }
 
-func (s *TaskStore) List() []crds.Task {
+func (s *TaskStore) List() []resources.Task {
 	if s.db != nil {
-		items, err := listFromTable[crds.Task](s.db, tableTasks)
+		items, err := listFromTable[resources.Task](s.db, tableTasks)
 		if err != nil {
-			return []crds.Task{}
+			return []resources.Task{}
 		}
 		return items
 	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := make([]crds.Task, 0, len(s.items))
+	out := make([]resources.Task, 0, len(s.items))
 	for _, item := range s.items {
 		out = append(out, item)
 	}
@@ -1575,7 +1692,7 @@ func (s *TaskStore) Logs(name string) ([]string, error) {
 	return out, nil
 }
 
-func (s *TaskStore) ClaimIfDue(name, workerID string, lease time.Duration) (crds.Task, bool, error) {
+func (s *TaskStore) ClaimIfDue(name, workerID string, lease time.Duration) (resources.Task, bool, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
 		return claimTaskSQL(s.db, key, workerID, lease)
@@ -1590,21 +1707,21 @@ func (s *TaskStore) ClaimIfDue(name, workerID string, lease time.Duration) (crds
 	defer s.mu.Unlock()
 	task, ok := s.items[key]
 	if !ok {
-		return crds.Task{}, false, nil
+		return resources.Task{}, false, nil
 	}
 	if !isTaskClaimable(task, workerID, now) {
-		return crds.Task{}, false, nil
+		return resources.Task{}, false, nil
 	}
 
 	claimedTask, err := applyTaskClaim(task, workerID, lease, now)
 	if err != nil {
-		return crds.Task{}, false, err
+		return resources.Task{}, false, err
 	}
 	s.items[key] = claimedTask
 	return claimedTask, true, nil
 }
 
-func (s *TaskStore) ClaimNextDue(workerID string, lease time.Duration, matches func(crds.Task) bool) (crds.Task, bool, error) {
+func (s *TaskStore) ClaimNextDue(workerID string, lease time.Duration, matches func(resources.Task) bool) (resources.Task, bool, error) {
 	if s.db != nil {
 		return claimNextDueTaskSQL(s.db, workerID, lease, matches)
 	}
@@ -1631,12 +1748,12 @@ func (s *TaskStore) ClaimNextDue(workerID string, lease time.Duration, matches f
 		}
 		claimedTask, err := applyTaskClaim(task, workerID, lease, now)
 		if err != nil {
-			return crds.Task{}, false, err
+			return resources.Task{}, false, err
 		}
 		s.items[name] = claimedTask
 		return claimedTask, true, nil
 	}
-	return crds.Task{}, false, nil
+	return resources.Task{}, false, nil
 }
 
 func (s *TaskStore) RenewLease(name, workerID string, lease time.Duration) error {
@@ -1674,7 +1791,7 @@ func (s *TaskStore) RenewLease(name, workerID string, lease time.Duration) error
 	return nil
 }
 
-func applyTaskClaim(task crds.Task, workerID string, lease time.Duration, now time.Time) (crds.Task, error) {
+func applyTaskClaim(task resources.Task, workerID string, lease time.Duration, now time.Time) (resources.Task, error) {
 	current := task.Metadata
 	previousPhase := strings.ToLower(strings.TrimSpace(task.Status.Phase))
 	previousWorker := strings.TrimSpace(task.Status.ClaimedBy)
@@ -1697,7 +1814,7 @@ func applyTaskClaim(task crds.Task, workerID string, lease time.Duration, now ti
 	}
 	if takeover {
 		task.Status.LastError = fmt.Sprintf("worker lease expired; task reassigned from %s to %s", previousWorker, workerID)
-		task.Status.History = append(task.Status.History, crds.TaskHistoryEvent{
+		task.Status.History = append(task.Status.History, resources.TaskHistoryEvent{
 			Timestamp: now.Format(time.RFC3339Nano),
 			Type:      "takeover",
 			Worker:    workerID,
@@ -1709,12 +1826,12 @@ func applyTaskClaim(task crds.Task, workerID string, lease time.Duration, now ti
 	}
 
 	if err := initializeUpdateMetadata("Task", &task.Metadata, current, false); err != nil {
-		return crds.Task{}, err
+		return resources.Task{}, err
 	}
 	return task, nil
 }
 
-func isTaskClaimable(task crds.Task, workerID string, now time.Time) bool {
+func isTaskClaimable(task resources.Task, workerID string, now time.Time) bool {
 	if strings.EqualFold(strings.TrimSpace(task.Spec.Mode), "template") {
 		return false
 	}
@@ -1743,7 +1860,7 @@ func isTaskClaimable(task crds.Task, workerID string, now time.Time) bool {
 	}
 }
 
-func taskAttemptDue(task crds.Task, now time.Time) bool {
+func taskAttemptDue(task resources.Task, now time.Time) bool {
 	next := strings.TrimSpace(task.Status.NextAttemptAt)
 	if next == "" {
 		return true

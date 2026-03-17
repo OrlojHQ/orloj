@@ -6,58 +6,58 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/store"
 )
 
 type agentStatusPatch struct {
-	Metadata crds.ObjectMeta  `json:"metadata"`
-	Status   crds.AgentStatus `json:"status"`
+	Metadata resources.ObjectMeta  `json:"metadata"`
+	Status   resources.AgentStatus `json:"status"`
 }
 
 type agentSystemStatusPatch struct {
-	Metadata crds.ObjectMeta        `json:"metadata"`
-	Status   crds.AgentSystemStatus `json:"status"`
+	Metadata resources.ObjectMeta        `json:"metadata"`
+	Status   resources.AgentSystemStatus `json:"status"`
 }
 
 type toolStatusPatch struct {
-	Metadata crds.ObjectMeta `json:"metadata"`
-	Status   crds.ToolStatus `json:"status"`
+	Metadata resources.ObjectMeta `json:"metadata"`
+	Status   resources.ToolStatus `json:"status"`
 }
 
 type modelEndpointStatusPatch struct {
-	Metadata crds.ObjectMeta          `json:"metadata"`
-	Status   crds.ModelEndpointStatus `json:"status"`
+	Metadata resources.ObjectMeta          `json:"metadata"`
+	Status   resources.ModelEndpointStatus `json:"status"`
 }
 
 type memoryStatusPatch struct {
-	Metadata crds.ObjectMeta   `json:"metadata"`
-	Status   crds.MemoryStatus `json:"status"`
+	Metadata resources.ObjectMeta   `json:"metadata"`
+	Status   resources.MemoryStatus `json:"status"`
 }
 
 type policyStatusPatch struct {
-	Metadata crds.ObjectMeta   `json:"metadata"`
-	Status   crds.PolicyStatus `json:"status"`
+	Metadata resources.ObjectMeta   `json:"metadata"`
+	Status   resources.PolicyStatus `json:"status"`
 }
 
 type taskStatusPatch struct {
-	Metadata crds.ObjectMeta `json:"metadata"`
-	Status   crds.TaskStatus `json:"status"`
+	Metadata resources.ObjectMeta `json:"metadata"`
+	Status   resources.TaskStatus `json:"status"`
 }
 
 type taskScheduleStatusPatch struct {
-	Metadata crds.ObjectMeta         `json:"metadata"`
-	Status   crds.TaskScheduleStatus `json:"status"`
+	Metadata resources.ObjectMeta         `json:"metadata"`
+	Status   resources.TaskScheduleStatus `json:"status"`
 }
 
 type taskWebhookStatusPatch struct {
-	Metadata crds.ObjectMeta        `json:"metadata"`
-	Status   crds.TaskWebhookStatus `json:"status"`
+	Metadata resources.ObjectMeta        `json:"metadata"`
+	Status   resources.TaskWebhookStatus `json:"status"`
 }
 
 type workerStatusPatch struct {
-	Metadata crds.ObjectMeta   `json:"metadata"`
-	Status   crds.WorkerStatus `json:"status"`
+	Metadata resources.ObjectMeta   `json:"metadata"`
+	Status   resources.WorkerStatus `json:"status"`
 }
 
 func decodeStatusPatch(r *http.Request, out any) error {
@@ -71,7 +71,7 @@ func decodeStatusPatch(r *http.Request, out any) error {
 	return nil
 }
 
-func writeStatus(w http.ResponseWriter, metadata crds.ObjectMeta, status any) {
+func writeStatus(w http.ResponseWriter, metadata resources.ObjectMeta, status any) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"metadata": metadata,
 		"status":   status,

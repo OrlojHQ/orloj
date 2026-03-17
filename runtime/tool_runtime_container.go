@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 // ContainerToolRuntimeConfig defines isolated tool execution in a locked-down container.
@@ -226,7 +226,7 @@ func (r *ContainerToolRuntime) WithNamespace(namespace string) ToolRuntime {
 		return NewContainerToolRuntime(nil, DefaultContainerToolRuntimeConfig())
 	}
 	copy := *r
-	copy.namespace = crds.NormalizeNamespace(strings.TrimSpace(namespace))
+	copy.namespace = resources.NormalizeNamespace(strings.TrimSpace(namespace))
 	if aware, ok := copy.secrets.(namespaceAwareSecretResolver); ok {
 		copy.secrets = aware.WithNamespace(copy.namespace)
 	}
@@ -289,7 +289,7 @@ func (r *ContainerToolRuntime) Call(ctx context.Context, tool string, input stri
 	}
 }
 
-func (r *ContainerToolRuntime) callHTTP(ctx context.Context, tool string, spec crds.ToolSpec, input string) (string, error) {
+func (r *ContainerToolRuntime) callHTTP(ctx context.Context, tool string, spec resources.ToolSpec, input string) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", mapContainerContextError(tool, err)
 	}

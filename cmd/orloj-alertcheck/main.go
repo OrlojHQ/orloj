@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 type alertConfig struct {
@@ -188,8 +188,8 @@ func loadProfile(path string) (thresholdProfile, error) {
 	return profile, nil
 }
 
-func filterTasks(tasks []crds.Task, cfg alertConfig) []crds.Task {
-	out := make([]crds.Task, 0, len(tasks))
+func filterTasks(tasks []resources.Task, cfg alertConfig) []resources.Task {
+	out := make([]resources.Task, 0, len(tasks))
 	prefix := strings.ToLower(strings.TrimSpace(cfg.taskNamePrefix))
 	system := strings.ToLower(strings.TrimSpace(cfg.taskSystem))
 	for _, task := range tasks {
@@ -205,7 +205,7 @@ func filterTasks(tasks []crds.Task, cfg alertConfig) []crds.Task {
 	return out
 }
 
-func collectAggregate(ctx context.Context, client *apiClient, cfg alertConfig, tasks []crds.Task) (taskAggregate, []string) {
+func collectAggregate(ctx context.Context, client *apiClient, cfg alertConfig, tasks []resources.Task) (taskAggregate, []string) {
 	agg := taskAggregate{Tasks: len(tasks)}
 	if len(tasks) == 0 {
 		return agg, nil
@@ -217,7 +217,7 @@ func collectAggregate(ctx context.Context, client *apiClient, cfg alertConfig, t
 		metrics taskMetricsResponse
 		err     error
 	}
-	jobs := make(chan crds.Task)
+	jobs := make(chan resources.Task)
 	results := make(chan item, len(tasks))
 
 	workerCount := cfg.pollConcurrency
@@ -375,10 +375,10 @@ func printReport(report alertReport) {
 	}
 }
 
-func (c *apiClient) listTasks(ctx context.Context, namespace string) (crds.TaskList, error) {
-	var out crds.TaskList
+func (c *apiClient) listTasks(ctx context.Context, namespace string) (resources.TaskList, error) {
+	var out resources.TaskList
 	if err := c.getJSON(ctx, "tasks", namespace, &out); err != nil {
-		return crds.TaskList{}, err
+		return resources.TaskList{}, err
 	}
 	return out, nil
 }

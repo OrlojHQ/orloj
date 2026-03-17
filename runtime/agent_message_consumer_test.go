@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/store"
 )
 
@@ -19,25 +19,25 @@ func TestAgentMessageConsumerExecutesGraphAndCompletesTask(t *testing.T) {
 	systemStore := store.NewAgentSystemStore()
 	taskStore := store.NewTaskStore()
 
-	for _, agent := range []crds.Agent{
+	for _, agent := range []resources.Agent{
 		{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Agent",
-			Metadata:   crds.ObjectMeta{Name: "planner-agent"},
-			Spec: crds.AgentSpec{
+			Metadata:   resources.ObjectMeta{Name: "planner-agent"},
+			Spec: resources.AgentSpec{
 				Model:  "gpt-4o",
 				Prompt: "plan",
-				Limits: crds.AgentLimits{MaxSteps: 1, Timeout: "1s"},
+				Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
 			},
 		},
 		{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Agent",
-			Metadata:   crds.ObjectMeta{Name: "writer-agent"},
-			Spec: crds.AgentSpec{
+			Metadata:   resources.ObjectMeta{Name: "writer-agent"},
+			Spec: resources.AgentSpec{
 				Model:  "gpt-4o",
 				Prompt: "write",
-				Limits: crds.AgentLimits{MaxSteps: 1, Timeout: "1s"},
+				Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
 			},
 		},
 	} {
@@ -46,13 +46,13 @@ func TestAgentMessageConsumerExecutesGraphAndCompletesTask(t *testing.T) {
 		}
 	}
 
-	if _, err := systemStore.Upsert(crds.AgentSystem{
+	if _, err := systemStore.Upsert(resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
-		Metadata:   crds.ObjectMeta{Name: "report-system"},
-		Spec: crds.AgentSystemSpec{
+		Metadata:   resources.ObjectMeta{Name: "report-system"},
+		Spec: resources.AgentSystemSpec{
 			Agents: []string{"planner-agent", "writer-agent"},
-			Graph: map[string]crds.GraphEdge{
+			Graph: map[string]resources.GraphEdge{
 				"planner-agent": {Next: "writer-agent"},
 			},
 		},
@@ -60,15 +60,15 @@ func TestAgentMessageConsumerExecutesGraphAndCompletesTask(t *testing.T) {
 		t.Fatalf("upsert system failed: %v", err)
 	}
 
-	if _, err := taskStore.Upsert(crds.Task{
+	if _, err := taskStore.Upsert(resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "task-1"},
-		Spec: crds.TaskSpec{
+		Metadata:   resources.ObjectMeta{Name: "task-1"},
+		Spec: resources.TaskSpec{
 			System: "report-system",
 			Input:  map[string]string{"topic": "agent systems"},
 		},
-		Status: crds.TaskStatus{
+		Status: resources.TaskStatus{
 			Phase:     "Running",
 			ClaimedBy: "worker-a",
 			Attempts:  1,
@@ -148,29 +148,29 @@ func TestAgentMessageConsumerWaitsForLeaseThenTakesOver(t *testing.T) {
 	systemStore := store.NewAgentSystemStore()
 	taskStore := store.NewTaskStore()
 
-	if _, err := agentStore.Upsert(crds.Agent{
+	if _, err := agentStore.Upsert(resources.Agent{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
-		Metadata:   crds.ObjectMeta{Name: "research-agent"},
-		Spec:       crds.AgentSpec{Model: "gpt-4o", Prompt: "research"},
+		Metadata:   resources.ObjectMeta{Name: "research-agent"},
+		Spec:       resources.AgentSpec{Model: "gpt-4o", Prompt: "research"},
 	}); err != nil {
 		t.Fatalf("upsert agent failed: %v", err)
 	}
-	if _, err := systemStore.Upsert(crds.AgentSystem{
+	if _, err := systemStore.Upsert(resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
-		Metadata:   crds.ObjectMeta{Name: "report-system"},
-		Spec:       crds.AgentSystemSpec{Agents: []string{"research-agent"}},
+		Metadata:   resources.ObjectMeta{Name: "report-system"},
+		Spec:       resources.AgentSystemSpec{Agents: []string{"research-agent"}},
 	}); err != nil {
 		t.Fatalf("upsert system failed: %v", err)
 	}
 
-	if _, err := taskStore.Upsert(crds.Task{
+	if _, err := taskStore.Upsert(resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "task-2"},
-		Spec:       crds.TaskSpec{System: "report-system"},
-		Status: crds.TaskStatus{
+		Metadata:   resources.ObjectMeta{Name: "task-2"},
+		Spec:       resources.TaskSpec{System: "report-system"},
+		Status: resources.TaskStatus{
 			Phase:      "Running",
 			ClaimedBy:  "worker-owner",
 			LeaseUntil: time.Now().UTC().Add(180 * time.Millisecond).Format(time.RFC3339Nano),
@@ -248,44 +248,44 @@ func TestAgentMessageConsumerRetriesThenDeadLettersMessage(t *testing.T) {
 	systemStore := store.NewAgentSystemStore()
 	taskStore := store.NewTaskStore()
 
-	if _, err := agentStore.Upsert(crds.Agent{
+	if _, err := agentStore.Upsert(resources.Agent{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
-		Metadata:   crds.ObjectMeta{Name: "planner-agent"},
-		Spec: crds.AgentSpec{
+		Metadata:   resources.ObjectMeta{Name: "planner-agent"},
+		Spec: resources.AgentSpec{
 			Model:  "gpt-4o",
 			Prompt: "plan",
-			Limits: crds.AgentLimits{MaxSteps: 50, Timeout: "1ms"},
+			Limits: resources.AgentLimits{MaxSteps: 50, Timeout: "1ms"},
 		},
 	}); err != nil {
 		t.Fatalf("upsert agent failed: %v", err)
 	}
-	if _, err := systemStore.Upsert(crds.AgentSystem{
+	if _, err := systemStore.Upsert(resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
-		Metadata:   crds.ObjectMeta{Name: "retry-system"},
-		Spec:       crds.AgentSystemSpec{Agents: []string{"planner-agent"}},
+		Metadata:   resources.ObjectMeta{Name: "retry-system"},
+		Spec:       resources.AgentSystemSpec{Agents: []string{"planner-agent"}},
 	}); err != nil {
 		t.Fatalf("upsert system failed: %v", err)
 	}
-	if _, err := taskStore.Upsert(crds.Task{
+	if _, err := taskStore.Upsert(resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "retry-task"},
-		Spec: crds.TaskSpec{
+		Metadata:   resources.ObjectMeta{Name: "retry-task"},
+		Spec: resources.TaskSpec{
 			System: "retry-system",
-			Retry: crds.TaskRetryPolicy{
+			Retry: resources.TaskRetryPolicy{
 				MaxAttempts: 4,
 				Backoff:     "800ms",
 			},
-			MessageRetry: crds.TaskMessageRetryPolicy{
+			MessageRetry: resources.TaskMessageRetryPolicy{
 				MaxAttempts: 2,
 				Backoff:     "120ms",
 				MaxBackoff:  "250ms",
 				Jitter:      "none",
 			},
 		},
-		Status: crds.TaskStatus{
+		Status: resources.TaskStatus{
 			Phase:     "Running",
 			ClaimedBy: "worker-a",
 			Attempts:  1,
@@ -376,28 +376,28 @@ func TestAgentMessageConsumerNonRetryableInvalidSystemDeadLettersImmediately(t *
 	systemStore := store.NewAgentSystemStore()
 	taskStore := store.NewTaskStore()
 
-	if _, err := agentStore.Upsert(crds.Agent{
+	if _, err := agentStore.Upsert(resources.Agent{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
-		Metadata:   crds.ObjectMeta{Name: "runner-agent"},
-		Spec:       crds.AgentSpec{Model: "gpt-4o", Prompt: "run"},
+		Metadata:   resources.ObjectMeta{Name: "runner-agent"},
+		Spec:       resources.AgentSpec{Model: "gpt-4o", Prompt: "run"},
 	}); err != nil {
 		t.Fatalf("upsert agent failed: %v", err)
 	}
-	if _, err := taskStore.Upsert(crds.Task{
+	if _, err := taskStore.Upsert(resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "invalid-ref-task"},
-		Spec: crds.TaskSpec{
+		Metadata:   resources.ObjectMeta{Name: "invalid-ref-task"},
+		Spec: resources.TaskSpec{
 			System: "missing-system",
-			MessageRetry: crds.TaskMessageRetryPolicy{
+			MessageRetry: resources.TaskMessageRetryPolicy{
 				MaxAttempts: 5,
 				Backoff:     "150ms",
 				MaxBackoff:  "2s",
 				Jitter:      "none",
 			},
 		},
-		Status: crds.TaskStatus{
+		Status: resources.TaskStatus{
 			Phase:     "Running",
 			ClaimedBy: "worker-a",
 			Attempts:  1,
@@ -462,7 +462,7 @@ func TestAgentMessageConsumerNonRetryableInvalidSystemDeadLettersImmediately(t *
 func TestComputeMessageRetryDelayCappedAndJitterModes(t *testing.T) {
 	msg := AgentMessage{MessageID: "msg-delay", TaskID: "default/delay-task", ToAgent: "writer-agent"}
 
-	none := computeMessageRetryDelay(crds.TaskMessageRetryPolicy{
+	none := computeMessageRetryDelay(resources.TaskMessageRetryPolicy{
 		Backoff:    "50ms",
 		MaxBackoff: "120ms",
 		Jitter:     "none",
@@ -471,7 +471,7 @@ func TestComputeMessageRetryDelayCappedAndJitterModes(t *testing.T) {
 		t.Fatalf("expected capped delay=120ms for attempt=3, got %s", none)
 	}
 
-	full := computeMessageRetryDelay(crds.TaskMessageRetryPolicy{
+	full := computeMessageRetryDelay(resources.TaskMessageRetryPolicy{
 		Backoff:    "100ms",
 		MaxBackoff: "5s",
 		Jitter:     "full",
@@ -480,7 +480,7 @@ func TestComputeMessageRetryDelayCappedAndJitterModes(t *testing.T) {
 		t.Fatalf("expected full jitter delay in (0,100ms], got %s", full)
 	}
 
-	equal := computeMessageRetryDelay(crds.TaskMessageRetryPolicy{
+	equal := computeMessageRetryDelay(resources.TaskMessageRetryPolicy{
 		Backoff:    "100ms",
 		MaxBackoff: "5s",
 		Jitter:     "equal",
@@ -498,30 +498,30 @@ func TestAgentMessageConsumerFanOutJoinWaitForAll(t *testing.T) {
 	systemStore := store.NewAgentSystemStore()
 	taskStore := store.NewTaskStore()
 
-	for _, agent := range []crds.Agent{
+	for _, agent := range []resources.Agent{
 		{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Agent",
-			Metadata:   crds.ObjectMeta{Name: "planner-agent"},
-			Spec:       crds.AgentSpec{Model: "gpt-4o", Prompt: "plan", Limits: crds.AgentLimits{MaxSteps: 1, Timeout: "1s"}},
+			Metadata:   resources.ObjectMeta{Name: "planner-agent"},
+			Spec:       resources.AgentSpec{Model: "gpt-4o", Prompt: "plan", Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"}},
 		},
 		{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Agent",
-			Metadata:   crds.ObjectMeta{Name: "researcher-agent"},
-			Spec:       crds.AgentSpec{Model: "gpt-4o", Prompt: "research", Limits: crds.AgentLimits{MaxSteps: 1, Timeout: "1s"}},
+			Metadata:   resources.ObjectMeta{Name: "researcher-agent"},
+			Spec:       resources.AgentSpec{Model: "gpt-4o", Prompt: "research", Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"}},
 		},
 		{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Agent",
-			Metadata:   crds.ObjectMeta{Name: "reviewer-agent"},
-			Spec:       crds.AgentSpec{Model: "gpt-4o", Prompt: "review", Limits: crds.AgentLimits{MaxSteps: 1, Timeout: "1s"}},
+			Metadata:   resources.ObjectMeta{Name: "reviewer-agent"},
+			Spec:       resources.AgentSpec{Model: "gpt-4o", Prompt: "review", Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"}},
 		},
 		{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Agent",
-			Metadata:   crds.ObjectMeta{Name: "writer-agent"},
-			Spec:       crds.AgentSpec{Model: "gpt-4o", Prompt: "write", Limits: crds.AgentLimits{MaxSteps: 1, Timeout: "1s"}},
+			Metadata:   resources.ObjectMeta{Name: "writer-agent"},
+			Spec:       resources.AgentSpec{Model: "gpt-4o", Prompt: "write", Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"}},
 		},
 	} {
 		if _, err := agentStore.Upsert(agent); err != nil {
@@ -529,23 +529,23 @@ func TestAgentMessageConsumerFanOutJoinWaitForAll(t *testing.T) {
 		}
 	}
 
-	if _, err := systemStore.Upsert(crds.AgentSystem{
+	if _, err := systemStore.Upsert(resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
-		Metadata:   crds.ObjectMeta{Name: "fanout-system"},
-		Spec: crds.AgentSystemSpec{
+		Metadata:   resources.ObjectMeta{Name: "fanout-system"},
+		Spec: resources.AgentSystemSpec{
 			Agents: []string{"planner-agent", "researcher-agent", "reviewer-agent", "writer-agent"},
-			Graph: map[string]crds.GraphEdge{
+			Graph: map[string]resources.GraphEdge{
 				"planner-agent": {
-					Edges: []crds.GraphRoute{
+					Edges: []resources.GraphRoute{
 						{To: "researcher-agent"},
 						{To: "reviewer-agent"},
 					},
 				},
-				"researcher-agent": {Edges: []crds.GraphRoute{{To: "writer-agent"}}},
-				"reviewer-agent":   {Edges: []crds.GraphRoute{{To: "writer-agent"}}},
+				"researcher-agent": {Edges: []resources.GraphRoute{{To: "writer-agent"}}},
+				"reviewer-agent":   {Edges: []resources.GraphRoute{{To: "writer-agent"}}},
 				"writer-agent": {
-					Join: crds.GraphJoin{Mode: "wait_for_all"},
+					Join: resources.GraphJoin{Mode: "wait_for_all"},
 				},
 			},
 		},
@@ -553,12 +553,12 @@ func TestAgentMessageConsumerFanOutJoinWaitForAll(t *testing.T) {
 		t.Fatalf("upsert system failed: %v", err)
 	}
 
-	if _, err := taskStore.Upsert(crds.Task{
+	if _, err := taskStore.Upsert(resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "fanout-task"},
-		Spec:       crds.TaskSpec{System: "fanout-system", Input: map[string]string{"topic": "fanout"}},
-		Status: crds.TaskStatus{
+		Metadata:   resources.ObjectMeta{Name: "fanout-task"},
+		Spec:       resources.TaskSpec{System: "fanout-system", Input: map[string]string{"topic": "fanout"}},
+		Status: resources.TaskStatus{
 			Phase:     "Running",
 			ClaimedBy: "worker-a",
 			Attempts:  1,
@@ -619,7 +619,7 @@ func TestAgentMessageConsumerFanOutJoinWaitForAll(t *testing.T) {
 	if len(task.Status.JoinStates) == 0 {
 		t.Fatal("expected join state to be recorded")
 	}
-	var writerJoin *crds.TaskJoinState
+	var writerJoin *resources.TaskJoinState
 	for i := range task.Status.JoinStates {
 		if strings.EqualFold(task.Status.JoinStates[i].Node, "writer-agent") {
 			writerJoin = &task.Status.JoinStates[i]
@@ -652,35 +652,35 @@ func TestAgentMessageConsumerJoinWaitPersistsIdempotencyAndSkipsDuplicate(t *tes
 	systemStore := store.NewAgentSystemStore()
 	taskStore := store.NewTaskStore()
 
-	if _, err := agentStore.Upsert(crds.Agent{
+	if _, err := agentStore.Upsert(resources.Agent{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
-		Metadata:   crds.ObjectMeta{Name: "writer-agent"},
-		Spec:       crds.AgentSpec{Model: "gpt-4o", Prompt: "write", Limits: crds.AgentLimits{MaxSteps: 1, Timeout: "1s"}},
+		Metadata:   resources.ObjectMeta{Name: "writer-agent"},
+		Spec:       resources.AgentSpec{Model: "gpt-4o", Prompt: "write", Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"}},
 	}); err != nil {
 		t.Fatalf("upsert writer failed: %v", err)
 	}
-	if _, err := systemStore.Upsert(crds.AgentSystem{
+	if _, err := systemStore.Upsert(resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
-		Metadata:   crds.ObjectMeta{Name: "join-system"},
-		Spec: crds.AgentSystemSpec{
+		Metadata:   resources.ObjectMeta{Name: "join-system"},
+		Spec: resources.AgentSystemSpec{
 			Agents: []string{"researcher-agent", "reviewer-agent", "writer-agent"},
-			Graph: map[string]crds.GraphEdge{
-				"researcher-agent": {Edges: []crds.GraphRoute{{To: "writer-agent"}}},
-				"reviewer-agent":   {Edges: []crds.GraphRoute{{To: "writer-agent"}}},
-				"writer-agent":     {Join: crds.GraphJoin{Mode: "wait_for_all"}},
+			Graph: map[string]resources.GraphEdge{
+				"researcher-agent": {Edges: []resources.GraphRoute{{To: "writer-agent"}}},
+				"reviewer-agent":   {Edges: []resources.GraphRoute{{To: "writer-agent"}}},
+				"writer-agent":     {Join: resources.GraphJoin{Mode: "wait_for_all"}},
 			},
 		},
 	}); err != nil {
 		t.Fatalf("upsert system failed: %v", err)
 	}
-	if _, err := taskStore.Upsert(crds.Task{
+	if _, err := taskStore.Upsert(resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "join-task"},
-		Spec:       crds.TaskSpec{System: "join-system"},
-		Status: crds.TaskStatus{
+		Metadata:   resources.ObjectMeta{Name: "join-task"},
+		Spec:       resources.TaskSpec{System: "join-system"},
+		Status: resources.TaskStatus{
 			Phase:     "Running",
 			ClaimedBy: "worker-a",
 			Attempts:  1,
@@ -763,18 +763,18 @@ func TestAgentMessageConsumerStopsCyclicBranchAtTaskMaxTurns(t *testing.T) {
 	systemStore := store.NewAgentSystemStore()
 	taskStore := store.NewTaskStore()
 
-	for _, agent := range []crds.Agent{
+	for _, agent := range []resources.Agent{
 		{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Agent",
-			Metadata:   crds.ObjectMeta{Name: "manager-agent"},
-			Spec:       crds.AgentSpec{Model: "gpt-4o", Prompt: "manage", Limits: crds.AgentLimits{MaxSteps: 1, Timeout: "1s"}},
+			Metadata:   resources.ObjectMeta{Name: "manager-agent"},
+			Spec:       resources.AgentSpec{Model: "gpt-4o", Prompt: "manage", Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"}},
 		},
 		{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Agent",
-			Metadata:   crds.ObjectMeta{Name: "research-agent"},
-			Spec:       crds.AgentSpec{Model: "gpt-4o", Prompt: "research", Limits: crds.AgentLimits{MaxSteps: 1, Timeout: "1s"}},
+			Metadata:   resources.ObjectMeta{Name: "research-agent"},
+			Spec:       resources.AgentSpec{Model: "gpt-4o", Prompt: "research", Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"}},
 		},
 	} {
 		if _, err := agentStore.Upsert(agent); err != nil {
@@ -782,13 +782,13 @@ func TestAgentMessageConsumerStopsCyclicBranchAtTaskMaxTurns(t *testing.T) {
 		}
 	}
 
-	if _, err := systemStore.Upsert(crds.AgentSystem{
+	if _, err := systemStore.Upsert(resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
-		Metadata:   crds.ObjectMeta{Name: "cycle-system"},
-		Spec: crds.AgentSystemSpec{
+		Metadata:   resources.ObjectMeta{Name: "cycle-system"},
+		Spec: resources.AgentSystemSpec{
 			Agents: []string{"manager-agent", "research-agent"},
-			Graph: map[string]crds.GraphEdge{
+			Graph: map[string]resources.GraphEdge{
 				"manager-agent":  {Next: "research-agent"},
 				"research-agent": {Next: "manager-agent"},
 			},
@@ -797,15 +797,15 @@ func TestAgentMessageConsumerStopsCyclicBranchAtTaskMaxTurns(t *testing.T) {
 		t.Fatalf("upsert system failed: %v", err)
 	}
 
-	if _, err := taskStore.Upsert(crds.Task{
+	if _, err := taskStore.Upsert(resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "cycle-task"},
-		Spec: crds.TaskSpec{
+		Metadata:   resources.ObjectMeta{Name: "cycle-task"},
+		Spec: resources.TaskSpec{
 			System:   "cycle-system",
 			MaxTurns: 3,
 		},
-		Status: crds.TaskStatus{
+		Status: resources.TaskStatus{
 			Phase:     "Running",
 			ClaimedBy: "worker-a",
 			Attempts:  1,
@@ -881,7 +881,7 @@ func waitForConsumer(t *testing.T, timeout time.Duration, cond func() bool) {
 	t.Fatal("condition not met before timeout")
 }
 
-func countMessages(messages []crds.TaskMessage, messageID string) int {
+func countMessages(messages []resources.TaskMessage, messageID string) int {
 	count := 0
 	for _, msg := range messages {
 		if strings.EqualFold(strings.TrimSpace(msg.MessageID), strings.TrimSpace(messageID)) {
@@ -891,7 +891,7 @@ func countMessages(messages []crds.TaskMessage, messageID string) int {
 	return count
 }
 
-func countTraceByTypeAndMessage(trace []crds.TaskTraceEvent, eventType, messageID string) int {
+func countTraceByTypeAndMessage(trace []resources.TaskTraceEvent, eventType, messageID string) int {
 	count := 0
 	needle := "message_id=" + strings.TrimSpace(messageID)
 	for _, event := range trace {
@@ -905,7 +905,7 @@ func countTraceByTypeAndMessage(trace []crds.TaskTraceEvent, eventType, messageI
 	return count
 }
 
-func countTraceByAgentAndType(trace []crds.TaskTraceEvent, agent, eventType string) int {
+func countTraceByAgentAndType(trace []resources.TaskTraceEvent, agent, eventType string) int {
 	count := 0
 	for _, event := range trace {
 		if !strings.EqualFold(strings.TrimSpace(event.Agent), strings.TrimSpace(agent)) {
@@ -919,11 +919,11 @@ func countTraceByAgentAndType(trace []crds.TaskTraceEvent, agent, eventType stri
 	return count
 }
 
-func taskMessageByID(messages []crds.TaskMessage, messageID string) (crds.TaskMessage, bool) {
+func taskMessageByID(messages []resources.TaskMessage, messageID string) (resources.TaskMessage, bool) {
 	for _, message := range messages {
 		if strings.EqualFold(strings.TrimSpace(message.MessageID), strings.TrimSpace(messageID)) {
 			return message, true
 		}
 	}
-	return crds.TaskMessage{}, false
+	return resources.TaskMessage{}, false
 }

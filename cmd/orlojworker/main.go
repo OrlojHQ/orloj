@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/OrlojHQ/orloj/controllers"
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 	agentruntime "github.com/OrlojHQ/orloj/runtime"
 	"github.com/OrlojHQ/orloj/startup"
 	"github.com/OrlojHQ/orloj/store"
@@ -143,6 +143,7 @@ func main() {
 	taskController.ConfigureWorker(*workerID, *leaseDuration, *heartbeatInterval)
 	taskController.SetExecutionMode(*taskExecutionMode)
 	taskController.SetGovernanceStores(stores.Roles, stores.ToolPerms)
+	taskController.SetToolApprovalStore(stores.ToolApprovals)
 	taskController.SetModelEndpointStore(stores.ModelEPs)
 	taskController.SetExecutor(taskExecutor)
 	taskController.SetExtensions(extensions)
@@ -183,9 +184,9 @@ func main() {
 	defer cancel()
 
 	specModels := startup.ParseCSV(*supportedModels)
-	go heartbeatWorkerRegistration(ctx, stores.Workers, logger, *workerID, crds.WorkerSpec{
+	go heartbeatWorkerRegistration(ctx, stores.Workers, logger, *workerID, resources.WorkerSpec{
 		Region: *region,
-		Capabilities: crds.WorkerCapabilities{
+		Capabilities: resources.WorkerCapabilities{
 			GPU:             *gpu,
 			SupportedModels: specModels,
 		},
@@ -229,7 +230,7 @@ func heartbeatWorkerRegistration(
 	workerStore *store.WorkerStore,
 	logger *log.Logger,
 	workerID string,
-	spec crds.WorkerSpec,
+	spec resources.WorkerSpec,
 	interval time.Duration,
 ) {
 	if interval <= 0 {
@@ -240,12 +241,12 @@ func heartbeatWorkerRegistration(
 
 	for {
 		now := time.Now().UTC().Format(time.RFC3339Nano)
-		worker := crds.Worker{
+		worker := resources.Worker{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Worker",
-			Metadata:   crds.ObjectMeta{Name: workerID},
+			Metadata:   resources.ObjectMeta{Name: workerID},
 			Spec:       spec,
-			Status: crds.WorkerStatus{
+			Status: resources.WorkerStatus{
 				Phase:         "Ready",
 				LastHeartbeat: now,
 				CurrentTasks:  0,

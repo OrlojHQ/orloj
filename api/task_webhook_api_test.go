@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 type webhookDeliveryPayload struct {
@@ -31,13 +31,13 @@ func TestTaskWebhookCRUDAndStatusPreconditions(t *testing.T) {
 	server := newTestServer(t)
 	defer server.Close()
 
-	postJSON(t, server.URL+"/v1/task-webhooks", crds.TaskWebhook{
+	postJSON(t, server.URL+"/v1/task-webhooks", resources.TaskWebhook{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "TaskWebhook",
-		Metadata:   crds.ObjectMeta{Name: "build-events"},
-		Spec: crds.TaskWebhookSpec{
+		Metadata:   resources.ObjectMeta{Name: "build-events"},
+		Spec: resources.TaskWebhookSpec{
 			TaskRef: "weekly-report-template",
-			Auth: crds.TaskWebhookAuthSpec{
+			Auth: resources.TaskWebhookAuthSpec{
 				SecretRef: "build-webhook-secret",
 			},
 		},
@@ -126,13 +126,13 @@ func TestTaskWebhookWatchEndpoint(t *testing.T) {
 	server := newTestServer(t)
 	defer server.Close()
 
-	postJSON(t, server.URL+"/v1/task-webhooks", crds.TaskWebhook{
+	postJSON(t, server.URL+"/v1/task-webhooks", resources.TaskWebhook{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "TaskWebhook",
-		Metadata:   crds.ObjectMeta{Name: "watch-build-events"},
-		Spec: crds.TaskWebhookSpec{
+		Metadata:   resources.ObjectMeta{Name: "watch-build-events"},
+		Spec: resources.TaskWebhookSpec{
 			TaskRef: "weekly-report-template",
-			Auth: crds.TaskWebhookAuthSpec{
+			Auth: resources.TaskWebhookAuthSpec{
 				SecretRef: "watch-secret",
 			},
 		},
@@ -354,31 +354,31 @@ func TestWebhookDeliveryRequiresTemplateTask(t *testing.T) {
 	defer server.Close()
 
 	secret := "template-check-secret"
-	postJSON(t, server.URL+"/v1/secrets", crds.Secret{
+	postJSON(t, server.URL+"/v1/secrets", resources.Secret{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Secret",
-		Metadata:   crds.ObjectMeta{Name: "template-check-secret"},
-		Spec: crds.SecretSpec{
+		Metadata:   resources.ObjectMeta{Name: "template-check-secret"},
+		Spec: resources.SecretSpec{
 			StringData: map[string]string{"value": secret},
 		},
 	})
-	postJSON(t, server.URL+"/v1/tasks", crds.Task{
+	postJSON(t, server.URL+"/v1/tasks", resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "not-a-template"},
-		Spec: crds.TaskSpec{
+		Metadata:   resources.ObjectMeta{Name: "not-a-template"},
+		Spec: resources.TaskSpec{
 			Mode:   "run",
 			System: "report-system",
 			Input:  map[string]string{"topic": "x"},
 		},
 	})
-	postJSON(t, server.URL+"/v1/task-webhooks", crds.TaskWebhook{
+	postJSON(t, server.URL+"/v1/task-webhooks", resources.TaskWebhook{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "TaskWebhook",
-		Metadata:   crds.ObjectMeta{Name: "enforce-template"},
-		Spec: crds.TaskWebhookSpec{
+		Metadata:   resources.ObjectMeta{Name: "enforce-template"},
+		Spec: resources.TaskWebhookSpec{
 			TaskRef: "not-a-template",
-			Auth: crds.TaskWebhookAuthSpec{
+			Auth: resources.TaskWebhookAuthSpec{
 				SecretRef: "template-check-secret",
 			},
 		},
@@ -404,19 +404,19 @@ func TestWebhookDeliveryRequiresTemplateTask(t *testing.T) {
 
 func createWebhookFixtures(t *testing.T, baseURL, templateName, webhookName, profile string, suspended bool, secretValue string) {
 	t.Helper()
-	postJSON(t, baseURL+"/v1/secrets", crds.Secret{
+	postJSON(t, baseURL+"/v1/secrets", resources.Secret{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Secret",
-		Metadata:   crds.ObjectMeta{Name: webhookName + "-secret"},
-		Spec: crds.SecretSpec{
+		Metadata:   resources.ObjectMeta{Name: webhookName + "-secret"},
+		Spec: resources.SecretSpec{
 			StringData: map[string]string{"value": secretValue},
 		},
 	})
-	postJSON(t, baseURL+"/v1/tasks", crds.Task{
+	postJSON(t, baseURL+"/v1/tasks", resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: templateName},
-		Spec: crds.TaskSpec{
+		Metadata:   resources.ObjectMeta{Name: templateName},
+		Spec: resources.TaskSpec{
 			Mode:   "template",
 			System: "report-system",
 			Input: map[string]string{
@@ -424,19 +424,19 @@ func createWebhookFixtures(t *testing.T, baseURL, templateName, webhookName, pro
 			},
 		},
 	})
-	postJSON(t, baseURL+"/v1/task-webhooks", crds.TaskWebhook{
+	postJSON(t, baseURL+"/v1/task-webhooks", resources.TaskWebhook{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "TaskWebhook",
-		Metadata:   crds.ObjectMeta{Name: webhookName},
-		Spec: crds.TaskWebhookSpec{
+		Metadata:   resources.ObjectMeta{Name: webhookName},
+		Spec: resources.TaskWebhookSpec{
 			TaskRef: templateName,
 			Suspend: suspended,
-			Auth:    crds.TaskWebhookAuthSpec{Profile: profile, SecretRef: webhookName + "-secret"},
+			Auth:    resources.TaskWebhookAuthSpec{Profile: profile, SecretRef: webhookName + "-secret"},
 		},
 	})
 }
 
-func getTaskWebhook(t *testing.T, baseURL, name, namespace string) crds.TaskWebhook {
+func getTaskWebhook(t *testing.T, baseURL, name, namespace string) resources.TaskWebhook {
 	t.Helper()
 	reqURL := fmt.Sprintf("%s/v1/task-webhooks/%s?namespace=%s", baseURL, name, url.QueryEscape(namespace))
 	resp, err := http.Get(reqURL)
@@ -448,7 +448,7 @@ func getTaskWebhook(t *testing.T, baseURL, name, namespace string) crds.TaskWebh
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("get task webhook status=%d body=%s", resp.StatusCode, string(body))
 	}
-	var hook crds.TaskWebhook
+	var hook resources.TaskWebhook
 	if err := json.NewDecoder(resp.Body).Decode(&hook); err != nil {
 		t.Fatalf("decode task webhook failed: %v", err)
 	}
@@ -478,7 +478,7 @@ func deliverWebhook(t *testing.T, baseURL, path string, body []byte, headers map
 	return resp.StatusCode, out, raw
 }
 
-func getTask(t *testing.T, baseURL, name, namespace string) crds.Task {
+func getTask(t *testing.T, baseURL, name, namespace string) resources.Task {
 	t.Helper()
 	reqURL := fmt.Sprintf("%s/v1/tasks/%s?namespace=%s", baseURL, name, url.QueryEscape(namespace))
 	resp, err := http.Get(reqURL)
@@ -490,7 +490,7 @@ func getTask(t *testing.T, baseURL, name, namespace string) crds.Task {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("get task status=%d body=%s", resp.StatusCode, string(body))
 	}
-	var task crds.Task
+	var task resources.Task
 	if err := json.NewDecoder(resp.Body).Decode(&task); err != nil {
 		t.Fatalf("decode task failed: %v", err)
 	}

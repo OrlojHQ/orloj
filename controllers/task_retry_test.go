@@ -8,44 +8,44 @@ import (
 	"testing"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/store"
 )
 
 func TestTaskRetrySchedulesNextAttemptOnTimeout(t *testing.T) {
 	controller, stores := newTaskControllerHarness()
 
-	agent := crds.Agent{
+	agent := resources.Agent{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
-		Metadata:   crds.ObjectMeta{Name: "retry-agent"},
-		Spec: crds.AgentSpec{
+		Metadata:   resources.ObjectMeta{Name: "retry-agent"},
+		Spec: resources.AgentSpec{
 			Model:  "gpt-4o",
 			Prompt: "retry test",
-			Limits: crds.AgentLimits{MaxSteps: 5, Timeout: "1ms"},
+			Limits: resources.AgentLimits{MaxSteps: 5, Timeout: "1ms"},
 		},
 	}
 	if _, err := stores.agentStore.Upsert(agent); err != nil {
 		t.Fatalf("upsert agent: %v", err)
 	}
 
-	system := crds.AgentSystem{
+	system := resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
-		Metadata:   crds.ObjectMeta{Name: "retry-system"},
-		Spec:       crds.AgentSystemSpec{Agents: []string{"retry-agent"}},
+		Metadata:   resources.ObjectMeta{Name: "retry-system"},
+		Spec:       resources.AgentSystemSpec{Agents: []string{"retry-agent"}},
 	}
 	if _, err := stores.agentSystemStore.Upsert(system); err != nil {
 		t.Fatalf("upsert system: %v", err)
 	}
 
-	task := crds.Task{
+	task := resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "retry-task"},
-		Spec: crds.TaskSpec{
+		Metadata:   resources.ObjectMeta{Name: "retry-task"},
+		Spec: resources.TaskSpec{
 			System: "retry-system",
-			Retry:  crds.TaskRetryPolicy{MaxAttempts: 3, Backoff: "1ms"},
+			Retry:  resources.TaskRetryPolicy{MaxAttempts: 3, Backoff: "1ms"},
 		},
 	}
 	if _, err := stores.taskStore.Upsert(task); err != nil {
@@ -108,35 +108,35 @@ func TestTaskRetrySchedulesNextAttemptOnTimeout(t *testing.T) {
 func TestTaskNonRetryablePolicyViolationFailsImmediately(t *testing.T) {
 	controller, stores := newTaskControllerHarness()
 
-	agent := crds.Agent{
+	agent := resources.Agent{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
-		Metadata:   crds.ObjectMeta{Name: "policy-agent"},
-		Spec: crds.AgentSpec{
+		Metadata:   resources.ObjectMeta{Name: "policy-agent"},
+		Spec: resources.AgentSpec{
 			Model:  "gpt-4o",
 			Prompt: "policy test",
-			Limits: crds.AgentLimits{MaxSteps: 1, Timeout: "1s"},
+			Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
 		},
 	}
 	if _, err := stores.agentStore.Upsert(agent); err != nil {
 		t.Fatalf("upsert agent: %v", err)
 	}
 
-	system := crds.AgentSystem{
+	system := resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
-		Metadata:   crds.ObjectMeta{Name: "policy-system"},
-		Spec:       crds.AgentSystemSpec{Agents: []string{"policy-agent"}},
+		Metadata:   resources.ObjectMeta{Name: "policy-system"},
+		Spec:       resources.AgentSystemSpec{Agents: []string{"policy-agent"}},
 	}
 	if _, err := stores.agentSystemStore.Upsert(system); err != nil {
 		t.Fatalf("upsert system: %v", err)
 	}
 
-	policy := crds.AgentPolicy{
+	policy := resources.AgentPolicy{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentPolicy",
-		Metadata:   crds.ObjectMeta{Name: "strict-policy"},
-		Spec: crds.AgentPolicySpec{
+		Metadata:   resources.ObjectMeta{Name: "strict-policy"},
+		Spec: resources.AgentPolicySpec{
 			ApplyMode:     "scoped",
 			TargetSystems: []string{"policy-system"},
 			AllowedModels: []string{"claude-3"},
@@ -146,13 +146,13 @@ func TestTaskNonRetryablePolicyViolationFailsImmediately(t *testing.T) {
 		t.Fatalf("upsert policy: %v", err)
 	}
 
-	task := crds.Task{
+	task := resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "policy-task"},
-		Spec: crds.TaskSpec{
+		Metadata:   resources.ObjectMeta{Name: "policy-task"},
+		Spec: resources.TaskSpec{
 			System: "policy-system",
-			Retry:  crds.TaskRetryPolicy{MaxAttempts: 3, Backoff: "1ms"},
+			Retry:  resources.TaskRetryPolicy{MaxAttempts: 3, Backoff: "1ms"},
 		},
 	}
 	if _, err := stores.taskStore.Upsert(task); err != nil {
@@ -199,12 +199,12 @@ func newTaskControllerHarness() (*TaskController, taskControllerHarness) {
 		policyStore:      store.NewAgentPolicyStore(),
 		workerStore:      store.NewWorkerStore(),
 	}
-	if _, err := h.workerStore.Upsert(crds.Worker{
+	if _, err := h.workerStore.Upsert(resources.Worker{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Worker",
-		Metadata:   crds.ObjectMeta{Name: "test-worker"},
-		Spec:       crds.WorkerSpec{Region: "default"},
-		Status: crds.WorkerStatus{
+		Metadata:   resources.ObjectMeta{Name: "test-worker"},
+		Spec:       resources.WorkerSpec{Region: "default"},
+		Status: resources.WorkerStatus{
 			Phase:         "Ready",
 			LastHeartbeat: time.Now().UTC().Format(time.RFC3339Nano),
 		},

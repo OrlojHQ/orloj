@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 type staticToolRuntime struct{}
@@ -37,13 +37,13 @@ func (f *failingModelGateway) Complete(_ context.Context, _ ModelRequest) (Model
 
 func TestTaskExecutorStepEventsIncludeModelAndToolCalls(t *testing.T) {
 	executor := NewTaskExecutorWithRuntime(nil, &staticToolRuntime{}, &MockModelGateway{}, nil)
-	agent := crds.Agent{
-		Metadata: crds.ObjectMeta{Name: "research"},
-		Spec: crds.AgentSpec{
+	agent := resources.Agent{
+		Metadata: resources.ObjectMeta{Name: "research"},
+		Spec: resources.AgentSpec{
 			Model:  "gpt-4o",
 			Prompt: "test prompt",
 			Tools:  []string{"web_search"},
-			Limits: crds.AgentLimits{MaxSteps: 2},
+			Limits: resources.AgentLimits{MaxSteps: 2},
 		},
 	}
 
@@ -89,13 +89,13 @@ func TestTaskExecutorStepEventsIncludeModelAndToolCalls(t *testing.T) {
 
 func TestTaskExecutorStepEventsCaptureModelErrors(t *testing.T) {
 	executor := NewTaskExecutorWithRuntime(nil, &staticToolRuntime{}, &failingModelGateway{}, nil)
-	agent := crds.Agent{
-		Metadata: crds.ObjectMeta{Name: "planner"},
-		Spec: crds.AgentSpec{
+	agent := resources.Agent{
+		Metadata: resources.ObjectMeta{Name: "planner"},
+		Spec: resources.AgentSpec{
 			Model:  "gpt-4o",
 			Prompt: "test prompt",
 			Tools:  []string{"web_search"},
-			Limits: crds.AgentLimits{MaxSteps: 1},
+			Limits: resources.AgentLimits{MaxSteps: 1},
 		},
 	}
 
@@ -129,13 +129,13 @@ func TestTaskExecutorStepEventsCaptureModelErrors(t *testing.T) {
 
 func TestTaskExecutorHardFailsOnPermissionDenied(t *testing.T) {
 	executor := NewTaskExecutorWithRuntime(nil, &denyingToolRuntime{}, &MockModelGateway{}, nil)
-	agent := crds.Agent{
-		Metadata: crds.ObjectMeta{Name: "research"},
-		Spec: crds.AgentSpec{
+	agent := resources.Agent{
+		Metadata: resources.ObjectMeta{Name: "research"},
+		Spec: resources.AgentSpec{
 			Model:  "gpt-4o",
 			Prompt: "test prompt",
 			Tools:  []string{"vector_db"},
-			Limits: crds.AgentLimits{MaxSteps: 2},
+			Limits: resources.AgentLimits{MaxSteps: 2},
 		},
 	}
 
@@ -174,13 +174,13 @@ func TestTaskExecutorHardFailsOnPermissionDenied(t *testing.T) {
 
 func TestTaskExecutorStepEventsCaptureToolContractMetadata(t *testing.T) {
 	executor := NewTaskExecutorWithRuntime(nil, &staticToolRuntime{}, &MockModelGateway{}, nil)
-	agent := crds.Agent{
-		Metadata: crds.ObjectMeta{Name: "research", Namespace: "default"},
-		Spec: crds.AgentSpec{
+	agent := resources.Agent{
+		Metadata: resources.ObjectMeta{Name: "research", Namespace: "default"},
+		Spec: resources.AgentSpec{
 			Model:  "gpt-4o",
 			Prompt: "test prompt",
 			Tools:  []string{"web_search"},
-			Limits: crds.AgentLimits{MaxSteps: 1},
+			Limits: resources.AgentLimits{MaxSteps: 1},
 		},
 	}
 
@@ -213,12 +213,12 @@ func TestTaskExecutorStepEventsCaptureToolContractMetadata(t *testing.T) {
 
 func TestTaskExecutorNoToolsReturnsModelOutput(t *testing.T) {
 	executor := NewTaskExecutorWithRuntime(nil, &staticToolRuntime{}, &MockModelGateway{}, nil)
-	agent := crds.Agent{
-		Metadata: crds.ObjectMeta{Name: "writer"},
-		Spec: crds.AgentSpec{
+	agent := resources.Agent{
+		Metadata: resources.ObjectMeta{Name: "writer"},
+		Spec: resources.AgentSpec{
 			Model:  "gpt-4o-mini",
 			Prompt: "write summary",
-			Limits: crds.AgentLimits{MaxSteps: 4},
+			Limits: resources.AgentLimits{MaxSteps: 4},
 		},
 	}
 

@@ -110,4 +110,4 @@ Orloj's runtime provides several reliability guarantees:
 - [Concepts](../concepts/)
 - [Runbook](../operations/runbook.md)
 - [Configuration](../operations/configuration.md)
-- [Resource Reference](../reference/crds.md)
+- [Resource Reference](../reference/resources.md)

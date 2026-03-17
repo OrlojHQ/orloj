@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 func TestTaskMessagesEndpointFiltersByLifecycleAndAgent(t *testing.T) {
@@ -135,11 +135,11 @@ func TestTaskMetricsEndpointAggregatesPerAgentAndPerEdge(t *testing.T) {
 func seedTaskObservabilityFixture(t *testing.T, baseURL string) {
 	t.Helper()
 
-	postJSON(t, baseURL+"/v1/tasks", crds.Task{
+	postJSON(t, baseURL+"/v1/tasks", resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
-		Metadata:   crds.ObjectMeta{Name: "obs-task"},
-		Spec:       crds.TaskSpec{System: "report-system"},
+		Metadata:   resources.ObjectMeta{Name: "obs-task"},
+		Spec:       resources.TaskSpec{System: "report-system"},
 	})
 	current := getTaskForContract(t, baseURL, "obs-task")
 

@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
-func requireUpdatePrecondition(headerValue string, incoming *crds.ObjectMeta, current crds.ObjectMeta) error {
+func requireUpdatePrecondition(headerValue string, incoming *resources.ObjectMeta, current resources.ObjectMeta) error {
 	if incoming == nil {
 		return fmt.Errorf("metadata is required")
 	}

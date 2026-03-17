@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 // AgentMessage is the runtime envelope exchanged between agents.
@@ -104,7 +104,7 @@ func retryDelayFromError(err error) (time.Duration, bool) {
 }
 
 func normalizeAgentMessage(message AgentMessage) (AgentMessage, error) {
-	message.Namespace = crds.NormalizeNamespace(message.Namespace)
+	message.Namespace = resources.NormalizeNamespace(message.Namespace)
 	message.FromAgent = strings.TrimSpace(message.FromAgent)
 	message.ToAgent = strings.TrimSpace(message.ToAgent)
 	message.TaskID = strings.TrimSpace(message.TaskID)
@@ -143,7 +143,7 @@ func messageSubject(prefix string, namespace string, agent string) string {
 	if p == "" {
 		p = "orloj.agentmsg"
 	}
-	ns := crds.NormalizeNamespace(namespace)
+	ns := resources.NormalizeNamespace(namespace)
 	ag := sanitizeSubjectToken(agent)
 	return p + "." + sanitizeSubjectToken(ns) + "." + ag + ".inbox"
 }
