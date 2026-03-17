@@ -44,7 +44,7 @@ spec:
 
 | Field | Description |
 |---|---|
-| `type` | Runtime type. Defaults to `http`. |
+| `type` | Tool type. Determines the transport and execution model. See below. |
 | `endpoint` | The tool's network endpoint. |
 | `capabilities` | Declared operations this tool provides. Used for permission matching. |
 | `risk_level` | `low`, `medium`, `high`, or `critical`. Affects default isolation mode. |
@@ -53,14 +53,52 @@ spec:
 | `runtime.retry` | Retry policy for failed invocations. |
 | `auth.secretRef` | Reference to a Secret resource for tool authentication. |
 
+## Tool Types
+
+`Tool.spec.type` determines how the runtime communicates with the tool. Five types are supported:
+
+| Type | Transport | Contract | Use case |
+|---|---|---|---|
+| `http` | HTTP POST to `endpoint` | Raw body or `ToolExecutionResponse` | Simple API integrations. Default when omitted. |
+| `external` | HTTP POST to `endpoint` | Strict `ToolExecutionRequest` / `ToolExecutionResponse` | Tools running as standalone microservices that need the full execution context. |
+| `grpc` | Unary gRPC call to `endpoint` | `ToolExecutionRequest` / `ToolExecutionResponse` as JSON over `orloj.tool.v1.ToolService/Execute` | Teams that prefer gRPC for tool communication. |
+| `webhook-callback` | HTTP POST to `endpoint`, then poll `{endpoint}/{request_id}` | `ToolExecutionRequest` / `ToolExecutionResponse` | Long-running tools, batch jobs, or tools that require human-in-the-loop steps. |
+| `queue` | Reserved for future use | -- | Planned for message-queue-backed tools. |
+
+All types flow through the same governed runtime pipeline -- policy enforcement, retry, timeout, auth injection, and error taxonomy behave identically regardless of tool type.
+
+Unknown type values are rejected at apply time.
+
+### HTTP (default)
+
+The `http` type sends the agent's tool input as an HTTP POST body to `spec.endpoint`. The runtime accepts both raw text responses and structured `ToolExecutionResponse` JSON envelopes. Auth is injected as an `Authorization: Bearer` header when `auth.secretRef` is configured.
+
+### External
+
+The `external` type sends the full `ToolExecutionRequest` contract envelope as JSON to `spec.endpoint` and expects a `ToolExecutionResponse` back. This gives the external service access to the full execution context (task ID, agent, namespace, trace IDs, attempt number). Use this when your tool needs to be aware of the Orloj execution context.
+
+### gRPC
+
+The `grpc` type calls `orloj.tool.v1.ToolService/Execute` as a unary gRPC method on `spec.endpoint`, using a JSON codec. The request and response payloads are the same `ToolExecutionRequest` / `ToolExecutionResponse` envelopes as `external`. Use this when your tool infrastructure is gRPC-native.
+
+### Webhook-Callback
+
+The `webhook-callback` type supports asynchronous tool execution:
+
+1. The runtime POSTs a `ToolExecutionRequest` to `spec.endpoint`.
+2. The tool returns `202 Accepted` (or `200 OK` with an immediate result).
+3. If `202`: the runtime polls `{endpoint}/{request_id}` at regular intervals until a `ToolExecutionResponse` with a terminal status arrives, or the configured timeout expires.
+
+This is useful for tools that take minutes to complete (e.g., batch processing, code review, CI pipeline triggers) or that require external approval before returning a result.
+
 ## Isolation Modes
 
-Orloj supports four isolation backends for tool execution, providing defense-in-depth for untrusted or high-risk tools.
+Isolation modes control the execution boundary of a tool, independent of tool type.
 
 | Mode | Description | Default for |
 |---|---|---|
-| `none` | Direct execution in the worker process. No isolation boundary. | `low` and `medium` risk tools |
-| `sandboxed` | Restricted execution environment with limited syscall access. | `high` and `critical` risk tools |
+| `none` | Direct execution in the worker process. The `http` type makes real HTTP calls; other types use their respective transports. | `low` and `medium` risk tools |
+| `sandboxed` | Restricted container execution with secure defaults: read-only filesystem, no capabilities, no privilege escalation, no network, non-root user, memory/CPU/pids limits. | `high` and `critical` risk tools |
 | `container` | Each tool invocation runs in an isolated container. Full filesystem and network isolation. | Explicitly configured |
 | `wasm` | Tool runs as a WebAssembly module with a host-guest stdin/stdout contract. Memory-safe and deterministic. | Explicitly configured |
 
@@ -69,6 +107,21 @@ The isolation mode defaults are based on `risk_level`:
 - `high` or `critical` risk: defaults to `sandboxed`
 
 You can always override the default by setting `runtime.isolation_mode` explicitly.
+
+### Sandboxed Defaults
+
+When `isolation_mode` is `sandboxed`, the container backend enforces these secure defaults:
+
+- `--read-only` filesystem
+- `--cap-drop=ALL` (no Linux capabilities)
+- `--security-opt no-new-privileges`
+- `--network none` (no network access)
+- `--user 65532:65532` (non-root)
+- `--memory 128m`
+- `--cpus 0.50`
+- `--pids-limit 64`
+
+These defaults can be overridden with `--tool-container-*` flags on `orlojd` and `orlojworker`, but the default posture is restrictive.
 
 ## Tool Contract v1
 
@@ -126,6 +179,18 @@ The tool contract defines a canonical error taxonomy with `tool_code`, `tool_rea
 WASM tools communicate over stdin/stdout using the same JSON envelope contract. The host writes the request to the module's stdin and reads the response from stdout. This provides memory-safe, deterministic execution with no filesystem or network access unless explicitly granted.
 
 See the [WASM Tool Module Contract v1](../reference/wasm-tool-module-contract-v1.md) for the full specification.
+
+## Error Taxonomy
+
+Tool failures use a canonical error taxonomy with three fields:
+
+| Field | Purpose |
+|---|---|
+| `tool_code` | Machine-readable error code (e.g. `rate_limited`, `unsupported_tool`, `secret_resolution_failed`) |
+| `tool_reason` | Human-readable explanation |
+| `retryable` | Whether the runtime should retry the invocation |
+
+HTTP status codes are mapped automatically: `429` and `5xx` are retryable, `4xx` are not. All tool types share the same taxonomy, so policy and observability behave consistently.
 
 ## Retry and Timeout
 

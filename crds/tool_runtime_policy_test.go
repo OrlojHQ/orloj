@@ -80,6 +80,56 @@ func TestToolNormalizeHighRiskDefaultsToSandboxedIsolation(t *testing.T) {
 	}
 }
 
+func TestToolNormalizeAcceptsValidToolTypes(t *testing.T) {
+	validTypes := []string{"http", "external", "grpc", "queue", "webhook-callback", "HTTP", "External", ""}
+	for _, toolType := range validTypes {
+		tool := Tool{
+			APIVersion: "orloj.dev/v1",
+			Kind:       "Tool",
+			Metadata:   ObjectMeta{Name: "valid-type"},
+			Spec: ToolSpec{
+				Type:     toolType,
+				Endpoint: "https://api.example.com",
+			},
+		}
+		if err := tool.Normalize(); err != nil {
+			t.Fatalf("expected valid tool type %q to normalize, got %v", toolType, err)
+		}
+	}
+}
+
+func TestToolNormalizeRejectsInvalidToolType(t *testing.T) {
+	tool := Tool{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Tool",
+		Metadata:   ObjectMeta{Name: "bad-type"},
+		Spec: ToolSpec{
+			Type:     "ftp",
+			Endpoint: "ftp://example.com",
+		},
+	}
+	if err := tool.Normalize(); err == nil {
+		t.Fatal("expected invalid tool type normalization error")
+	}
+}
+
+func TestToolNormalizeDefaultsEmptyTypeToHTTP(t *testing.T) {
+	tool := Tool{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Tool",
+		Metadata:   ObjectMeta{Name: "default-type"},
+		Spec: ToolSpec{
+			Endpoint: "https://api.example.com",
+		},
+	}
+	if err := tool.Normalize(); err != nil {
+		t.Fatalf("normalize failed: %v", err)
+	}
+	if tool.Spec.Type != "http" {
+		t.Fatalf("expected default type=http, got %q", tool.Spec.Type)
+	}
+}
+
 func TestToolNormalizeRejectsInvalidRetryJitter(t *testing.T) {
 	tool := Tool{
 		APIVersion: "orloj.dev/v1",

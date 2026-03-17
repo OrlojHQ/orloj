@@ -101,7 +101,7 @@ type toolContractAdapter struct {
 
 func NewToolContractExecutor(runtime ToolRuntime) ToolContractExecutor {
 	if runtime == nil {
-		runtime = &MockToolClient{}
+		runtime = NewHTTPToolClient(nil, nil, nil)
 	}
 	return &toolContractAdapter{runtime: runtime}
 }

@@ -2,7 +2,10 @@ package agentruntime_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -327,6 +330,157 @@ func TestContainerToolRuntimeConformanceSuite(t *testing.T) {
 		}
 		t.Fatalf("container runtime conformance failures: %d", len(failures))
 	}
+}
+
+func TestHTTPToolRuntimeConformanceSuite(t *testing.T) {
+	registry := agentruntime.NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+		"web_search": {
+			Type:     "http",
+			Endpoint: "https://api.example/search",
+		},
+		"missing_endpoint": {
+			Type: "http",
+		},
+		"secret_lookup": {
+			Type:     "http",
+			Endpoint: "https://api.example/private",
+			Auth: crds.ToolAuth{
+				SecretRef: "missing-secret",
+			},
+		},
+	})
+	doer := &httpConformanceDoer{}
+	runtime := agentruntime.NewHTTPToolClient(
+		registry,
+		fakeSecretResolver{values: map[string]string{}},
+		doer,
+	)
+	executor := agentruntime.NewToolContractExecutor(runtime)
+
+	cases := []conformance.Case{
+		{
+			Name:     "http-success",
+			Request:  conformancecases.BaseRequest("req-http-success", "web_search"),
+			Expected: conformance.Expected{Status: agentruntime.ToolExecutionStatusOK},
+		},
+		{
+			Name:    "http-runtime-policy-invalid",
+			Request: conformancecases.BaseRequest("req-http-runtime-policy-invalid", "missing_endpoint"),
+			Expected: conformance.Expected{
+				Status:    agentruntime.ToolExecutionStatusError,
+				ErrorCode: agentruntime.ToolCodeRuntimePolicyInvalid,
+				Reason:    agentruntime.ToolReasonRuntimePolicyInvalid,
+				Retryable: conformancecases.BoolPtr(false),
+			},
+		},
+		{
+			Name:    "http-unsupported",
+			Request: conformancecases.BaseRequest("req-http-unsupported", "missing_tool"),
+			Expected: conformance.Expected{
+				Status:    agentruntime.ToolExecutionStatusError,
+				ErrorCode: agentruntime.ToolCodeUnsupportedTool,
+				Reason:    agentruntime.ToolReasonToolUnsupported,
+				Retryable: conformancecases.BoolPtr(false),
+			},
+		},
+		{
+			Name:    "http-secret-resolution",
+			Request: conformancecases.BaseRequest("req-http-secret-resolution", "secret_lookup"),
+			Expected: conformance.Expected{
+				Status:    agentruntime.ToolExecutionStatusError,
+				ErrorCode: agentruntime.ToolCodeSecretResolution,
+				Reason:    agentruntime.ToolReasonSecretResolution,
+				Retryable: conformancecases.BoolPtr(false),
+			},
+		},
+		conformancecases.UnknownVersionCase("req-http-unknown-version", "web_search"),
+	}
+	failures := conformance.RunCases(context.Background(), executor, cases)
+	if len(failures) > 0 {
+		for _, failure := range failures {
+			t.Errorf("case=%s err=%v", failure.Case, failure.Err)
+		}
+		t.Fatalf("HTTP runtime conformance failures: %d", len(failures))
+	}
+}
+
+func TestExternalToolRuntimeConformanceSuite(t *testing.T) {
+	registry := agentruntime.NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+		"ext_tool": {
+			Type:     "external",
+			Endpoint: "https://ext.example/execute",
+		},
+		"missing_endpoint": {
+			Type: "external",
+		},
+	})
+	doer := &externalConformanceDoer{}
+	runtime := agentruntime.NewExternalToolRuntime(registry, nil, doer)
+	executor := agentruntime.NewToolContractExecutor(runtime)
+
+	cases := []conformance.Case{
+		{
+			Name:     "external-success",
+			Request:  conformancecases.BaseRequest("req-ext-success", "ext_tool"),
+			Expected: conformance.Expected{Status: agentruntime.ToolExecutionStatusOK},
+		},
+		{
+			Name:    "external-runtime-policy-invalid",
+			Request: conformancecases.BaseRequest("req-ext-runtime-policy-invalid", "missing_endpoint"),
+			Expected: conformance.Expected{
+				Status:    agentruntime.ToolExecutionStatusError,
+				ErrorCode: agentruntime.ToolCodeRuntimePolicyInvalid,
+				Reason:    agentruntime.ToolReasonRuntimePolicyInvalid,
+				Retryable: conformancecases.BoolPtr(false),
+			},
+		},
+		{
+			Name:    "external-unsupported",
+			Request: conformancecases.BaseRequest("req-ext-unsupported", "missing_tool"),
+			Expected: conformance.Expected{
+				Status:    agentruntime.ToolExecutionStatusError,
+				ErrorCode: agentruntime.ToolCodeUnsupportedTool,
+				Reason:    agentruntime.ToolReasonToolUnsupported,
+				Retryable: conformancecases.BoolPtr(false),
+			},
+		},
+		conformancecases.UnknownVersionCase("req-ext-unknown-version", "ext_tool"),
+	}
+	failures := conformance.RunCases(context.Background(), executor, cases)
+	if len(failures) > 0 {
+		for _, failure := range failures {
+			t.Errorf("case=%s err=%v", failure.Case, failure.Err)
+		}
+		t.Fatalf("external runtime conformance failures: %d", len(failures))
+	}
+}
+
+// httpConformanceDoer returns a success response for any valid request.
+type httpConformanceDoer struct{}
+
+func (d *httpConformanceDoer) Do(req *http.Request) (*http.Response, error) {
+	return &http.Response{
+		StatusCode: 200,
+		Body:       io.NopCloser(strings.NewReader("conformance-ok")),
+	}, nil
+}
+
+// externalConformanceDoer returns a valid ToolExecutionResponse for any request.
+type externalConformanceDoer struct{}
+
+func (d *externalConformanceDoer) Do(req *http.Request) (*http.Response, error) {
+	resp := agentruntime.ToolExecutionResponse{
+		ToolContractVersion: "v1",
+		RequestID:           "ext-conformance",
+		Status:              "ok",
+		Output:              agentruntime.ToolExecutionOutput{Result: "ext-conformance-ok"},
+		Usage:               agentruntime.ToolExecutionUsage{Attempt: 1},
+	}
+	body, _ := json.Marshal(resp)
+	return &http.Response{
+		StatusCode: 200,
+		Body:       io.NopCloser(strings.NewReader(string(body))),
+	}, nil
 }
 
 func TestWASMStubRuntimeFailsClosed(t *testing.T) {

@@ -293,6 +293,39 @@
 - added observability operations doc (`docs/pages/operations/observability.md`)
 - added enterprise observability boundary doc (`docs/pages/boundaries/observability-enterprise.BOUNDARY.md`)
 
+## Tool Platform 2.6
+
+- replaced `MockToolClient` with `HTTPToolClient` as the base runtime for `isolation_mode=none`:
+  - `runtime/tool_runtime_http.go`
+  - real HTTP POST to `Tool.spec.endpoint` with `ToolExecutionResponse` parsing
+  - auth injection via `Authorization: Bearer` header from secret-resolved `Tool.spec.auth.secretRef`
+  - HTTP status code mapping to canonical tool error taxonomy (429/5xx retryable, 4xx non-retryable)
+  - contract-aware response parsing: detects `ToolExecutionResponse` envelopes vs raw output
+- added `Tool.spec.type` validation at apply time in `crds/resource_types.go`:
+  - allowed values: `http`, `external`, `grpc`, `queue`, `webhook-callback`
+  - unknown types rejected with deterministic validation error
+- added external tool executor runtime (`runtime/tool_runtime_external.go`):
+  - `Tool.spec.type=external` delegates `ToolExecutionRequest` JSON to `Tool.spec.endpoint` via HTTP POST
+  - strict contract response parsing: rejects non-JSON responses
+  - registered in default isolation backend registry
+- added gRPC tool adapter (`runtime/tool_runtime_grpc.go`):
+  - `Tool.spec.type=grpc` sends `ToolExecutionRequest` via generic unary gRPC call
+  - uses JSON codec over `orloj.tool.v1.ToolService/Execute` method path
+  - registered in default isolation backend registry
+- added webhook-callback async adapter (`runtime/tool_runtime_webhook_callback.go`):
+  - `Tool.spec.type=webhook-callback` fires request, then polls `{endpoint}/{request_id}` for result
+  - supports push-based callback delivery via `DeliverCallback` API
+  - 202 Accepted triggers async polling; 200 returns immediate result
+  - registered in default isolation backend registry
+- documented and enforced sandbox defaults:
+  - `SandboxedContainerDefaults()` function codifies secure-by-default settings
+  - container runtime enforces `--read-only`, `--cap-drop=ALL`, `--security-opt no-new-privileges`, `--network none`, non-root user, memory/CPU/pids limits
+  - added conformance test for sandboxed default assertions
+- added conformance suites for new backends:
+  - `TestHTTPToolRuntimeConformanceSuite`
+  - `TestExternalToolRuntimeConformanceSuite`
+- all new adapters registered via `runtime.RegisterToolIsolationBackend` in default registry
+
 ## Documentation Process
 
 For each new phase:

@@ -4,7 +4,7 @@ Status: release-candidate contract targeted for Gate 0 stabilization.
 
 ## Purpose
 
-Define a consistent execution contract across runtime backends (`native`, `container`, `wasm`, `external`) so policy, retries, auth, and observability behave deterministically.
+Define a consistent execution contract across runtime backends (`http`, `container`, `wasm`, `external`, `grpc`, `webhook-callback`) so policy, retries, auth, and observability behave deterministically.
 
 ## Scope
 
@@ -206,6 +206,16 @@ All runtimes must honor:
 - retry attempt index (`usage.attempt`)
 - deterministic error mapping
 - bounded return on timeout/cancel
+
+### Transport-Specific Behavior
+
+**`http`** -- Sends raw tool input as the HTTP POST body. Accepts both raw text and `ToolExecutionResponse` JSON in the response. Maps HTTP status codes to canonical errors (429/5xx retryable, 4xx non-retryable).
+
+**`external`** -- Sends the full `ToolExecutionRequest` as the POST body with `Content-Type: application/json` and `X-Tool-Contract-Version: v1`. Requires a `ToolExecutionResponse` JSON response. Non-JSON responses are rejected.
+
+**`grpc`** -- Invokes `orloj.tool.v1.ToolService/Execute` as a unary RPC using a JSON codec. Request and response are `ToolExecutionRequest` and `ToolExecutionResponse` marshaled as JSON. gRPC status codes are mapped to the canonical error taxonomy.
+
+**`webhook-callback`** -- Sends `ToolExecutionRequest` via HTTP POST. A `200` response is treated as immediate completion. A `202` triggers asynchronous polling at `{endpoint}/{request_id}` until a terminal `ToolExecutionResponse` arrives or timeout expires. The runtime also accepts push-based delivery via the callback API.
 
 ## Observability Requirements
 

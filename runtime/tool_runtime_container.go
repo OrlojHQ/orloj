@@ -85,6 +85,24 @@ func DefaultContainerToolRuntimeConfig() ContainerToolRuntimeConfig {
 	}
 }
 
+// SandboxedContainerDefaults returns secure-by-default container settings
+// for tools running in sandboxed isolation mode. These enforce:
+//   - network=none (no network access)
+//   - memory=128m (128 MB ceiling)
+//   - cpus=0.50 (half a core)
+//   - pids_limit=64 (process limit)
+//   - user=65532:65532 (non-root nobody user)
+//   - read-only filesystem (via containerRunArgs --read-only)
+//   - no Linux capabilities (via --cap-drop=ALL)
+//   - no privilege escalation (via --security-opt no-new-privileges)
+//
+// These defaults match DefaultContainerToolRuntimeConfig but are preserved
+// as an explicit contract so callers can distinguish between default and
+// sandboxed modes.
+func SandboxedContainerDefaults() ContainerToolRuntimeConfig {
+	return DefaultContainerToolRuntimeConfig()
+}
+
 func (c ContainerToolRuntimeConfig) normalized() ContainerToolRuntimeConfig {
 	out := c
 	defaults := DefaultContainerToolRuntimeConfig()

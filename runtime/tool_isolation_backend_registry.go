@@ -103,6 +103,27 @@ func DefaultToolIsolationBackendRegistry() *ToolIsolationBackendRegistry {
 		_ = registry.Register("wasm", func(options ToolIsolationBackendOptions) (ToolRuntime, error) {
 			return NewWASMToolRuntimeWithFactory(nil, options.WASMExecutorFactory, options.WASMConfig), nil
 		})
+		_ = registry.Register("external", func(options ToolIsolationBackendOptions) (ToolRuntime, error) {
+			resolver := options.SecretResolver
+			if resolver == nil {
+				resolver = NewEnvSecretResolver("ORLOJ_SECRET_")
+			}
+			return NewExternalToolRuntime(nil, resolver, nil), nil
+		})
+		_ = registry.Register("grpc", func(options ToolIsolationBackendOptions) (ToolRuntime, error) {
+			resolver := options.SecretResolver
+			if resolver == nil {
+				resolver = NewEnvSecretResolver("ORLOJ_SECRET_")
+			}
+			return NewGRPCToolRuntime(nil, resolver, nil), nil
+		})
+		_ = registry.Register("webhook-callback", func(options ToolIsolationBackendOptions) (ToolRuntime, error) {
+			resolver := options.SecretResolver
+			if resolver == nil {
+				resolver = NewEnvSecretResolver("ORLOJ_SECRET_")
+			}
+			return NewWebhookCallbackToolRuntime(nil, resolver, nil, 0), nil
+		})
 		defaultToolIsolationBackendRegistry = registry
 	})
 	return defaultToolIsolationBackendRegistry

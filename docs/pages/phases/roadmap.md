@@ -69,26 +69,19 @@ The `Memory` CRD exists and agents can reference it via `spec.memory.ref`, but t
 
 Tool Platform 2-6 are the remaining pre-launch milestones. They are sequenced -- each builds on the previous. All other milestones (Phases 10-16) are post-launch.
 
-### Tool Platform 2: Remaining Runtime Work
+### Tool Platform 2: Remaining Runtime Work (Complete)
 
-Current state: three isolation backends exist (`none`, `container`, `wasm`). The `container` backend runs curl in Docker. The `wasm` backend runs wasmtime as a subprocess. But `mode=none` uses `MockToolClient` which returns fake output and never makes real HTTP calls. Only the `http` tool type is supported. `Tool.spec.type` is not validated at apply time.
+Completed in Tool Platform 2.6. See `docs/pages/phases/phase-log.md` for delivery details.
 
-Deliverables:
-
-- **Real HTTP tool executor for `mode=none`**: Replace `MockToolClient` in `runtime/tool_runtime_governed.go` with an actual HTTP client so tools work without container/wasm isolation. This is the base runtime path used when `isolation_mode=none`.
-- **External tool executor mode**: Add a `Tool.spec.type=external` value and a delegator runtime that forwards `ToolExecutionRequest` to a configured endpoint via HTTP/gRPC. Enables tools to run as standalone services outside the Orloj process.
-- **Additional `Tool.spec.type` adapters**: Add `grpc` adapter (call a gRPC service endpoint) and at least one async adapter (`queue` or `webhook-callback`). Each adapter goes through the governed runtime pipeline and interoperates with existing policy controls.
-- **Sandbox defaults hardening**: Document and enforce secure defaults for `sandboxed` isolation mode (network policy, resource limits, filesystem restrictions). Container backend already has memory/CPU flags -- make them secure-by-default.
-- **Tool type validation**: Add validation in `crds/resource_types.go` that rejects unknown `Tool.spec.type` values at apply time.
-
-Exit criteria:
-- Runtime wiring no longer depends on mode-specific core switch edits.
-- Resource governance defaults are secure-by-default and documented.
-- New tool types are contract-tested and interoperable with existing policy controls.
-
-Test gate:
-- Runtime conformance suites cover all supported execution modes.
-- New adapter implementations include unit, integration, and policy-behavior tests.
+Summary of deliverables completed:
+- Real HTTP tool executor (`HTTPToolClient`) replaces `MockToolClient` for `isolation_mode=none`
+- `Tool.spec.type=external` delegator runtime for standalone tool services
+- gRPC tool adapter (`Tool.spec.type=grpc`) with JSON-over-gRPC convention
+- Webhook-callback async adapter (`Tool.spec.type=webhook-callback`) with poll and push callback
+- `Tool.spec.type` validation at apply time (rejects unknown types)
+- Sandbox defaults hardening with `SandboxedContainerDefaults()` and conformance assertions
+- Conformance suite coverage for HTTP and external runtimes
+- All new backends registered via `RegisterToolIsolationBackend` (no core switch edits)
 
 ### Tool Platform 3: Tool Auth and Secret Binding
 

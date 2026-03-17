@@ -10,16 +10,37 @@ This page describes current runtime security controls and expected operator prac
 - Unsupported tools and disallowed runtime requests fail closed.
 - Permission denials are terminal for the current execution path.
 
+## Tool Types
+
+All tool types (`http`, `external`, `grpc`, `webhook-callback`) flow through the governed runtime pipeline, so policy enforcement, retry, auth injection, and error handling behave identically regardless of transport. See [Tools and Isolation](../concepts/tools-and-isolation.md) for type details.
+
 ## Isolation Modes
 
-- `none`
-- `sandboxed`
-- `container`
-- `wasm`
+- `none` -- direct execution with real HTTP/gRPC calls (no isolation boundary)
+- `sandboxed` -- restricted container with secure defaults (see below)
+- `container` -- per-invocation isolated container
+- `wasm` -- WebAssembly module with host-guest stdin/stdout boundary
 
 Container backend supports constrained execution for high-risk paths.
 
 WASM backend uses executor-factory boundaries and command-backed runtime execution (default runtime binary `wasmtime`). Invalid wasm runtime configuration fails closed with deterministic non-retryable policy errors.
+
+### Sandboxed Container Defaults
+
+When `isolation_mode=sandboxed` (the default for `high`/`critical` risk tools), the container backend enforces these security constraints:
+
+| Control | Value |
+|---|---|
+| Filesystem | `--read-only` |
+| Linux capabilities | `--cap-drop=ALL` |
+| Privilege escalation | `--security-opt no-new-privileges` |
+| Network | `--network none` |
+| User | `65532:65532` (non-root) |
+| Memory | `128m` |
+| CPU | `0.50` cores |
+| Process limit | `64` PIDs |
+
+These defaults are enforced by `SandboxedContainerDefaults()` in the runtime and validated by conformance tests. Override with `--tool-container-*` flags only when necessary.
 
 ## Secret Handling
 

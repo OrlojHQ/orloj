@@ -131,8 +131,8 @@ Example: `examples/model-endpoints/*.yaml`
 
 ### `spec`
 
-- `type` (string): tool runtime type (`http`, etc.).
-- `endpoint` (string): tool endpoint.
+- `type` (string): tool type. Allowed values: `http`, `external`, `grpc`, `webhook-callback`, `queue`. Unknown values are rejected at apply time.
+- `endpoint` (string): tool endpoint URL (or `host:port` for gRPC).
 - `capabilities` ([]string): declared operations.
 - `risk_level` (string): `low`, `medium`, `high`, `critical`.
 - `runtime` (object):
@@ -146,7 +146,7 @@ Example: `examples/model-endpoints/*.yaml`
 
 ### Defaults and Validation
 
-- `type` defaults to `http`.
+- `type` defaults to `http`. Unknown types are rejected with a validation error.
 - `capabilities` are trimmed and deduplicated (case-insensitive).
 - `risk_level` defaults to `low`.
 - `runtime.timeout` defaults to `30s` and must parse as duration.

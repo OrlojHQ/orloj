@@ -185,8 +185,15 @@ func (t *Tool) Normalize() error {
 	if t.Metadata.Name == "" {
 		return fmt.Errorf("metadata.name is required")
 	}
-	if t.Spec.Type == "" {
-		t.Spec.Type = "http"
+	toolType := strings.ToLower(strings.TrimSpace(t.Spec.Type))
+	if toolType == "" {
+		toolType = "http"
+	}
+	switch toolType {
+	case "http", "external", "grpc", "queue", "webhook-callback":
+		t.Spec.Type = toolType
+	default:
+		return fmt.Errorf("invalid spec.type %q: expected http, external, grpc, queue, or webhook-callback", t.Spec.Type)
 	}
 	normalizedCaps := make([]string, 0, len(t.Spec.Capabilities))
 	seenCaps := make(map[string]struct{}, len(t.Spec.Capabilities))

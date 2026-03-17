@@ -143,9 +143,62 @@ spec:
 
 If governance is enabled, you also need a ToolPermission and an AgentRole that grants the required permissions. See the [governance guide](./setup-governance.md) for details.
 
-## Step 5: Configure Isolation (Optional)
+## Step 5: Choose a Tool Type
 
-For tools that run untrusted code or interact with sensitive resources, set an explicit isolation mode:
+The examples above use `type: http` (the default). If your tool uses a different transport or execution model, set `spec.type` accordingly. The tool type and isolation mode are independent -- any type can run under any isolation mode.
+
+### External (standalone service)
+
+For tools that need the full Orloj execution context (task, agent, namespace, attempt):
+
+```yaml
+spec:
+  type: external
+  endpoint: https://your-tool-service.internal/execute
+  runtime:
+    timeout: 30s
+```
+
+Your service receives the complete `ToolExecutionRequest` JSON envelope and must return a `ToolExecutionResponse`. This is the right choice when your tool is a dedicated microservice that makes decisions based on who called it and why.
+
+### gRPC
+
+For tools that expose a gRPC service:
+
+```yaml
+spec:
+  type: grpc
+  endpoint: your-grpc-service:50051
+  runtime:
+    timeout: 15s
+```
+
+Implement the `orloj.tool.v1.ToolService/Execute` unary method. Payloads are the same `ToolExecutionRequest` / `ToolExecutionResponse` envelopes as `external`, marshaled as JSON over gRPC (no protobuf compilation needed).
+
+### Webhook-Callback (async / long-running)
+
+For tools that take seconds-to-minutes to complete:
+
+```yaml
+spec:
+  type: webhook-callback
+  endpoint: https://your-async-tool.internal/submit
+  runtime:
+    timeout: 120s
+```
+
+Execution flow:
+
+1. Orloj POSTs a `ToolExecutionRequest` to your endpoint.
+2. Your tool returns `202 Accepted` to acknowledge receipt.
+3. Orloj polls `{endpoint}/{request_id}` at intervals until your tool returns a `ToolExecutionResponse` with a terminal status, or the timeout expires.
+4. Alternatively, your tool can push the result to Orloj's callback delivery API instead of waiting for a poll.
+
+Use this for batch processing, CI triggers, human approval workflows, or any tool where the response isn't immediate.
+
+## Step 6: Configure Isolation (Optional)
+
+For tools that run untrusted code or interact with sensitive resources, set an explicit isolation mode. This is independent of tool type.
 
 **Container isolation:**
 ```yaml
@@ -166,7 +219,17 @@ spec:
 
 WASM tools communicate over stdin/stdout using the same JSON envelope. See the [WASM Tool Module Contract v1](../reference/wasm-tool-module-contract-v1.md) for the host-guest communication specification.
 
-## Step 6: Validate with the Conformance Harness
+**Sandboxed isolation** (secure-by-default container):
+```yaml
+spec:
+  risk_level: high
+  runtime:
+    isolation_mode: sandboxed
+```
+
+Sandboxed mode runs tools in a locked-down container: read-only filesystem, no capabilities, no privilege escalation, no network, non-root user, and strict memory/CPU/pids limits. This is the default for `high` and `critical` risk tools.
+
+## Step 7: Validate with the Conformance Harness
 
 Orloj provides a tool runtime conformance harness that tests your tool against the contract specification. The harness covers eight test groups:
 

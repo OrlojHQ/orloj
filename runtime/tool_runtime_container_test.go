@@ -292,6 +292,72 @@ func TestContainerToolRuntimeMapsCanceledContextToCanceledError(t *testing.T) {
 	}
 }
 
+func TestSandboxedContainerDefaultsAreSecure(t *testing.T) {
+	cfg := SandboxedContainerDefaults()
+
+	if cfg.Network != "none" {
+		t.Fatalf("expected sandboxed network=none, got %q", cfg.Network)
+	}
+	if cfg.Memory != "128m" {
+		t.Fatalf("expected sandboxed memory=128m, got %q", cfg.Memory)
+	}
+	if cfg.CPUs != "0.50" {
+		t.Fatalf("expected sandboxed cpus=0.50, got %q", cfg.CPUs)
+	}
+	if cfg.PidsLimit != 64 {
+		t.Fatalf("expected sandboxed pids_limit=64, got %d", cfg.PidsLimit)
+	}
+	if cfg.User != "65532:65532" {
+		t.Fatalf("expected sandboxed user=65532:65532, got %q", cfg.User)
+	}
+
+	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+		"sandboxed_tool": {
+			Type:     "http",
+			Endpoint: "https://api.example/sandboxed",
+		},
+	})
+	runner := &captureContainerRunner{stdout: "ok"}
+	runtime := NewContainerToolRuntimeWithRunner(registry, cfg, runner)
+
+	_, err := runtime.Call(context.Background(), "sandboxed_tool", "input")
+	if err != nil {
+		t.Fatalf("expected success, got %v", err)
+	}
+
+	assertArgsContain(t, runner.args, []string{
+		"--read-only",
+		"--cap-drop=ALL",
+		"--security-opt", "no-new-privileges",
+		"--network", "none",
+		"--memory", "128m",
+		"--cpus", "0.50",
+		"--pids-limit", "64",
+		"--user", "65532:65532",
+	})
+}
+
+func TestContainerDefaultNormalizationEnforcesSecureValues(t *testing.T) {
+	cfg := ContainerToolRuntimeConfig{}
+	normalized := cfg.normalized()
+
+	if normalized.Network != "none" {
+		t.Fatalf("expected default network=none, got %q", normalized.Network)
+	}
+	if normalized.Memory != "128m" {
+		t.Fatalf("expected default memory=128m, got %q", normalized.Memory)
+	}
+	if normalized.CPUs != "0.50" {
+		t.Fatalf("expected default cpus=0.50, got %q", normalized.CPUs)
+	}
+	if normalized.PidsLimit != 64 {
+		t.Fatalf("expected default pids_limit=64, got %d", normalized.PidsLimit)
+	}
+	if normalized.User != "65532:65532" {
+		t.Fatalf("expected default user=65532:65532, got %q", normalized.User)
+	}
+}
+
 func TestEnvSecretResolverSupportsPrefixedNormalizedKey(t *testing.T) {
 	t.Setenv("ORLOJ_SECRET_SEARCH_API_KEY", "token-123")
 	resolver := NewEnvSecretResolver("ORLOJ_SECRET_")

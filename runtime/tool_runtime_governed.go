@@ -114,7 +114,7 @@ func NewGovernedToolRuntimeWithAuthorizer(
 	strict bool,
 ) *GovernedToolRuntime {
 	if baseRuntime == nil {
-		baseRuntime = &MockToolClient{}
+		baseRuntime = NewHTTPToolClient(nil, nil, nil)
 	}
 	return &GovernedToolRuntime{
 		baseRuntime:     baseRuntime,
