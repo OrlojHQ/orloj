@@ -6,10 +6,11 @@ import { YamlEditor } from "../components/YamlEditor";
 import { LogViewer } from "../components/LogViewer";
 import { GraphView } from "../components/GraphView";
 import { MetricCard } from "../components/MetricCard";
+import { TraceView } from "../components/TraceView";
 import { ArrowLeft, Clock, Activity, Hash, Zap } from "lucide-react";
 import clsx from "clsx";
 
-type Tab = "overview" | "messages" | "metrics" | "logs" | "graph" | "yaml";
+type Tab = "overview" | "messages" | "metrics" | "trace" | "logs" | "graph" | "yaml";
 
 export function TaskDetail() {
   const { name } = useParams<{ name: string }>();
@@ -25,10 +26,13 @@ export function TaskDetail() {
     return <div className="page"><div className="loading-placeholder">Loading task...</div></div>;
   }
 
+  const traceEvents = task.status?.trace ?? [];
+
   const tabs: { id: Tab; label: string }[] = [
     { id: "overview", label: "Overview" },
     { id: "messages", label: `Messages (${messages.data?.length ?? 0})` },
     { id: "metrics", label: "Metrics" },
+    { id: "trace", label: `Trace (${traceEvents.length})` },
     { id: "logs", label: "Logs" },
     { id: "graph", label: "Graph" },
     { id: "yaml", label: "YAML" },
@@ -155,6 +159,8 @@ export function TaskDetail() {
           </div>
         )}
         {tab === "metrics" && !m && <p className="text-muted">No metrics available</p>}
+
+        {tab === "trace" && <TraceView trace={traceEvents} />}
 
         {tab === "logs" && <LogViewer logs={logs.data ?? ""} loading={logs.isLoading} />}
 

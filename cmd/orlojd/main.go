@@ -16,6 +16,7 @@ import (
 	"github.com/OrlojHQ/orloj/eventbus"
 	agentruntime "github.com/OrlojHQ/orloj/runtime"
 	"github.com/OrlojHQ/orloj/startup"
+	"github.com/OrlojHQ/orloj/telemetry"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
@@ -75,7 +76,21 @@ func main() {
 	postgresConnMaxLifetime := flag.Duration("postgres-conn-max-lifetime", 30*time.Minute, "max lifetime of postgres connections")
 	flag.Parse()
 
-	logger := log.New(os.Stdout, "orlojd ", log.LstdFlags|log.Lmicroseconds)
+	slogger := telemetry.NewLogger("orlojd")
+	logger := telemetry.NewBridgeLogger(slogger)
+
+	otelShutdown, otelErr := telemetry.Init(context.Background(), telemetry.Config{
+		ServiceName: "orlojd",
+	})
+	if otelErr != nil {
+		logger.Printf("opentelemetry init failed (tracing disabled): %v", otelErr)
+	} else {
+		defer func() {
+			shutdownCtx, c := context.WithTimeout(context.Background(), 5*time.Second)
+			defer c()
+			_ = otelShutdown(shutdownCtx)
+		}()
+	}
 
 	secretEncryptionKey, err := startup.ParseSecretEncryptionKey(*secretEncryptionKeyRaw)
 	if err != nil {
@@ -248,7 +263,7 @@ func main() {
 
 	httpServer := &http.Server{
 		Addr:    *addr,
-		Handler: server.Handler(),
+		Handler: telemetry.RequestIDMiddleware(server.Handler()),
 	}
 
 	go func() {

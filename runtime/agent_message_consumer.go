@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/OrlojHQ/orloj/crds"
+	"github.com/OrlojHQ/orloj/telemetry"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 var hopPattern = regexp.MustCompile(`/h([0-9]+)(?:/|$)`) //nolint:gochecknoglobals
@@ -248,8 +250,13 @@ func (m *AgentMessageConsumerManager) handleDelivery(ctx context.Context, _ stri
 }
 
 func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKey string, msg AgentMessage) error {
+	ctx, msgSpan := telemetry.StartMessageSpan(ctx, taskKey,
+		msg.MessageID, msg.FromAgent, msg.ToAgent, msg.BranchID)
+	defer msgSpan.End()
+
 	task, record, skip, retryAfter, err := m.beginMessageAttempt(taskKey, msg)
 	if err != nil {
+		telemetry.EndSpanError(msgSpan, err)
 		return err
 	}
 	if skip {
@@ -327,8 +334,10 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 		ns,
 		agent,
 	)
-	result, err := m.executor.ExecuteAgentWithRuntime(ctx, agent, input, toolRuntime)
+	agentCtx, agentSpan := telemetry.StartAgentSpan(ctx, agent.Metadata.Name, msg.MessageID, msg.Attempt)
+	result, err := m.executor.ExecuteAgentWithRuntime(agentCtx, agent, input, toolRuntime)
 	if err != nil {
+		telemetry.EndSpanError(agentSpan, err)
 		retryScheduled, delay, markErr := m.recordRetryOrDeadLetter(taskKey, msg, record, fmt.Errorf("agent %s execution failed: %w", agent.Metadata.Name, err))
 		if markErr != nil {
 			return markErr
@@ -341,6 +350,14 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 		}
 		return nil
 	}
+	telemetry.EndSpanOK(agentSpan,
+		attribute.Int("orloj.tokens.used", result.TokensUsed),
+		attribute.Int("orloj.tokens.estimated", result.EstimatedTokens),
+		attribute.Int("orloj.tool_calls", result.ToolCalls),
+		attribute.Int64("orloj.latency_ms", result.Duration.Milliseconds()),
+	)
+	telemetry.RecordAgentExecution(agent.Metadata.Name, agent.Spec.Model, result.Duration.Seconds(), result.TokensUsed, result.EstimatedTokens)
+	telemetry.RecordMessagePhase("succeeded", strings.TrimSpace(msg.ToAgent))
 	if tokenBudgetExceeded(task, result) {
 		reason := fmt.Errorf(
 			"token budget exceeded after agent %s: used=%d budget=%d source=%s",
@@ -926,6 +943,8 @@ func (m *AgentMessageConsumerManager) recordRetryOrDeadLetter(taskKey string, ms
 				continue
 			}
 			_ = m.tasks.AppendLog(taskKey, fmt.Sprintf("agent message retry scheduled: id=%s attempt=%d/%d delay=%s error=%s", msg.MessageID, current.Attempts, current.MaxAttempts, delay.String(), current.LastError))
+			telemetry.RecordRetry(strings.TrimSpace(msg.ToAgent))
+			telemetry.RecordMessagePhase("retrypending", strings.TrimSpace(msg.ToAgent))
 			namespace, taskName := splitTaskKey(taskKey)
 			m.emitMetering(context.Background(), MeteringEvent{
 				Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
@@ -999,6 +1018,8 @@ func (m *AgentMessageConsumerManager) recordRetryOrDeadLetter(taskKey string, ms
 			continue
 		}
 		_ = m.tasks.AppendLog(taskKey, fmt.Sprintf("agent message dead-lettered: id=%s attempts=%d error=%s", msg.MessageID, current.Attempts, current.LastError))
+		telemetry.RecordDeadLetter(strings.TrimSpace(msg.ToAgent))
+		telemetry.RecordMessagePhase("deadletter", strings.TrimSpace(msg.ToAgent))
 		namespace, taskName := splitTaskKey(taskKey)
 		m.emitMetering(context.Background(), MeteringEvent{
 			Timestamp: time.Now().UTC().Format(time.RFC3339Nano),

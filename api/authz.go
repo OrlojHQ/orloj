@@ -125,7 +125,7 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 func requiredRoleForRequest(r *http.Request) string {
 	path := strings.TrimSpace(r.URL.Path)
 	method := strings.ToUpper(strings.TrimSpace(r.Method))
-	if path == "/healthz" {
+	if path == "/healthz" || path == "/metrics" {
 		return ""
 	}
 	if method == http.MethodGet || method == http.MethodHead || method == http.MethodOptions {

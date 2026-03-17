@@ -2,6 +2,8 @@
 
 Use `orloj-alertcheck` and dashboard contracts to validate runtime reliability signals.
 
+> For Prometheus metrics, OpenTelemetry tracing, structured logging, and the trace visualization UI, see [Observability](./observability.md).
+
 ## Purpose
 
 This guide defines repeatable operational checks for retry storms, dead-letter growth, and latency saturation.
@@ -44,7 +46,7 @@ The default profile checks:
 - retry storm absolute total and per-task rate
 - dead-letter absolute total and dead-letter task rate
 - in-flight saturation ceiling
-- max p95 latency ceiling
+- max p95 latency ceiling (complement with `orloj_agent_step_duration_seconds` Prometheus histogram for live percentile queries)
 - optional `require_any_task_succeeded`
 
 ## Dashboard Contract

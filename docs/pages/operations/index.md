@@ -15,9 +15,13 @@ Use this section to run, secure, troubleshoot, and validate Orloj in production-
 - [Webhook Triggers](./webhooks.md)
 - [Security and Isolation](./security.md)
 
+## Observability
+
+- [Observability](./observability.md)
+- [Monitoring and Alerts](./monitoring-alerts.md)
+
 ## Reliability and Validation
 
 - [Load Testing](./load-testing.md)
-- [Monitoring and Alerts](./monitoring-alerts.md)
 - [Tool Runtime Conformance](./tool-runtime-conformance.md)
 - [Real Tool Validation](./real-tool-validation.md)

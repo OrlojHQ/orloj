@@ -29,6 +29,9 @@ Example:
 | `ORLOJ_AGENT_MESSAGE_BUS_BACKEND` | `orlojd`, `orlojworker` | Runtime message bus (`none|memory|nats-jetstream`). |
 | `ORLOJ_SECRET_ENCRYPTION_KEY` | `orlojd`, `orlojworker` | 256-bit AES key (hex or base64) for encrypting Secret resource data at rest. |
 | `ORLOJ_TOOL_ISOLATION_BACKEND` | `orlojd`, `orlojworker` | Tool isolation (`none|container|wasm`). |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `orlojd`, `orlojworker` | OTLP gRPC endpoint for OpenTelemetry trace export. Empty disables export. |
+| `OTEL_EXPORTER_OTLP_INSECURE` | `orlojd`, `orlojworker` | Set to `true` for non-TLS OTLP connections (development). |
+| `ORLOJ_LOG_FORMAT` | `orlojd`, `orlojworker` | Log output format: `json` (default) or `text`. |
 
 ## Server Flags
 
@@ -79,6 +82,8 @@ Pass `--secret-encryption-key` (or set `ORLOJ_SECRET_ENCRYPTION_KEY`) on both `o
 - `orlojworker`: `--storage-backend=postgres`, `--task-execution-mode=message-driven`, `--agent-message-consume`
 - Enable `--secret-encryption-key` on all processes if using `Secret` resources
 - Set provider keys via `ORLOJ_SECRET_*` environment variables or an external secret manager
+- Set `OTEL_EXPORTER_OTLP_ENDPOINT` to your tracing backend (Jaeger, Tempo, etc.) for distributed trace collection
+- See [Observability](./observability.md) for the full tracing, metrics, and logging setup
 
 ## Verification
 

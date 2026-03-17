@@ -14,6 +14,7 @@ import (
 	"github.com/OrlojHQ/orloj/frontend"
 	"github.com/OrlojHQ/orloj/runtime"
 	"github.com/OrlojHQ/orloj/store"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // Stores groups typed state stores used by the API server.
@@ -113,6 +114,7 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) routes() {
 	s.mux.HandleFunc("/healthz", s.handleHealth)
+	s.mux.Handle("/metrics", promhttp.Handler())
 	s.mux.HandleFunc("/v1/capabilities", s.handleCapabilities)
 	s.mux.HandleFunc("/ui", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/ui/", http.StatusTemporaryRedirect)

@@ -91,6 +91,8 @@ Extensions run in-process with the server or worker. They should be fast and non
 
 ## Related Docs
 
+- [Observability](../operations/observability.md) -- OSS tracing, metrics, and logging
+- [Enterprise Observability Boundary](../boundaries/observability-enterprise.BOUNDARY.md) -- commercial observability roadmap
 - [Versioning and Deprecation](../project/versioning-and-deprecation.md)
 - [Cloud Boundary](../boundaries/agentops-cloud.BOUNDARY.md)
 - [Enterprise Boundary](../boundaries/agentops-enterprise.BOUNDARY.md)

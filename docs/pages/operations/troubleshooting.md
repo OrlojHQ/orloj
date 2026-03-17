@@ -98,6 +98,55 @@ Fix:
 
 - verify backend-specific settings (container runtime settings or wasm module/runtime configuration).
 
+## Observability Diagnostics
+
+### Logs are unstructured or missing request IDs
+
+Cause:
+
+- `ORLOJ_LOG_FORMAT` is not set or binary predates the structured logging migration.
+
+Fix:
+
+- Set `ORLOJ_LOG_FORMAT=json` (default) to emit structured JSON logs with `request_id`, `trace_id`, and `span_id` fields.
+- Set `ORLOJ_LOG_FORMAT=text` for human-readable output during local development.
+
+### Traces not appearing in Jaeger/Tempo
+
+Cause:
+
+- `OTEL_EXPORTER_OTLP_ENDPOINT` is not set or the backend is unreachable.
+
+Fix:
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT=localhost:4317
+export OTEL_EXPORTER_OTLP_INSECURE=true  # for non-TLS dev backends
+```
+
+Restart `orlojd` and `orlojworker`. Verify spans appear in the backend UI.
+
+### Prometheus `/metrics` returning 404
+
+Cause:
+
+- Running a build that predates the metrics endpoint addition.
+
+Fix:
+
+- Rebuild from the latest source and verify `curl http://127.0.0.1:8080/metrics` returns Prometheus text output.
+
+### Correlating a log entry with a trace
+
+Use the `trace_id` field from a JSON log entry to search in your tracing backend:
+
+```bash
+# Find trace ID in logs
+grep '"trace_id"' /var/log/orlojd.log | head -5
+```
+
+Then search for that trace ID in Jaeger, Tempo, or the web console Trace tab.
+
 ## Escalation Workflow
 
 1. Capture failing command and exact error text.
@@ -113,4 +162,10 @@ go run ./cmd/orlojctl trace task <task-name>
 go run ./cmd/orlojctl events --once --timeout=30s --raw
 ```
 
-4. File an issue with logs, trace, and manifest snippets.
+4. Capture relevant Prometheus metrics (if applicable):
+
+```bash
+curl -s http://127.0.0.1:8080/metrics | grep orloj_
+```
+
+5. File an issue with logs, trace, metrics, and manifest snippets.

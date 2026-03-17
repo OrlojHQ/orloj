@@ -15,6 +15,8 @@ import (
 	"github.com/OrlojHQ/orloj/eventbus"
 	"github.com/OrlojHQ/orloj/runtime"
 	"github.com/OrlojHQ/orloj/store"
+	"github.com/OrlojHQ/orloj/telemetry"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 var traceStepIDPattern = regexp.MustCompile(`^a([0-9]+)\.s([0-9]+)$`) //nolint:gochecknoglobals
@@ -328,6 +330,9 @@ func (c *TaskController) reconcileRunning(ctx context.Context, task crds.Task) e
 	task.Status.ClaimedBy = ""
 	task.Status.LeaseUntil = ""
 	task.Status.LastHeartbeat = ""
+	if startT, parseErr := time.Parse(time.RFC3339Nano, task.Status.StartedAt); parseErr == nil {
+		telemetry.RecordTaskCompletion(crds.NormalizeNamespace(task.Metadata.Namespace), task.Spec.System, "succeeded", time.Since(startT).Seconds())
+	}
 	c.appendTaskHistory(&task, "succeeded", "task execution completed successfully")
 	_, err = c.upsertTask(task)
 	if err != nil {
@@ -474,6 +479,9 @@ func (c *TaskController) markFailed(task crds.Task, reason string) error {
 	task.Status.ClaimedBy = ""
 	task.Status.LeaseUntil = ""
 	task.Status.LastHeartbeat = ""
+	if startT, parseErr := time.Parse(time.RFC3339Nano, task.Status.StartedAt); parseErr == nil {
+		telemetry.RecordTaskCompletion(crds.NormalizeNamespace(task.Metadata.Namespace), task.Spec.System, "failed", time.Since(startT).Seconds())
+	}
 	c.appendTaskHistory(&task, "failed", reason)
 	_, err := c.upsertTask(task)
 	if err != nil {
@@ -932,6 +940,11 @@ func (c *TaskController) executeTask(ctx context.Context, task *crds.Task, syste
 	if len(order) == 0 {
 		return nil, fmt.Errorf("cannot derive execution order from agentsystem %q", system.Metadata.Name)
 	}
+
+	ctx, taskSpan := telemetry.StartTaskSpan(ctx, task.Metadata.Name, system.Metadata.Name,
+		crds.NormalizeNamespace(task.Metadata.Namespace), task.Status.Attempts)
+	defer taskSpan.End()
+
 	c.appendTaskTrace(task, crds.TaskTraceEvent{
 		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 		Type:      "task_start",
@@ -992,6 +1005,9 @@ func (c *TaskController) executeTask(ctx context.Context, task *crds.Task, syste
 			Message:   fmt.Sprintf("model=%s tools=%d", agent.Spec.Model, len(agent.Spec.Tools)),
 		})
 
+		agentCtx, agentSpan := telemetry.StartAgentSpan(ctx, agent.Metadata.Name,
+			fmt.Sprintf("a%d.s%d", task.Status.Attempts, idx+1), task.Status.Attempts)
+
 		if err := enforcePoliciesForAgent(agent, policies); err != nil {
 			c.appendTaskLog(taskScopedName(*task), fmt.Sprintf("agent policy violation: %s error=%s", agent.Metadata.Name, err))
 			c.appendTaskTrace(task, crds.TaskTraceEvent{
@@ -1000,6 +1016,7 @@ func (c *TaskController) executeTask(ctx context.Context, task *crds.Task, syste
 				Agent:     agent.Metadata.Name,
 				Message:   err.Error(),
 			})
+			telemetry.EndSpanError(agentSpan, err)
 			return nil, err
 		}
 
@@ -1012,7 +1029,7 @@ func (c *TaskController) executeTask(ctx context.Context, task *crds.Task, syste
 			task.Metadata.Namespace,
 			agent,
 		)
-		result, err := c.executor.ExecuteAgentWithRuntime(ctx, agent, runtimeInput, toolRuntime)
+		result, err := c.executor.ExecuteAgentWithRuntime(agentCtx, agent, runtimeInput, toolRuntime)
 		if err != nil {
 			category := "failure"
 			if strings.Contains(strings.ToLower(err.Error()), "timed out") {
@@ -1025,6 +1042,7 @@ func (c *TaskController) executeTask(ctx context.Context, task *crds.Task, syste
 				Agent:     agentName,
 				Message:   err.Error(),
 			})
+			telemetry.EndSpanError(agentSpan, fmt.Errorf("agent %q execution failed: %w", agentName, err))
 			return nil, fmt.Errorf("agent %q execution failed: %w", agentName, err)
 		}
 		c.appendRuntimeStepTrace(task, result.Agent, result.StepEvents)
@@ -1081,6 +1099,13 @@ func (c *TaskController) executeTask(ctx context.Context, task *crds.Task, syste
 				"tool_calls":       strconv.Itoa(result.ToolCalls),
 			},
 		})
+		telemetry.EndSpanOK(agentSpan,
+			attribute.Int("orloj.tokens.used", result.TokensUsed),
+			attribute.Int("orloj.tokens.estimated", result.EstimatedTokens),
+			attribute.Int("orloj.tool_calls", result.ToolCalls),
+			attribute.Int64("orloj.latency_ms", result.Duration.Milliseconds()),
+		)
+		telemetry.RecordAgentExecution(result.Agent, agent.Spec.Model, result.Duration.Seconds(), result.TokensUsed, result.EstimatedTokens)
 
 		totalEstimatedTokens += result.EstimatedTokens
 		totalUsedTokens += result.TokensUsed
