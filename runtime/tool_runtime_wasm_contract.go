@@ -25,6 +25,12 @@ type WASMToolModuleRequest struct {
 	Capabilities    []string                 `json:"capabilities,omitempty"`
 	RiskLevel       string                   `json:"risk_level,omitempty"`
 	Runtime         WASMToolModuleReqRuntime `json:"runtime,omitempty"`
+	Auth            WASMToolModuleReqAuth    `json:"auth,omitempty"`
+}
+
+type WASMToolModuleReqAuth struct {
+	Profile string            `json:"profile,omitempty"`
+	Headers map[string]string `json:"headers,omitempty"`
 }
 
 type WASMToolModuleReqRuntime struct {

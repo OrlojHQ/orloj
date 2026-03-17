@@ -22,6 +22,9 @@ const (
 	ToolCodeTimeout              = "timeout"
 	ToolCodeCanceled             = "canceled"
 	ToolCodeExecutionFailed      = "execution_failed"
+	ToolCodeAuthExpired          = "auth_expired"
+	ToolCodeAuthInvalid          = "auth_invalid"
+	ToolCodeAuthForbidden        = "auth_forbidden"
 )
 
 const (
@@ -34,6 +37,9 @@ const (
 	ToolReasonExecutionTimeout     = "tool_execution_timeout"
 	ToolReasonExecutionCanceled    = "tool_execution_canceled"
 	ToolReasonBackendFailure       = "tool_backend_failure"
+	ToolReasonAuthExpired          = "tool_auth_expired"
+	ToolReasonAuthInvalid          = "tool_auth_invalid"
+	ToolReasonAuthForbidden        = "tool_auth_forbidden"
 )
 
 // ToolError is the canonical runtime tool error envelope.

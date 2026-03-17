@@ -121,10 +121,40 @@ Approaches 2 and 3 do not require `Secret` resources -- the env-var resolver han
 - Store the encryption key itself in a secure location (e.g., a KMS, Vault, or hardware security module). Do not commit it to version control.
 - Validate redaction behavior during incident drills.
 
+## Tool Auth Profiles
+
+Tools can authenticate using one of four profiles via `spec.auth.profile`:
+
+| Profile | Suitable for | Notes |
+|---------|-------------|-------|
+| `bearer` (default) | API tokens, service keys | Injected as `Authorization: Bearer <token>` |
+| `api_key_header` | APIs using custom header auth (e.g., `X-Api-Key`) | Requires `auth.headerName` |
+| `basic` | Legacy HTTP basic auth | Secret must be `username:password` |
+| `oauth2_client_credentials` | Machine-to-machine OAuth2 | Requires `auth.tokenURL`; uses multi-key secret with `client_id` and `client_secret` |
+
+### Auth in Container Isolation
+
+For container-isolated tools, auth is injected as environment variables rather than HTTP headers. The container's entrypoint script maps these to the appropriate `curl` headers:
+
+| Env Var | Auth Profile |
+|---------|-------------|
+| `TOOL_AUTH_BEARER` | `bearer`, `oauth2_client_credentials` |
+| `TOOL_AUTH_BASIC` | `basic` |
+| `TOOL_AUTH_HEADER_NAME` + `TOOL_AUTH_HEADER_VALUE` | `api_key_header` |
+
+### Auth Error Handling
+
+Auth failures produce distinct error codes (`auth_invalid` for HTTP 401, `auth_forbidden` for HTTP 403) that are non-retryable. For `oauth2_client_credentials`, a 401 triggers automatic token cache eviction and one retry with a fresh token.
+
+### Auth Audit Trail
+
+Every tool invocation records `tool_auth_profile` and `tool_auth_secret_ref` (the secret name, not the resolved value) in the task trace. Use these fields for audit queries and compliance reporting.
+
 ## Operational Requirements
 
 - Enforce least-privilege tool permissions.
 - Monitor denial and runtime policy error trends.
+- Monitor auth failure rates by profile for early detection of expired credentials.
 - Approval hooks for high-risk operations are a post-launch roadmap item (Phase 12). See [Roadmap](../phases/roadmap.md).
 
 ## Related Docs

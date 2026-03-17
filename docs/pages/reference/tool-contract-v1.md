@@ -185,17 +185,45 @@ Capability labels are lowercase and dot-delimited:
 
 ## Auth Binding
 
-Auth must be declarative and secret-referenced:
+Auth is declarative and secret-referenced via `Tool.spec.auth`:
 
-- `auth.profile` (`api_key_header`, `bearer_token`, `basic`, `custom_headers`)
-- `auth.secret_ref`
-- `auth.scopes[]`
+- `auth.profile`: `bearer` (default), `api_key_header`, `basic`, `oauth2_client_credentials`
+- `auth.secretRef`: reference to a `Secret` resource (required when profile is set)
+- `auth.headerName`: custom header name (required for `api_key_header`)
+- `auth.tokenURL`: OAuth2 token endpoint (required for `oauth2_client_credentials`)
+- `auth.scopes[]`: OAuth2 scopes
 
-Rules:
+### Auth Profiles
 
-- do not persist resolved secrets in status/logs
-- redact auth values in logs and traces
-- auth resolution failures must map to canonical error fields
+| Profile | Secret format | Injection |
+|---------|--------------|-----------|
+| `bearer` | Single value (token) | `Authorization: Bearer <token>` |
+| `api_key_header` | Single value (key) | `<headerName>: <key>` |
+| `basic` | `username:password` | `Authorization: Basic <base64>` |
+| `oauth2_client_credentials` | Multi-key: `client_id`, `client_secret` | Token exchange, then `Authorization: Bearer <access_token>` |
+
+### Auth Error Codes
+
+| HTTP Status / gRPC Code | `tool_code` | `tool_reason` | Retryable |
+|---|---|---|---|
+| 401 / `Unauthenticated` | `auth_invalid` | `tool_auth_invalid` | false |
+| 403 / `PermissionDenied` | `auth_forbidden` | `tool_auth_forbidden` | false |
+| Token expired (OAuth2) | `auth_expired` | `tool_auth_expired` | true (one retry) |
+| Secret not found | `secret_resolution_failed` | `tool_secret_resolution_failed` | false |
+
+### Rules
+
+- Do not persist resolved secrets in status/logs
+- Redact auth values in logs and traces
+- Auth resolution failures must map to canonical error fields
+- Traces record `tool_auth_profile` and `tool_auth_secret_ref` (secret name, not value)
+
+### Secret Rotation Semantics
+
+- Secret resolution is performed fresh per tool invocation (no caching of raw secret values)
+- If a secret is rotated between invocations, the new value is used on the next call without restart
+- For `oauth2_client_credentials`: access tokens are cached with TTL derived from the token response's `expires_in` field (minus a 30-second safety margin). Cache eviction occurs automatically on expiry or on HTTP 401 from the tool endpoint, triggering a fresh token exchange.
+- Long-running tasks get the latest secret value on each step's tool calls
 
 ## Runtime Semantics
 

@@ -190,7 +190,26 @@ Tool failures use a canonical error taxonomy with three fields:
 | `tool_reason` | Human-readable explanation |
 | `retryable` | Whether the runtime should retry the invocation |
 
-HTTP status codes are mapped automatically: `429` and `5xx` are retryable, `4xx` are not. All tool types share the same taxonomy, so policy and observability behave consistently.
+HTTP status codes are mapped automatically: `429` and `5xx` are retryable, `4xx` are not. HTTP `401` maps to `auth_invalid` and `403` maps to `auth_forbidden` -- both non-retryable. All tool types share the same taxonomy, so policy and observability behave consistently.
+
+## Auth Profiles
+
+Tools support four authentication profiles via `spec.auth.profile`:
+
+| Profile | Secret format | Injection |
+|---------|--------------|-----------|
+| `bearer` (default) | Single token value | `Authorization: Bearer <token>` |
+| `api_key_header` | Single key value | Custom header via `spec.auth.headerName` |
+| `basic` | `username:password` | `Authorization: Basic <base64>` |
+| `oauth2_client_credentials` | Multi-key secret with `client_id` and `client_secret` | Token exchange at `spec.auth.tokenURL`, then bearer injection |
+
+When `spec.auth.secretRef` is set without an explicit profile, the default is `bearer` for backward compatibility. See the [Tool Contract v1](../reference/tool-contract-v1.md) for full auth binding details.
+
+### Secret Rotation
+
+Secret resolution is performed fresh per tool invocation -- there is no caching of raw secret values. If a secret is rotated between invocations, the new value takes effect on the next call without requiring a restart.
+
+For `oauth2_client_credentials`, access tokens are cached with a TTL derived from the token endpoint's `expires_in` response. Tokens are evicted on expiry or when the tool endpoint returns HTTP 401, triggering a fresh token exchange.
 
 ## Retry and Timeout
 

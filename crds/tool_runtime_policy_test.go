@@ -130,6 +130,148 @@ func TestToolNormalizeDefaultsEmptyTypeToHTTP(t *testing.T) {
 	}
 }
 
+func TestToolNormalizeAuthDefaultsBearerWhenSecretRefSet(t *testing.T) {
+	tool := Tool{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Tool",
+		Metadata:   ObjectMeta{Name: "auth-default"},
+		Spec: ToolSpec{
+			Endpoint: "https://api.example.com",
+			Auth:     ToolAuth{SecretRef: "my-key"},
+		},
+	}
+	if err := tool.Normalize(); err != nil {
+		t.Fatalf("normalize failed: %v", err)
+	}
+	if tool.Spec.Auth.Profile != "bearer" {
+		t.Fatalf("expected default auth.profile=bearer, got %q", tool.Spec.Auth.Profile)
+	}
+}
+
+func TestToolNormalizeAuthAcceptsAllProfiles(t *testing.T) {
+	profiles := []struct {
+		profile    string
+		headerName string
+		tokenURL   string
+	}{
+		{"bearer", "", ""},
+		{"api_key_header", "X-Key", ""},
+		{"basic", "", ""},
+		{"oauth2_client_credentials", "", "https://auth.example/token"},
+	}
+	for _, tc := range profiles {
+		tool := Tool{
+			APIVersion: "orloj.dev/v1",
+			Kind:       "Tool",
+			Metadata:   ObjectMeta{Name: "auth-" + tc.profile},
+			Spec: ToolSpec{
+				Endpoint: "https://api.example.com",
+				Auth: ToolAuth{
+					Profile:    tc.profile,
+					SecretRef:  "my-secret",
+					HeaderName: tc.headerName,
+					TokenURL:   tc.tokenURL,
+				},
+			},
+		}
+		if err := tool.Normalize(); err != nil {
+			t.Fatalf("expected valid auth profile %q to normalize, got %v", tc.profile, err)
+		}
+	}
+}
+
+func TestToolNormalizeAuthRejectsInvalidProfile(t *testing.T) {
+	tool := Tool{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Tool",
+		Metadata:   ObjectMeta{Name: "bad-profile"},
+		Spec: ToolSpec{
+			Endpoint: "https://api.example.com",
+			Auth: ToolAuth{
+				Profile:   "custom_thing",
+				SecretRef: "my-secret",
+			},
+		},
+	}
+	if err := tool.Normalize(); err == nil {
+		t.Fatal("expected error for invalid auth profile")
+	}
+}
+
+func TestToolNormalizeAuthRequiresSecretRef(t *testing.T) {
+	tool := Tool{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Tool",
+		Metadata:   ObjectMeta{Name: "no-secret"},
+		Spec: ToolSpec{
+			Endpoint: "https://api.example.com",
+			Auth:     ToolAuth{Profile: "bearer"},
+		},
+	}
+	if err := tool.Normalize(); err == nil {
+		t.Fatal("expected error when profile set without secretRef")
+	}
+}
+
+func TestToolNormalizeAuthAPIKeyHeaderRequiresHeaderName(t *testing.T) {
+	tool := Tool{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Tool",
+		Metadata:   ObjectMeta{Name: "no-header"},
+		Spec: ToolSpec{
+			Endpoint: "https://api.example.com",
+			Auth: ToolAuth{
+				Profile:   "api_key_header",
+				SecretRef: "my-key",
+			},
+		},
+	}
+	if err := tool.Normalize(); err == nil {
+		t.Fatal("expected error when api_key_header missing headerName")
+	}
+}
+
+func TestToolNormalizeAuthOAuth2RequiresTokenURL(t *testing.T) {
+	tool := Tool{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Tool",
+		Metadata:   ObjectMeta{Name: "no-token-url"},
+		Spec: ToolSpec{
+			Endpoint: "https://api.example.com",
+			Auth: ToolAuth{
+				Profile:   "oauth2_client_credentials",
+				SecretRef: "my-oauth",
+			},
+		},
+	}
+	if err := tool.Normalize(); err == nil {
+		t.Fatal("expected error when oauth2_client_credentials missing tokenURL")
+	}
+}
+
+func TestToolNormalizeAuthScopesAreTrimmed(t *testing.T) {
+	tool := Tool{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Tool",
+		Metadata:   ObjectMeta{Name: "scoped"},
+		Spec: ToolSpec{
+			Endpoint: "https://api.example.com",
+			Auth: ToolAuth{
+				Profile:   "oauth2_client_credentials",
+				SecretRef: "my-oauth",
+				TokenURL:  "https://auth.example/token",
+				Scopes:    []string{"  read ", " write ", ""},
+			},
+		},
+	}
+	if err := tool.Normalize(); err != nil {
+		t.Fatalf("normalize failed: %v", err)
+	}
+	if len(tool.Spec.Auth.Scopes) != 2 {
+		t.Fatalf("expected 2 scopes after trimming, got %d: %v", len(tool.Spec.Auth.Scopes), tool.Spec.Auth.Scopes)
+	}
+}
+
 func TestToolNormalizeRejectsInvalidRetryJitter(t *testing.T) {
 	tool := Tool{
 		APIVersion: "orloj.dev/v1",

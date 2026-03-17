@@ -18,10 +18,11 @@ import (
 // Tools with spec.type=external have their ToolExecutionRequest forwarded
 // to spec.endpoint and the ToolExecutionResponse parsed from the reply.
 type ExternalToolRuntime struct {
-	registry  ToolCapabilityRegistry
-	secrets   SecretResolver
-	client    HTTPDoer
-	namespace string
+	registry     ToolCapabilityRegistry
+	secrets      SecretResolver
+	authInjector *AuthInjector
+	client       HTTPDoer
+	namespace    string
 }
 
 func NewExternalToolRuntime(registry ToolCapabilityRegistry, secrets SecretResolver, client HTTPDoer) *ExternalToolRuntime {
@@ -29,9 +30,10 @@ func NewExternalToolRuntime(registry ToolCapabilityRegistry, secrets SecretResol
 		client = &http.Client{Timeout: 60 * time.Second}
 	}
 	return &ExternalToolRuntime{
-		registry: registry,
-		secrets:  secrets,
-		client:   client,
+		registry:     registry,
+		secrets:      secrets,
+		authInjector: NewAuthInjector(secrets, nil),
+		client:       client,
 	}
 }
 
@@ -40,10 +42,11 @@ func (r *ExternalToolRuntime) WithRegistry(registry ToolCapabilityRegistry) Tool
 		return NewExternalToolRuntime(registry, nil, nil)
 	}
 	return &ExternalToolRuntime{
-		registry:  registry,
-		secrets:   r.secrets,
-		client:    r.client,
-		namespace: r.namespace,
+		registry:     registry,
+		secrets:      r.secrets,
+		authInjector: r.authInjector,
+		client:       r.client,
+		namespace:    r.namespace,
 	}
 }
 
@@ -55,6 +58,10 @@ func (r *ExternalToolRuntime) WithNamespace(namespace string) ToolRuntime {
 	copy.namespace = crds.NormalizeNamespace(strings.TrimSpace(namespace))
 	if aware, ok := copy.secrets.(namespaceAwareSecretResolver); ok {
 		copy.secrets = aware.WithNamespace(copy.namespace)
+	}
+	copy.authInjector = NewAuthInjector(copy.secrets, nil)
+	if r.authInjector != nil {
+		copy.authInjector.tokenCache = r.authInjector.tokenCache
 	}
 	return &copy
 }
@@ -153,34 +160,14 @@ func (r *ExternalToolRuntime) Call(ctx context.Context, tool string, input strin
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("X-Tool-Contract-Version", ToolContractVersionV1)
 
-	if secretRef := strings.TrimSpace(spec.Auth.SecretRef); secretRef != "" {
-		if r.secrets == nil {
-			return "", NewToolError(
-				ToolStatusError,
-				ToolCodeSecretResolution,
-				ToolReasonSecretResolution,
-				false,
-				fmt.Sprintf("tool=%s has auth.secretRef but no secret resolver is configured", tool),
-				ErrToolSecretResolution,
-				map[string]string{"tool": tool},
-			)
+	if r.authInjector != nil {
+		authResult, authErr := r.authInjector.Resolve(ctx, tool, spec.Auth)
+		if authErr != nil {
+			return "", authErr
 		}
-		secretValue, resolveErr := r.secrets.Resolve(ctx, secretRef)
-		if resolveErr != nil {
-			return "", NewToolError(
-				ToolStatusError,
-				ToolCodeSecretResolution,
-				ToolReasonSecretResolution,
-				false,
-				fmt.Sprintf("tool=%s secretRef=%s resolution failed", tool, secretRef),
-				fmt.Errorf("%w: %v", ErrToolSecretResolution, resolveErr),
-				map[string]string{
-					"tool":       tool,
-					"secret_ref": secretRef,
-				},
-			)
+		for k, v := range authResult.Headers {
+			httpReq.Header.Set(k, v)
 		}
-		httpReq.Header.Set("Authorization", "Bearer "+secretValue)
 	}
 
 	resp, err := r.client.Do(httpReq)

@@ -10,8 +10,10 @@ import (
 
 	"github.com/OrlojHQ/orloj/crds"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/encoding"
+	"google.golang.org/grpc/status"
 )
 
 const (
@@ -34,10 +36,11 @@ func (jsonCodec) Name() string                     { return grpcCodecName }
 // The service must implement orloj.tool.v1.ToolService/Execute accepting
 // ToolExecutionRequest and returning ToolExecutionResponse as JSON payloads.
 type GRPCToolRuntime struct {
-	registry  ToolCapabilityRegistry
-	secrets   SecretResolver
-	dialer    GRPCDialer
-	namespace string
+	registry     ToolCapabilityRegistry
+	secrets      SecretResolver
+	authInjector *AuthInjector
+	dialer       GRPCDialer
+	namespace    string
 }
 
 // GRPCDialer abstracts gRPC connection establishment for testing.
@@ -56,9 +59,10 @@ func NewGRPCToolRuntime(registry ToolCapabilityRegistry, secrets SecretResolver,
 		dialer = defaultGRPCDialer{}
 	}
 	return &GRPCToolRuntime{
-		registry: registry,
-		secrets:  secrets,
-		dialer:   dialer,
+		registry:     registry,
+		secrets:      secrets,
+		authInjector: NewAuthInjector(secrets, nil),
+		dialer:       dialer,
 	}
 }
 
@@ -67,10 +71,11 @@ func (r *GRPCToolRuntime) WithRegistry(registry ToolCapabilityRegistry) ToolRunt
 		return NewGRPCToolRuntime(registry, nil, nil)
 	}
 	return &GRPCToolRuntime{
-		registry:  registry,
-		secrets:   r.secrets,
-		dialer:    r.dialer,
-		namespace: r.namespace,
+		registry:     registry,
+		secrets:      r.secrets,
+		authInjector: r.authInjector,
+		dialer:       r.dialer,
+		namespace:    r.namespace,
 	}
 }
 
@@ -82,6 +87,10 @@ func (r *GRPCToolRuntime) WithNamespace(namespace string) ToolRuntime {
 	copy.namespace = crds.NormalizeNamespace(strings.TrimSpace(namespace))
 	if aware, ok := copy.secrets.(namespaceAwareSecretResolver); ok {
 		copy.secrets = aware.WithNamespace(copy.namespace)
+	}
+	copy.authInjector = NewAuthInjector(copy.secrets, nil)
+	if r.authInjector != nil {
+		copy.authInjector.tokenCache = r.authInjector.tokenCache
 	}
 	return &copy
 }
@@ -152,36 +161,15 @@ func (r *GRPCToolRuntime) Call(ctx context.Context, tool string, input string) (
 		Attempt: 1,
 	}
 
-	if secretRef := strings.TrimSpace(spec.Auth.SecretRef); secretRef != "" {
-		if r.secrets == nil {
-			return "", NewToolError(
-				ToolStatusError,
-				ToolCodeSecretResolution,
-				ToolReasonSecretResolution,
-				false,
-				fmt.Sprintf("tool=%s has auth.secretRef but no secret resolver is configured", tool),
-				ErrToolSecretResolution,
-				map[string]string{"tool": tool},
-			)
+	if r.authInjector != nil {
+		authResult, authErr := r.authInjector.Resolve(ctx, tool, spec.Auth)
+		if authErr != nil {
+			return "", authErr
 		}
-		secretValue, resolveErr := r.secrets.Resolve(ctx, secretRef)
-		if resolveErr != nil {
-			return "", NewToolError(
-				ToolStatusError,
-				ToolCodeSecretResolution,
-				ToolReasonSecretResolution,
-				false,
-				fmt.Sprintf("tool=%s secretRef=%s resolution failed", tool, secretRef),
-				fmt.Errorf("%w: %v", ErrToolSecretResolution, resolveErr),
-				map[string]string{
-					"tool":       tool,
-					"secret_ref": secretRef,
-				},
-			)
+		if authResult.Profile != "" {
+			execReq.Auth.Profile = authResult.Profile
+			execReq.Auth.SecretRef = strings.TrimSpace(spec.Auth.SecretRef)
 		}
-		execReq.Auth.SecretRef = secretRef
-		execReq.Auth.Profile = "bearer_token"
-		_ = secretValue // Auth token passed via gRPC metadata in production; placeholder for future per-call auth headers.
 	}
 
 	dialOpts := []grpc.DialOption{
@@ -230,6 +218,30 @@ func mapGRPCError(tool string, err error) error {
 			map[string]string{"tool": tool, "isolation_mode": "grpc"},
 		)
 	default:
+		if st, ok := status.FromError(err); ok {
+			switch st.Code() {
+			case codes.Unauthenticated:
+				return NewToolError(
+					ToolStatusError,
+					ToolCodeAuthInvalid,
+					ToolReasonAuthInvalid,
+					false,
+					fmt.Sprintf("gRPC tool auth failed for tool=%s: %s", tool, RedactSensitive(st.Message())),
+					err,
+					map[string]string{"tool": tool, "isolation_mode": "grpc"},
+				)
+			case codes.PermissionDenied:
+				return NewToolError(
+					ToolStatusError,
+					ToolCodeAuthForbidden,
+					ToolReasonAuthForbidden,
+					false,
+					fmt.Sprintf("gRPC tool permission denied for tool=%s: %s", tool, RedactSensitive(st.Message())),
+					err,
+					map[string]string{"tool": tool, "isolation_mode": "grpc"},
+				)
+			}
+		}
 		return NewToolError(
 			ToolStatusError,
 			ToolCodeExecutionFailed,

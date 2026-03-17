@@ -69,39 +69,6 @@ The `Memory` CRD exists and agents can reference it via `spec.memory.ref`, but t
 
 Tool Platform 2-6 are the remaining pre-launch milestones. They are sequenced -- each builds on the previous. All other milestones (Phases 10-16) are post-launch.
 
-### Tool Platform 2: Remaining Runtime Work (Complete)
-
-Completed in Tool Platform 2.6. See `docs/pages/phases/phase-log.md` for delivery details.
-
-Summary of deliverables completed:
-- Real HTTP tool executor (`HTTPToolClient`) replaces `MockToolClient` for `isolation_mode=none`
-- `Tool.spec.type=external` delegator runtime for standalone tool services
-- gRPC tool adapter (`Tool.spec.type=grpc`) with JSON-over-gRPC convention
-- Webhook-callback async adapter (`Tool.spec.type=webhook-callback`) with poll and push callback
-- `Tool.spec.type` validation at apply time (rejects unknown types)
-- Sandbox defaults hardening with `SandboxedContainerDefaults()` and conformance assertions
-- Conformance suite coverage for HTTP and external runtimes
-- All new backends registered via `RegisterToolIsolationBackend` (no core switch edits)
-
-### Tool Platform 3: Tool Auth and Secret Binding
-
-Current state: `Tool.spec.auth.secretRef` exists and resolves via `StoreSecretResolver` -> `EnvSecretResolver` chain (`runtime/tool_secret_resolver.go`). Container backend injects a bearer token as `TOOL_AUTH_BEARER`. WASM passes auth via the execution envelope. Redaction is implemented in `runtime/redact.go`. But auth is limited to a single `secretRef` that resolves to one bearer token value.
-
-Deliverables:
-
-- **Per-tool auth profiles**: Expand `Tool.spec.auth` beyond single `secretRef` to support multiple auth modes -- bearer token, API key header, basic auth, OAuth2 client credentials. Each mode has its own secret binding shape and injection semantics.
-- **Rotation-aware secret resolution**: Define explicit rotation semantics. Currently each resolution is a fresh store lookup (correct), but the contract should specify rotation behavior for long-running tasks and cached resolution in message-driven paths.
-- **Auth failure classification**: Map auth failures (expired token, invalid credentials, 401/403 from tool endpoint) into the canonical tool error taxonomy (`runtime/tool_error.go`) with deterministic `tool_code` values like `auth_expired`, `auth_invalid`, `auth_forbidden`.
-- **Auth audit fields in traces**: Extend `TaskTraceEvent` to include auth metadata on tool calls (secret name used, auth mode) without leaking the actual credential. Ensure redaction covers all auth injection points across all backends.
-
-Exit criteria:
-- Tool auth behavior is deterministic and documented by contract.
-- Auth failures classify into canonical tool error taxonomy.
-
-Test gate:
-- Secret resolution and redaction tests pass across runtime backends.
-- Contract and trace-parsing tests validate auth metadata and failure mapping.
-
 ### Tool Platform 4: Policy Hooks and Risk-Tier Routing
 
 Current state: `AgentPolicy`, `AgentRole`, `ToolPermission` exist and are enforced at tool call time via `AgentToolAuthorizer`. Denials are fail-closed with deterministic reason codes. But there is no concept of operation classes or risk tiers -- authorization is all-or-nothing per tool.

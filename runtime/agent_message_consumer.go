@@ -1213,6 +1213,8 @@ func appendRuntimeStepTrace(task *crds.Task, agentName string, events []AgentSte
 			Retryable:           runtimeEvent.Retryable,
 			Message:             strings.TrimSpace(runtimeEvent.Message),
 			Step:                runtimeEvent.Step,
+			ToolAuthProfile:     strings.TrimSpace(runtimeEvent.ToolAuthProfile),
+			ToolAuthSecretRef:   strings.TrimSpace(runtimeEvent.ToolAuthSecretRef),
 		}
 		if strings.EqualFold(runtimeEvent.Type, "tool_call") {
 			traceEvent.ToolCalls = 1

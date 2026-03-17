@@ -21,8 +21,10 @@ var retryableRegex = regexp.MustCompile(`retryable=(true|false)`)       //nolint
 var toolContractRegex = regexp.MustCompile(`tool_contract=([^\s]+)`)    //nolint:gochecknoglobals
 var toolRequestIDRegex = regexp.MustCompile(`tool_request_id=([^\s]+)`) //nolint:gochecknoglobals
 var toolAttemptRegex = regexp.MustCompile(`tool_attempt=([0-9]+)`)      //nolint:gochecknoglobals
-var tokenRegex = regexp.MustCompile(`tokens=([0-9]+)`)                  //nolint:gochecknoglobals
-var usageSourceRegex = regexp.MustCompile(`usage_source=([^\s]+)`)      //nolint:gochecknoglobals
+var tokenRegex = regexp.MustCompile(`tokens=([0-9]+)`)                        //nolint:gochecknoglobals
+var usageSourceRegex = regexp.MustCompile(`usage_source=([^\s]+)`)            //nolint:gochecknoglobals
+var toolAuthProfileRegex = regexp.MustCompile(`tool_auth_profile=([^\s]+)`)   //nolint:gochecknoglobals
+var toolAuthSecretRefRegex = regexp.MustCompile(`tool_auth_secret=([^\s]+)`)  //nolint:gochecknoglobals
 
 // AgentStepEvent is one structured runtime event emitted during agent execution.
 type AgentStepEvent struct {
@@ -39,6 +41,8 @@ type AgentStepEvent struct {
 	ToolAttempt         int
 	Tokens              int
 	UsageSource         string
+	ToolAuthProfile     string
+	ToolAuthSecretRef   string
 }
 
 // AgentExecutionResult captures task-time execution details for one agent.
@@ -179,6 +183,8 @@ func parseAgentStepEvents(events []observedAgentEvent) []AgentStepEvent {
 			ToolAttempt:         toolAttempt,
 			Tokens:              parseTokens(msg),
 			UsageSource:         parseUsageSource(msg),
+			ToolAuthProfile:     parseToolAuthProfile(msg),
+			ToolAuthSecretRef:   parseToolAuthSecretRef(msg),
 		})
 	}
 	return out
@@ -318,4 +324,20 @@ func parseUsageSource(msg string) string {
 		return ""
 	}
 	return strings.ToLower(strings.TrimSpace(matches[1]))
+}
+
+func parseToolAuthProfile(msg string) string {
+	matches := toolAuthProfileRegex.FindStringSubmatch(msg)
+	if len(matches) < 2 {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(matches[1]))
+}
+
+func parseToolAuthSecretRef(msg string) string {
+	matches := toolAuthSecretRefRegex.FindStringSubmatch(msg)
+	if len(matches) < 2 {
+		return ""
+	}
+	return strings.TrimSpace(matches[1])
 }

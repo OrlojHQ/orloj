@@ -326,6 +326,51 @@
   - `TestExternalToolRuntimeConformanceSuite`
 - all new adapters registered via `runtime.RegisterToolIsolationBackend` in default registry
 
+### Tool Platform 3: Tool Auth and Secret Binding
+
+- expanded `ToolAuth` CRD to support four auth profiles:
+  - `bearer` (default, backward-compatible)
+  - `api_key_header` with custom header name
+  - `basic` with base64-encoded `username:password`
+  - `oauth2_client_credentials` with token exchange, caching, and auto-refresh
+- added `Tool.Normalize()` validation for auth fields (profile, headerName, tokenURL, scopes)
+- updated manifest parser to handle new auth fields (`profile`, `headerName`/`header_name`, `tokenURL`/`token_url`, `scopes`)
+- created centralized `AuthInjector` (`runtime/tool_auth_injector.go`):
+  - `Resolve(ctx, toolName, auth)` returns `AuthResult{Headers, EnvVars, Profile}`
+  - all four profiles implemented with proper error mapping
+- implemented OAuth2 client credentials flow (`runtime/tool_auth_oauth2.go`):
+  - token exchange via `grant_type=client_credentials`
+  - in-memory cache keyed by `tokenURL+clientID` with TTL from `expires_in`
+  - `Evict()` for cache invalidation on 401 responses
+- added auth failure classification to error taxonomy:
+  - `auth_invalid` / `tool_auth_invalid` for HTTP 401 and gRPC `Unauthenticated`
+  - `auth_forbidden` / `tool_auth_forbidden` for HTTP 403 and gRPC `PermissionDenied`
+  - `auth_expired` / `tool_auth_expired` for expired OAuth2 tokens
+- added auth audit fields to traces:
+  - `tool_auth_profile` and `tool_auth_secret_ref` on `TaskTraceEvent` and `AgentStepEvent`
+  - propagation through `agent_message_consumer.go` and `task_controller.go`
+- updated all six backends to use `AuthInjector`:
+  - `HTTPToolClient`: replaced inline bearer logic with `AuthInjector.Resolve`
+  - `ExternalToolRuntime`: same pattern
+  - `GRPCToolRuntime`: resolves auth, propagates profile to contract request
+  - `WebhookCallbackToolRuntime`: refactored from string auth header to map-based headers
+  - `ContainerToolRuntime`: generalized env var injection for all profiles
+  - `WASMToolRuntime`: added `WASMToolModuleReqAuth` struct with profile and headers
+- documented rotation semantics:
+  - secret resolution is fresh per invocation (no caching of raw secrets)
+  - OAuth2 access tokens cached with TTL, evicted on expiry or 401
+- comprehensive test coverage:
+  - `TestAuthInjector*`: all four profiles, error cases, edge cases (14 tests)
+  - `TestOAuth2TokenCache*`: caching, eviction, expiry, errors (5 tests)
+  - `TestHTTPToolClientMaps401ToAuthInvalid`, `TestHTTPToolClientMaps403ToAuthForbidden`
+  - `TestToolNormalizeAuth*`: CRD validation for profiles, constraints, scopes (7 tests)
+- updated user-facing documentation:
+  - `build-custom-tool.md`: examples for all four auth profiles
+  - `crds.md`: full auth field reference and validation rules
+  - `security.md`: auth profile guidance, container auth, error handling, audit trail
+  - `tool-contract-v1.md`: expanded auth binding section with rotation semantics
+  - `tools-and-isolation.md`: auth profiles section with rotation details
+
 ## Documentation Process
 
 For each new phase:

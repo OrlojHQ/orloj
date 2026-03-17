@@ -156,11 +156,12 @@ func (r *osExecContainerCommandRunner) Run(ctx context.Context, binary string, a
 
 // ContainerToolRuntime executes tools inside a containerized sandbox.
 type ContainerToolRuntime struct {
-	registry  ToolCapabilityRegistry
-	secrets   SecretResolver
-	runner    ContainerCommandRunner
-	config    ContainerToolRuntimeConfig
-	namespace string
+	registry     ToolCapabilityRegistry
+	secrets      SecretResolver
+	authInjector *AuthInjector
+	runner       ContainerCommandRunner
+	config       ContainerToolRuntimeConfig
+	namespace    string
 }
 
 func NewContainerToolRuntime(registry ToolCapabilityRegistry, config ContainerToolRuntimeConfig) *ContainerToolRuntime {
@@ -198,10 +199,11 @@ func NewContainerToolRuntimeWithRunnerAndSecrets(
 		secrets = NewEnvSecretResolver("ORLOJ_SECRET_")
 	}
 	return &ContainerToolRuntime{
-		registry: registry,
-		secrets:  secrets,
-		runner:   runner,
-		config:   config.normalized(),
+		registry:     registry,
+		secrets:      secrets,
+		authInjector: NewAuthInjector(secrets, nil),
+		runner:       runner,
+		config:       config.normalized(),
 	}
 }
 
@@ -210,11 +212,12 @@ func (r *ContainerToolRuntime) WithRegistry(registry ToolCapabilityRegistry) Too
 		return NewContainerToolRuntime(registry, DefaultContainerToolRuntimeConfig())
 	}
 	return &ContainerToolRuntime{
-		registry:  registry,
-		secrets:   r.secrets,
-		runner:    r.runner,
-		config:    r.config,
-		namespace: r.namespace,
+		registry:     registry,
+		secrets:      r.secrets,
+		authInjector: r.authInjector,
+		runner:       r.runner,
+		config:       r.config,
+		namespace:    r.namespace,
 	}
 }
 
@@ -304,37 +307,18 @@ func (r *ContainerToolRuntime) callHTTP(ctx context.Context, tool string, spec c
 	}
 
 	containerEnv := map[string]string{}
-	args := r.containerRunArgs(endpoint, false)
-	if strings.TrimSpace(spec.Auth.SecretRef) != "" {
-		if r.secrets == nil {
-			return "", NewToolError(
-				ToolStatusError,
-				ToolCodeSecretResolution,
-				ToolReasonSecretResolution,
-				false,
-				fmt.Sprintf("tool=%s has auth.secretRef but no secret resolver is configured", tool),
-				ErrToolSecretResolution,
-				map[string]string{"tool": tool},
-			)
+	hasAuth := false
+	if r.authInjector != nil {
+		authResult, authErr := r.authInjector.Resolve(ctx, tool, spec.Auth)
+		if authErr != nil {
+			return "", authErr
 		}
-		secretValue, err := r.secrets.Resolve(ctx, spec.Auth.SecretRef)
-		if err != nil {
-			return "", NewToolError(
-				ToolStatusError,
-				ToolCodeSecretResolution,
-				ToolReasonSecretResolution,
-				false,
-				fmt.Sprintf("tool=%s secretRef=%s resolution failed", tool, spec.Auth.SecretRef),
-				fmt.Errorf("%w: %v", ErrToolSecretResolution, err),
-				map[string]string{
-					"tool":       tool,
-					"secret_ref": strings.TrimSpace(spec.Auth.SecretRef),
-				},
-			)
+		for k, v := range authResult.EnvVars {
+			containerEnv[k] = v
+			hasAuth = true
 		}
-		containerEnv["TOOL_AUTH_BEARER"] = secretValue
-		args = r.containerRunArgs(endpoint, true)
 	}
+	args := r.containerRunArgs(endpoint, hasAuth)
 	stdout, stderr, err := runContainerCommandBounded(ctx, r.runner, r.config.RuntimeBinary, args, input, containerEnv)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
@@ -446,7 +430,12 @@ func (r *ContainerToolRuntime) containerRunArgs(endpoint string, includeAuth boo
 		args = append(args, "--pids-limit", strconv.Itoa(r.config.PidsLimit))
 	}
 	if includeAuth {
-		args = append(args, "--env", "TOOL_AUTH_BEARER")
+		args = append(args,
+			"--env", "TOOL_AUTH_BEARER",
+			"--env", "TOOL_AUTH_BASIC",
+			"--env", "TOOL_AUTH_HEADER_NAME",
+			"--env", "TOOL_AUTH_HEADER_VALUE",
+		)
 	}
 	args = append(
 		args,
@@ -454,7 +443,7 @@ func (r *ContainerToolRuntime) containerRunArgs(endpoint string, includeAuth boo
 		"--entrypoint", strings.TrimSpace(r.config.Shell),
 		strings.TrimSpace(r.config.Image),
 		"-lc",
-		`if [ -n "$TOOL_AUTH_BEARER" ]; then HEADER="Authorization: Bearer $TOOL_AUTH_BEARER"; cat | curl -sS --fail-with-body -X POST -H "$HEADER" --data-binary @- "$TOOL_ENDPOINT"; else cat | curl -sS --fail-with-body -X POST --data-binary @- "$TOOL_ENDPOINT"; fi`,
+		`if [ -n "$TOOL_AUTH_BEARER" ]; then HEADER="Authorization: Bearer $TOOL_AUTH_BEARER"; cat | curl -sS --fail-with-body -X POST -H "$HEADER" --data-binary @- "$TOOL_ENDPOINT"; elif [ -n "$TOOL_AUTH_BASIC" ]; then HEADER="Authorization: Basic $TOOL_AUTH_BASIC"; cat | curl -sS --fail-with-body -X POST -H "$HEADER" --data-binary @- "$TOOL_ENDPOINT"; elif [ -n "$TOOL_AUTH_HEADER_NAME" ]; then HEADER="$TOOL_AUTH_HEADER_NAME: $TOOL_AUTH_HEADER_VALUE"; cat | curl -sS --fail-with-body -X POST -H "$HEADER" --data-binary @- "$TOOL_ENDPOINT"; else cat | curl -sS --fail-with-body -X POST --data-binary @- "$TOOL_ENDPOINT"; fi`,
 	)
 	return args
 }

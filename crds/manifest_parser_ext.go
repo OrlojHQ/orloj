@@ -310,28 +310,37 @@ func ParseToolManifest(data []byte) (Tool, error) {
 					subsection = "auth"
 					runtimeSubsection = ""
 				}
-			case "capabilities":
-				if section == "spec" {
-					subsection = "capabilities"
-					runtimeSubsection = ""
-				}
-			case "runtime":
-				if section == "spec" {
-					subsection = "runtime"
-					runtimeSubsection = ""
-				}
-			case "retry":
-				if section == "spec" && subsection == "runtime" {
-					runtimeSubsection = "retry"
-				}
+		case "capabilities":
+			if section == "spec" {
+				subsection = "capabilities"
+				runtimeSubsection = ""
 			}
-			continue
+		case "scopes":
+			if section == "spec" && subsection == "auth" {
+				runtimeSubsection = "scopes"
+			}
+		case "runtime":
+			if section == "spec" {
+				subsection = "runtime"
+				runtimeSubsection = ""
+			}
+		case "retry":
+			if section == "spec" && subsection == "runtime" {
+				runtimeSubsection = "retry"
+			}
 		}
+		continue
+	}
 
-		if section == "spec" && subsection == "capabilities" && strings.HasPrefix(trimmed, "- ") {
-			out.Spec.Capabilities = append(out.Spec.Capabilities, stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))))
-			continue
-		}
+	if section == "spec" && subsection == "capabilities" && strings.HasPrefix(trimmed, "- ") {
+		out.Spec.Capabilities = append(out.Spec.Capabilities, stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))))
+		continue
+	}
+
+	if section == "spec" && subsection == "auth" && runtimeSubsection == "scopes" && strings.HasPrefix(trimmed, "- ") {
+		out.Spec.Auth.Scopes = append(out.Spec.Auth.Scopes, stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))))
+		continue
+	}
 
 		key, value, ok := parseKeyValue(trimmed)
 		if !ok {
@@ -359,8 +368,14 @@ func ParseToolManifest(data []byte) (Tool, error) {
 			out.Spec.Endpoint = value
 		case section == "spec" && subsection == "" && (key == "risk_level" || key == "riskLevel"):
 			out.Spec.RiskLevel = value
+		case section == "spec" && subsection == "auth" && key == "profile":
+			out.Spec.Auth.Profile = value
 		case section == "spec" && subsection == "auth" && (key == "secretRef" || key == "secret_ref"):
 			out.Spec.Auth.SecretRef = value
+		case section == "spec" && subsection == "auth" && (key == "headerName" || key == "header_name"):
+			out.Spec.Auth.HeaderName = value
+		case section == "spec" && subsection == "auth" && (key == "tokenURL" || key == "token_url"):
+			out.Spec.Auth.TokenURL = value
 		case section == "spec" && subsection == "runtime" && runtimeSubsection == "" && key == "timeout":
 			out.Spec.Runtime.Timeout = value
 		case section == "spec" && subsection == "runtime" && runtimeSubsection == "" && (key == "isolation_mode" || key == "isolationMode"):

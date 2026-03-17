@@ -16,9 +16,10 @@ import (
 // HTTPToolClient executes tools via HTTP POST against Tool.spec.endpoint.
 // It replaces MockToolClient as the base runtime for isolation_mode=none.
 type HTTPToolClient struct {
-	registry ToolCapabilityRegistry
-	secrets  SecretResolver
-	client   HTTPDoer
+	registry     ToolCapabilityRegistry
+	secrets      SecretResolver
+	authInjector *AuthInjector
+	client       HTTPDoer
 }
 
 // HTTPDoer abstracts HTTP request execution for testing.
@@ -31,9 +32,21 @@ func NewHTTPToolClient(registry ToolCapabilityRegistry, secrets SecretResolver, 
 		client = http.DefaultClient
 	}
 	return &HTTPToolClient{
-		registry: registry,
-		secrets:  secrets,
-		client:   client,
+		registry:     registry,
+		secrets:      secrets,
+		authInjector: NewAuthInjector(secrets, nil),
+		client:       client,
+	}
+}
+
+func NewHTTPToolClientWithAuth(registry ToolCapabilityRegistry, injector *AuthInjector, client HTTPDoer) *HTTPToolClient {
+	if client == nil {
+		client = http.DefaultClient
+	}
+	return &HTTPToolClient{
+		registry:     registry,
+		authInjector: injector,
+		client:       client,
 	}
 }
 
@@ -42,9 +55,10 @@ func (r *HTTPToolClient) WithRegistry(registry ToolCapabilityRegistry) ToolRunti
 		return NewHTTPToolClient(registry, nil, nil)
 	}
 	return &HTTPToolClient{
-		registry: registry,
-		secrets:  r.secrets,
-		client:   r.client,
+		registry:     registry,
+		secrets:      r.secrets,
+		authInjector: r.authInjector,
+		client:       r.client,
 	}
 }
 
@@ -55,6 +69,12 @@ func (r *HTTPToolClient) WithNamespace(namespace string) ToolRuntime {
 	copy := *r
 	if aware, ok := copy.secrets.(namespaceAwareSecretResolver); ok {
 		copy.secrets = aware.WithNamespace(namespace)
+	}
+	if copy.secrets != nil {
+		copy.authInjector = NewAuthInjector(copy.secrets, nil)
+		if r.authInjector != nil {
+			copy.authInjector.tokenCache = r.authInjector.tokenCache
+		}
 	}
 	return &copy
 }
@@ -111,34 +131,14 @@ func (r *HTTPToolClient) Call(ctx context.Context, tool string, input string) (s
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	if secretRef := strings.TrimSpace(spec.Auth.SecretRef); secretRef != "" {
-		if r.secrets == nil {
-			return "", NewToolError(
-				ToolStatusError,
-				ToolCodeSecretResolution,
-				ToolReasonSecretResolution,
-				false,
-				fmt.Sprintf("tool=%s has auth.secretRef but no secret resolver is configured", tool),
-				ErrToolSecretResolution,
-				map[string]string{"tool": tool},
-			)
+	if r.authInjector != nil {
+		authResult, authErr := r.authInjector.Resolve(ctx, tool, spec.Auth)
+		if authErr != nil {
+			return "", authErr
 		}
-		secretValue, resolveErr := r.secrets.Resolve(ctx, secretRef)
-		if resolveErr != nil {
-			return "", NewToolError(
-				ToolStatusError,
-				ToolCodeSecretResolution,
-				ToolReasonSecretResolution,
-				false,
-				fmt.Sprintf("tool=%s secretRef=%s resolution failed", tool, secretRef),
-				fmt.Errorf("%w: %v", ErrToolSecretResolution, resolveErr),
-				map[string]string{
-					"tool":       tool,
-					"secret_ref": secretRef,
-				},
-			)
+		for k, v := range authResult.Headers {
+			req.Header.Set(k, v)
 		}
-		req.Header.Set("Authorization", "Bearer "+secretValue)
 	}
 
 	resp, err := r.client.Do(req)
@@ -216,6 +216,17 @@ func mapHTTPStatusToToolError(tool string, statusCode int, body string) error {
 	retryable := statusCode == 429 || statusCode >= 500
 	code := ToolCodeExecutionFailed
 	reason := ToolReasonBackendFailure
+
+	switch statusCode {
+	case 401:
+		code = ToolCodeAuthInvalid
+		reason = ToolReasonAuthInvalid
+		retryable = false
+	case 403:
+		code = ToolCodeAuthForbidden
+		reason = ToolReasonAuthForbidden
+		retryable = false
+	}
 
 	return NewToolError(
 		ToolStatusError,

@@ -25,12 +25,13 @@ import (
 //  2. Receive 202 Accepted (or 200 with immediate result)
 //  3. If 202: poll GET {endpoint}/{request_id} until status != "pending"
 type WebhookCallbackToolRuntime struct {
-	registry      ToolCapabilityRegistry
-	secrets       SecretResolver
-	client        HTTPDoer
-	namespace     string
-	pollInterval  time.Duration
-	callbacks     *callbackRegistry
+	registry     ToolCapabilityRegistry
+	secrets      SecretResolver
+	authInjector *AuthInjector
+	client       HTTPDoer
+	namespace    string
+	pollInterval time.Duration
+	callbacks    *callbackRegistry
 }
 
 // callbackRegistry stores async responses delivered via push callback.
@@ -84,6 +85,7 @@ func NewWebhookCallbackToolRuntime(registry ToolCapabilityRegistry, secrets Secr
 	return &WebhookCallbackToolRuntime{
 		registry:     registry,
 		secrets:      secrets,
+		authInjector: NewAuthInjector(secrets, nil),
 		client:       client,
 		pollInterval: pollInterval,
 		callbacks:    newCallbackRegistry(),
@@ -97,6 +99,7 @@ func (r *WebhookCallbackToolRuntime) WithRegistry(registry ToolCapabilityRegistr
 	return &WebhookCallbackToolRuntime{
 		registry:     registry,
 		secrets:      r.secrets,
+		authInjector: r.authInjector,
 		client:       r.client,
 		namespace:    r.namespace,
 		pollInterval: r.pollInterval,
@@ -112,6 +115,10 @@ func (r *WebhookCallbackToolRuntime) WithNamespace(namespace string) ToolRuntime
 	copy.namespace = crds.NormalizeNamespace(strings.TrimSpace(namespace))
 	if aware, ok := copy.secrets.(namespaceAwareSecretResolver); ok {
 		copy.secrets = aware.WithNamespace(copy.namespace)
+	}
+	copy.authInjector = NewAuthInjector(copy.secrets, nil)
+	if r.authInjector != nil {
+		copy.authInjector.tokenCache = r.authInjector.tokenCache
 	}
 	return &copy
 }
@@ -204,15 +211,19 @@ func (r *WebhookCallbackToolRuntime) Call(ctx context.Context, tool string, inpu
 		)
 	}
 
-	authHeader, err := r.resolveAuth(ctx, tool, spec)
-	if err != nil {
-		return "", err
+	var authHeaders map[string]string
+	if r.authInjector != nil {
+		authResult, authErr := r.authInjector.Resolve(ctx, tool, spec.Auth)
+		if authErr != nil {
+			return "", authErr
+		}
+		authHeaders = authResult.Headers
 	}
 
 	callbackCh := r.callbacks.Register(requestID)
 	defer r.callbacks.Remove(requestID)
 
-	submitResp, submitBody, err := r.submitRequest(ctx, endpoint, payload, authHeader)
+	submitResp, submitBody, err := r.submitRequest(ctx, endpoint, payload, authHeaders)
 	if err != nil {
 		return "", mapWebhookHTTPError(tool, err)
 	}
@@ -224,52 +235,18 @@ func (r *WebhookCallbackToolRuntime) Call(ctx context.Context, tool string, inpu
 		return r.parseContractResponse(tool, submitBody)
 	}
 
-	return r.awaitResult(ctx, tool, requestID, endpoint, authHeader, callbackCh)
+	return r.awaitResult(ctx, tool, requestID, endpoint, authHeaders, callbackCh)
 }
 
-func (r *WebhookCallbackToolRuntime) resolveAuth(ctx context.Context, tool string, spec crds.ToolSpec) (string, error) {
-	secretRef := strings.TrimSpace(spec.Auth.SecretRef)
-	if secretRef == "" {
-		return "", nil
-	}
-	if r.secrets == nil {
-		return "", NewToolError(
-			ToolStatusError,
-			ToolCodeSecretResolution,
-			ToolReasonSecretResolution,
-			false,
-			fmt.Sprintf("tool=%s has auth.secretRef but no secret resolver is configured", tool),
-			ErrToolSecretResolution,
-			map[string]string{"tool": tool},
-		)
-	}
-	secretValue, resolveErr := r.secrets.Resolve(ctx, secretRef)
-	if resolveErr != nil {
-		return "", NewToolError(
-			ToolStatusError,
-			ToolCodeSecretResolution,
-			ToolReasonSecretResolution,
-			false,
-			fmt.Sprintf("tool=%s secretRef=%s resolution failed", tool, secretRef),
-			fmt.Errorf("%w: %v", ErrToolSecretResolution, resolveErr),
-			map[string]string{
-				"tool":       tool,
-				"secret_ref": secretRef,
-			},
-		)
-	}
-	return "Bearer " + secretValue, nil
-}
-
-func (r *WebhookCallbackToolRuntime) submitRequest(ctx context.Context, endpoint string, payload []byte, authHeader string) (*http.Response, string, error) {
+func (r *WebhookCallbackToolRuntime) submitRequest(ctx context.Context, endpoint string, payload []byte, authHeaders map[string]string) (*http.Response, string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
 	if err != nil {
 		return nil, "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Tool-Contract-Version", ToolContractVersionV1)
-	if authHeader != "" {
-		req.Header.Set("Authorization", authHeader)
+	for k, v := range authHeaders {
+		req.Header.Set(k, v)
 	}
 
 	resp, err := r.client.Do(req)
@@ -286,7 +263,7 @@ func (r *WebhookCallbackToolRuntime) awaitResult(
 	tool string,
 	requestID string,
 	endpoint string,
-	authHeader string,
+	authHeaders map[string]string,
 	callbackCh <-chan ToolExecutionResponse,
 ) (string, error) {
 	pollURL := strings.TrimRight(endpoint, "/") + "/" + requestID
@@ -324,7 +301,7 @@ func (r *WebhookCallbackToolRuntime) awaitResult(
 			return strings.TrimSpace(resp.Output.Result), nil
 
 		case <-ticker.C:
-			result, done, err := r.pollOnce(ctx, tool, pollURL, authHeader)
+			result, done, err := r.pollOnce(ctx, tool, pollURL, authHeaders)
 			if err != nil {
 				return "", err
 			}
@@ -335,7 +312,7 @@ func (r *WebhookCallbackToolRuntime) awaitResult(
 	}
 }
 
-func (r *WebhookCallbackToolRuntime) pollOnce(ctx context.Context, tool, pollURL, authHeader string) (string, bool, error) {
+func (r *WebhookCallbackToolRuntime) pollOnce(ctx context.Context, tool, pollURL string, authHeaders map[string]string) (string, bool, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pollURL, nil)
 	if err != nil {
 		return "", false, NewToolError(
@@ -349,8 +326,8 @@ func (r *WebhookCallbackToolRuntime) pollOnce(ctx context.Context, tool, pollURL
 		)
 	}
 	req.Header.Set("Accept", "application/json")
-	if authHeader != "" {
-		req.Header.Set("Authorization", authHeader)
+	for k, v := range authHeaders {
+		req.Header.Set(k, v)
 	}
 
 	resp, err := r.client.Do(req)

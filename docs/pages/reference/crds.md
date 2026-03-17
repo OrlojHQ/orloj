@@ -142,11 +142,19 @@ Example: `examples/model-endpoints/*.yaml`
   - `retry.backoff` (duration string)
   - `retry.max_backoff` (duration string)
   - `retry.jitter`: `none`, `full`, `equal`
-- `auth.secretRef` (string): namespaced secret reference.
+- `auth` (object):
+  - `profile` (string): auth profile. Allowed values: `bearer`, `api_key_header`, `basic`, `oauth2_client_credentials`. Defaults to `bearer` when `secretRef` is set.
+  - `secretRef` (string): namespaced secret reference. Required when `profile` is set.
+  - `headerName` (string): custom header name. Required when `profile=api_key_header`.
+  - `tokenURL` (string): OAuth2 token endpoint. Required when `profile=oauth2_client_credentials`.
+  - `scopes` ([]string): OAuth2 scopes.
 
 ### Defaults and Validation
 
 - `type` defaults to `http`. Unknown types are rejected with a validation error.
+- `auth.profile` defaults to `bearer` when `secretRef` is set. Unknown profiles are rejected.
+- `auth.headerName` is required when `profile=api_key_header`.
+- `auth.tokenURL` is required when `profile=oauth2_client_credentials`.
 - `capabilities` are trimmed and deduplicated (case-insensitive).
 - `risk_level` defaults to `low`.
 - `runtime.timeout` defaults to `30s` and must parse as duration.

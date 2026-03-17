@@ -407,6 +407,8 @@ func shouldRetryToolError(err error) bool {
 		"permission denied",
 		"invalid ",
 		"isolation runtime unavailable",
+		"auth_invalid",
+		"auth_forbidden",
 	}
 	for _, marker := range nonRetryableMarkers {
 		if strings.Contains(lower, marker) {

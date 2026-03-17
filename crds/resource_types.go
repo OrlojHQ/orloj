@@ -120,7 +120,11 @@ type ToolSpec struct {
 }
 
 type ToolAuth struct {
-	SecretRef string `json:"secretRef,omitempty"`
+	Profile    string   `json:"profile,omitempty"`
+	SecretRef  string   `json:"secretRef,omitempty"`
+	HeaderName string   `json:"headerName,omitempty"`
+	TokenURL   string   `json:"tokenURL,omitempty"`
+	Scopes     []string `json:"scopes,omitempty"`
 }
 
 // Secret stores sensitive values for runtime tool auth.
@@ -269,6 +273,39 @@ func (t *Tool) Normalize() error {
 	default:
 		return fmt.Errorf("invalid spec.runtime.retry.jitter %q: expected none, full, or equal", t.Spec.Runtime.Retry.Jitter)
 	}
+	t.Spec.Auth.SecretRef = strings.TrimSpace(t.Spec.Auth.SecretRef)
+	t.Spec.Auth.HeaderName = strings.TrimSpace(t.Spec.Auth.HeaderName)
+	t.Spec.Auth.TokenURL = strings.TrimSpace(t.Spec.Auth.TokenURL)
+	authProfile := strings.ToLower(strings.TrimSpace(t.Spec.Auth.Profile))
+	if authProfile == "" && t.Spec.Auth.SecretRef != "" {
+		authProfile = "bearer"
+	}
+	if authProfile != "" {
+		switch authProfile {
+		case "bearer", "api_key_header", "basic", "oauth2_client_credentials":
+			t.Spec.Auth.Profile = authProfile
+		default:
+			return fmt.Errorf("invalid spec.auth.profile %q: expected bearer, api_key_header, basic, or oauth2_client_credentials", t.Spec.Auth.Profile)
+		}
+		if t.Spec.Auth.SecretRef == "" {
+			return fmt.Errorf("spec.auth.secretRef is required when auth.profile is set")
+		}
+		if authProfile == "api_key_header" && t.Spec.Auth.HeaderName == "" {
+			return fmt.Errorf("spec.auth.headerName is required when auth.profile is api_key_header")
+		}
+		if authProfile == "oauth2_client_credentials" && t.Spec.Auth.TokenURL == "" {
+			return fmt.Errorf("spec.auth.tokenURL is required when auth.profile is oauth2_client_credentials")
+		}
+	}
+	normalizedScopes := make([]string, 0, len(t.Spec.Auth.Scopes))
+	for _, scope := range t.Spec.Auth.Scopes {
+		scope = strings.TrimSpace(scope)
+		if scope != "" {
+			normalizedScopes = append(normalizedScopes, scope)
+		}
+	}
+	t.Spec.Auth.Scopes = normalizedScopes
+
 	if t.Status.Phase == "" {
 		t.Status.Phase = "Pending"
 	}
@@ -657,6 +694,8 @@ type TaskTraceEvent struct {
 	TokenUsageSource    string `json:"token_usage_source,omitempty"`
 	ToolCalls           int    `json:"tool_calls,omitempty"`
 	MemoryWrites        int    `json:"memory_writes,omitempty"`
+	ToolAuthProfile     string `json:"tool_auth_profile,omitempty"`
+	ToolAuthSecretRef   string `json:"tool_auth_secret_ref,omitempty"`
 }
 
 type TaskHistoryEvent struct {

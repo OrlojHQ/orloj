@@ -1582,6 +1582,8 @@ func (c *TaskController) appendRuntimeStepTrace(task *crds.Task, agentName strin
 			Retryable:           runtimeEvent.Retryable,
 			Message:             agentruntime.RedactSensitive(strings.TrimSpace(runtimeEvent.Message)),
 			Step:                runtimeEvent.Step,
+			ToolAuthProfile:     strings.TrimSpace(runtimeEvent.ToolAuthProfile),
+			ToolAuthSecretRef:   strings.TrimSpace(runtimeEvent.ToolAuthSecretRef),
 		}
 		if strings.EqualFold(runtimeEvent.Type, "tool_call") {
 			traceEvent.ToolCalls = 1

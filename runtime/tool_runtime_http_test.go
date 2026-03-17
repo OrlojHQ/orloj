@@ -233,6 +233,58 @@ func TestHTTPToolClientMapsHTTPErrorCodes(t *testing.T) {
 	}
 }
 
+func TestHTTPToolClientMaps401ToAuthInvalid(t *testing.T) {
+	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+		"web_search": {Endpoint: "https://api.example.com/search"},
+	})
+	doer := &fakeHTTPDoer{statusCode: 401, body: "unauthorized"}
+	client := NewHTTPToolClient(registry, nil, doer)
+
+	_, err := client.Call(context.Background(), "web_search", "input")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	code, reason, retryable, ok := ToolErrorMeta(err)
+	if !ok {
+		t.Fatal("expected tool error metadata")
+	}
+	if code != ToolCodeAuthInvalid {
+		t.Fatalf("expected code=%s, got %s", ToolCodeAuthInvalid, code)
+	}
+	if reason != ToolReasonAuthInvalid {
+		t.Fatalf("expected reason=%s, got %s", ToolReasonAuthInvalid, reason)
+	}
+	if retryable {
+		t.Fatal("expected retryable=false for 401")
+	}
+}
+
+func TestHTTPToolClientMaps403ToAuthForbidden(t *testing.T) {
+	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
+		"web_search": {Endpoint: "https://api.example.com/search"},
+	})
+	doer := &fakeHTTPDoer{statusCode: 403, body: "forbidden"}
+	client := NewHTTPToolClient(registry, nil, doer)
+
+	_, err := client.Call(context.Background(), "web_search", "input")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	code, reason, retryable, ok := ToolErrorMeta(err)
+	if !ok {
+		t.Fatal("expected tool error metadata")
+	}
+	if code != ToolCodeAuthForbidden {
+		t.Fatalf("expected code=%s, got %s", ToolCodeAuthForbidden, code)
+	}
+	if reason != ToolReasonAuthForbidden {
+		t.Fatalf("expected reason=%s, got %s", ToolReasonAuthForbidden, reason)
+	}
+	if retryable {
+		t.Fatal("expected retryable=false for 403")
+	}
+}
+
 func TestHTTPToolClientMapsContextTimeout(t *testing.T) {
 	registry := NewStaticToolCapabilityRegistry(map[string]crds.ToolSpec{
 		"web_search": {Endpoint: "https://api.example.com/search"},

@@ -104,9 +104,11 @@ orlojctl apply -f my-custom-tool.yaml
 
 **`runtime.retry`** -- Configure retry behavior for transient failures. The `jitter: full` setting randomizes backoff intervals to prevent thundering herd effects when multiple agents hit the same tool.
 
-## Step 3: Create a Secret (If Needed)
+## Step 3: Create a Secret and Configure Auth
 
-If your tool requires authentication:
+If your tool requires authentication, create a Secret and set the auth profile on the Tool. Orloj supports four auth profiles:
+
+### Bearer token (default)
 
 ```yaml
 apiVersion: orloj.dev/v1
@@ -118,8 +120,77 @@ spec:
     value: your-api-key-here
 ```
 
+```yaml
+spec:
+  auth:
+    secretRef: my-tool-api-key
+```
+
+When `profile` is omitted, it defaults to `bearer`. The runtime injects `Authorization: Bearer <token>`.
+
+### API key header
+
+```yaml
+spec:
+  auth:
+    profile: api_key_header
+    secretRef: my-tool-api-key
+    headerName: X-Api-Key
+```
+
+The runtime injects the secret value as `X-Api-Key: <value>`.
+
+### Basic auth
+
+```yaml
+apiVersion: orloj.dev/v1
+kind: Secret
+metadata:
+  name: my-basic-creds
+spec:
+  stringData:
+    value: "username:password"
+```
+
+```yaml
+spec:
+  auth:
+    profile: basic
+    secretRef: my-basic-creds
+```
+
+The secret must contain `username:password`. The runtime base64-encodes it and injects `Authorization: Basic <encoded>`.
+
+### OAuth2 client credentials
+
+```yaml
+apiVersion: orloj.dev/v1
+kind: Secret
+metadata:
+  name: my-oauth-creds
+spec:
+  stringData:
+    client_id: your-client-id
+    client_secret: your-client-secret
+```
+
+```yaml
+spec:
+  auth:
+    profile: oauth2_client_credentials
+    secretRef: my-oauth-creds
+    tokenURL: https://auth.provider.com/oauth/token
+    scopes:
+      - read
+      - write
+```
+
+The runtime exchanges client credentials for an access token, caches it with TTL, and injects `Authorization: Bearer <access_token>`. Tokens are refreshed automatically on expiry or HTTP 401.
+
+Apply:
 ```bash
 orlojctl apply -f my-tool-secret.yaml
+orlojctl apply -f my-custom-tool.yaml
 ```
 
 ## Step 4: Grant Agent Access
