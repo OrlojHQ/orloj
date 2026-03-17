@@ -128,27 +128,39 @@ func (r *WASMToolRuntime) WithRegistry(registry ToolCapabilityRegistry) ToolRunt
 	if r == nil {
 		return NewWASMToolRuntime(registry, nil)
 	}
-	copy := *r
-	copy.registry = registry
-	return &copy
+	return &WASMToolRuntime{
+		registry:  registry,
+		executor:  r.executor,
+		factory:   r.factory,
+		config:    r.config,
+		namespace: r.namespace,
+	}
 }
 
 func (r *WASMToolRuntime) WithNamespace(namespace string) ToolRuntime {
 	if r == nil {
 		return NewWASMToolRuntime(nil, nil)
 	}
-	copy := *r
-	copy.namespace = strings.TrimSpace(namespace)
-	return &copy
+	return &WASMToolRuntime{
+		registry:  r.registry,
+		executor:  r.executor,
+		factory:   r.factory,
+		config:    r.config,
+		namespace: strings.TrimSpace(namespace),
+	}
 }
 
 func (r *WASMToolRuntime) WithConfig(config WASMToolRuntimeConfig) *WASMToolRuntime {
 	if r == nil {
 		return NewWASMToolRuntimeWithFactory(nil, nil, config)
 	}
-	copy := *r
-	copy.config = config.normalized()
-	return &copy
+	return &WASMToolRuntime{
+		registry:  r.registry,
+		executor:  r.executor,
+		factory:   r.factory,
+		config:    config.normalized(),
+		namespace: r.namespace,
+	}
 }
 
 func (r *WASMToolRuntime) Call(ctx context.Context, tool string, input string) (string, error) {
