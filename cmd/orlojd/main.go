@@ -37,6 +37,7 @@ func main() {
 	taskWorkerID := flag.String("task-worker-id", "embedded-worker", "worker id for embedded task worker")
 	taskLeaseDuration := flag.Duration("task-lease-duration", 30*time.Second, "task lease duration for embedded worker")
 	taskHeartbeatInterval := flag.Duration("task-heartbeat-interval", 10*time.Second, "task lease heartbeat interval for embedded worker")
+	taskWorkerRegion := flag.String("task-worker-region", env("ORLOJ_TASK_WORKER_REGION", "default"), "region for embedded task worker")
 	taskExecutionMode := flag.String("task-execution-mode", env("ORLOJ_TASK_EXECUTION_MODE", "sequential"), "task execution mode: sequential|message-driven")
 	modelGatewayProvider := flag.String("model-gateway-provider", env("ORLOJ_MODEL_GATEWAY_PROVIDER", "mock"), "task model gateway provider: mock|openai|anthropic|azure-openai|ollama")
 	modelGatewayAPIKey := flag.String("model-gateway-api-key", env("ORLOJ_MODEL_GATEWAY_API_KEY", ""), "API key used by task model gateway provider")
@@ -239,6 +240,7 @@ func main() {
 	go workerController.Start(ctx)
 	if *runTaskWorker || *embeddedWorker {
 		go heartbeatWorkerRegistration(ctx, stores.Workers, logger, *taskWorkerID, resources.WorkerSpec{
+			Region:             *taskWorkerRegion,
 			MaxConcurrentTasks: 5,
 		}, *taskHeartbeatInterval)
 		go taskController.Start(ctx)
