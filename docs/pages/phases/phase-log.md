@@ -247,6 +247,51 @@
   - expanded `runtime/model_gateway_anthropic_test.go`
   - expanded `runtime/model_gateway_ollama_test.go`
 
+## OSS Launch Readiness
+
+- added CI workflow (`.github/workflows/ci.yml`): Go build, test, vet, frontend build on push/PR
+- implemented secret/auth redaction in log and trace paths (`runtime/redact.go`, `runtime/redact_test.go`)
+- wired redaction into task controller and container tool runtime
+- added `Stability: beta` lifecycle labels to API reference, resource reference, and extensions docs
+- added `CODE_OF_CONDUCT.md` (Contributor Covenant v2.1)
+- linked `CONTRIBUTING.md` and `CODE_OF_CONDUCT.md` from `docs/pages/project/index.md`
+- updated `docs/pages/operations/security.md` to mark approval hooks as post-launch (Phase 12)
+- added `build` target to Makefile (`go build ./cmd/...`)
+
+## OSS Rebrand and Documentation
+
+- replaced Kubernetes-specific vocabulary across all docs (CRDs -> resources, control plane -> server, controllers -> services)
+- rewrote README for OSS launch (concise value prop, quickstart, architecture)
+- restructured onboarding: sequential mode first, blueprint-first quickstart
+- documented secrets story (dev vs production, env-var resolver chain)
+- added two-tier execution mode docs (sequential for dev, message-driven for prod)
+- restructured docs to professional standard with Vocs site publishing
+- added deployment docs and assets for local, VPS, and Kubernetes targets
+- added VPS docker-compose (`docs/deploy/vps/docker-compose.vps.yml`) and systemd service
+
+## Platform Improvements
+
+- added `--api-key` flag and `--embedded-worker` alias to `orlojd`
+- added database migration system (`store/migrate.go` + embedded SQL files)
+- added `spec.allowed_tools` on Agent for simplified governance without full RBAC
+- added `orlojctl run` command for imperative task execution
+- added `orlojctl init` command for project scaffolding
+- extracted shared startup package (`startup/`) to deduplicate orlojd and orlojworker initialization
+- updated `.gitignore` for current binary names, switched to bun lockfile
+
+## Observability
+
+- added trace waterfall/timeline UI component (`frontend/src/components/TraceView.tsx`) wired into TaskDetail page
+- integrated OpenTelemetry SDK with OTLP gRPC exporter (`telemetry/otel.go`)
+- added span helpers for task execution, agent steps, and message processing (`telemetry/spans.go`)
+- wired OTel initialization into `orlojd` and `orlojworker` startup
+- instrumented task controller and agent message consumer with OTel spans
+- added Prometheus client with `/metrics` endpoint (`telemetry/metrics.go`), auth-exempt
+- instrumented task/agent/message paths with Prometheus counters and histograms
+- added structured logging setup (`telemetry/logging.go`)
+- added observability operations doc (`docs/pages/operations/observability.md`)
+- added enterprise observability boundary doc (`docs/pages/boundaries/observability-enterprise.BOUNDARY.md`)
+
 ## Documentation Process
 
 For each new phase:

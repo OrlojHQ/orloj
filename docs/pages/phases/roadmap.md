@@ -8,177 +8,34 @@ This roadmap is forward-looking only. Completed delivery history is tracked in `
 - Closed-source sibling repos are used as compatibility signals, not feature-priority drivers.
 - Backward-compatible, additive contract evolution is the default policy.
 
-## Release Gate 0: Core OSS Readiness
+## Release Gate 0: Deferred Items
 
-Gate 0 is a hard blocker for OSS launch and must pass before broad post-core expansion.
-Non-goal for Gate 0: multi-server high availability; defer HA implementation to later reliability hardening.
-
-### 0.1 Extensibility Readiness
-
-Deliverables:
-- Stable versioned extension contracts for runtime and API integrations.
-- Explicit compatibility policy for contract evolution and versioning.
-- Consumer-facing conformance checks that validate extension assumptions.
-
-Done means:
-- Contract docs are current and linked from `docs/pages/index.md`.
-- A no-unversioned-breaking-change CI guard exists for extension surfaces.
-- Compatibility checks are green against pinned `orloj-cloud`, `orloj-enterprise`, and `orloj-plugins` integration expectations.
-
-Test gate:
-- `go test ./...` in core.
-- Core contract/conformance suites pass.
-- Consumer compatibility smoke jobs pass for pinned references.
+Gate 0 is largely complete. The following items were evaluated during the pre-launch audit and deferred to post-launch hardening. See `docs/pages/phases/phase-log.md` for completed Gate 0 work.
 
 ### 0.2 Reliability Readiness
 
-Deliverables:
-- SLO-backed load and failure quality gates are published and enforced.
-- Deferred operational follow-through from prior phases is completed:
-  - schedule/integration path for `cmd/orloj-alertcheck`
-  - production dashboard mapping for `monitoring/dashboards/retry-deadletter-overview.json`
-- Backup/restore verification and upgrade/canary validation paths are defined.
-
-Done means:
-- Quality-profile gates are part of release validation.
-- Alert and dashboard paths are wired into operator workflow.
-- Reliability runbooks include rollback and incident-response checks.
-
-Test gate:
-- Load and failure-injection scenarios pass quality thresholds.
-- Alert checks and dashboard contracts validate in CI or release verification.
-- Backup/restore and upgrade validation tests pass.
-
-### 0.3 Security Readiness
+Load and failure-injection tooling (`orloj-loadtest`, `orloj-alertcheck`) works for manual validation. Remaining work is CI integration for SLO-backed quality gates and automated backup/restore verification.
 
 Deliverables:
-- Rotation-aware secret resolution behavior for tool and provider auth paths.
-- Redaction and auth audit field standards enforced across logs/traces.
-- Approval-hook foundation for high-risk tool operations.
-
-Done means:
-- Sensitive fields are consistently redacted by policy.
-- Security-critical tool actions emit deterministic reason codes.
-- High-risk execution classes support approval-required routing hooks.
-
-Test gate:
-- Security regression tests pass for secret resolution, redaction, and policy errors.
-- Runtime/tool conformance tests verify canonical error and denial semantics.
-
-### 0.4 DX and Documentation Readiness
-
-Deliverables:
-- Clean install/run paths for local and production-style deployments.
-- Operator runbooks and contract docs updated for release.
-- Versioning and deprecation policy documented with upgrade guidance.
-
-Done means:
-- All release-critical docs are link-complete from `docs/pages/index.md`.
-- Examples are runnable from repository root.
-- Release notes and migration notes templates are in place.
-
-Test gate:
-- Documentation link checks and scenario walkthrough checks pass.
-- Example manifests and commands validate against current binaries.
-
-### 0.5 API/Resource Stability Policy
-
-Deliverables:
-- Public surface lifecycle labels for APIs and resources (`experimental`, `beta`, `stable`).
-- Deprecation/removal windows for each stability level.
-- CI API/schema diff guard that blocks unversioned breaking changes.
-
-Done means:
-- Public API and resource docs declare lifecycle status and compatibility expectations.
-- Deprecation policy includes minimum support window and migration-note requirements.
-- Breaking API/schema changes require explicit versioning and approval path.
-
-Test gate:
-- CI contract/API diff checks fail on unversioned breaking changes.
-- Policy compliance checks validate lifecycle labels and deprecation metadata in docs.
+- SLO-backed load and failure quality gates enforced in CI.
+- Backup/restore verification and upgrade/canary validation paths.
 
 ### 0.6 Draft-to-Stable Contract Graduation
 
+Contracts exist, pass conformance suites, and are documented. Remaining work is formal graduation labeling and versioned change-control process.
+
 Deliverables:
-- Graduation plan for release-critical Draft specs to either stable or explicitly experimental with timeline:
-  - `docs/pages/reference/tool-contract-v1.md`
-  - `docs/pages/reference/wasm-tool-module-contract-v1.md`
-  - `docs/pages/operations/tool-runtime-conformance.md`
-  - release-gated sections of load-testing and monitoring docs
+- Graduation plan for Draft specs (`tool-contract-v1`, `wasm-tool-module-contract-v1`, `tool-runtime-conformance`) to stable or explicitly experimental with timeline.
 - Versioned contract ownership and change-control expectations.
 
-Done means:
-- No release-critical contract remains ambiguous Draft at OSS launch.
-- Any intentionally experimental contract has explicit scope limits and graduation timeline.
-- `docs/pages/index.md` and reference links reflect final stability state.
-
-Test gate:
-- Contract conformance suites are mapped to each stabilized contract version.
-- Docs checks validate that contract status labels and linked references are consistent.
-
-### 0.7 OSS Security Operations
-
-Deliverables:
-- Public security disclosure workflow and response SLA.
-- CVE triage and patch-release process for security fixes.
-- Incident ownership and external communication path.
-
-Done means:
-- Security reporting instructions and timelines are published and actionable.
-- Security patch process is included in release checklist and runbooks.
-- Responsible disclosure flow is tested internally.
-
-Test gate:
-- Release checklist enforces security process artifacts.
-- Security incident-response tabletop or dry-run verification completes successfully.
-
-### 0.8 OSS Governance and Support
-
-Deliverables:
-- Community support path and maintainer/reviewer operating model.
-- Release cadence/support policy and contribution decision model.
-- Escalation path for breaking-change approvals.
-
-Done means:
-- Governance/support docs are publish-ready and linked from primary docs entrypoints.
-- Breaking-change decisions follow a documented approval path.
-- Contributor experience is defined without private tribal process.
-
-Test gate:
-- Docs completeness check validates governance/support presence and links.
-- Release process check validates governance gates were applied to contract-breaking proposals.
-
 ### 0.9 Supply-Chain and Provenance
+
+Release-pipeline work with no application-code changes required.
 
 Deliverables:
 - SBOM generation for release artifacts.
 - Signed binaries and images with verification instructions.
 - Provenance/attestation checks in release CI.
-
-Done means:
-- Every release artifact has verifiable origin and integrity metadata.
-- Supply-chain checks are mandatory in pre-release pipeline.
-- Verification steps are documented for operators/users.
-
-Test gate:
-- SBOM, signature, and provenance checks pass before release tag creation.
-- Dependency/vulnerability policy gate passes with documented exceptions.
-
-### 0.10 Operability Baseline
-
-Deliverables:
-- Server operability baseline for OSS operators: readiness, health, metrics, and trace/log correlation conventions.
-- Operator-facing SLI definitions and runbook mappings for core server behavior.
-- Baseline operational checks wired into release verification.
-
-Done means:
-- Operators can assess server health from documented endpoints/signals.
-- Core operational runbooks map alerts/signals to concrete remediation actions.
-- Operability expectations are explicit for single-server deployments.
-
-Test gate:
-- Operability smoke checks validate readiness/health and baseline telemetry signals.
-- Runbook validation scenarios pass for startup, degraded behavior, and recovery.
 
 ## Post-Launch Engineering
 
@@ -196,10 +53,6 @@ Workers currently connect directly to Postgres. Introduce an API-mediated path w
 
 Add optional encryption for `Secret.spec.data` values stored in the database. Accept a `--secret-encryption-key` flag and encrypt/decrypt transparently in the resource store layer. This makes the built-in Secret resource viable for production use alongside the existing env-var resolution path.
 
-### Worker Initialization Simplification
-
-Reduce boilerplate in `cmd/orlojworker/main.go` and `cmd/orlojd/main.go` by extracting a shared store-initialization factory. Both binaries currently initialize 11+ stores with identical patterns.
-
 ### Python SDK
 
 Create a thin Python client library for the Orloj REST API. Target use cases: programmatic task submission, status polling, and result retrieval from Python-based ML/data pipelines.
@@ -208,9 +61,9 @@ Create a thin Python client library for the Orloj REST API. Target use cases: pr
 
 `scheduler/scheduler.go` is a stub that returns the first graph node. Real scheduling logic lives in `TaskSchedulerController` (worker assignment) and `TaskController` (graph traversal and claim). Evaluate removing the package or consolidating the scheduling surface so the code structure matches the actual responsibility boundaries.
 
-### OpenTelemetry Tracing Extension
+### TracingSink Extension Interface
 
-Add a `TracingSink` extension interface alongside the existing `MeteringSink` and `AuditSink`. This would enable distributed tracing through agent graphs, which is especially valuable for debugging hierarchical and swarm-loop topologies where a task fans out across multiple agents and join points.
+Base OpenTelemetry integration is complete (OTLP export, span instrumentation on agent steps, model calls, tool execution, and message processing). Remaining work is adding a `TracingSink` extension interface alongside the existing `MeteringSink` and `AuditSink` so consumers can plug in custom trace processing.
 
 ### Memory Resource Maturity Review
 
@@ -388,31 +241,17 @@ Test gate:
 
 ## Contract Stability Track (Cross-Cutting)
 
-This track operationalizes Release Gate 0.1 and 0.5 across the full delivery lifecycle.
+Ongoing work to maintain contract compatibility as the platform evolves. Gate 0.1 and 0.5 baseline requirements are met; this track covers continued enforcement.
 
 Deliverables:
+- CI enforcement for contract/API diff guardrails that block unversioned breaking changes.
 - Contract compatibility matrix maintenance and release-time verification workflow.
-- CI enforcement and policy ownership for contract/API diff guardrails.
-- Release checklist integration requiring consumer compatibility signals.
 
-Done means:
-- Contract changes require compatibility notes and versioning rationale.
-- Core changes are validated against pinned consumer expectations.
+## Release Packaging Track (Cross-Cutting)
 
-Test gate:
-- Contract diff checks and compatibility smoke checks pass in release CI.
-
-## Pre-OSS Packaging Track (Cross-Cutting)
-
-This track operationalizes Release Gate 0.7 and 0.9 for release mechanics.
+Covers release mechanics for Gate 0.9 deliverables and ongoing release hygiene.
 
 Deliverables:
 - Reproducible release artifacts with deterministic build inputs.
+- SBOM, signature, and provenance checks in release CI.
 - Release-note, changelog, and migration-note workflow.
-- Security/process checkpoint integration into release pipeline.
-
-Done means:
-- Release process is automated, documented, and auditable.
-
-Test gate:
-- Reproducibility and signature verification checks pass before release tags.
