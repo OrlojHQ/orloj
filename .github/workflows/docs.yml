@@ -2,21 +2,24 @@ name: docs
 
 on:
   pull_request:
+    paths:
+      - "docs/**"
+      - "vocs.config.ts"
+      - "package.json"
   push:
     branches:
       - main
+    paths:
+      - "docs/**"
+      - "vocs.config.ts"
+      - "package.json"
 
 jobs:
-  build-docs:
+  docs-build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v5
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
