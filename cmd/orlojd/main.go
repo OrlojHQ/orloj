@@ -14,8 +14,10 @@ import (
 	"github.com/OrlojHQ/orloj/api"
 	"github.com/OrlojHQ/orloj/controllers"
 	"github.com/OrlojHQ/orloj/eventbus"
+	"github.com/OrlojHQ/orloj/resources"
 	agentruntime "github.com/OrlojHQ/orloj/runtime"
 	"github.com/OrlojHQ/orloj/startup"
+	"github.com/OrlojHQ/orloj/store"
 	"github.com/OrlojHQ/orloj/telemetry"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
@@ -236,6 +238,9 @@ func main() {
 	go taskScheduleController.Start(ctx)
 	go workerController.Start(ctx)
 	if *runTaskWorker || *embeddedWorker {
+		go heartbeatWorkerRegistration(ctx, stores.Workers, logger, *taskWorkerID, resources.WorkerSpec{
+			MaxConcurrentTasks: 5,
+		}, *taskHeartbeatInterval)
 		go taskController.Start(ctx)
 		if strings.EqualFold(strings.TrimSpace(*taskExecutionMode), "message-driven") {
 			if agentMessageBus == nil {
@@ -278,6 +283,66 @@ func main() {
 	logger.Printf("API server listening on %s", *addr)
 	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		logger.Fatalf("server error: %v", err)
+	}
+}
+
+func heartbeatWorkerRegistration(
+	ctx context.Context,
+	workerStore *store.WorkerStore,
+	logger *log.Logger,
+	workerID string,
+	spec resources.WorkerSpec,
+	interval time.Duration,
+) {
+	if interval <= 0 {
+		interval = 10 * time.Second
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		now := time.Now().UTC().Format(time.RFC3339Nano)
+		worker := resources.Worker{
+			APIVersion: "orloj.dev/v1",
+			Kind:       "Worker",
+			Metadata:   resources.ObjectMeta{Name: workerID},
+			Spec:       spec,
+			Status: resources.WorkerStatus{
+				Phase:         "Ready",
+				LastHeartbeat: now,
+				CurrentTasks:  0,
+			},
+		}
+		if existing, ok := workerStore.Get(workerID); ok {
+			worker.Metadata.ResourceVersion = existing.Metadata.ResourceVersion
+			worker.Metadata.Generation = existing.Metadata.Generation
+			worker.Metadata.CreatedAt = existing.Metadata.CreatedAt
+			worker.Status.ObservedGeneration = existing.Metadata.Generation
+			if strings.EqualFold(strings.TrimSpace(existing.Status.Phase), "ready") ||
+				strings.EqualFold(strings.TrimSpace(existing.Status.Phase), "pending") {
+				worker.Status.CurrentTasks = existing.Status.CurrentTasks
+			} else {
+				worker.Status.CurrentTasks = 0
+			}
+		}
+		if _, err := workerStore.Upsert(worker); err != nil && logger != nil {
+			logger.Printf("worker heartbeat upsert failed: %v", err)
+		}
+
+		select {
+		case <-ctx.Done():
+			final := worker
+			final.Status.Phase = "NotReady"
+			final.Status.LastError = "worker stopped"
+			if existing, ok := workerStore.Get(workerID); ok {
+				final.Metadata.ResourceVersion = existing.Metadata.ResourceVersion
+				final.Metadata.Generation = existing.Metadata.Generation
+				final.Metadata.CreatedAt = existing.Metadata.CreatedAt
+			}
+			_, _ = workerStore.Upsert(final)
+			return
+		case <-ticker.C:
+		}
 	}
 }
 
