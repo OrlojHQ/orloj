@@ -12,7 +12,10 @@ import {
   useTaskSchedules,
   useTaskWebhooks,
   useWorkers,
+  useDeleteResource,
+  useUpdateResource,
 } from "../api/hooks";
+import { toast } from "../components/Toast";
 import { GraphView } from "../components/GraphView";
 import { StatusBadge } from "../components/StatusBadge";
 import { YamlEditor } from "../components/YamlEditor";
@@ -37,6 +40,8 @@ export function AgentSystemDetail() {
   const taskSchedules = useTaskSchedules();
   const taskWebhooks = useTaskWebhooks();
   const workers = useWorkers();
+  const deleteMutation = useDeleteResource("AgentSystem");
+  const updateMutation = useUpdateResource("AgentSystem");
   const [tab, setTab] = useState<Tab>("graph");
 
   const related = useMemo(() => ({
@@ -80,6 +85,17 @@ export function AgentSystemDetail() {
     }
     return running;
   }, [systemTasks]);
+
+  const handleDelete = async () => {
+    if (!system || !window.confirm(`Delete AgentSystem ${system.metadata.name}?`)) return;
+    try {
+      await deleteMutation.mutateAsync(system.metadata.name);
+      toast("success", "AgentSystem deleted successfully");
+      navigate("/systems");
+    } catch (err) {
+      toast("error", err instanceof Error ? err.message : "Failed to delete AgentSystem");
+    }
+  };
 
   if (isLoading || !system) {
     return (
@@ -135,6 +151,13 @@ export function AgentSystemDetail() {
           </div>
           <StatusBadge phase={system.status?.phase} size="md" />
         </div>
+        <button
+          className="btn-secondary text-red"
+          onClick={handleDelete}
+          disabled={deleteMutation.isPending}
+        >
+          {deleteMutation.isPending ? "Deleting..." : "Delete System"}
+        </button>
       </div>
 
       <div className="tab-bar">
@@ -162,7 +185,16 @@ export function AgentSystemDetail() {
             emptyMessage="No tasks for this system"
           />
         )}
-        {tab === "yaml" && <YamlEditor value={yamlContent} />}
+        {tab === "yaml" && (
+          <YamlEditor
+            value={yamlContent}
+            editable
+            onSave={async (body) => {
+              await updateMutation.mutateAsync({ name: system.metadata.name, body, rv: system.metadata.resourceVersion });
+              toast("success", "Agent system updated");
+            }}
+          />
+        )}
         {tab === "status" && (
           <div className="detail-grid">
             <div className="detail-field">

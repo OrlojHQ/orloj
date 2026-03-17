@@ -9,7 +9,7 @@ import { ListTodo, Plus } from "lucide-react";
 import type { Task } from "../api/types";
 import { CreateResourceDialog } from "../components/CreateResourceDialog";
 
-const PHASES = ["All", "Pending", "Running", "Succeeded", "Failed", "DeadLetter"];
+const PHASES = ["All", "Pending", "Running", "WaitingApproval", "Succeeded", "Failed", "DeadLetter"];
 
 export function Tasks() {
   const { data, isLoading } = useTasks();

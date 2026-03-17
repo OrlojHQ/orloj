@@ -1,12 +1,17 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useMemories } from "../api/hooks";
 import { ResourceTable, type Column } from "../components/ResourceTable";
 import { StatusBadge } from "../components/StatusBadge";
 import { EmptyState } from "../components/EmptyState";
-import { Brain } from "lucide-react";
+import { Brain, Plus } from "lucide-react";
 import type { Memory } from "../api/types";
+import { CreateResourceDialog } from "../components/CreateResourceDialog";
 
 export function Memories() {
+  const navigate = useNavigate();
   const { data, isLoading } = useMemories();
+  const [showCreate, setShowCreate] = useState(false);
   const memories = data ?? [];
 
   const columns: Column<Memory>[] = [
@@ -24,12 +29,18 @@ export function Memories() {
           <h1 className="page__title">Memories</h1>
           <p className="page__subtitle">{memories.length} memories</p>
         </div>
+        <div className="page__header-actions">
+          <button className="btn-primary" onClick={() => setShowCreate(true)}>
+            <Plus size={14} /> New Memory
+          </button>
+        </div>
       </div>
       {memories.length === 0 && !isLoading ? (
         <EmptyState icon={<Brain size={40} />} title="No Memories" description="Persistent memory configurations for agents." />
       ) : (
-        <ResourceTable columns={columns} data={memories} rowKey={(r) => r.metadata.name} loading={isLoading} />
+        <ResourceTable columns={columns} data={memories} rowKey={(r) => r.metadata.name} onRowClick={(r) => navigate(`/memories/${r.metadata.name}`)} loading={isLoading} />
       )}
+      <CreateResourceDialog kind="Memory" open={showCreate} onClose={() => setShowCreate(false)} />
     </div>
   );
 }

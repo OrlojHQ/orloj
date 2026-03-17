@@ -7,34 +7,59 @@ type WatchEvent = {
   object?: unknown;
 };
 
-function createEventSource(
+const INITIAL_BACKOFF = 1000;
+const MAX_BACKOFF = 30000;
+
+function createReconnectingSource(
   apiBase: string,
   path: string,
   namespace: string,
   token: string,
   onEvent: (evt: WatchEvent) => void,
-  onError?: () => void,
-): EventSource {
-  const base = apiBase.replace(/\/$/, "");
-  const url = new URL(`/v1/${path}`, base);
-  url.searchParams.set("namespace", namespace);
-  if (token.trim()) {
-    url.searchParams.set("token", token.trim());
+  abortSignal: AbortSignal,
+): void {
+  let backoff = INITIAL_BACKOFF;
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  function connect() {
+    if (abortSignal.aborted) return;
+
+    const base = apiBase.replace(/\/$/, "");
+    const url = new URL(`/v1/${path}`, base);
+    url.searchParams.set("namespace", namespace);
+    if (token.trim()) {
+      url.searchParams.set("token", token.trim());
+    }
+
+    const es = new EventSource(url.toString());
+
+    es.onopen = () => {
+      backoff = INITIAL_BACKOFF;
+    };
+
+    es.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data) as WatchEvent;
+        onEvent(data);
+      } catch {
+        // ignore parse errors
+      }
+    };
+
+    es.onerror = () => {
+      es.close();
+      if (abortSignal.aborted) return;
+      timeoutId = setTimeout(connect, backoff);
+      backoff = Math.min(backoff * 2, MAX_BACKOFF);
+    };
+
+    abortSignal.addEventListener("abort", () => {
+      es.close();
+      if (timeoutId != null) clearTimeout(timeoutId);
+    }, { once: true });
   }
 
-  const es = new EventSource(url.toString());
-  es.onmessage = (e) => {
-    try {
-      const data = JSON.parse(e.data) as WatchEvent;
-      onEvent(data);
-    } catch {
-      // ignore parse errors
-    }
-  };
-  es.onerror = () => {
-    onError?.();
-  };
-  return es;
+  connect();
 }
 
 export function useWatchInvalidation() {
@@ -43,16 +68,20 @@ export function useWatchInvalidation() {
   const namespace = useAppStore((s) => s.namespace);
   const token = useAppStore((s) => s.token);
   const connected = useAppStore((s) => s.connected);
-  const sourcesRef = useRef<EventSource[]>([]);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (!connected) return;
 
+    const abort = new AbortController();
+    abortRef.current = abort;
+
     const paths = ["tasks/watch", "agents/watch", "task-schedules/watch", "task-webhooks/watch", "events/watch"];
-    const sources = paths.map((path) =>
-      createEventSource(apiBase, path, namespace, token, (evt) => {
+
+    for (const path of paths) {
+      createReconnectingSource(apiBase, path, namespace, token, (evt) => {
         const eventType = (evt.type ?? "").toLowerCase();
-        if (eventType === "modified" || eventType === "added" || eventType === "deleted") {
+        if (eventType === "modified" || eventType === "updated" || eventType === "added" || eventType === "deleted") {
           if (path.startsWith("tasks")) {
             qc.invalidateQueries({ queryKey: ["Task"] });
           } else if (path.startsWith("agents")) {
@@ -65,12 +94,11 @@ export function useWatchInvalidation() {
             qc.invalidateQueries();
           }
         }
-      }),
-    );
+      }, abort.signal);
+    }
 
-    sourcesRef.current = sources;
     return () => {
-      sources.forEach((s) => s.close());
+      abort.abort();
     };
   }, [apiBase, namespace, token, connected, qc]);
 }

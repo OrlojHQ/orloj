@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Clipboard } from "lucide-react";
 import clsx from "clsx";
-import { useDeleteResource, useTaskWebhook, useTasks } from "../api/hooks";
+import { useDeleteResource, useTaskWebhook, useTasks, useUpdateResource } from "../api/hooks";
 import { StatusBadge } from "../components/StatusBadge";
 import { YamlEditor } from "../components/YamlEditor";
 import { ResourceTable, type Column } from "../components/ResourceTable";
@@ -32,6 +32,7 @@ export function TaskWebhookDetail() {
   const { data: taskWebhook, isLoading } = useTaskWebhook(name ?? "");
   const tasks = useTasks();
   const deleteMutation = useDeleteResource("TaskWebhook");
+  const updateMutation = useUpdateResource("TaskWebhook");
   const [tab, setTab] = useState<Tab>("overview");
 
   const webhookNamespace = taskWebhook?.metadata.namespace ?? "default";
@@ -260,7 +261,16 @@ export function TaskWebhookDetail() {
           />
         )}
 
-        {tab === "yaml" && <YamlEditor value={JSON.stringify(taskWebhook, null, 2)} />}
+        {tab === "yaml" && (
+          <YamlEditor
+            value={JSON.stringify(taskWebhook, null, 2)}
+            editable
+            onSave={async (body) => {
+              await updateMutation.mutateAsync({ name: taskWebhook.metadata.name, body, rv: taskWebhook.metadata.resourceVersion });
+              toast("success", "Task webhook updated");
+            }}
+          />
+        )}
       </div>
     </div>
   );

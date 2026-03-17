@@ -1,7 +1,8 @@
 import { useState, useMemo } from "react";
 import type { TaskTraceEvent } from "../api/types";
 import { StatusBadge } from "./StatusBadge";
-import { Clock, Cpu, Wrench, AlertTriangle, ChevronDown, ChevronRight, Zap } from "lucide-react";
+import { Clock, Cpu, Wrench, AlertTriangle, ChevronDown, ChevronRight, Zap, Download, Search } from "lucide-react";
+import { toast } from "./Toast";
 import clsx from "clsx";
 
 interface TraceViewProps {
@@ -73,6 +74,7 @@ export function TraceView({ trace }: TraceViewProps) {
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
   const [filterAgent, setFilterAgent] = useState<string | null>(null);
   const [filterBranch, setFilterBranch] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const stats = useMemo(() => computeStats(trace), [trace]);
 
@@ -84,12 +86,33 @@ export function TraceView({ trace }: TraceViewProps) {
   }, [trace]);
 
   const filteredTrace = useMemo(() => {
+    const q = searchQuery.toLowerCase();
     return trace.filter((ev) => {
       if (filterAgent && ev.agent !== filterAgent) return false;
       if (filterBranch && ev.branch_id !== filterBranch) return false;
+      if (q) {
+        const text = [ev.type, ev.agent, ev.tool, ev.message, ev.error_code, ev.error_reason, ev.step_id].filter(Boolean).join(" ").toLowerCase();
+        if (!text.includes(q)) return false;
+      }
       return true;
     });
-  }, [trace, filterAgent, filterBranch]);
+  }, [trace, filterAgent, filterBranch, searchQuery]);
+
+  const handleExport = () => {
+    try {
+      const json = JSON.stringify(trace, null, 2);
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `trace-${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast("success", "Trace exported");
+    } catch {
+      toast("error", "Failed to export trace");
+    }
+  };
 
   const originTime = useMemo(() => {
     if (trace.length === 0) return 0;
@@ -168,6 +191,22 @@ export function TraceView({ trace }: TraceViewProps) {
           )}
         </div>
       )}
+
+      <div className="trace-toolbar">
+        <Search size={14} className="text-muted" />
+        <input
+          className="trace-toolbar__search"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search trace events..."
+        />
+        <span className="log-viewer__match-count">{filteredTrace.length}/{trace.length} events</span>
+        <div className="log-viewer__actions">
+          <button className="btn-secondary btn-sm" onClick={handleExport}>
+            <Download size={13} /> Export JSON
+          </button>
+        </div>
+      </div>
 
       <div className="trace-view__waterfall">
         <div className="trace-view__header-row">

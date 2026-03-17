@@ -101,6 +101,16 @@ export async function del(resourcePath: string, name: string): Promise<void> {
   }
 }
 
+export async function postAction<T>(resourcePath: string, name: string, action: string): Promise<T> {
+  const { namespace } = getConnection();
+  const url = buildUrl(`${resourcePath}/${name}/${action}`, namespace);
+  return request<T>(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+}
+
 export async function getStatus<T>(resourcePath: string, name: string): Promise<T> {
   const { namespace } = getConnection();
   const url = buildUrl(`${resourcePath}/${name}/status`, namespace);
@@ -118,14 +128,23 @@ export async function getLogs(resourcePath: string, name: string): Promise<strin
   return resp.text();
 }
 
+interface MessagesResponse<T> {
+  name: string;
+  namespace: string;
+  total: number;
+  filtered_from: number;
+  lifecycle_counts: Record<string, number>;
+  messages: T[];
+}
+
 export async function getMessages<T>(
   name: string,
   filters?: Record<string, string>,
 ): Promise<T[]> {
   const { namespace } = getConnection();
   const url = buildUrl(`tasks/${name}/messages`, namespace, filters);
-  const data = await request<ListResponse<T>>(url);
-  return data.items ?? [];
+  const data = await request<MessagesResponse<T>>(url);
+  return data.messages ?? [];
 }
 
 export async function getMetrics<T>(name: string): Promise<T> {

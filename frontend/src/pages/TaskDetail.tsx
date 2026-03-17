@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useTask, useTaskMessages, useTaskMetrics, useTaskLogs, useAgentSystem } from "../api/hooks";
+import { useTask, useTaskMessages, useTaskMetrics, useTaskLogs, useAgentSystem, useDeleteResource, useUpdateResource } from "../api/hooks";
+import { toast } from "../components/Toast";
 import { StatusBadge } from "../components/StatusBadge";
 import { YamlEditor } from "../components/YamlEditor";
 import { LogViewer } from "../components/LogViewer";
@@ -20,7 +21,20 @@ export function TaskDetail() {
   const metrics = useTaskMetrics(name ?? "");
   const logs = useTaskLogs(name ?? "");
   const system = useAgentSystem(task?.spec.system ?? "");
+  const deleteMutation = useDeleteResource("Task");
+  const updateMutation = useUpdateResource("Task");
   const [tab, setTab] = useState<Tab>("overview");
+
+  const handleDelete = async () => {
+    if (!task || !window.confirm(`Delete Task ${task.metadata.name}?`)) return;
+    try {
+      await deleteMutation.mutateAsync(task.metadata.name);
+      toast("success", "Task deleted successfully");
+      navigate("/tasks");
+    } catch (err) {
+      toast("error", err instanceof Error ? err.message : "Failed to delete Task");
+    }
+  };
 
   if (isLoading || !task) {
     return <div className="page"><div className="loading-placeholder">Loading task...</div></div>;
@@ -53,6 +67,13 @@ export function TaskDetail() {
           </div>
           <StatusBadge phase={task.status?.phase} size="md" pulse={task.status?.phase === "Running"} />
         </div>
+        <button
+          className="btn-secondary text-red"
+          onClick={handleDelete}
+          disabled={deleteMutation.isPending}
+        >
+          {deleteMutation.isPending ? "Deleting..." : "Delete Task"}
+        </button>
       </div>
 
       <div className="tab-bar">
@@ -169,7 +190,16 @@ export function TaskDetail() {
         )}
         {tab === "graph" && !system.data && <p className="text-muted">System not found</p>}
 
-        {tab === "yaml" && <YamlEditor value={JSON.stringify(task, null, 2)} />}
+        {tab === "yaml" && (
+          <YamlEditor
+            value={JSON.stringify(task, null, 2)}
+            editable
+            onSave={async (body) => {
+              await updateMutation.mutateAsync({ name: task.metadata.name, body, rv: task.metadata.resourceVersion });
+              toast("success", "Task updated");
+            }}
+          />
+        )}
       </div>
     </div>
   );

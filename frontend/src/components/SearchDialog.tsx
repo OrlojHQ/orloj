@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, X, Network, Bot, ListTodo, Cpu, Database, Wrench, CalendarClock, Webhook } from "lucide-react";
-import { useAgentSystems, useAgents, useTasks, useTaskSchedules, useTaskWebhooks, useWorkers, useModelEndpoints, useTools } from "../api/hooks";
+import { Search, X, Network, Bot, ListTodo, Cpu, Database, Wrench, CalendarClock, Webhook, Lock, Brain, Shield, KeyRound, ShieldCheck } from "lucide-react";
+import { useAgentSystems, useAgents, useTasks, useTaskSchedules, useTaskWebhooks, useWorkers, useModelEndpoints, useTools, useSecrets, useMemories, useAgentPolicies, useAgentRoles, useToolPermissions, useToolApprovals } from "../api/hooks";
 
 interface SearchResult {
   kind: string;
@@ -23,6 +23,12 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
   const tools = useTools();
   const taskSchedules = useTaskSchedules();
   const taskWebhooks = useTaskWebhooks();
+  const secrets = useSecrets();
+  const memories = useMemories();
+  const policies = useAgentPolicies();
+  const roles = useAgentRoles();
+  const permissions = useToolPermissions();
+  const approvals = useToolApprovals();
 
   useEffect(() => {
     if (open) {
@@ -49,16 +55,34 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
       results.push({ kind: "TaskWebhook", name: w.metadata.name, path: `/task-webhooks/${w.metadata.name}`, icon: <Webhook size={14} /> });
     }
     for (const w of workers.data ?? []) {
-      results.push({ kind: "Worker", name: w.metadata.name, path: `/workers`, icon: <Cpu size={14} /> });
+      results.push({ kind: "Worker", name: w.metadata.name, path: `/workers/${w.metadata.name}`, icon: <Cpu size={14} /> });
     }
     for (const m of models.data ?? []) {
-      results.push({ kind: "Model", name: m.metadata.name, path: `/models`, icon: <Database size={14} /> });
+      results.push({ kind: "Model", name: m.metadata.name, path: `/models/${m.metadata.name}`, icon: <Database size={14} /> });
     }
     for (const t of tools.data ?? []) {
-      results.push({ kind: "Tool", name: t.metadata.name, path: `/tools`, icon: <Wrench size={14} /> });
+      results.push({ kind: "Tool", name: t.metadata.name, path: `/tools/${t.metadata.name}`, icon: <Wrench size={14} /> });
+    }
+    for (const s of secrets.data ?? []) {
+      results.push({ kind: "Secret", name: s.metadata.name, path: `/secrets/${s.metadata.name}`, icon: <Lock size={14} /> });
+    }
+    for (const m of memories.data ?? []) {
+      results.push({ kind: "Memory", name: m.metadata.name, path: `/memories/${m.metadata.name}`, icon: <Brain size={14} /> });
+    }
+    for (const p of policies.data ?? []) {
+      results.push({ kind: "Policy", name: p.metadata.name, path: `/policies/${p.metadata.name}`, icon: <Shield size={14} /> });
+    }
+    for (const r of roles.data ?? []) {
+      results.push({ kind: "Role", name: r.metadata.name, path: `/roles/${r.metadata.name}`, icon: <KeyRound size={14} /> });
+    }
+    for (const p of permissions.data ?? []) {
+      results.push({ kind: "Permission", name: p.metadata.name, path: `/permissions/${p.metadata.name}`, icon: <KeyRound size={14} /> });
+    }
+    for (const a of approvals.data ?? []) {
+      results.push({ kind: "Approval", name: a.metadata.name, path: `/approvals/${a.metadata.name}`, icon: <ShieldCheck size={14} /> });
     }
     return results;
-  }, [systems.data, agents.data, tasks.data, taskSchedules.data, taskWebhooks.data, workers.data, models.data, tools.data]);
+  }, [systems.data, agents.data, tasks.data, taskSchedules.data, taskWebhooks.data, workers.data, models.data, tools.data, secrets.data, memories.data, policies.data, roles.data, permissions.data, approvals.data]);
 
   const filtered = useMemo(() => {
     if (!query.trim()) return allResults.slice(0, 20);

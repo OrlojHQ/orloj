@@ -1,5 +1,7 @@
+import { useMemo } from "react";
 import { NavLink } from "react-router-dom";
 import { useAppStore } from "../store";
+import { useToolApprovals } from "../api/hooks";
 import clsx from "clsx";
 import {
   LayoutDashboard,
@@ -12,6 +14,7 @@ import {
   Database,
   Brain,
   Shield,
+  ShieldCheck,
   KeyRound,
   Lock,
   Webhook,
@@ -42,11 +45,17 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/policies", icon: <Shield size={18} />, label: "Policies", group: "Governance" },
   { to: "/roles", icon: <KeyRound size={18} />, label: "Roles", group: "Governance" },
   { to: "/permissions", icon: <KeyRound size={18} />, label: "Permissions", group: "Governance" },
+  { to: "/approvals", icon: <ShieldCheck size={18} />, label: "Approvals", group: "Governance" },
 ];
 
 export function Sidebar() {
   const collapsed = useAppStore((s) => s.sidebarCollapsed);
   const toggle = useAppStore((s) => s.toggleSidebar);
+  const approvals = useToolApprovals();
+
+  const pendingCount = useMemo(() => {
+    return (approvals.data ?? []).filter((a) => (a.status?.phase ?? "Pending").toLowerCase() === "pending").length;
+  }, [approvals.data]);
 
   let lastGroup: string | undefined;
 
@@ -63,6 +72,7 @@ export function Sidebar() {
         {NAV_ITEMS.map((item) => {
           const showGroup = !collapsed && item.group && item.group !== lastGroup;
           lastGroup = item.group;
+          const badge = item.to === "/approvals" && pendingCount > 0 ? pendingCount : 0;
           return (
             <div key={item.to}>
               {showGroup && <div className="sidebar__group-label">{item.group}</div>}
@@ -76,6 +86,7 @@ export function Sidebar() {
               >
                 <span className="sidebar__link-icon">{item.icon}</span>
                 {!collapsed && <span className="sidebar__link-label">{item.label}</span>}
+                {badge > 0 && <span className="sidebar__badge">{badge}</span>}
               </NavLink>
             </div>
           );

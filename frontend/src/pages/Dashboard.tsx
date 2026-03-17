@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { MetricCard } from "../components/MetricCard";
 import {
   useAgentSystems,
@@ -8,6 +9,8 @@ import {
   useWorkers,
   useModelEndpoints,
   useTools,
+  useToolApprovals,
+  useHealthCheck,
 } from "../api/hooks";
 import {
   Network,
@@ -22,6 +25,8 @@ import {
   Clock,
   XCircle,
   Webhook,
+  ShieldCheck,
+  Activity,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { StatusBadge } from "../components/StatusBadge";
@@ -40,6 +45,8 @@ export function Dashboard() {
   const workers = useWorkers();
   const models = useModelEndpoints();
   const tools = useTools();
+  const approvals = useToolApprovals();
+  const health = useHealthCheck();
   const navigate = useNavigate();
 
   const taskList = tasks.data ?? [];
@@ -51,6 +58,18 @@ export function Dashboard() {
 
   const totalTasks = taskList.length;
   const healthyPct = totalTasks > 0 ? Math.round((succeeded / totalTasks) * 100) : 0;
+  const successColor = healthyPct >= 95 ? "green" : healthyPct >= 80 ? "yellow" : "red";
+
+  const workerList = workers.data ?? [];
+  const workersOnline = workerList.filter((w) => (w.status?.phase ?? "").toLowerCase() === "healthy").length;
+
+  const modelList = models.data ?? [];
+  const modelsReady = modelList.filter((m) => (m.status?.phase ?? "").toLowerCase() === "ready").length;
+
+  const pendingApprovals = useMemo(() =>
+    (approvals.data ?? []).filter((a) => (a.status?.phase ?? "Pending").toLowerCase() === "pending").length,
+    [approvals.data],
+  );
 
   return (
     <div className="page">
@@ -108,6 +127,43 @@ export function Dashboard() {
           icon={<Wrench size={16} />}
           variant="default"
         />
+      </div>
+
+      <div className="attention-cards">
+        <div className="attention-card" onClick={() => navigate("/workers")}>
+          <Activity size={20} className={`attention-card__icon ${health.data ? "text-green" : "text-red"}`} />
+          <div className="attention-card__body">
+            <div className="attention-card__title">{health.data ? "API Healthy" : "API Unreachable"}</div>
+            <div className="attention-card__desc">{workersOnline}/{workerList.length} workers online</div>
+          </div>
+        </div>
+        <div className="attention-card" onClick={() => navigate("/models")}>
+          <Database size={20} className="attention-card__icon text-blue" />
+          <div className="attention-card__body">
+            <div className="attention-card__title">Model Endpoints</div>
+            <div className="attention-card__desc">{modelsReady}/{modelList.length} ready</div>
+          </div>
+        </div>
+        {(failed + deadletter) > 0 && (
+          <div className="attention-card attention-card--error" onClick={() => navigate("/tasks")}>
+            <XCircle size={20} className="attention-card__icon text-red" />
+            <div className="attention-card__body">
+              <div className="attention-card__title">Task Failures</div>
+              <div className="attention-card__desc">{failed} failed, {deadletter} dead-letter</div>
+            </div>
+            <div className="attention-card__count text-red">{failed + deadletter}</div>
+          </div>
+        )}
+        {pendingApprovals > 0 && (
+          <div className="attention-card attention-card--warning" onClick={() => navigate("/approvals")}>
+            <ShieldCheck size={20} className="attention-card__icon text-orange" />
+            <div className="attention-card__body">
+              <div className="attention-card__title">Pending Approvals</div>
+              <div className="attention-card__desc">{pendingApprovals} awaiting review</div>
+            </div>
+            <div className="attention-card__count text-orange">{pendingApprovals}</div>
+          </div>
+        )}
       </div>
 
       <div className="dashboard-row">
@@ -168,7 +224,7 @@ export function Dashboard() {
                 <AlertTriangle size={12} className="text-orange" /> DeadLetter: {deadletter}
               </span>
             </div>
-            <p className="task-health__pct">{healthyPct}% success rate</p>
+            <p className={`task-health__pct text-${successColor}`}>{healthyPct}% success rate</p>
           </div>
         </div>
 
@@ -224,7 +280,7 @@ export function Dashboard() {
               <div
                 key={w.metadata.name}
                 className="recent-list__item"
-                onClick={() => navigate(`/workers`)}
+                onClick={() => navigate(`/workers/${w.metadata.name}`)}
               >
                 <span className="recent-list__name mono">{w.metadata.name}</span>
                 <span className="text-muted">

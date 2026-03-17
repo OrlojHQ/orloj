@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useAgent, useAgentLogs } from "../api/hooks";
+import { useAgent, useAgentLogs, useDeleteResource, useUpdateResource } from "../api/hooks";
+import { toast } from "../components/Toast";
 import { StatusBadge } from "../components/StatusBadge";
 import { YamlEditor } from "../components/YamlEditor";
 import { LogViewer } from "../components/LogViewer";
@@ -14,7 +15,20 @@ export function AgentDetail() {
   const navigate = useNavigate();
   const { data: agent, isLoading } = useAgent(name ?? "");
   const logs = useAgentLogs(name ?? "");
+  const deleteMutation = useDeleteResource("Agent");
+  const updateMutation = useUpdateResource("Agent");
   const [tab, setTab] = useState<Tab>("overview");
+
+  const handleDelete = async () => {
+    if (!agent || !window.confirm(`Delete Agent ${agent.metadata.name}?`)) return;
+    try {
+      await deleteMutation.mutateAsync(agent.metadata.name);
+      toast("success", "Agent deleted successfully");
+      navigate("/agents");
+    } catch (err) {
+      toast("error", err instanceof Error ? err.message : "Failed to delete Agent");
+    }
+  };
 
   if (isLoading || !agent) {
     return <div className="page"><div className="loading-placeholder">Loading agent...</div></div>;
@@ -39,6 +53,13 @@ export function AgentDetail() {
           </div>
           <StatusBadge phase={agent.status?.phase} size="md" />
         </div>
+        <button
+          className="btn-secondary text-red"
+          onClick={handleDelete}
+          disabled={deleteMutation.isPending}
+        >
+          {deleteMutation.isPending ? "Deleting..." : "Delete Agent"}
+        </button>
       </div>
 
       <div className="tab-bar">
@@ -90,7 +111,16 @@ export function AgentDetail() {
             )}
           </div>
         )}
-        {tab === "yaml" && <YamlEditor value={JSON.stringify(agent, null, 2)} />}
+        {tab === "yaml" && (
+          <YamlEditor
+            value={JSON.stringify(agent, null, 2)}
+            editable
+            onSave={async (body) => {
+              await updateMutation.mutateAsync({ name: agent.metadata.name, body, rv: agent.metadata.resourceVersion });
+              toast("success", "Agent updated");
+            }}
+          />
+        )}
         {tab === "logs" && <LogViewer logs={logs.data ?? ""} loading={logs.isLoading} />}
       </div>
     </div>

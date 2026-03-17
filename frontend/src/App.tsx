@@ -19,13 +19,25 @@ import { TaskScheduleDetail } from "./pages/TaskScheduleDetail";
 import { TaskWebhooks } from "./pages/TaskWebhooks";
 import { TaskWebhookDetail } from "./pages/TaskWebhookDetail";
 import { Workers } from "./pages/Workers";
+import { WorkerDetail } from "./pages/WorkerDetail";
 import { ModelEndpoints } from "./pages/ModelEndpoints";
+import { ModelEndpointDetail } from "./pages/ModelEndpointDetail";
 import { Tools } from "./pages/Tools";
+import { ToolDetail } from "./pages/ToolDetail";
 import { Memories } from "./pages/Memories";
+import { MemoryDetail } from "./pages/MemoryDetail";
 import { Secrets } from "./pages/Secrets";
+import { SecretDetail } from "./pages/SecretDetail";
 import { Policies } from "./pages/Policies";
+import { AgentPolicyDetail } from "./pages/AgentPolicyDetail";
 import { Roles } from "./pages/Roles";
+import { AgentRoleDetail } from "./pages/AgentRoleDetail";
 import { Permissions } from "./pages/Permissions";
+import { ToolPermissionDetail } from "./pages/ToolPermissionDetail";
+import { ToolApprovals } from "./pages/ToolApprovals";
+import { ToolApprovalDetail } from "./pages/ToolApprovalDetail";
+import { NotFound } from "./pages/NotFound";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import clsx from "clsx";
 
 const queryClient = new QueryClient({
@@ -73,27 +85,40 @@ function AppLayout() {
       <div className="app-layout__main">
         <TopBar />
         <main id="main-content" className="app-layout__content" role="main">
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/systems" element={<AgentSystems />} />
-            <Route path="/systems/:name" element={<AgentSystemDetail />} />
-            <Route path="/agents" element={<Agents />} />
-            <Route path="/agents/:name" element={<AgentDetail />} />
-            <Route path="/tasks" element={<Tasks />} />
-            <Route path="/tasks/:name" element={<TaskDetail />} />
-            <Route path="/task-schedules" element={<TaskSchedules />} />
-            <Route path="/task-schedules/:name" element={<TaskScheduleDetail />} />
-            <Route path="/task-webhooks" element={<TaskWebhooks />} />
-            <Route path="/task-webhooks/:name" element={<TaskWebhookDetail />} />
-            <Route path="/workers" element={<Workers />} />
-            <Route path="/models" element={<ModelEndpoints />} />
-            <Route path="/tools" element={<Tools />} />
-            <Route path="/memories" element={<Memories />} />
-            <Route path="/secrets" element={<Secrets />} />
-            <Route path="/policies" element={<Policies />} />
-            <Route path="/roles" element={<Roles />} />
-            <Route path="/permissions" element={<Permissions />} />
-          </Routes>
+          <ErrorBoundary>
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/systems" element={<AgentSystems />} />
+              <Route path="/systems/:name" element={<AgentSystemDetail />} />
+              <Route path="/agents" element={<Agents />} />
+              <Route path="/agents/:name" element={<AgentDetail />} />
+              <Route path="/tasks" element={<Tasks />} />
+              <Route path="/tasks/:name" element={<TaskDetail />} />
+              <Route path="/task-schedules" element={<TaskSchedules />} />
+              <Route path="/task-schedules/:name" element={<TaskScheduleDetail />} />
+              <Route path="/task-webhooks" element={<TaskWebhooks />} />
+              <Route path="/task-webhooks/:name" element={<TaskWebhookDetail />} />
+              <Route path="/workers" element={<Workers />} />
+              <Route path="/workers/:name" element={<WorkerDetail />} />
+              <Route path="/models" element={<ModelEndpoints />} />
+              <Route path="/models/:name" element={<ModelEndpointDetail />} />
+              <Route path="/tools" element={<Tools />} />
+              <Route path="/tools/:name" element={<ToolDetail />} />
+              <Route path="/memories" element={<Memories />} />
+              <Route path="/memories/:name" element={<MemoryDetail />} />
+              <Route path="/secrets" element={<Secrets />} />
+              <Route path="/secrets/:name" element={<SecretDetail />} />
+              <Route path="/policies" element={<Policies />} />
+              <Route path="/policies/:name" element={<AgentPolicyDetail />} />
+              <Route path="/roles" element={<Roles />} />
+              <Route path="/roles/:name" element={<AgentRoleDetail />} />
+              <Route path="/permissions" element={<Permissions />} />
+              <Route path="/permissions/:name" element={<ToolPermissionDetail />} />
+              <Route path="/approvals" element={<ToolApprovals />} />
+              <Route path="/approvals/:name" element={<ToolApprovalDetail />} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </ErrorBoundary>
         </main>
       </div>
       <ToastContainer />

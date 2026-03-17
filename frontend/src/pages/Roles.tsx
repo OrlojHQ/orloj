@@ -1,12 +1,17 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAgentRoles } from "../api/hooks";
 import { ResourceTable, type Column } from "../components/ResourceTable";
 import { StatusBadge } from "../components/StatusBadge";
 import { EmptyState } from "../components/EmptyState";
-import { KeyRound } from "lucide-react";
+import { KeyRound, Plus } from "lucide-react";
 import type { AgentRole } from "../api/types";
+import { CreateResourceDialog } from "../components/CreateResourceDialog";
 
 export function Roles() {
+  const navigate = useNavigate();
   const { data, isLoading } = useAgentRoles();
+  const [showCreate, setShowCreate] = useState(false);
   const roles = data ?? [];
 
   const columns: Column<AgentRole>[] = [
@@ -24,12 +29,18 @@ export function Roles() {
           <h1 className="page__title">Agent Roles</h1>
           <p className="page__subtitle">{roles.length} roles</p>
         </div>
+        <div className="page__header-actions">
+          <button className="btn-primary" onClick={() => setShowCreate(true)}>
+            <Plus size={14} /> New Role
+          </button>
+        </div>
       </div>
       {roles.length === 0 && !isLoading ? (
         <EmptyState icon={<KeyRound size={40} />} title="No Roles" description="Permission grants bound to agents." />
       ) : (
-        <ResourceTable columns={columns} data={roles} rowKey={(r) => r.metadata.name} loading={isLoading} />
+        <ResourceTable columns={columns} data={roles} rowKey={(r) => r.metadata.name} onRowClick={(r) => navigate(`/roles/${r.metadata.name}`)} loading={isLoading} />
       )}
+      <CreateResourceDialog kind="AgentRole" open={showCreate} onClose={() => setShowCreate(false)} />
     </div>
   );
 }

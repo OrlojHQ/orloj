@@ -10,6 +10,7 @@ import type {
   AgentPolicy,
   AgentRole,
   ToolPermission,
+  ToolApproval,
   Task,
   TaskSchedule,
   TaskWebhook,
@@ -80,21 +81,61 @@ export function useTool(name: string) {
 export function useSecrets() {
   return useResourceList<Secret>("Secret", RESOURCE_ENDPOINTS.Secret);
 }
+export function useSecret(name: string) {
+  return useResourceGet<Secret>("Secret", RESOURCE_ENDPOINTS.Secret, name);
+}
 
 export function useMemories() {
   return useResourceList<Memory>("Memory", RESOURCE_ENDPOINTS.Memory);
+}
+export function useMemory(name: string) {
+  return useResourceGet<Memory>("Memory", RESOURCE_ENDPOINTS.Memory, name);
 }
 
 export function useAgentPolicies() {
   return useResourceList<AgentPolicy>("AgentPolicy", RESOURCE_ENDPOINTS.AgentPolicy);
 }
+export function useAgentPolicy(name: string) {
+  return useResourceGet<AgentPolicy>("AgentPolicy", RESOURCE_ENDPOINTS.AgentPolicy, name);
+}
 
 export function useAgentRoles() {
   return useResourceList<AgentRole>("AgentRole", RESOURCE_ENDPOINTS.AgentRole);
 }
+export function useAgentRole(name: string) {
+  return useResourceGet<AgentRole>("AgentRole", RESOURCE_ENDPOINTS.AgentRole, name);
+}
 
 export function useToolPermissions() {
   return useResourceList<ToolPermission>("ToolPermission", RESOURCE_ENDPOINTS.ToolPermission);
+}
+export function useToolPermission(name: string) {
+  return useResourceGet<ToolPermission>("ToolPermission", RESOURCE_ENDPOINTS.ToolPermission, name);
+}
+
+export function useToolApprovals() {
+  return useResourceList<ToolApproval>("ToolApproval", RESOURCE_ENDPOINTS.ToolApproval);
+}
+export function useToolApproval(name: string) {
+  return useResourceGet<ToolApproval>("ToolApproval", RESOURCE_ENDPOINTS.ToolApproval, name);
+}
+
+export function useApproveToolApproval() {
+  const qc = useQueryClient();
+  const ns = useNamespace();
+  return useMutation({
+    mutationFn: (name: string) => client.postAction("tool-approvals", name, "approve"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["ToolApproval", ns] }),
+  });
+}
+
+export function useDenyToolApproval() {
+  const qc = useQueryClient();
+  const ns = useNamespace();
+  return useMutation({
+    mutationFn: (name: string) => client.postAction("tool-approvals", name, "deny"),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["ToolApproval", ns] }),
+  });
 }
 
 export function useTasks() {

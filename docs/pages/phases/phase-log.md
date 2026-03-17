@@ -451,6 +451,59 @@ Deliverables:
 - updated `docs/pages/operations/monitoring-alerts.md`:
   - documented CI alert profile and its use in the reliability CI job
 
+## Frontend Full Sync
+
+Full frontend-backend synchronization. Brought the UI to parity with the 14 backend resource kinds, adding CRUD capabilities, detail pages, and new field display across the board.
+
+Deliverables:
+
+- **ToolApproval resource support**:
+  - added `ToolApproval` type, `RESOURCE_ENDPOINTS` entry, list/get hooks, and approve/deny mutation hooks
+  - added `postAction` helper to the API client for `/approve` and `/deny` sub-endpoints
+  - created `ToolApprovals.tsx` list page with phase filtering (Pending, Approved, Denied, Expired)
+  - created `ToolApprovalDetail.tsx` detail page with approve/deny action buttons and delete
+  - added `/approvals` and `/approvals/:name` routes
+  - added Approvals entry to sidebar under Governance group
+- **StatusBadge phases**: added `WaitingApproval`, `Approved`, `Denied`, `Expired` phase mappings
+- **Task filter**: added `WaitingApproval` to task list phase filter pills
+- **Create dialogs**: added templates for Tool, Secret, ModelEndpoint, Memory, AgentPolicy, AgentRole, ToolPermission, ToolApproval; added create buttons to all list pages that lacked them (Agents, Tools, ModelEndpoints, Secrets, Memories, Policies, Roles, Permissions)
+- **Delete support**: wired delete functionality into AgentDetail, AgentSystemDetail, and TaskDetail (all new detail pages were created with delete included)
+- **Detail pages**: created ToolDetail, ModelEndpointDetail, WorkerDetail, SecretDetail (with redacted values), MemoryDetail, AgentPolicyDetail, AgentRoleDetail, ToolPermissionDetail
+- **Routing**: added detail routes for all 8 new detail pages; made all list page rows clickable with navigation to detail views
+- **YAML Edit + Save**: extended `YamlEditor` with `editable` and `onSave` props (edit/save/cancel toolbar with error display); wired editable YAML into all 14 detail pages using `useUpdateResource` with optimistic resource version
+- **Search coverage**: expanded `SearchDialog` to include Secrets, Memories, Policies, Roles, Permissions, and Approvals; updated existing search paths to use detail page routes
+- **New field display**: added operation_classes column to Tools list; added operation rules count to Permissions list; Tool detail page shows auth profiles and runtime config
+- **Pending approval badge**: sidebar shows a count badge next to Approvals when there are pending tool approvals
+- **CSS additions**: sidebar badge styles, YAML editor toolbar styles, small button variant
+
+## Frontend Polish Pass
+
+Bug fixes, production UX fundamentals, and component improvements to prepare the frontend for launch.
+
+Deliverables:
+
+- **Bug fix: task messages never loaded**: `api/client.ts` `getMessages()` expected `{ items }` but the backend returns `{ messages }`. Changed to read `data.messages` with a proper `MessagesResponse` type.
+- **Bug fix: watch SSE missed updates**: backend sends event type `updated` but the watch handler only matched `modified`. Added `updated` to the match condition.
+- **Error boundary**: created `ErrorBoundary.tsx` (class component with `getDerivedStateFromError`/`componentDidCatch`); wraps all route content in `App.tsx`. Shows friendly error message with reload button instead of blank screen.
+- **404 page**: created `NotFound.tsx` with "Page Not Found" message and "Go to Dashboard" button. Added `<Route path="*">` catch-all at end of route list.
+- **HTML meta tags**: added `description` and `theme-color` (light/dark media queries) meta tags to `index.html`.
+- **Dashboard improvements**:
+  - added health summary row: API health status, worker online count, model endpoint ready count
+  - added attention cards: task failures card (with count, links to /tasks) and pending approvals card (with count, links to /approvals) — only shown when non-zero
+  - success rate text now color-coded (green >=95%, yellow >=80%, red <80%)
+  - worker list items now link to individual worker detail pages
+- **LogViewer overhaul** (30 lines to 130 lines):
+  - search with match highlighting, match count, and prev/next navigation
+  - auto-scroll toggle to follow new log output
+  - copy-to-clipboard button
+  - log level coloring: ERROR (red), WARN (orange), INFO (blue), DEBUG (muted)
+- **TraceView improvements**:
+  - export button to download trace events as JSON file
+  - text search input that filters trace events by content (type, agent, tool, message, error fields)
+  - filtered event count display
+- **Watch SSE reconnection**: rewrote `watch.ts` to use `createReconnectingSource` with exponential backoff (1s initial, 30s cap). Backoff resets on successful connection. Uses `AbortController` for clean teardown.
+- **CSS additions**: error boundary, not-found page, log viewer toolbar/search/level coloring, attention cards, trace toolbar styles
+
 ## Documentation Process
 
 For each new phase:

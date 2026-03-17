@@ -1,14 +1,17 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAgents } from "../api/hooks";
 import { ResourceTable, type Column } from "../components/ResourceTable";
 import { StatusBadge } from "../components/StatusBadge";
 import { EmptyState } from "../components/EmptyState";
-import { Bot } from "lucide-react";
+import { Bot, Plus } from "lucide-react";
 import type { Agent } from "../api/types";
+import { CreateResourceDialog } from "../components/CreateResourceDialog";
 
 export function Agents() {
   const { data, isLoading } = useAgents();
   const navigate = useNavigate();
+  const [showCreate, setShowCreate] = useState(false);
   const agents = data ?? [];
 
   const columns: Column<Agent>[] = [
@@ -25,13 +28,21 @@ export function Agents() {
     return (
       <div className="page">
         <div className="page__header">
-          <h1 className="page__title">Agents</h1>
+          <div>
+            <h1 className="page__title">Agents</h1>
+          </div>
+          <div className="page__header-actions">
+            <button className="btn-primary" onClick={() => setShowCreate(true)}>
+              <Plus size={14} /> New Agent
+            </button>
+          </div>
         </div>
         <EmptyState
           icon={<Bot size={40} />}
           title="No Agents"
           description="Create agents to define individual AI runtime configurations."
         />
+        <CreateResourceDialog kind="Agent" open={showCreate} onClose={() => setShowCreate(false)} />
       </div>
     );
   }
@@ -43,6 +54,11 @@ export function Agents() {
           <h1 className="page__title">Agents</h1>
           <p className="page__subtitle">{agents.length} agents</p>
         </div>
+        <div className="page__header-actions">
+          <button className="btn-primary" onClick={() => setShowCreate(true)}>
+            <Plus size={14} /> New Agent
+          </button>
+        </div>
       </div>
       <ResourceTable
         columns={columns}
@@ -51,6 +67,7 @@ export function Agents() {
         onRowClick={(r) => navigate(`/agents/${r.metadata.name}`)}
         loading={isLoading}
       />
+      <CreateResourceDialog kind="Agent" open={showCreate} onClose={() => setShowCreate(false)} />
     </div>
   );
 }

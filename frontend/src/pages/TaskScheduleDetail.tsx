@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useDeleteResource, useTaskSchedule, useTasks } from "../api/hooks";
+import { useDeleteResource, useTaskSchedule, useTasks, useUpdateResource } from "../api/hooks";
 import { StatusBadge } from "../components/StatusBadge";
 import { YamlEditor } from "../components/YamlEditor";
 import { ResourceTable, type Column } from "../components/ResourceTable";
@@ -21,6 +21,7 @@ export function TaskScheduleDetail() {
   const { data: taskSchedule, isLoading } = useTaskSchedule(name ?? "");
   const tasks = useTasks();
   const deleteMutation = useDeleteResource("TaskSchedule");
+  const updateMutation = useUpdateResource("TaskSchedule");
   const [tab, setTab] = useState<Tab>("overview");
 
   const scheduleNamespace = taskSchedule?.metadata.namespace ?? "default";
@@ -203,7 +204,16 @@ export function TaskScheduleDetail() {
           />
         )}
 
-        {tab === "yaml" && <YamlEditor value={JSON.stringify(taskSchedule, null, 2)} />}
+        {tab === "yaml" && (
+          <YamlEditor
+            value={JSON.stringify(taskSchedule, null, 2)}
+            editable
+            onSave={async (body) => {
+              await updateMutation.mutateAsync({ name: taskSchedule.metadata.name, body, rv: taskSchedule.metadata.resourceVersion });
+              toast("success", "Task schedule updated");
+            }}
+          />
+        )}
       </div>
     </div>
   );

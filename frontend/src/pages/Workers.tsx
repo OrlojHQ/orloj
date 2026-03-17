@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import { useWorkers } from "../api/hooks";
 import { ResourceTable, type Column } from "../components/ResourceTable";
 import { StatusBadge } from "../components/StatusBadge";
@@ -6,6 +7,7 @@ import { Cpu } from "lucide-react";
 import type { Worker } from "../api/types";
 
 export function Workers() {
+  const navigate = useNavigate();
   const { data, isLoading } = useWorkers();
   const workers = data ?? [];
 
@@ -43,7 +45,7 @@ export function Workers() {
       {workers.length === 0 && !isLoading ? (
         <EmptyState icon={<Cpu size={40} />} title="No Workers" description="Workers claim and execute tasks from the queue." />
       ) : (
-        <ResourceTable columns={columns} data={workers} rowKey={(r) => r.metadata.name} loading={isLoading} />
+        <ResourceTable columns={columns} data={workers} rowKey={(r) => r.metadata.name} onRowClick={(r) => navigate(`/workers/${r.metadata.name}`)} loading={isLoading} />
       )}
     </div>
   );

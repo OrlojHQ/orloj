@@ -10,7 +10,7 @@ This roadmap is forward-looking only. Completed delivery history is tracked in `
 
 ## Release Gate 0: Deferred Items
 
-Gate 0 is largely complete. The following items were evaluated during the pre-launch audit and deferred to post-launch hardening. See `docs/pages/phases/phase-log.md` for completed Gate 0 work.
+Gate 0 is largely complete. The frontend is fully synced with current backend capabilities (14 resource kinds with full CRUD, detail pages, YAML edit, and search). The following items were evaluated during the pre-launch audit and deferred to post-launch hardening. See `docs/pages/phases/phase-log.md` for completed Gate 0 work.
 
 ### 0.6 Draft-to-Stable Contract Graduation
 

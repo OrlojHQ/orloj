@@ -114,9 +114,28 @@ export interface ToolSpec {
   type?: string;
   endpoint?: string;
   capabilities?: string[];
+  operation_classes?: string[];
   risk_level?: string;
   runtime?: ToolRuntimePolicy;
-  auth?: { secretRef?: string };
+  auth?: ToolAuth;
+}
+
+export interface ToolAuth {
+  profile?: string;
+  profiles?: ToolAuthProfile[];
+  secretRef?: string;
+  headerName?: string;
+  tokenURL?: string;
+  scopes?: string[];
+}
+
+export interface ToolAuthProfile {
+  name?: string;
+  profile?: string;
+  secretRef?: string;
+  headerName?: string;
+  tokenURL?: string;
+  scopes?: string[];
 }
 
 export interface ToolRuntimePolicy {
@@ -232,6 +251,12 @@ export interface ToolPermissionSpec {
   match_mode?: string;
   apply_mode?: string;
   target_agents?: string[];
+  operation_rules?: OperationRule[];
+}
+
+export interface OperationRule {
+  operation_class?: string;
+  verdict?: string;
 }
 
 export interface ToolPermissionStatus {
@@ -442,6 +467,32 @@ export interface TaskJoinState {
   sources?: TaskJoinSource[];
 }
 
+export interface ToolApproval {
+  apiVersion: string;
+  kind: string;
+  metadata: ObjectMeta;
+  spec: ToolApprovalSpec;
+  status?: ToolApprovalStatus;
+}
+
+export interface ToolApprovalSpec {
+  task_ref?: string;
+  tool?: string;
+  operation_class?: string;
+  agent?: string;
+  input?: Record<string, string>;
+  reason?: string;
+  ttl?: string;
+}
+
+export interface ToolApprovalStatus {
+  phase?: string;
+  decision?: string;
+  decided_by?: string;
+  decided_at?: string;
+  expires_at?: string;
+}
+
 export interface Worker {
   apiVersion: string;
   kind: string;
@@ -520,6 +571,7 @@ export type ResourceKind =
   | "AgentPolicy"
   | "AgentRole"
   | "ToolPermission"
+  | "ToolApproval"
   | "Task"
   | "TaskSchedule"
   | "TaskWebhook"
@@ -535,6 +587,7 @@ export const RESOURCE_ENDPOINTS: Record<ResourceKind, string> = {
   AgentPolicy: "agent-policies",
   AgentRole: "agent-roles",
   ToolPermission: "tool-permissions",
+  ToolApproval: "tool-approvals",
   Task: "tasks",
   TaskSchedule: "task-schedules",
   TaskWebhook: "task-webhooks",

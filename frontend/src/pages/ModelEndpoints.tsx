@@ -1,12 +1,17 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useModelEndpoints } from "../api/hooks";
 import { ResourceTable, type Column } from "../components/ResourceTable";
 import { StatusBadge } from "../components/StatusBadge";
 import { EmptyState } from "../components/EmptyState";
-import { Database } from "lucide-react";
+import { Database, Plus } from "lucide-react";
 import type { ModelEndpoint } from "../api/types";
+import { CreateResourceDialog } from "../components/CreateResourceDialog";
 
 export function ModelEndpoints() {
+  const navigate = useNavigate();
   const { data, isLoading } = useModelEndpoints();
+  const [showCreate, setShowCreate] = useState(false);
   const endpoints = data ?? [];
 
   const columns: Column<ModelEndpoint>[] = [
@@ -25,12 +30,18 @@ export function ModelEndpoints() {
           <h1 className="page__title">Model Endpoints</h1>
           <p className="page__subtitle">{endpoints.length} endpoints</p>
         </div>
+        <div className="page__header-actions">
+          <button className="btn-primary" onClick={() => setShowCreate(true)}>
+            <Plus size={14} /> New Endpoint
+          </button>
+        </div>
       </div>
       {endpoints.length === 0 && !isLoading ? (
         <EmptyState icon={<Database size={40} />} title="No Model Endpoints" description="Configure LLM provider connections." />
       ) : (
-        <ResourceTable columns={columns} data={endpoints} rowKey={(r) => r.metadata.name} loading={isLoading} />
+        <ResourceTable columns={columns} data={endpoints} rowKey={(r) => r.metadata.name} onRowClick={(r) => navigate(`/models/${r.metadata.name}`)} loading={isLoading} />
       )}
+      <CreateResourceDialog kind="ModelEndpoint" open={showCreate} onClose={() => setShowCreate(false)} />
     </div>
   );
 }

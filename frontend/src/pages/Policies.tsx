@@ -1,12 +1,17 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAgentPolicies } from "../api/hooks";
 import { ResourceTable, type Column } from "../components/ResourceTable";
 import { StatusBadge } from "../components/StatusBadge";
 import { EmptyState } from "../components/EmptyState";
-import { Shield } from "lucide-react";
+import { Shield, Plus } from "lucide-react";
 import type { AgentPolicy } from "../api/types";
+import { CreateResourceDialog } from "../components/CreateResourceDialog";
 
 export function Policies() {
+  const navigate = useNavigate();
   const { data, isLoading } = useAgentPolicies();
+  const [showCreate, setShowCreate] = useState(false);
   const policies = data ?? [];
 
   const columns: Column<AgentPolicy>[] = [
@@ -25,12 +30,18 @@ export function Policies() {
           <h1 className="page__title">Agent Policies</h1>
           <p className="page__subtitle">{policies.length} policies</p>
         </div>
+        <div className="page__header-actions">
+          <button className="btn-primary" onClick={() => setShowCreate(true)}>
+            <Plus size={14} /> New Policy
+          </button>
+        </div>
       </div>
       {policies.length === 0 && !isLoading ? (
         <EmptyState icon={<Shield size={40} />} title="No Policies" description="Governance rules for agent runtime behavior." />
       ) : (
-        <ResourceTable columns={columns} data={policies} rowKey={(r) => r.metadata.name} loading={isLoading} />
+        <ResourceTable columns={columns} data={policies} rowKey={(r) => r.metadata.name} onRowClick={(r) => navigate(`/policies/${r.metadata.name}`)} loading={isLoading} />
       )}
+      <CreateResourceDialog kind="AgentPolicy" open={showCreate} onClose={() => setShowCreate(false)} />
     </div>
   );
 }
