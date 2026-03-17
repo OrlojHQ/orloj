@@ -273,6 +273,7 @@
 
 - added `--api-key` flag and `--embedded-worker` alias to `orlojd`
 - added database migration system (`store/migrate.go` + embedded SQL files)
+- added secret encryption at rest (`store/secret_crypto.go`): AES-256-GCM encryption for `Secret.spec.data` values, enabled via `--secret-encryption-key` flag on both `orlojd` and `orlojworker`
 - added `spec.allowed_tools` on Agent for simplified governance without full RBAC
 - added `orlojctl run` command for imperative task execution
 - added `orlojctl init` command for project scaffolding

@@ -49,10 +49,6 @@ Move from the single `resources` JSONB table to dedicated tables per resource ty
 
 Workers currently connect directly to Postgres. Introduce an API-mediated path where workers interact with the server through the REST API or a lightweight RPC layer. This decouples workers from the database, simplifies network security, and enables the server to enforce admission control on worker operations.
 
-### Secret Encryption at Rest
-
-Add optional encryption for `Secret.spec.data` values stored in the database. Accept a `--secret-encryption-key` flag and encrypt/decrypt transparently in the resource store layer. This makes the built-in Secret resource viable for production use alongside the existing env-var resolution path.
-
 ### Python SDK
 
 Create a thin Python client library for the Orloj REST API. Target use cases: programmatic task submission, status polling, and result retrieval from Python-based ML/data pipelines.
@@ -69,14 +65,21 @@ Base OpenTelemetry integration is complete (OTLP export, span instrumentation on
 
 The `Memory` CRD exists and agents can reference it via `spec.memory.ref`, but the runtime integration surface is limited. Evaluate whether to flesh out the vector-store retrieval implementation or explicitly scope the Memory resource as experimental with a graduation timeline.
 
-## Active Milestones
+## Pre-Launch: Tool Platform
 
-### Tool Platform 2 (Remaining Runtime Work)
+Tool Platform 2-6 are the remaining pre-launch milestones. They are sequenced -- each builds on the previous. All other milestones (Phases 10-16) are post-launch.
+
+### Tool Platform 2: Remaining Runtime Work
+
+Current state: three isolation backends exist (`none`, `container`, `wasm`). The `container` backend runs curl in Docker. The `wasm` backend runs wasmtime as a subprocess. But `mode=none` uses `MockToolClient` which returns fake output and never makes real HTTP calls. Only the `http` tool type is supported. `Tool.spec.type` is not validated at apply time.
 
 Deliverables:
-- External tool executor mode integrated into unified runtime contract.
-- Stronger sandbox and resource-governance defaults.
-- Additional `Tool.spec.type` adapters beyond HTTP-first runtime (`grpc`, `queue/job`, `pod/service`-native).
+
+- **Real HTTP tool executor for `mode=none`**: Replace `MockToolClient` in `runtime/tool_runtime_governed.go` with an actual HTTP client so tools work without container/wasm isolation. This is the base runtime path used when `isolation_mode=none`.
+- **External tool executor mode**: Add a `Tool.spec.type=external` value and a delegator runtime that forwards `ToolExecutionRequest` to a configured endpoint via HTTP/gRPC. Enables tools to run as standalone services outside the Orloj process.
+- **Additional `Tool.spec.type` adapters**: Add `grpc` adapter (call a gRPC service endpoint) and at least one async adapter (`queue` or `webhook-callback`). Each adapter goes through the governed runtime pipeline and interoperates with existing policy controls.
+- **Sandbox defaults hardening**: Document and enforce secure defaults for `sandboxed` isolation mode (network policy, resource limits, filesystem restrictions). Container backend already has memory/CPU flags -- make them secure-by-default.
+- **Tool type validation**: Add validation in `crds/resource_types.go` that rejects unknown `Tool.spec.type` values at apply time.
 
 Exit criteria:
 - Runtime wiring no longer depends on mode-specific core switch edits.
@@ -87,12 +90,16 @@ Test gate:
 - Runtime conformance suites cover all supported execution modes.
 - New adapter implementations include unit, integration, and policy-behavior tests.
 
-### Tool Platform 3
+### Tool Platform 3: Tool Auth and Secret Binding
+
+Current state: `Tool.spec.auth.secretRef` exists and resolves via `StoreSecretResolver` -> `EnvSecretResolver` chain (`runtime/tool_secret_resolver.go`). Container backend injects a bearer token as `TOOL_AUTH_BEARER`. WASM passes auth via the execution envelope. Redaction is implemented in `runtime/redact.go`. But auth is limited to a single `secretRef` that resolves to one bearer token value.
 
 Deliverables:
-- Per-tool auth profiles with explicit secret binding model.
-- Rotation-aware secret resolution semantics.
-- Standardized redaction and auth audit fields across runtime traces.
+
+- **Per-tool auth profiles**: Expand `Tool.spec.auth` beyond single `secretRef` to support multiple auth modes -- bearer token, API key header, basic auth, OAuth2 client credentials. Each mode has its own secret binding shape and injection semantics.
+- **Rotation-aware secret resolution**: Define explicit rotation semantics. Currently each resolution is a fresh store lookup (correct), but the contract should specify rotation behavior for long-running tasks and cached resolution in message-driven paths.
+- **Auth failure classification**: Map auth failures (expired token, invalid credentials, 401/403 from tool endpoint) into the canonical tool error taxonomy (`runtime/tool_error.go`) with deterministic `tool_code` values like `auth_expired`, `auth_invalid`, `auth_forbidden`.
+- **Auth audit fields in traces**: Extend `TaskTraceEvent` to include auth metadata on tool calls (secret name used, auth mode) without leaking the actual credential. Ensure redaction covers all auth injection points across all backends.
 
 Exit criteria:
 - Tool auth behavior is deterministic and documented by contract.
@@ -102,12 +109,17 @@ Test gate:
 - Secret resolution and redaction tests pass across runtime backends.
 - Contract and trace-parsing tests validate auth metadata and failure mapping.
 
-### Tool Platform 4
+### Tool Platform 4: Policy Hooks and Risk-Tier Routing
+
+Current state: `AgentPolicy`, `AgentRole`, `ToolPermission` exist and are enforced at tool call time via `AgentToolAuthorizer`. Denials are fail-closed with deterministic reason codes. But there is no concept of operation classes or risk tiers -- authorization is all-or-nothing per tool.
 
 Deliverables:
-- Policy hooks for tool operation classes.
-- Risk-tier routing (`allow`, `deny`, `approval_required`) for high-risk actions.
-- Human approval workflow integration points.
+
+- **Tool operation class annotations**: Allow tools to declare operation classes in `Tool.spec` (e.g. `read`, `write`, `delete`, `admin`). Policy evaluation considers the operation class, not just tool name. `ToolPermission` can grant access to specific operation classes.
+- **Risk-tier routing**: `ToolPermission` or `AgentPolicy` can specify `allow`, `deny`, or `approval_required` per operation class. `approval_required` pauses the tool call and emits a pending-approval event.
+- **Human approval workflow**: Define an approval mechanism (resource, status field, or API endpoint). When a tool call requires approval, the task transitions to a waiting state. An external actor (human or system) approves/denies via API. The task resumes or fails accordingly.
+- **Policy reason codes**: Extend the existing denial reason codes to cover approval-related outcomes (`approval_pending`, `approval_denied`, `approval_timeout`).
+- **Retry/deadletter behavior**: Approval timeouts and denials are non-retryable. Approval-pending is a pausable state that does not consume retry budget.
 
 Exit criteria:
 - High-risk operations can be blocked pending approval by policy.
@@ -117,12 +129,17 @@ Test gate:
 - Governance policy tests cover allow/deny/approval flows.
 - Retry/deadletter behavior is correct for approval-related denials/timeouts.
 
-### Tool Platform 5
+### Tool Platform 5: Tool SDK and Developer Experience
+
+Current state: tool contract is defined in `runtime/tool_contract.go` (`ToolExecutionRequest`/`ToolExecutionResponse`). Conformance harness exists in `runtime/conformance/harness.go`. WASM reference module exists in `examples/tools/wasm-reference/`. A guide exists at `docs/pages/guides/build-custom-tool.md`. But there is no standalone SDK package or developer-facing test tooling.
 
 Deliverables:
-- Provider-agnostic tool SDK.
-- Local tool simulator and conformance kit.
-- Packaging/distribution guidance for internal and external tool implementations.
+
+- **Provider-agnostic tool SDK**: A Go package that handles the `ToolExecutionRequest`/`ToolExecutionResponse` contract, including envelope validation, error taxonomy mapping, and retry semantics. Developers import this and implement a handler function.
+- **Local tool simulator**: A standalone binary or test harness that sends `ToolExecutionRequest` payloads to a tool endpoint and validates responses against the contract. Developers use this to test their tool implementations locally without running the full Orloj stack.
+- **Conformance kit**: Package the existing `runtime/conformance/harness.go` as a reusable test kit with a CLI wrapper. Tool developers run this against their implementations to verify contract compliance.
+- **Developer docs**: Extend `docs/pages/guides/build-custom-tool.md` with SDK usage, simulator workflow, and conformance testing instructions.
+- **Packaging guidance**: Document how to distribute tools (container images, WASM modules, HTTP services) with versioning and registry conventions.
 
 Exit criteria:
 - New tool developers can implement and verify against a single documented flow.
@@ -132,12 +149,17 @@ Test gate:
 - SDK fixtures pass runtime conformance checks.
 - Developer-path scenarios are validated in CI smoke jobs.
 
-### Tool Platform 6
+### Tool Platform 6: Tool Observability
+
+Current state: per-agent and per-edge metrics exist in the custom metrics API (`GET /v1/tasks/{name}/metrics`). Prometheus metrics exist for task/agent/message level (`telemetry/metrics.go`). OTel spans cover agent steps and tool execution (`telemetry/spans.go`). But there are no per-tool Prometheus metrics, no tool-level SLO targets, and no reliability scorecards.
 
 Deliverables:
-- Per-tool latency/error/retry metrics with SLO targets.
-- Tool execution tracing across task/message lifecycle.
-- Reliability scorecards and alert thresholds.
+
+- **Per-tool Prometheus metrics**: Add `orloj_tool_call_duration_seconds` (histogram, labels: `tool`, `agent`, `status`), `orloj_tool_errors_total` (counter, labels: `tool`, `error_code`), `orloj_tool_retries_total` (counter, labels: `tool`). Instrument in the governed tool runtime.
+- **Tool execution tracing**: Ensure OTel spans on tool calls include `tool.name`, `tool.type`, `tool.attempt`, `tool.error_code`, `tool.latency_ms` attributes. Link tool spans to parent agent step spans for end-to-end trace correlation.
+- **SLO targets on `Tool.spec`**: Allow tools to declare latency/error-rate SLO targets (e.g. `spec.slo.p99_latency_ms`, `spec.slo.error_rate`). Emit metrics that can be compared against these targets for alerting.
+- **Reliability scorecards**: A CLI command or API endpoint that computes per-tool reliability scores from recent metrics (success rate, p50/p99 latency, retry rate). Usable in CI or operator workflows.
+- **Alert thresholds**: Default alert profile for tool SLO violations, extending the existing `monitoring/alerts/` convention.
 
 Exit criteria:
 - Tool-level SLO observability is production-usable.
@@ -146,6 +168,10 @@ Exit criteria:
 Test gate:
 - Metrics/tracing payload tests and alert-profile validations pass.
 - Reliability scorecard generation is reproducible in CI.
+
+## Post-Launch Milestones
+
+These milestones are planned for after OSS launch.
 
 ### Phase 10: External Provider Runtime
 
@@ -158,10 +184,6 @@ Exit criteria:
 - Providers can evolve independently without core switch edits.
 - Failure isolation is bounded and observable.
 
-Test gate:
-- Provider lifecycle and health-check integration tests pass.
-- Compatibility checks validate built-in and external provider parity.
-
 ### Phase 11: Policy Engine
 
 Deliverables:
@@ -170,9 +192,6 @@ Deliverables:
 
 Exit criteria:
 - Policy evaluation behavior is explicit, auditable, and reproducible.
-
-Test gate:
-- Cross-scope policy tests pass with deterministic reason-code assertions.
 
 ### Phase 12: Approvals and Audit
 
@@ -183,10 +202,6 @@ Deliverables:
 Exit criteria:
 - Sensitive operations are either approved or blocked with audit evidence.
 
-Test gate:
-- End-to-end approval lifecycle tests pass.
-- Audit immutability and replay-verification tests pass.
-
 ### Phase 13: Multi-Tenancy and Quotas
 
 Deliverables:
@@ -196,21 +211,15 @@ Deliverables:
 Exit criteria:
 - Tenant-level controls are enforceable with clear denial telemetry.
 
-Test gate:
-- Quota/isolation tests pass under load and failure scenarios.
-
 ### Phase 14: Production Reliability
 
 Deliverables:
 - Backup/restore and disaster-recovery procedures with tests.
 - Upgrade/canary strategies and reliability conformance suites.
-- Multi-server HA hardening (leader election/failover) as post-Gate-0 optional reliability work.
+- Multi-server HA hardening (leader election/failover).
 
 Exit criteria:
 - Operational recovery and upgrade safety are validated before release.
-
-Test gate:
-- DR exercises and upgrade/canary validation suites pass.
 
 ### Phase 15: Packaging and Platform DX
 
@@ -220,10 +229,6 @@ Deliverables:
 
 Exit criteria:
 - Release artifacts and docs are reproducible and publish-ready.
-
-Test gate:
-- Packaging reproducibility checks pass in CI.
-- Versioned docs build and link checks pass.
 
 ### Phase 16: GitOps Sync for Orloj Resources
 
@@ -235,9 +240,6 @@ Deliverables:
 
 Exit criteria:
 - GitOps sync is deterministic, auditable, and safe-by-default.
-
-Test gate:
-- Drift/detect-and-sync/rollback integration scenarios pass.
 
 ## Contract Stability Track (Cross-Cutting)
 
