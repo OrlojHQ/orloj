@@ -17,6 +17,12 @@ type MemoryStore interface {
 	Snapshot() map[string]string
 }
 
+// ChatMessage represents one message in a multi-turn conversation.
+type ChatMessage struct {
+	Role    string // "system", "user", "assistant"
+	Content string
+}
+
 // ModelRequest defines one model inference request for an agent step.
 type ModelRequest struct {
 	Model     string
@@ -27,6 +33,7 @@ type ModelRequest struct {
 	Step      int
 	Tools     []string
 	Context   map[string]string
+	Messages  []ChatMessage
 }
 
 // ModelResponse captures model output used by the runtime loop.

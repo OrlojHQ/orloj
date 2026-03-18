@@ -7,6 +7,7 @@ import type {
   Tool,
   Secret,
   Memory,
+  MemoryEntriesResponse,
   AgentPolicy,
   AgentRole,
   ToolPermission,
@@ -90,6 +91,18 @@ export function useMemories() {
 }
 export function useMemory(name: string) {
   return useResourceGet<Memory>("Memory", RESOURCE_ENDPOINTS.Memory, name);
+}
+export function useMemoryEntries(
+  name: string,
+  params?: { prefix?: string; q?: string; limit?: number },
+) {
+  const ns = useNamespace();
+  return useQuery<MemoryEntriesResponse>({
+    queryKey: ["MemoryEntries", ns, name, params],
+    queryFn: () => client.listMemoryEntries(name, params),
+    enabled: !!name,
+    refetchInterval: REFETCH_INTERVAL,
+  });
 }
 
 export function useAgentPolicies() {
@@ -204,6 +217,14 @@ export function useWorkers() {
 }
 export function useWorker(name: string) {
   return useResourceGet<Worker>("Worker", RESOURCE_ENDPOINTS.Worker, name);
+}
+
+export function useNamespaces() {
+  return useQuery<string[]>({
+    queryKey: ["namespaces"],
+    queryFn: client.listNamespaces,
+    refetchInterval: REFETCH_INTERVAL,
+  });
 }
 
 export function useHealthCheck() {

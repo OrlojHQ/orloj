@@ -62,6 +62,18 @@ Namespace defaults to `default` and can be overridden with `?namespace=<ns>`.
 
 Both profiles support replay protection through timestamp skew and/or event-id dedupe checks.
 
+## Memory Entries
+
+- `GET /v1/memories/{name}/entries`
+  - query parameters:
+    - `q` (string): search query. When provided, searches entries by keyword match (or vector similarity if the backend supports it).
+    - `prefix` (string): filter entries by key prefix. Ignored when `q` is set.
+    - `limit` (int): maximum number of entries to return. Defaults to `100`.
+    - `namespace` (string): resource namespace. Defaults to `default`.
+  - returns `{"entries": [{"key": "...", "value": "...", "score": 0.95}], "count": N}`
+  - returns `404` if the Memory resource does not exist
+  - returns an empty list if no persistent backend is registered for the Memory resource
+
 ## Task Observability Endpoints
 
 - `GET /v1/tasks/{name}/messages`

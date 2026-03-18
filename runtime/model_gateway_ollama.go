@@ -88,18 +88,22 @@ func (g *OllamaModelGateway) Complete(ctx context.Context, req ModelRequest) (Mo
 	}
 
 	body := ollamaChatRequest{
-		Model: model,
-		Messages: []ollamaChatMessage{
+		Model:  model,
+		Stream: false,
+	}
+	if len(req.Messages) > 0 {
+		body.Messages = chatMessagesToOllama(req.Messages)
+	} else {
+		body.Messages = []ollamaChatMessage{
 			{Role: "system", Content: strings.TrimSpace(req.Prompt)},
 			{Role: "user", Content: buildOpenAIUserContent(req)},
-		},
-		Stream: false,
+		}
+		if strings.TrimSpace(req.Prompt) == "" {
+			body.Messages = body.Messages[1:]
+		}
 	}
 	if len(req.Tools) > 0 {
 		body.Tools = buildOpenAIChatTools(req.Tools)
-	}
-	if strings.TrimSpace(req.Prompt) == "" {
-		body.Messages = body.Messages[1:]
 	}
 
 	payload, err := json.Marshal(body)
@@ -155,6 +159,22 @@ func (g *OllamaModelGateway) Complete(ctx context.Context, req ModelRequest) (Mo
 			Source:       "provider",
 		},
 	}, nil
+}
+
+func chatMessagesToOllama(msgs []ChatMessage) []ollamaChatMessage {
+	out := make([]ollamaChatMessage, 0, len(msgs))
+	for _, m := range msgs {
+		content := strings.TrimSpace(m.Content)
+		if content == "" {
+			continue
+		}
+		role := strings.TrimSpace(m.Role)
+		if role != "system" && role != "assistant" {
+			role = "user"
+		}
+		out = append(out, ollamaChatMessage{Role: role, Content: content})
+	}
+	return out
 }
 
 func parseOllamaError(body []byte) string {

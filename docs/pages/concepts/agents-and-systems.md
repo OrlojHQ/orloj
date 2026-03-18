@@ -37,7 +37,7 @@ spec:
 | `prompt` | The system instruction that defines the agent's behavior. |
 | `tools` | List of [Tool](./tools-and-isolation.md) names this agent may call. Tool calls are subject to governance checks. |
 | `roles` | Bound [AgentRole](./governance.md) names. Roles carry permissions that authorize tool usage. |
-| `memory.ref` | Reference to a Memory resource for vector-backed retrieval. |
+| `memory.ref` | Reference to a [Memory](./memory/index.md) resource. When set, built-in memory tools (`memory.read`, `memory.write`, `memory.search`, `memory.list`, `memory.ingest`) are automatically injected into the agent's tool list. |
 | `limits.max_steps` | Maximum execution steps per task turn. Defaults to `10`. |
 | `limits.timeout` | Maximum wall-clock time per task turn. |
 
@@ -45,10 +45,13 @@ spec:
 
 When the runtime activates an agent during a task, it:
 
-1. Loads the agent's prompt and any memory context.
-2. Routes the request to the configured model via the model gateway.
-3. If the model selects tool calls, the runtime checks governance (AgentPolicy, AgentRole, ToolPermission) and executes authorized tools.
-4. Results flow back to the model for the next step, up to `max_steps` or `timeout`.
+1. Initializes the agent's conversation history with the system prompt and current task context.
+2. If `memory.ref` is set, injects built-in memory tools (`memory.read`, `memory.write`, `memory.search`, `memory.list`, `memory.ingest`) into the agent's available tools and wires them to the backing store.
+3. Routes the request to the configured model via the model gateway, sending the full conversation history.
+4. If the model selects tool calls, the runtime checks governance (AgentPolicy, AgentRole, ToolPermission) and executes authorized tools. Memory tool calls are handled internally without network calls.
+5. Results (including tool outputs) are appended to the conversation history and sent back to the model for the next step, up to `max_steps` or `timeout`.
+
+Conversation history is maintained for the full duration of the agent's activation, giving the model continuity across reasoning and tool-use steps. See [Memory](./memory/index.md) for details on memory layers and built-in tools.
 
 ## Agent Systems
 
@@ -158,6 +161,7 @@ metadata:
 ## Related Resources
 
 - [Resource Reference: Agent and AgentSystem](../reference/resources.md)
+- [Memory](./memory/index.md)
 - [Execution and Messaging](../architecture/execution-model.md)
 - [Starter Blueprints](../architecture/starter-blueprints.md)
 - [Guide: Deploy Your First Pipeline](../guides/deploy-pipeline.md)

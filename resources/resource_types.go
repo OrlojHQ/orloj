@@ -395,9 +395,15 @@ type Memory struct {
 }
 
 type MemoryConfig struct {
-	Type           string `json:"type,omitempty"`
-	Provider       string `json:"provider,omitempty"`
-	EmbeddingModel string `json:"embedding_model,omitempty"`
+	Type           string           `json:"type,omitempty"`
+	Provider       string           `json:"provider,omitempty"`
+	EmbeddingModel string           `json:"embedding_model,omitempty"`
+	Endpoint       string           `json:"endpoint,omitempty"`
+	Auth           MemoryAuthConfig `json:"auth,omitempty"`
+}
+
+type MemoryAuthConfig struct {
+	SecretRef string `json:"secretRef,omitempty"`
 }
 
 type MemoryStatus struct {

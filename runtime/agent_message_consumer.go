@@ -37,6 +37,11 @@ type TaskStateStore interface {
 	AppendLog(name, message string) error
 }
 
+// MemoryResourceLookup resolves Memory CRDs by name.
+type MemoryResourceLookup interface {
+	Get(name string) (resources.Memory, bool)
+}
+
 // AgentMessageConsumerOptions configures inbox consumers in a worker.
 type AgentMessageConsumerOptions struct {
 	WorkerID            string
@@ -51,6 +56,8 @@ type AgentMessageConsumerOptions struct {
 	ToolPermissions     ToolPermissionLookup
 	IsolatedToolRuntime ToolRuntime
 	Extensions          Extensions
+	Memories            MemoryResourceLookup
+	MemoryBackends      *PersistentMemoryBackendRegistry
 }
 
 // AgentMessageConsumerManager watches agents and consumes runtime inbox messages per agent.
@@ -72,9 +79,13 @@ type AgentMessageConsumerManager struct {
 	retryDelay  time.Duration
 	leaseExtend time.Duration
 	extensions  Extensions
-	mu          sync.Mutex
-	consumers   map[string]context.CancelFunc
-	seenMessage map[string]time.Time
+	memories       MemoryResourceLookup
+	memBackends    *PersistentMemoryBackendRegistry
+	mu             sync.Mutex
+	consumers      map[string]context.CancelFunc
+	seenMessage    map[string]time.Time
+	taskMemory     map[string]*SharedMemoryStore
+	taskMemoryMu   sync.Mutex
 }
 
 func NewAgentMessageConsumerManager(
@@ -122,9 +133,12 @@ func NewAgentMessageConsumerManager(
 		dedupeTTL:   dedupe,
 		retryDelay:  retry,
 		leaseExtend: lease,
+		memories:    opts.Memories,
+		memBackends: opts.MemoryBackends,
 		extensions:  NormalizeExtensions(opts.Extensions),
 		consumers:   make(map[string]context.CancelFunc),
 		seenMessage: make(map[string]time.Time),
+		taskMemory:  make(map[string]*SharedMemoryStore),
 	}
 }
 
@@ -270,9 +284,6 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 	systemKey := scopedTaskName(ns, task.Spec.System)
 	system, ok := m.systems.Get(systemKey)
 	if !ok {
-		system, ok = m.systems.Get(strings.TrimSpace(task.Spec.System))
-	}
-	if !ok {
 		retryScheduled, delay, markErr := m.recordRetryOrDeadLetter(taskKey, msg, record, fmt.Errorf("agentsystem %q not found", task.Spec.System))
 		if markErr != nil {
 			return markErr
@@ -293,9 +304,6 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 
 	agentKey := scopedTaskName(ns, msg.ToAgent)
 	agent, ok := m.agents.Get(agentKey)
-	if !ok {
-		agent, ok = m.agents.Get(strings.TrimSpace(msg.ToAgent))
-	}
 	if !ok {
 		retryScheduled, delay, markErr := m.recordRetryOrDeadLetter(taskKey, msg, record, fmt.Errorf("agent %q not found for message processing", msg.ToAgent))
 		if markErr != nil {
@@ -325,7 +333,7 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 		input["inbox.join.payloads"] = joinDecision.SourcePayloads()
 	}
 
-	toolRuntime := BuildGovernedToolRuntimeForAgentWithGovernance(
+	var toolRT ToolRuntime = BuildGovernedToolRuntimeForAgentWithGovernance(
 		nil,
 		m.isolated,
 		m.tools,
@@ -334,8 +342,22 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 		ns,
 		agent,
 	)
+	if memRef := strings.TrimSpace(agent.Spec.Memory.Ref); memRef != "" {
+		sharedMem := m.taskSharedMemory(taskKey)
+		memRT := NewMemoryToolRuntime(toolRT, sharedMem)
+		memKey := scopedTaskName(ns, memRef)
+		if m.memBackends != nil {
+			if backend, ok := m.memBackends.Get(memKey); ok {
+				memRT = memRT.WithPersistentBackend(backend)
+			}
+		}
+		toolRT = memRT
+		for _, name := range BuiltinMemoryToolNames() {
+			agent.Spec.Tools = append(agent.Spec.Tools, name)
+		}
+	}
 	agentCtx, agentSpan := telemetry.StartAgentSpan(ctx, agent.Metadata.Name, msg.MessageID, msg.Attempt)
-	result, err := m.executor.ExecuteAgentWithRuntime(agentCtx, agent, input, toolRuntime)
+	result, err := m.executor.ExecuteAgentWithRuntime(agentCtx, agent, input, toolRT)
 	if err != nil {
 		telemetry.EndSpanError(agentSpan, err)
 		retryScheduled, delay, markErr := m.recordRetryOrDeadLetter(taskKey, msg, record, fmt.Errorf("agent %s execution failed: %w", agent.Metadata.Name, err))
@@ -901,6 +923,17 @@ func (m *AgentMessageConsumerManager) beginMessageAttempt(taskKey string, msg Ag
 		return task, record, false, 0, nil
 	}
 	return resources.Task{}, resources.TaskMessage{}, false, 0, lastErr
+}
+
+func (m *AgentMessageConsumerManager) taskSharedMemory(taskKey string) *SharedMemoryStore {
+	m.taskMemoryMu.Lock()
+	defer m.taskMemoryMu.Unlock()
+	mem, ok := m.taskMemory[taskKey]
+	if !ok {
+		mem = NewSharedMemoryStore()
+		m.taskMemory[taskKey] = mem
+	}
+	return mem
 }
 
 func (m *AgentMessageConsumerManager) recordRetryOrDeadLetter(taskKey string, msg AgentMessage, record resources.TaskMessage, processErr error) (bool, time.Duration, error) {

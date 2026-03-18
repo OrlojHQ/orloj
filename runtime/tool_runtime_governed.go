@@ -184,7 +184,7 @@ func buildGovernedToolRuntime(
 			continue
 		}
 		item, ok := lookup.Get(scopedRuntimeName(namespace, trimmed))
-		if !ok {
+		if !ok && strings.Contains(trimmed, "/") {
 			item, ok = lookup.Get(trimmed)
 		}
 		if ok {

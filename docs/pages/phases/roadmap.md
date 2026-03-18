@@ -53,9 +53,13 @@ Create a thin Python client library for the Orloj REST API. Target use cases: pr
 
 Base OpenTelemetry integration is complete (OTLP export, span instrumentation on agent steps, model calls, tool execution, and message processing). Remaining work is adding a `TracingSink` extension interface alongside the existing `MeteringSink` and `AuditSink` so consumers can plug in custom trace processing.
 
-### Memory Resource Maturity Review
+### Memory Resource Maturity Review -- Addressed
 
-The `Memory` resource exists and agents can reference it via `spec.memory.ref`, but the runtime integration surface is limited. Evaluate whether to flesh out the vector-store retrieval implementation or explicitly scope the Memory resource as experimental with a graduation timeline.
+The Memory resource is now fully integrated into the runtime. Agents that reference a Memory resource via `spec.memory.ref` gain five built-in memory tools (`memory.read`, `memory.write`, `memory.search`, `memory.list`, `memory.ingest`). Memory operates in three layers: conversation history (per-activation), task-scoped shared store (per-task), and persistent backends (cross-task). The in-memory backend is available; pgvector support is planned. The Memory detail page in the frontend includes an Entries tab for browsing stored data. See [Memory Concepts](../concepts/memory/index.md).
+
+Remaining work:
+- First-party vector database provider implementations (pgvector, etc.). The provider registry is extensible — third-party providers can be plugged in today.
+- Vector similarity search with embedding model integration.
 
 ## Post-Launch Milestones
 

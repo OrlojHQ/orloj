@@ -759,7 +759,11 @@ func (c *TaskController) validateTask(task resources.Task) (resources.AgentSyste
 				}
 				roleKey := store.ScopedName(task.Metadata.Namespace, roleName)
 				if _, ok := c.roleStore.Get(roleKey); !ok {
-					if _, ok := c.roleStore.Get(roleName); !ok {
+					if strings.Contains(roleName, "/") {
+						if _, ok := c.roleStore.Get(roleName); !ok {
+							errs = append(errs, fmt.Sprintf("agent %q references missing role %q", name, roleName))
+						}
+					} else {
 						errs = append(errs, fmt.Sprintf("agent %q references missing role %q", name, roleName))
 					}
 				}

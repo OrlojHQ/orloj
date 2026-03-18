@@ -45,6 +45,8 @@ If you are new to Orloj, start with the [Architecture Overview](../architecture/
 
 **[Model Routing](./model-routing.md)** -- ModelEndpoints decouple agents from specific model providers. Configure connections to OpenAI, Anthropic, Azure OpenAI, or Ollama, and bind agents to endpoints by reference.
 
+**[Memory](./memory/index.md)** -- Memory gives agents the ability to store, retrieve, and search information using built-in tools. Operates in three layers: conversation history, task-scoped shared state, and persistent backends.
+
 **[Governance and Policies](./governance.md)** -- AgentPolicy, AgentRole, and ToolPermission resources enforce authorization at the execution layer. The governance model is fail-closed: unauthorized tool calls are denied, not silently ignored.
 
 ## Architecture and Execution

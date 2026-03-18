@@ -24,6 +24,7 @@ type AgentWorker struct {
 	onEvent      func(string)
 	stepEvery    time.Duration
 	input        map[string]string
+	history      []ChatMessage
 }
 
 func NewAgentWorker(agent resources.Agent, toolRuntime ToolRuntime, memory MemoryStore, onEvent func(string)) *AgentWorker {
@@ -86,6 +87,10 @@ func (w *AgentWorker) Run(ctx context.Context) {
 		w.onEvent(fmt.Sprintf("worker started model=%s max_steps=%d", w.agent.Spec.Model, maxSteps))
 	}
 
+	if prompt := strings.TrimSpace(w.agent.Spec.Prompt); prompt != "" {
+		w.history = append(w.history, ChatMessage{Role: "system", Content: prompt})
+	}
+
 	ticker := time.NewTicker(w.stepEvery)
 	defer ticker.Stop()
 
@@ -97,6 +102,10 @@ func (w *AgentWorker) Run(ctx context.Context) {
 			}
 			return
 		case <-ticker.C:
+			w.history = append(w.history, ChatMessage{
+				Role:    "user",
+				Content: buildOpenAIUserContent(ModelRequest{Step: step, Tools: w.agent.Spec.Tools, Context: w.modelContext(step)}),
+			})
 			modelResp, modelErr := w.modelGateway.Complete(ctx, ModelRequest{
 				Model:     w.agent.Spec.Model,
 				ModelRef:  w.agent.Spec.ModelRef,
@@ -106,11 +115,13 @@ func (w *AgentWorker) Run(ctx context.Context) {
 				Step:      step,
 				Tools:     append([]string(nil), w.agent.Spec.Tools...),
 				Context:   w.modelContext(step),
+				Messages:  append([]ChatMessage(nil), w.history...),
 			})
 			if modelErr != nil {
 				if w.onEvent != nil {
 					w.onEvent(fmt.Sprintf("step=%d model_error=%v", step, modelErr))
 				}
+				w.history = w.history[:len(w.history)-1]
 				continue
 			}
 			modelOutput := strings.TrimSpace(modelResp.Content)
@@ -120,6 +131,10 @@ func (w *AgentWorker) Run(ctx context.Context) {
 				if modelOutput != "" {
 					w.onEvent(fmt.Sprintf("step=%d model_output=%s", step, modelOutput))
 				}
+			}
+
+			if modelOutput != "" {
+				w.history = append(w.history, ChatMessage{Role: "assistant", Content: modelOutput})
 			}
 
 			if len(w.agent.Spec.Tools) == 0 {
@@ -246,6 +261,10 @@ func (w *AgentWorker) Run(ctx context.Context) {
 				if w.onEvent != nil {
 					w.onEvent(fmt.Sprintf("step=%d tool=%s tool_contract=%s tool_request_id=%s tool_attempt=%d success", step, tool, contractVersion, toolRequestID, toolAttempt))
 				}
+				w.history = append(w.history, ChatMessage{
+					Role:    "user",
+					Content: fmt.Sprintf("[tool_result tool=%s]\n%s", tool, result),
+				})
 			}
 		}
 	}

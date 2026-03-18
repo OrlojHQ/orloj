@@ -98,17 +98,21 @@ func (g *AzureOpenAIModelGateway) Complete(ctx context.Context, req ModelRequest
 
 	body := openAIChatCompletionRequest{
 		Model: deployment,
-		Messages: []openAIChatCompletionMessage{
+	}
+	if len(req.Messages) > 0 {
+		body.Messages = chatMessagesToOpenAI(req.Messages)
+	} else {
+		body.Messages = []openAIChatCompletionMessage{
 			{Role: "system", Content: strings.TrimSpace(req.Prompt)},
 			{Role: "user", Content: buildOpenAIUserContent(req)},
-		},
+		}
+		if strings.TrimSpace(req.Prompt) == "" {
+			body.Messages = body.Messages[1:]
+		}
 	}
 	if len(req.Tools) > 0 {
 		body.Tools = buildOpenAIChatTools(req.Tools)
 		body.ToolChoice = "auto"
-	}
-	if strings.TrimSpace(req.Prompt) == "" {
-		body.Messages = body.Messages[1:]
 	}
 
 	payload, err := json.Marshal(body)

@@ -143,8 +143,13 @@ func main() {
 	agentSystemController := controllers.NewAgentSystemController(stores.AgentSystems, logger, *reconcile)
 	modelEndpointController := controllers.NewModelEndpointController(stores.ModelEPs, logger, 5*time.Second)
 	toolController := controllers.NewToolController(stores.Tools, logger, 5*time.Second)
+	memoryBackendRegistry := agentruntime.NewPersistentMemoryBackendRegistry()
 	memoryController := controllers.NewMemoryController(stores.Memories, logger, 5*time.Second)
+	memoryController.SetBackendRegistry(memoryBackendRegistry)
+	memoryController.SetSecretStore(stores.Secrets)
+	memoryController.SetModelEndpointStore(stores.ModelEPs)
 	policyController := controllers.NewPolicyController(stores.Policies, logger, 5*time.Second)
+	secretController := controllers.NewSecretController(stores.Secrets, logger, 5*time.Second)
 	taskController := controllers.NewTaskController(
 		stores.Tasks, stores.AgentSystems, stores.Agents, stores.Tools,
 		stores.Memories, stores.Policies, stores.Workers, logger, *reconcile,
@@ -216,6 +221,7 @@ func main() {
 		defer closeAgentMessageBus()
 	}
 	server.SetEventBus(bus)
+	server.SetMemoryBackends(memoryBackendRegistry)
 	taskController.SetEventBus(bus)
 	taskController.SetAgentMessageBus(agentMessageBus)
 	taskSchedulerController.SetEventBus(bus)
@@ -235,6 +241,7 @@ func main() {
 	go toolController.Start(ctx)
 	go memoryController.Start(ctx)
 	go policyController.Start(ctx)
+	go secretController.Start(ctx)
 	go taskSchedulerController.Start(ctx)
 	go taskScheduleController.Start(ctx)
 	go workerController.Start(ctx)
@@ -261,6 +268,8 @@ func main() {
 						ToolPermissions:     stores.ToolPerms,
 						IsolatedToolRuntime: isolatedToolRuntime,
 						Extensions:          extensions,
+						Memories:            stores.Memories,
+						MemoryBackends:      memoryBackendRegistry,
 					},
 				)
 				go consumer.Start(ctx)

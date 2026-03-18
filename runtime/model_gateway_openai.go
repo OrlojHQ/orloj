@@ -96,17 +96,21 @@ func (g *OpenAIModelGateway) Complete(ctx context.Context, req ModelRequest) (Mo
 
 	body := openAIChatCompletionRequest{
 		Model: model,
-		Messages: []openAIChatCompletionMessage{
+	}
+	if len(req.Messages) > 0 {
+		body.Messages = chatMessagesToOpenAI(req.Messages)
+	} else {
+		body.Messages = []openAIChatCompletionMessage{
 			{Role: "system", Content: strings.TrimSpace(req.Prompt)},
 			{Role: "user", Content: buildOpenAIUserContent(req)},
-		},
+		}
+		if strings.TrimSpace(req.Prompt) == "" {
+			body.Messages = body.Messages[1:]
+		}
 	}
 	if len(req.Tools) > 0 {
 		body.Tools = buildOpenAIChatTools(req.Tools)
 		body.ToolChoice = "auto"
-	}
-	if strings.TrimSpace(req.Prompt) == "" {
-		body.Messages = body.Messages[1:]
 	}
 
 	payload, err := json.Marshal(body)
@@ -346,6 +350,21 @@ func parseOpenAIToolCallInput(arguments string) string {
 		return arguments
 	}
 	return strings.TrimSpace(string(encoded))
+}
+
+func chatMessagesToOpenAI(msgs []ChatMessage) []openAIChatCompletionMessage {
+	out := make([]openAIChatCompletionMessage, 0, len(msgs))
+	for _, m := range msgs {
+		content := strings.TrimSpace(m.Content)
+		if content == "" {
+			continue
+		}
+		out = append(out, openAIChatCompletionMessage{
+			Role:    strings.TrimSpace(m.Role),
+			Content: content,
+		})
+	}
+	return out
 }
 
 func parseOpenAIUsage(raw *openAIUsage, source string) ModelUsage {

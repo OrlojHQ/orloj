@@ -123,16 +123,20 @@ func (g *AnthropicModelGateway) Complete(ctx context.Context, req ModelRequest) 
 	body := anthropicMessagesRequest{
 		Model:     model,
 		MaxTokens: g.maxTokens,
-		Messages: []anthropicMessagesInput{{
+	}
+	if len(req.Messages) > 0 {
+		body.System, body.Messages = chatMessagesToAnthropic(req.Messages)
+	} else {
+		body.Messages = []anthropicMessagesInput{{
 			Role:    "user",
 			Content: buildOpenAIUserContent(req),
-		}},
+		}}
+		if strings.TrimSpace(req.Prompt) != "" {
+			body.System = strings.TrimSpace(req.Prompt)
+		}
 	}
 	if len(req.Tools) > 0 {
 		body.Tools = buildAnthropicTools(req.Tools)
-	}
-	if strings.TrimSpace(req.Prompt) != "" {
-		body.System = strings.TrimSpace(req.Prompt)
 	}
 
 	payload, err := json.Marshal(body)
@@ -305,6 +309,38 @@ func parseAnthropicToolUseInput(input map[string]any) string {
 		return ""
 	}
 	return strings.TrimSpace(string(encoded))
+}
+
+func chatMessagesToAnthropic(msgs []ChatMessage) (string, []anthropicMessagesInput) {
+	var system string
+	out := make([]anthropicMessagesInput, 0, len(msgs))
+	for _, m := range msgs {
+		role := strings.TrimSpace(m.Role)
+		content := strings.TrimSpace(m.Content)
+		if content == "" {
+			continue
+		}
+		if role == "system" {
+			if system == "" {
+				system = content
+			} else {
+				system += "\n" + content
+			}
+			continue
+		}
+		apiRole := role
+		if apiRole == "tool" {
+			apiRole = "user"
+		}
+		if apiRole != "user" && apiRole != "assistant" {
+			apiRole = "user"
+		}
+		out = append(out, anthropicMessagesInput{
+			Role:    apiRole,
+			Content: content,
+		})
+	}
+	return system, out
 }
 
 func parseAnthropicUsage(raw *anthropicMessagesUsage) ModelUsage {

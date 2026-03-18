@@ -54,13 +54,13 @@ func (c *ToolController) runWorker(ctx context.Context, queue *keyQueue) {
 
 func (c *ToolController) enqueueAll(queue *keyQueue) {
 	for _, item := range c.store.List() {
-		queue.Enqueue(item.Metadata.Name)
+		queue.Enqueue(store.ScopedName(item.Metadata.Namespace, item.Metadata.Name))
 	}
 }
 
 func (c *ToolController) ReconcileOnce(_ context.Context) error {
 	for _, item := range c.store.List() {
-		if err := c.reconcileByName(item.Metadata.Name); err != nil {
+		if err := c.reconcileByName(store.ScopedName(item.Metadata.Namespace, item.Metadata.Name)); err != nil {
 			return err
 		}
 	}

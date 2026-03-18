@@ -1,5 +1,5 @@
 import { useAppStore } from "../store";
-import type { ListResponse } from "./types";
+import type { ListResponse, MemoryEntriesResponse } from "./types";
 
 function getConnection() {
   const { apiBase, namespace, token } = useAppStore.getState();
@@ -151,6 +151,30 @@ export async function getMetrics<T>(name: string): Promise<T> {
   const { namespace } = getConnection();
   const url = buildUrl(`tasks/${name}/metrics`, namespace);
   return request<T>(url);
+}
+
+export async function listMemoryEntries(
+  name: string,
+  params?: { prefix?: string; q?: string; limit?: number },
+): Promise<MemoryEntriesResponse> {
+  const { namespace } = getConnection();
+  const qp: Record<string, string> = {};
+  if (params?.prefix) qp.prefix = params.prefix;
+  if (params?.q) qp.q = params.q;
+  if (params?.limit) qp.limit = String(params.limit);
+  const url = buildUrl(`memories/${name}/entries`, namespace, qp);
+  return request<MemoryEntriesResponse>(url);
+}
+
+export async function listNamespaces(): Promise<string[]> {
+  const { apiBase, token } = getConnection();
+  const base = apiBase.replace(/\/$/, "");
+  const resp = await fetch(`${base}/v1/namespaces`, {
+    headers: buildHeaders(token),
+  });
+  if (!resp.ok) return ["default"];
+  const data = (await resp.json()) as { namespaces: string[] };
+  return data.namespaces ?? ["default"];
 }
 
 export async function getCapabilities<T>(): Promise<T> {

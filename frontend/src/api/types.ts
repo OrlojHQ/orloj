@@ -186,12 +186,29 @@ export interface MemoryConfig {
   type?: string;
   provider?: string;
   embedding_model?: string;
+  endpoint?: string;
+  auth?: MemoryAuthConfig;
+}
+
+export interface MemoryAuthConfig {
+  secretRef?: string;
 }
 
 export interface MemoryStatus {
   phase?: string;
   lastError?: string;
   observedGeneration?: number;
+}
+
+export interface MemoryEntry {
+  key: string;
+  value: string;
+  score?: number;
+}
+
+export interface MemoryEntriesResponse {
+  entries: MemoryEntry[];
+  count: number;
 }
 
 export interface AgentPolicy {

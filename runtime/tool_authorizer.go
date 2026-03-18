@@ -88,7 +88,7 @@ func NewAgentToolAuthorizer(
 			continue
 		}
 		role, ok := roleLookup.Get(scopedRuntimeName(namespace, roleName))
-		if !ok {
+		if !ok && strings.Contains(roleName, "/") {
 			role, ok = roleLookup.Get(roleName)
 		}
 		if !ok {

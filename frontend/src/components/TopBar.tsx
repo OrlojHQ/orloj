@@ -2,6 +2,7 @@ import { useAppStore } from "../store";
 import { useHealthCheck } from "../api/hooks";
 import { Sun, Moon, Wifi, WifiOff, Settings } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
+import { NamespaceSelector } from "./NamespaceSelector";
 
 export function TopBar() {
   const namespace = useAppStore((s) => s.namespace);
@@ -40,12 +41,7 @@ export function TopBar() {
       <div className="topbar__left">
         <div className="topbar__breadcrumb">
           <span className="topbar__breadcrumb-muted">namespace:</span>
-          <input
-            className="topbar__namespace-input"
-            value={namespace}
-            onChange={(e) => setNamespace(e.target.value)}
-            aria-label="Namespace"
-          />
+          <NamespaceSelector value={namespace} onChange={setNamespace} />
         </div>
       </div>
 

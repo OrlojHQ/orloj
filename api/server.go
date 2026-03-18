@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -44,13 +45,14 @@ type ServerOptions struct {
 
 // Server exposes CRUD endpoints for control plane resources.
 type Server struct {
-	stores     Stores
-	runtime    *agentruntime.Manager
-	logger     *log.Logger
-	mux        *http.ServeMux
-	authorizer RequestAuthorizer
-	bus        eventbus.Bus
-	extensions agentruntime.Extensions
+	stores         Stores
+	runtime        *agentruntime.Manager
+	logger         *log.Logger
+	mux            *http.ServeMux
+	authorizer     RequestAuthorizer
+	bus            eventbus.Bus
+	extensions     agentruntime.Extensions
+	memoryBackends *agentruntime.PersistentMemoryBackendRegistry
 }
 
 func NewServer(stores Stores, runtime *agentruntime.Manager, logger *log.Logger) *Server {
@@ -107,6 +109,11 @@ func (s *Server) SetEventBus(bus eventbus.Bus) {
 
 func (s *Server) EventBus() eventbus.Bus {
 	return s.bus
+}
+
+// SetMemoryBackends configures the registry used to serve memory entry queries.
+func (s *Server) SetMemoryBackends(registry *agentruntime.PersistentMemoryBackendRegistry) {
+	s.memoryBackends = registry
 }
 
 func (s *Server) Handler() http.Handler {
@@ -167,6 +174,8 @@ func (s *Server) routes() {
 
 	s.mux.HandleFunc("/v1/workers", s.handleWorkers)
 	s.mux.HandleFunc("/v1/workers/", s.handleWorkerByName)
+
+	s.mux.HandleFunc("/v1/namespaces", s.handleNamespaces)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
@@ -183,6 +192,56 @@ func (s *Server) handleCapabilities(w http.ResponseWriter, r *http.Request) {
 		snapshot.GeneratedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	}
 	writeJSON(w, http.StatusOK, snapshot)
+}
+
+func (s *Server) handleNamespaces(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	seen := make(map[string]struct{})
+	collect := func(ns string) {
+		ns = strings.TrimSpace(ns)
+		if ns != "" {
+			seen[ns] = struct{}{}
+		}
+	}
+	for _, item := range s.stores.Agents.List() {
+		collect(item.Metadata.Namespace)
+	}
+	for _, item := range s.stores.AgentSystems.List() {
+		collect(item.Metadata.Namespace)
+	}
+	for _, item := range s.stores.ModelEPs.List() {
+		collect(item.Metadata.Namespace)
+	}
+	for _, item := range s.stores.Tools.List() {
+		collect(item.Metadata.Namespace)
+	}
+	for _, item := range s.stores.Secrets.List() {
+		collect(item.Metadata.Namespace)
+	}
+	for _, item := range s.stores.Memories.List() {
+		collect(item.Metadata.Namespace)
+	}
+	for _, item := range s.stores.Policies.List() {
+		collect(item.Metadata.Namespace)
+	}
+	for _, item := range s.stores.Tasks.List() {
+		collect(item.Metadata.Namespace)
+	}
+	for _, item := range s.stores.Workers.List() {
+		collect(item.Metadata.Namespace)
+	}
+	if len(seen) == 0 {
+		seen[resources.DefaultNamespace] = struct{}{}
+	}
+	namespaces := make([]string, 0, len(seen))
+	for ns := range seen {
+		namespaces = append(namespaces, ns)
+	}
+	sort.Strings(namespaces)
+	writeJSON(w, http.StatusOK, map[string]any{"namespaces": namespaces})
 }
 
 func (s *Server) handleAgents(w http.ResponseWriter, r *http.Request) {
@@ -340,7 +399,7 @@ func (s *Server) deleteAgent(w http.ResponseWriter, r *http.Request, key, name s
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	s.runtime.Stop(name)
+	s.runtime.Stop(key)
 	s.publishResourceEvent("Agent", name, "deleted", map[string]any{"metadata": map[string]string{"name": name, "namespace": requestNamespace(r)}})
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -895,6 +954,15 @@ func (s *Server) handleMemoryByName(w http.ResponseWriter, r *http.Request) {
 		s.handleMemoryStatusByName(w, r, base)
 		return
 	}
+	if strings.HasSuffix(name, "/entries") {
+		base := strings.Trim(strings.TrimSuffix(name, "/entries"), "/")
+		if base == "" {
+			http.Error(w, "memory name is required", http.StatusBadRequest)
+			return
+		}
+		s.handleMemoryEntries(w, r, base)
+		return
+	}
 	key := scopedNameForRequest(r, name)
 	switch r.Method {
 	case http.MethodGet:
@@ -947,6 +1015,58 @@ func (s *Server) handleMemoryByName(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+func (s *Server) handleMemoryEntries(w http.ResponseWriter, r *http.Request, name string) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	key := scopedNameForRequest(r, name)
+	if _, ok := s.stores.Memories.Get(key); !ok {
+		http.Error(w, fmt.Sprintf("memory %q not found", name), http.StatusNotFound)
+		return
+	}
+	if s.memoryBackends == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"entries": []any{}, "count": 0})
+		return
+	}
+	backend, ok := s.memoryBackends.Get(key)
+	if !ok {
+		writeJSON(w, http.StatusOK, map[string]any{"entries": []any{}, "count": 0})
+		return
+	}
+
+	q := r.URL.Query()
+	query := strings.TrimSpace(q.Get("q"))
+	prefix := strings.TrimSpace(q.Get("prefix"))
+	limitStr := strings.TrimSpace(q.Get("limit"))
+	limit := 100
+	if limitStr != "" {
+		if v, err := fmt.Sscanf(limitStr, "%d", &limit); err != nil || v != 1 || limit <= 0 {
+			limit = 100
+		}
+	}
+
+	ctx := r.Context()
+	if query != "" {
+		results, err := backend.Search(ctx, query, limit)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"entries": results, "count": len(results)})
+		return
+	}
+	results, err := backend.List(ctx, prefix)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if len(results) > limit {
+		results = results[:limit]
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"entries": results, "count": len(results)})
 }
 
 func (s *Server) handlePolicies(w http.ResponseWriter, r *http.Request) {

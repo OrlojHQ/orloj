@@ -192,6 +192,12 @@ func main() {
 		},
 		MaxConcurrentTasks: *maxConcurrentTasks,
 	}, *heartbeatInterval)
+	memoryBackendRegistry := agentruntime.NewPersistentMemoryBackendRegistry()
+	memoryController := controllers.NewMemoryController(stores.Memories, logger, 5*time.Second)
+	memoryController.SetBackendRegistry(memoryBackendRegistry)
+	memoryController.SetSecretStore(stores.Secrets)
+	memoryController.SetModelEndpointStore(stores.ModelEPs)
+	go memoryController.Start(ctx)
 	if *agentMessageConsume {
 		if agentMessageBus == nil {
 			logger.Printf("runtime inbox consumer disabled: agent message bus backend is none")
@@ -210,6 +216,8 @@ func main() {
 					ToolPermissions:     stores.ToolPerms,
 					IsolatedToolRuntime: isolatedToolRuntime,
 					Extensions:          extensions,
+					Memories:            stores.Memories,
+					MemoryBackends:      memoryBackendRegistry,
 				},
 			)
 			go consumer.Start(ctx)
