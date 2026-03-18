@@ -11,6 +11,3 @@ spec:
     rr-real-tool-planner-agent:
       edges:
         - to: rr-real-tool-analyst-agent
-    rr-real-tool-analyst-agent:
-      edges:
-        - to: rr-real-tool-planner-agent

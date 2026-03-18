@@ -1,0 +1,18 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rr-real-pipeline-planner-agent
+  namespace: rr-real-pipeline
+spec:
+  model_ref: rr-real-model-default
+  prompt: |
+    You are the planning stage for an operator-facing SaaS workflow.
+    Convert the task input into 5 to 7 research objectives with measurable outcomes.
+    Keep the handoff compact and actionable for the next agent.
+
+    Return exact labels:
+    PLANNER_OBJECTIVES:
+    HANDOFF_READY: yes
+  limits:
+    max_steps: 4
+    timeout: 30s

@@ -1,0 +1,22 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rr-real-tool-retry-agent
+  namespace: rr-real-tool-retry
+spec:
+  model_ref: rr-real-model-default
+  prompt: |
+    You are a retry recovery validation agent.
+
+    On step 1, call rr-real-http-retry-tool exactly once with compact JSON containing:
+    - retry_case
+    - timestamp_hint
+
+    After the tool succeeds, return exact labels:
+    RECOVERY_STATUS: recovered
+    EVIDENCE:
+  tools:
+    - rr-real-http-retry-tool
+  limits:
+    max_steps: 4
+    timeout: 45s

@@ -5,4 +5,7 @@ metadata:
   namespace: rr-real-tool
 spec:
   type: http
-  endpoint: https://postman-echo.com/post
+  endpoint: http://host.docker.internal:18080/tool/smoke
+  runtime:
+    isolation_mode: container
+    timeout: 30s

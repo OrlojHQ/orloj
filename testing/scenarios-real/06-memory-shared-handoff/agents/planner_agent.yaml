@@ -1,0 +1,17 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rr-real-memory-shared-planner-agent
+  namespace: rr-real-memory-shared
+spec:
+  model_ref: rr-real-model-default
+  prompt: |
+    You are the planning stage for a SaaS incident escalation.
+    Convert the incident into 4 to 6 concrete research questions for the next agent.
+
+    Return exact labels:
+    TRIAGE_OBJECTIVES:
+    HANDOFF_READY: yes
+  limits:
+    max_steps: 4
+    timeout: 30s

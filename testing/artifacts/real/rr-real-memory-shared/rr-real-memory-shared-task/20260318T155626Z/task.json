@@ -1,0 +1,139 @@
+{
+  "apiVersion": "orloj.dev/v1",
+  "kind": "Task",
+  "metadata": {
+    "name": "rr-real-memory-shared-task",
+    "namespace": "rr-real-memory-shared",
+    "resourceVersion": "8",
+    "generation": 1,
+    "createdAt": "2026-03-18T15:56:24Z"
+  },
+  "spec": {
+    "system": "rr-real-memory-shared-system",
+    "mode": "run",
+    "input": {
+      "Error rate dropped to 4% by 14": "24 UTC, but VIP merchants are still impacted.",
+      "Rollback completed at 14": "17 UTC.",
+      "Status page updated at 14": "05 UTC.",
+      "incident_notes": "|",
+      "incident_title": "SEV-1 payment API saturation"
+    },
+    "priority": "high",
+    "retry": {
+      "max_attempts": 2,
+      "backoff": "2s"
+    },
+    "message_retry": {
+      "max_attempts": 2,
+      "backoff": "250ms",
+      "max_backoff": "2s",
+      "jitter": "full"
+    },
+    "requirements": {}
+  },
+  "status": {
+    "phase": "DeadLetter",
+    "lastError": "message rr-real-memory-shared/rr-real-memory-shared-task/a001/h001/system/rr-real-memory-shared-planner-agent dead-lettered after 2 attempts: agent rr-real-memory-shared-planner-agent execution failed: agent rr-real-memory-shared-planner-agent model execution failed: model request failed status=400: tools.0.custom.name: String should match pattern '^[a-zA-Z0-9_-]{1,128}$'",
+    "startedAt": "2026-03-18T15:56:24.178257Z",
+    "completedAt": "2026-03-18T15:56:25.989373Z",
+    "attempts": 1,
+    "output": {
+      "runtime.entry_agent": "rr-real-memory-shared-planner-agent",
+      "runtime.mode": "message-driven"
+    },
+    "trace": [
+      {
+        "timestamp": "2026-03-18T15:56:24.178331Z",
+        "step_id": "a001.s0001",
+        "attempt": 1,
+        "branch_id": "b001",
+        "type": "task_runtime_kickoff",
+        "agent": "rr-real-memory-shared-planner-agent",
+        "message": "message_id=rr-real-memory-shared/rr-real-memory-shared-task/a001/h001/system/rr-real-memory-shared-planner-agent branch_id=b001"
+      },
+      {
+        "timestamp": "2026-03-18T15:56:24.178318Z",
+        "attempt": 1,
+        "branch_id": "b001",
+        "type": "agent_message_received",
+        "agent": "rr-real-memory-shared-planner-agent",
+        "message": "message_id=rr-real-memory-shared/rr-real-memory-shared-task/a001/h001/system/rr-real-memory-shared-planner-agent from=system type=task_start branch_id=b001"
+      },
+      {
+        "timestamp": "2026-03-18T15:56:24.178318Z",
+        "attempt": 1,
+        "branch_id": "b001",
+        "type": "agent_message_retry_scheduled",
+        "agent": "rr-real-memory-shared-planner-agent",
+        "message": "message_id=rr-real-memory-shared/rr-real-memory-shared-task/a001/h001/system/rr-real-memory-shared-planner-agent attempt=1/2 delay=75.49675ms error=agent rr-real-memory-shared-planner-agent execution failed: agent rr-real-memory-shared-planner-agent model execution failed: model request failed status=400: tools.0.custom.name: String should match pattern '^[a-zA-Z0-9_-]{1,128}$'"
+      },
+      {
+        "timestamp": "2026-03-18T15:56:24.178318Z",
+        "attempt": 1,
+        "branch_id": "b001",
+        "type": "agent_message_deadletter",
+        "agent": "rr-real-memory-shared-planner-agent",
+        "message": "message_id=rr-real-memory-shared/rr-real-memory-shared-task/a001/h001/system/rr-real-memory-shared-planner-agent attempts=2 error=agent rr-real-memory-shared-planner-agent execution failed: agent rr-real-memory-shared-planner-agent model execution failed: model request failed status=400: tools.0.custom.name: String should match pattern '^[a-zA-Z0-9_-]{1,128}$' branch_id=b001"
+      }
+    ],
+    "history": [
+      {
+        "timestamp": "2026-03-18T15:56:24.178245Z",
+        "type": "assigned",
+        "worker": "embedded-worker",
+        "message": "task assigned to worker=embedded-worker"
+      },
+      {
+        "timestamp": "2026-03-18T15:56:24.178293Z",
+        "type": "claim",
+        "worker": "embedded-worker",
+        "message": "task claimed by worker=embedded-worker lease=30s"
+      },
+      {
+        "timestamp": "2026-03-18T15:56:24.178332Z",
+        "type": "runtime_kickoff",
+        "worker": "embedded-worker",
+        "message": "message-driven kickoff sent to rr-real-memory-shared-planner-agent branch=b001"
+      },
+      {
+        "timestamp": "2026-03-18T15:56:25.989373Z",
+        "type": "deadletter",
+        "worker": "embedded-worker",
+        "message": "message rr-real-memory-shared/rr-real-memory-shared-task/a001/h001/system/rr-real-memory-shared-planner-agent dead-lettered after 2 attempts: agent rr-real-memory-shared-planner-agent execution failed: agent rr-real-memory-shared-planner-agent model execution failed: model request failed status=400: tools.0.custom.name: String should match pattern '^[a-zA-Z0-9_-]{1,128}$'"
+      }
+    ],
+    "messages": [
+      {
+        "timestamp": "2026-03-18T15:56:24.178318Z",
+        "message_id": "rr-real-memory-shared/rr-real-memory-shared-task/a001/h001/system/rr-real-memory-shared-planner-agent",
+        "idempotency_key": "rr-real-memory-shared/rr-real-memory-shared-task/a001/h001/system/rr-real-memory-shared-planner-agent",
+        "task_id": "rr-real-memory-shared/rr-real-memory-shared-task",
+        "attempt": 1,
+        "system": "rr-real-memory-shared-system",
+        "from_agent": "system",
+        "to_agent": "rr-real-memory-shared-planner-agent",
+        "branch_id": "b001",
+        "type": "task_start",
+        "content": "task=rr-real-memory-shared-task attempt=1",
+        "trace_id": "rr-real-memory-shared/rr-real-memory-shared-task/a001",
+        "phase": "DeadLetter",
+        "attempts": 2,
+        "max_attempts": 2,
+        "last_error": "agent rr-real-memory-shared-planner-agent execution failed: agent rr-real-memory-shared-planner-agent model execution failed: model request failed status=400: tools.0.custom.name: String should match pattern '^[a-zA-Z0-9_-]{1,128}$'",
+        "worker": "embedded-worker",
+        "processed_at": "2026-03-18T15:56:25.989373Z"
+      }
+    ],
+    "message_idempotency": [
+      {
+        "key": "rr-real-memory-shared/rr-real-memory-shared-task/a001/h001/system/rr-real-memory-shared-planner-agent",
+        "message_id": "rr-real-memory-shared/rr-real-memory-shared-task/a001/h001/system/rr-real-memory-shared-planner-agent",
+        "state": "deadletter",
+        "updated_at": "2026-03-18T15:56:25.989374Z",
+        "expires_at": "2026-04-17T15:56:25.989374Z",
+        "worker": "embedded-worker"
+      }
+    ],
+    "observedGeneration": 1
+  }
+}

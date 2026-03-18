@@ -840,6 +840,8 @@ type TaskTraceEvent struct {
 	Message             string `json:"message,omitempty"`
 	LatencyMS           int64  `json:"latency_ms,omitempty"`
 	Tokens              int    `json:"tokens,omitempty"`
+	InputTokens         int    `json:"input_tokens,omitempty"`
+	OutputTokens        int    `json:"output_tokens,omitempty"`
 	TokenUsageSource    string `json:"token_usage_source,omitempty"`
 	ToolCalls           int    `json:"tool_calls,omitempty"`
 	MemoryWrites        int    `json:"memory_writes,omitempty"`

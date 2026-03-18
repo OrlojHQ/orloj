@@ -1,6 +1,9 @@
 package resources
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestAgentNormalizeWithModelRefDoesNotForceDefaultModel(t *testing.T) {
 	agent := Agent{
@@ -40,5 +43,50 @@ spec:
 	}
 	if agent.Spec.Model != "" {
 		t.Fatalf("expected model to remain empty when model_ref is set, got %q", agent.Spec.Model)
+	}
+}
+
+func TestParseAgentManifestWithMemoryAllowYAML(t *testing.T) {
+	raw := []byte(`apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: memory-agent
+spec:
+  model_ref: anthropic-prod
+  prompt: test
+  memory:
+    ref: shared-store
+    allow:
+      - read
+      - memory.write
+      - search
+`)
+	agent, err := ParseAgentManifest(raw)
+	if err != nil {
+		t.Fatalf("parse agent failed: %v", err)
+	}
+	got := strings.Join(agent.Spec.Memory.Allow, ",")
+	if got != "read,write,search" {
+		t.Fatalf("unexpected memory allow set %q", got)
+	}
+}
+
+func TestAgentNormalizeRejectsMemoryAllowWithoutRef(t *testing.T) {
+	agent := Agent{
+		Kind:     "Agent",
+		Metadata: ObjectMeta{Name: "memory-agent"},
+		Spec: AgentSpec{
+			Prompt: "test",
+			Memory: MemorySpec{
+				Allow: []string{"read"},
+			},
+		},
+	}
+	err := agent.Normalize()
+	if err == nil {
+		t.Fatal("expected error for memory.allow without memory.ref")
+	}
+	if !strings.Contains(err.Error(), "spec.memory.ref is required") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

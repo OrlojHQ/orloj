@@ -1,0 +1,19 @@
+apiVersion: orloj.dev/v1
+kind: Task
+metadata:
+  name: rr-real-memory-query-task
+  namespace: rr-real-memory-reuse
+spec:
+  system: rr-real-memory-reuse-system
+  input:
+    mode: query
+    question: first operator action when checkout API returns HTTP 503 after a deploy
+  priority: high
+  retry:
+    max_attempts: 2
+    backoff: 2s
+  message_retry:
+    max_attempts: 2
+    backoff: 250ms
+    max_backoff: 2s
+    jitter: full

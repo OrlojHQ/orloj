@@ -1,0 +1,8 @@
+apiVersion: orloj.dev/v1
+kind: AgentSystem
+metadata:
+  name: rr-real-webhook-system
+  namespace: rr-real-webhook
+spec:
+  agents:
+    - rr-real-webhook-triage-agent

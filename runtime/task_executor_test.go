@@ -250,3 +250,39 @@ func TestTaskExecutorNoToolsReturnsModelOutput(t *testing.T) {
 		t.Fatal("did not expect max steps reached when no-tools model output is available")
 	}
 }
+
+func TestParseAgentStepEventsCapturesLatencyFields(t *testing.T) {
+	events := []observedAgentEvent{
+		{
+			Timestamp: "2026-03-18T00:00:00Z",
+			Message:   "step=1 model success tokens=42 input_tokens=30 output_tokens=12 usage_source=provider latency_ms=27",
+		},
+		{
+			Timestamp: "2026-03-18T00:00:01Z",
+			Message:   "step=1 tool=memory.write tool_contract=v1 tool_request_id=req-1 tool_attempt=1 duration_ms=14 success",
+		},
+	}
+
+	parsed := parseAgentStepEvents(events)
+	if len(parsed) != 2 {
+		t.Fatalf("expected 2 parsed events, got %d", len(parsed))
+	}
+	if parsed[0].Type != "model_call" {
+		t.Fatalf("expected first event type model_call, got %q", parsed[0].Type)
+	}
+	if parsed[0].LatencyMS != 27 {
+		t.Fatalf("expected model_call latency_ms=27, got %d", parsed[0].LatencyMS)
+	}
+	if parsed[0].InputTokens != 30 {
+		t.Fatalf("expected model_call input_tokens=30, got %d", parsed[0].InputTokens)
+	}
+	if parsed[0].OutputTokens != 12 {
+		t.Fatalf("expected model_call output_tokens=12, got %d", parsed[0].OutputTokens)
+	}
+	if parsed[1].Type != "tool_call" {
+		t.Fatalf("expected second event type tool_call, got %q", parsed[1].Type)
+	}
+	if parsed[1].LatencyMS != 14 {
+		t.Fatalf("expected tool_call latency_ms=14, got %d", parsed[1].LatencyMS)
+	}
+}

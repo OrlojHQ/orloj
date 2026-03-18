@@ -106,6 +106,7 @@ func (w *AgentWorker) Run(ctx context.Context) {
 				Role:    "user",
 				Content: buildOpenAIUserContent(ModelRequest{Step: step, Tools: w.agent.Spec.Tools, Context: w.modelContext(step)}),
 			})
+			modelStart := time.Now()
 			modelResp, modelErr := w.modelGateway.Complete(ctx, ModelRequest{
 				Model:     w.agent.Spec.Model,
 				ModelRef:  w.agent.Spec.ModelRef,
@@ -117,9 +118,10 @@ func (w *AgentWorker) Run(ctx context.Context) {
 				Context:   w.modelContext(step),
 				Messages:  append([]ChatMessage(nil), w.history...),
 			})
+			modelLatencyMS := time.Since(modelStart).Milliseconds()
 			if modelErr != nil {
 				if w.onEvent != nil {
-					w.onEvent(fmt.Sprintf("step=%d model_error=%v", step, modelErr))
+					w.onEvent(fmt.Sprintf("step=%d model_error=%v latency_ms=%d", step, modelErr, modelLatencyMS))
 				}
 				w.history = w.history[:len(w.history)-1]
 				continue
@@ -127,7 +129,15 @@ func (w *AgentWorker) Run(ctx context.Context) {
 			modelOutput := strings.TrimSpace(modelResp.Content)
 			modelUsage := normalizeModelUsageWithFallback(modelResp.Usage, w.agent, modelResp, step)
 			if w.onEvent != nil {
-				w.onEvent(fmt.Sprintf("step=%d model success tokens=%d usage_source=%s", step, modelUsage.TotalTokens, modelUsage.Source))
+				w.onEvent(fmt.Sprintf(
+					"step=%d model success tokens=%d input_tokens=%d output_tokens=%d usage_source=%s latency_ms=%d",
+					step,
+					modelUsage.TotalTokens,
+					modelUsage.InputTokens,
+					modelUsage.OutputTokens,
+					modelUsage.Source,
+					modelLatencyMS,
+				))
 				if modelOutput != "" {
 					w.onEvent(fmt.Sprintf("step=%d model_output=%s", step, modelOutput))
 				}
@@ -206,6 +216,7 @@ func (w *AgentWorker) Run(ctx context.Context) {
 					step,
 					normalizeToolKey(tool),
 				)
+				toolStart := time.Now()
 				response, execErr := ExecuteToolContract(ctx, w.toolRuntime, ToolExecutionRequest{
 					ToolContractVersion: ToolContractVersionV1,
 					RequestID:           reqID,
@@ -235,6 +246,10 @@ func (w *AgentWorker) Run(ctx context.Context) {
 				if toolAttempt <= 0 {
 					toolAttempt = 1
 				}
+				toolDurationMS := response.Usage.DurationMS
+				if toolDurationMS <= 0 {
+					toolDurationMS = time.Since(toolStart).Milliseconds()
+				}
 				if err != nil {
 					if code, reason, retryable, ok := ToolErrorMeta(err); ok {
 						status := ToolStatusError
@@ -242,24 +257,24 @@ func (w *AgentWorker) Run(ctx context.Context) {
 							status = ToolStatusDenied
 						}
 						if w.onEvent != nil {
-							w.onEvent(fmt.Sprintf("step=%d tool=%s tool_contract=%s tool_request_id=%s tool_attempt=%d status=%s tool_code=%s tool_reason=%s retryable=%t error=%s", step, tool, contractVersion, toolRequestID, toolAttempt, status, code, reason, retryable, err))
+							w.onEvent(fmt.Sprintf("step=%d tool=%s tool_contract=%s tool_request_id=%s tool_attempt=%d status=%s tool_code=%s tool_reason=%s retryable=%t duration_ms=%d error=%s", step, tool, contractVersion, toolRequestID, toolAttempt, status, code, reason, retryable, toolDurationMS, err))
 						}
 					}
 					if IsToolDeniedError(err) || errors.Is(err, ErrToolPermissionDenied) || strings.Contains(strings.ToLower(err.Error()), "permission denied") {
 						if w.onEvent != nil {
-							w.onEvent(fmt.Sprintf("step=%d tool=%s tool_contract=%s tool_request_id=%s tool_attempt=%d permission denied error=%v", step, tool, contractVersion, toolRequestID, toolAttempt, err))
+							w.onEvent(fmt.Sprintf("step=%d tool=%s tool_contract=%s tool_request_id=%s tool_attempt=%d permission denied duration_ms=%d error=%v", step, tool, contractVersion, toolRequestID, toolAttempt, toolDurationMS, err))
 							w.onEvent("worker stopped permission denied")
 						}
 						return
 					}
 					if w.onEvent != nil {
-						w.onEvent(fmt.Sprintf("step=%d tool=%s tool_contract=%s tool_request_id=%s tool_attempt=%d error=%v", step, tool, contractVersion, toolRequestID, toolAttempt, err))
+						w.onEvent(fmt.Sprintf("step=%d tool=%s tool_contract=%s tool_request_id=%s tool_attempt=%d duration_ms=%d error=%v", step, tool, contractVersion, toolRequestID, toolAttempt, toolDurationMS, err))
 					}
 					continue
 				}
 				w.memory.Put(fmt.Sprintf("%s:%d", tool, step), result)
 				if w.onEvent != nil {
-					w.onEvent(fmt.Sprintf("step=%d tool=%s tool_contract=%s tool_request_id=%s tool_attempt=%d success", step, tool, contractVersion, toolRequestID, toolAttempt))
+					w.onEvent(fmt.Sprintf("step=%d tool=%s tool_contract=%s tool_request_id=%s tool_attempt=%d duration_ms=%d success", step, tool, contractVersion, toolRequestID, toolAttempt, toolDurationMS))
 				}
 				w.history = append(w.history, ChatMessage{
 					Role:    "user",

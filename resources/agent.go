@@ -66,9 +66,10 @@ type AgentSpec struct {
 
 // MemorySpec configures runtime memory backend.
 type MemorySpec struct {
-	Ref      string `json:"ref,omitempty"`
-	Type     string `json:"type,omitempty"`
-	Provider string `json:"provider,omitempty"`
+	Ref      string   `json:"ref,omitempty"`
+	Type     string   `json:"type,omitempty"`
+	Provider string   `json:"provider,omitempty"`
+	Allow    []string `json:"allow,omitempty"`
 }
 
 // AgentLimits configures execution safety bounds.
@@ -103,6 +104,17 @@ func (a *Agent) Normalize() error {
 	a.Spec.ModelRef = strings.TrimSpace(a.Spec.ModelRef)
 	if a.Spec.Model == "" && a.Spec.ModelRef == "" {
 		a.Spec.Model = "gpt-4o-mini"
+	}
+	a.Spec.Memory.Ref = strings.TrimSpace(a.Spec.Memory.Ref)
+	a.Spec.Memory.Type = strings.TrimSpace(a.Spec.Memory.Type)
+	a.Spec.Memory.Provider = strings.TrimSpace(a.Spec.Memory.Provider)
+	normalizedMemoryAllow, err := NormalizeMemoryOperations(a.Spec.Memory.Allow)
+	if err != nil {
+		return fmt.Errorf("invalid spec.memory.allow: %w", err)
+	}
+	a.Spec.Memory.Allow = normalizedMemoryAllow
+	if len(a.Spec.Memory.Allow) > 0 && a.Spec.Memory.Ref == "" {
+		return fmt.Errorf("spec.memory.ref is required when spec.memory.allow is set")
 	}
 	normalizedRoles := make([]string, 0, len(a.Spec.Roles))
 	seenRoles := make(map[string]struct{}, len(a.Spec.Roles))

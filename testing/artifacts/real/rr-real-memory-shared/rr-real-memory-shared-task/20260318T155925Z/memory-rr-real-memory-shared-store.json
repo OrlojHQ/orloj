@@ -1,0 +1,13 @@
+{
+  "count": 2,
+  "entries": [
+    {
+      "key": "incident-notes/chunk-0000",
+      "value": "SEV-1 payment API saturation\nError rate dropped to 4% by 14:24 UTC, but VIP merchants are still impacted.\nRollback completed at 14:17 UTC.\nStatus page updated at 14:05 UTC."
+    },
+    {
+      "key": "triage/recommendation",
+      "value": "Prioritize investigation of VIP merchant-specific issues post-rollback. Verify if impacted merchants share common patterns (account tier, transaction volume, or specific payment methods). Consider targeted rollout of fix or merchant communication strategy while stability is maintained at 4% error rate."
+    }
+  ]
+}

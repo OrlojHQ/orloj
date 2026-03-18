@@ -1,0 +1,135 @@
+{
+  "apiVersion": "orloj.dev/v1",
+  "kind": "Task",
+  "metadata": {
+    "name": "rr-real-pipeline-task",
+    "namespace": "rr-real-pipeline",
+    "resourceVersion": "8",
+    "generation": 1,
+    "createdAt": "2026-03-18T15:32:57Z"
+  },
+  "spec": {
+    "system": "rr-real-pipeline-system",
+    "mode": "run",
+    "input": {
+      "topic": "operator launch brief for an AI-assisted incident response copilot used by SaaS support teams"
+    },
+    "priority": "high",
+    "retry": {
+      "max_attempts": 2,
+      "backoff": "2s"
+    },
+    "message_retry": {
+      "max_attempts": 2,
+      "backoff": "250ms",
+      "max_backoff": "2s",
+      "jitter": "full"
+    },
+    "requirements": {}
+  },
+  "status": {
+    "phase": "DeadLetter",
+    "lastError": "message rr-real-pipeline/rr-real-pipeline-task/a001/h001/system/rr-real-pipeline-planner-agent dead-lettered after 2 attempts: agent rr-real-pipeline-planner-agent execution failed: agent rr-real-pipeline-planner-agent model execution failed: model request failed status=404: model: claude-3-5-haiku",
+    "startedAt": "2026-03-18T15:32:57.038559Z",
+    "completedAt": "2026-03-18T15:32:59.929065Z",
+    "attempts": 1,
+    "output": {
+      "runtime.entry_agent": "rr-real-pipeline-planner-agent",
+      "runtime.mode": "message-driven"
+    },
+    "trace": [
+      {
+        "timestamp": "2026-03-18T15:32:57.038637Z",
+        "step_id": "a001.s0001",
+        "attempt": 1,
+        "branch_id": "b001",
+        "type": "task_runtime_kickoff",
+        "agent": "rr-real-pipeline-planner-agent",
+        "message": "message_id=rr-real-pipeline/rr-real-pipeline-task/a001/h001/system/rr-real-pipeline-planner-agent branch_id=b001"
+      },
+      {
+        "timestamp": "2026-03-18T15:32:57.038624Z",
+        "attempt": 1,
+        "branch_id": "b001",
+        "type": "agent_message_received",
+        "agent": "rr-real-pipeline-planner-agent",
+        "message": "message_id=rr-real-pipeline/rr-real-pipeline-task/a001/h001/system/rr-real-pipeline-planner-agent from=system type=task_start branch_id=b001"
+      },
+      {
+        "timestamp": "2026-03-18T15:32:57.038624Z",
+        "attempt": 1,
+        "branch_id": "b001",
+        "type": "agent_message_retry_scheduled",
+        "agent": "rr-real-pipeline-planner-agent",
+        "message": "message_id=rr-real-pipeline/rr-real-pipeline-task/a001/h001/system/rr-real-pipeline-planner-agent attempt=1/2 delay=178.467ms error=agent rr-real-pipeline-planner-agent execution failed: agent rr-real-pipeline-planner-agent model execution failed: model request failed status=404: model: claude-3-5-haiku"
+      },
+      {
+        "timestamp": "2026-03-18T15:32:57.038624Z",
+        "attempt": 1,
+        "branch_id": "b001",
+        "type": "agent_message_deadletter",
+        "agent": "rr-real-pipeline-planner-agent",
+        "message": "message_id=rr-real-pipeline/rr-real-pipeline-task/a001/h001/system/rr-real-pipeline-planner-agent attempts=2 error=agent rr-real-pipeline-planner-agent execution failed: agent rr-real-pipeline-planner-agent model execution failed: model request failed status=404: model: claude-3-5-haiku branch_id=b001"
+      }
+    ],
+    "history": [
+      {
+        "timestamp": "2026-03-18T15:32:57.038547Z",
+        "type": "assigned",
+        "worker": "embedded-worker",
+        "message": "task assigned to worker=embedded-worker"
+      },
+      {
+        "timestamp": "2026-03-18T15:32:57.038583Z",
+        "type": "claim",
+        "worker": "embedded-worker",
+        "message": "task claimed by worker=embedded-worker lease=30s"
+      },
+      {
+        "timestamp": "2026-03-18T15:32:57.038639Z",
+        "type": "runtime_kickoff",
+        "worker": "embedded-worker",
+        "message": "message-driven kickoff sent to rr-real-pipeline-planner-agent branch=b001"
+      },
+      {
+        "timestamp": "2026-03-18T15:32:59.929065Z",
+        "type": "deadletter",
+        "worker": "embedded-worker",
+        "message": "message rr-real-pipeline/rr-real-pipeline-task/a001/h001/system/rr-real-pipeline-planner-agent dead-lettered after 2 attempts: agent rr-real-pipeline-planner-agent execution failed: agent rr-real-pipeline-planner-agent model execution failed: model request failed status=404: model: claude-3-5-haiku"
+      }
+    ],
+    "messages": [
+      {
+        "timestamp": "2026-03-18T15:32:57.038624Z",
+        "message_id": "rr-real-pipeline/rr-real-pipeline-task/a001/h001/system/rr-real-pipeline-planner-agent",
+        "idempotency_key": "rr-real-pipeline/rr-real-pipeline-task/a001/h001/system/rr-real-pipeline-planner-agent",
+        "task_id": "rr-real-pipeline/rr-real-pipeline-task",
+        "attempt": 1,
+        "system": "rr-real-pipeline-system",
+        "from_agent": "system",
+        "to_agent": "rr-real-pipeline-planner-agent",
+        "branch_id": "b001",
+        "type": "task_start",
+        "content": "operator launch brief for an AI-assisted incident response copilot used by SaaS support teams",
+        "trace_id": "rr-real-pipeline/rr-real-pipeline-task/a001",
+        "phase": "DeadLetter",
+        "attempts": 2,
+        "max_attempts": 2,
+        "last_error": "agent rr-real-pipeline-planner-agent execution failed: agent rr-real-pipeline-planner-agent model execution failed: model request failed status=404: model: claude-3-5-haiku",
+        "worker": "embedded-worker",
+        "processed_at": "2026-03-18T15:32:59.929065Z"
+      }
+    ],
+    "message_idempotency": [
+      {
+        "key": "rr-real-pipeline/rr-real-pipeline-task/a001/h001/system/rr-real-pipeline-planner-agent",
+        "message_id": "rr-real-pipeline/rr-real-pipeline-task/a001/h001/system/rr-real-pipeline-planner-agent",
+        "state": "deadletter",
+        "updated_at": "2026-03-18T15:32:59.929066Z",
+        "expires_at": "2026-04-17T15:32:59.929066Z",
+        "worker": "embedded-worker"
+      }
+    ],
+    "observedGeneration": 1
+  }
+}

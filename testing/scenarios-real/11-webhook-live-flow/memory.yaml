@@ -1,0 +1,8 @@
+apiVersion: orloj.dev/v1
+kind: Memory
+metadata:
+  name: rr-real-webhook-memory
+  namespace: rr-real-webhook
+spec:
+  type: vector
+  provider: in-memory

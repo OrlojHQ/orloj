@@ -55,7 +55,7 @@ Base OpenTelemetry integration is complete (OTLP export, span instrumentation on
 
 ### Memory Resource Maturity Review -- Addressed
 
-The Memory resource is now fully integrated into the runtime. Agents that reference a Memory resource via `spec.memory.ref` gain five built-in memory tools (`memory.read`, `memory.write`, `memory.search`, `memory.list`, `memory.ingest`). Memory operates in three layers: conversation history (per-activation), task-scoped shared store (per-task), and persistent backends (cross-task). The in-memory backend is available; pgvector support is planned. The Memory detail page in the frontend includes an Entries tab for browsing stored data. See [Memory Concepts](../concepts/memory/index.md).
+The Memory resource is now fully integrated into the runtime. Agents attach a Memory resource via `spec.memory.ref` and explicitly grant built-in memory operations via `spec.memory.allow` (`read`, `write`, `search`, `list`, `ingest`). Memory operates in three layers: conversation history (per-activation), task-scoped shared store (per-task), and persistent backends (cross-task). The in-memory backend is available; pgvector support is planned. The Memory detail page in the frontend includes an Entries tab for browsing stored data. See [Memory Concepts](../concepts/memory/index.md).
 
 Remaining work:
 - First-party vector database provider implementations (pgvector, etc.). The provider registry is extensible — third-party providers can be plugged in today.

@@ -1,0 +1,11 @@
+apiVersion: orloj.dev/v1
+kind: Tool
+metadata:
+  name: rr-real-tool-decision-http-tool
+  namespace: rr-real-tool-decision
+spec:
+  type: http
+  endpoint: http://host.docker.internal:18080/tool/decision
+  runtime:
+    isolation_mode: container
+    timeout: 30s

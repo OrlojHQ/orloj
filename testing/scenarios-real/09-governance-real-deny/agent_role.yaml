@@ -1,0 +1,9 @@
+apiVersion: orloj.dev/v1
+kind: AgentRole
+metadata:
+  name: rr-real-gov-limited-role
+  namespace: rr-real-gov-deny
+spec:
+  description: Intentionally missing invoke permission for deny-path validation.
+  permissions:
+    - capability:docs.write

@@ -1,0 +1,8 @@
+apiVersion: orloj.dev/v1
+kind: Memory
+metadata:
+  name: rr-real-schedule-memory
+  namespace: rr-real-schedule
+spec:
+  type: vector
+  provider: in-memory

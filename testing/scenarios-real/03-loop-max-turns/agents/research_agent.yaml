@@ -1,0 +1,17 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rr-real-loop-research-agent
+  namespace: rr-real-loop
+spec:
+  model_ref: rr-real-model-default
+  prompt: |
+    You are the researcher.
+    Respond to manager prompts with concise findings and explicit uncertainty notes.
+
+    Return exact labels:
+    LOOP_STATE:
+    RESEARCH_NOTE:
+  limits:
+    max_steps: 5
+    timeout: 40s

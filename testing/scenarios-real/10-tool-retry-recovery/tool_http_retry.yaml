@@ -1,0 +1,16 @@
+apiVersion: orloj.dev/v1
+kind: Tool
+metadata:
+  name: rr-real-http-retry-tool
+  namespace: rr-real-tool-retry
+spec:
+  type: http
+  endpoint: http://host.docker.internal:18080/tool/retry-once
+  runtime:
+    isolation_mode: container
+    timeout: 30s
+    retry:
+      max_attempts: 2
+      backoff: 250ms
+      max_backoff: 1s
+      jitter: none

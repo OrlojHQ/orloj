@@ -44,7 +44,8 @@ This document describes the current resource schemas in `orloj.dev/v1`, based on
 - `allowed_tools` ([]string): tools pre-authorized without RBAC. Bypasses AgentRole/ToolPermission checks for listed tools.
 - `roles` ([]string): bound `AgentRole` names.
 - `memory` (object):
-  - `ref` (string): reference to a `Memory` resource. When set, built-in memory tools (`memory.read`, `memory.write`, `memory.search`, `memory.list`, `memory.ingest`) are automatically injected into the agent's tool list. See [Memory](../concepts/memory/index.md).
+  - `ref` (string): reference to a `Memory` resource. This attaches the memory backend to the agent. See [Memory](../concepts/memory/index.md).
+  - `allow` ([]string): explicit built-in memory operations allowed for the agent: `read`, `write`, `search`, `list`, `ingest`.
   - `type` (string)
   - `provider` (string)
 - `limits` (object):
@@ -55,6 +56,7 @@ This document describes the current resource schemas in `orloj.dev/v1`, based on
 
 - If both `model` and `model_ref` are empty, `model` defaults to `gpt-4o-mini`.
 - `roles` are trimmed and deduplicated (case-insensitive).
+- `memory.allow` is trimmed, normalized, and deduplicated. It requires `memory.ref`.
 - `limits.max_steps` defaults to `10` when `<= 0`.
 
 ### `status`
@@ -225,7 +227,7 @@ A Memory resource configures a persistent memory backend that agents can read fr
 
 ### Built-in Memory Tools
 
-When an Agent references a Memory resource via `spec.memory.ref`, the runtime automatically injects the following tools:
+When an Agent references a Memory resource via `spec.memory.ref` and explicitly grants operations with `spec.memory.allow`, the runtime exposes the following built-in tools:
 
 | Tool | Description |
 |---|---|

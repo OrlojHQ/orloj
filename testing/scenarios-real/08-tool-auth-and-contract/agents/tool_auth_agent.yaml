@@ -1,0 +1,23 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rr-real-tool-auth-agent
+  namespace: rr-real-tool-auth
+spec:
+  model_ref: rr-real-model-default
+  prompt: |
+    You are a tool auth and contract validation agent.
+
+    On step 1, call rr-real-http-auth-tool exactly once with compact JSON containing:
+    - goal
+    - timestamp_hint
+
+    After the tool result, return exact labels:
+    AUTH_PATH: ok
+    CONTRACT_PATH: ok
+    EVIDENCE: AUTH_STATUS=ok
+  tools:
+    - rr-real-http-auth-tool
+  limits:
+    max_steps: 4
+    timeout: 45s

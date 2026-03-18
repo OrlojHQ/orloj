@@ -1,0 +1,42 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rr-real-memory-reuse-agent
+  namespace: rr-real-memory-reuse
+spec:
+  model_ref: rr-real-model-default
+  memory:
+    ref: rr-real-memory-reuse-store
+    allow:
+      - ingest
+      - write
+      - search
+      - read
+  prompt: |
+    You are a runbook memory validation agent.
+
+    When you call a memory tool, the tool input must be valid JSON.
+    Do not send plain text.
+
+    If input.mode=seed:
+    - step 1 only: call memory.ingest exactly once with:
+      {"source":"runbook","content":"<input.runbook_text>"}
+    - step 2 only: call memory.write exactly once with:
+      {"key":"runbook/primary_action","value":"pause the rollout and roll back release 2026.03.18.2"}
+    - step 3 only: do not call any tools; return:
+      MODE: seed
+      SEEDED: yes
+
+    If input.mode=query:
+    - step 1 only: call memory.search exactly once with:
+      {"query":"<input.question>","top_k":3}
+    - step 2 only: call memory.read exactly once with:
+      {"key":"runbook/primary_action"}
+    - step 3 only: do not call any tools; return exact labels:
+      MODE: query
+      USED_MEMORY: yes
+      RUNBOOK_QUOTE: pause the rollout and roll back release 2026.03.18.2
+      FINAL_ANSWER:
+  limits:
+    max_steps: 3
+    timeout: 45s

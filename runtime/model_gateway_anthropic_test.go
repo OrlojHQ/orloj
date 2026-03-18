@@ -267,3 +267,60 @@ func TestAnthropicModelGatewayCompleteToolCallResponse(t *testing.T) {
 		t.Fatalf("unexpected tool call input %q", resp.ToolCalls[0].Input)
 	}
 }
+
+func TestAnthropicModelGatewayCompleteMapsToolAliasesBackToRuntimeNames(t *testing.T) {
+	type capturedRequest struct {
+		Tools []struct {
+			Name string `json:"name"`
+		} `json:"tools"`
+	}
+
+	captured := capturedRequest{}
+	client := &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			body, err := io.ReadAll(req.Body)
+			if err != nil {
+				return nil, err
+			}
+			if err := json.Unmarshal(body, &captured); err != nil {
+				return nil, err
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body: io.NopCloser(strings.NewReader(
+					`{"content":[{"type":"tool_use","name":"memory_write","input":{"input":"{\"key\":\"x\",\"value\":\"y\"}"}}]}`,
+				)),
+				Header: make(http.Header),
+			}, nil
+		}),
+		Timeout: time.Second,
+	}
+
+	cfg := DefaultAnthropicModelGatewayConfig()
+	cfg.APIKey = "test-key"
+	cfg.BaseURL = "https://example.invalid/v1"
+	cfg.HTTPClient = client
+
+	gateway, err := NewAnthropicModelGateway(cfg)
+	if err != nil {
+		t.Fatalf("new gateway failed: %v", err)
+	}
+
+	resp, err := gateway.Complete(context.Background(), ModelRequest{
+		Model: "claude-test",
+		Step:  1,
+		Tools: []string{"memory.write"},
+	})
+	if err != nil {
+		t.Fatalf("complete failed: %v", err)
+	}
+	if len(captured.Tools) != 1 || captured.Tools[0].Name != "memory_write" {
+		t.Fatalf("expected sanitized provider tool name, got %+v", captured.Tools)
+	}
+	if len(resp.ToolCalls) != 1 {
+		t.Fatalf("expected one tool call, got %d", len(resp.ToolCalls))
+	}
+	if resp.ToolCalls[0].Name != "memory.write" {
+		t.Fatalf("expected runtime tool name memory.write, got %q", resp.ToolCalls[0].Name)
+	}
+}

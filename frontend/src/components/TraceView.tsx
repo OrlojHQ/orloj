@@ -62,7 +62,7 @@ function computeStats(trace: TaskTraceEvent[]): TraceStats {
   };
   for (const ev of trace) {
     if (ev.latency_ms) stats.totalLatency += ev.latency_ms;
-    if (ev.tokens) stats.totalTokens += ev.tokens;
+    if (ev.tokens && ev.type !== "model_output") stats.totalTokens += ev.tokens;
     if (ev.tool_calls) stats.totalToolCalls += ev.tool_calls;
     if (ev.error_code || ev.type === "agent_error") stats.errorCount++;
     if (ev.agent) stats.agentSet.add(ev.agent);
@@ -300,6 +300,24 @@ export function TraceView({ trace }: TraceViewProps) {
                       <div className="trace-view__detail-field">
                         <span className="trace-view__detail-label">Tokens</span>
                         <span className="trace-view__detail-value">{ev.tokens.toLocaleString()}</span>
+                      </div>
+                    )}
+                    {ev.input_tokens != null && ev.input_tokens > 0 && (
+                      <div className="trace-view__detail-field">
+                        <span className="trace-view__detail-label">Input Tokens</span>
+                        <span className="trace-view__detail-value">{ev.input_tokens.toLocaleString()}</span>
+                      </div>
+                    )}
+                    {ev.output_tokens != null && ev.output_tokens > 0 && (
+                      <div className="trace-view__detail-field">
+                        <span className="trace-view__detail-label">Output Tokens</span>
+                        <span className="trace-view__detail-value">{ev.output_tokens.toLocaleString()}</span>
+                      </div>
+                    )}
+                    {ev.token_usage_source && (
+                      <div className="trace-view__detail-field">
+                        <span className="trace-view__detail-label">Token Source</span>
+                        <span className="trace-view__detail-value mono">{ev.token_usage_source}</span>
                       </div>
                     )}
                     {ev.error_code && (

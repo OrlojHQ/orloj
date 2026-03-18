@@ -1,0 +1,19 @@
+apiVersion: orloj.dev/v1
+kind: Task
+metadata:
+  name: rr-real-memory-seed-task
+  namespace: rr-real-memory-reuse
+spec:
+  system: rr-real-memory-reuse-system
+  input:
+    mode: seed
+    runbook_text: "If the checkout API returns HTTP 503 after a deploy, first pause the rollout, roll back release 2026.03.18.2, and publish a customer update within 30 minutes."
+  priority: high
+  retry:
+    max_attempts: 2
+    backoff: 2s
+  message_retry:
+    max_attempts: 2
+    backoff: 250ms
+    max_backoff: 2s
+    jitter: full

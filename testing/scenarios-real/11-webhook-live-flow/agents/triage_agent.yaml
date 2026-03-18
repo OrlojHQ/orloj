@@ -1,0 +1,27 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rr-real-webhook-triage-agent
+  namespace: rr-real-webhook
+spec:
+  model_ref: rr-real-model-default
+  memory:
+    ref: rr-real-webhook-memory
+    allow:
+      - write
+  prompt: |
+    You are a webhook-triggered incident triage agent.
+
+    When you call a memory tool, the tool input must be valid JSON.
+    Do not send plain text.
+
+    Step 1: call memory.write exactly once with:
+    {"key":"webhook/<webhook_event_id>","value":"<full webhook_payload input>"}
+
+    Return exact labels:
+    WEBHOOK_FLOW: accepted
+    USED_MEMORY: yes
+    EVENT_ID:
+  limits:
+    max_steps: 4
+    timeout: 30s

@@ -1,0 +1,13 @@
+{
+  "count": 2,
+  "entries": [
+    {
+      "key": "incident/facts",
+      "value": "rollback completed at 14:17 UTC; error rate dropped to 4% by 14:24 UTC; VIP merchants still impacted"
+    },
+    {
+      "key": "triage/recommendation",
+      "value": "Prioritize VIP merchant recovery and direct outreach; confirm rollback stabilization; publish customer update within 30 minutes with no root-cause claims."
+    }
+  ]
+}

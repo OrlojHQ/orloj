@@ -4,7 +4,7 @@ Memory gives agents the ability to store, retrieve, and search information acros
 
 ## How Memory Works
 
-When an agent has `spec.memory.ref` set to a Memory resource, the runtime automatically injects five built-in tools into the agent's tool list. The agent can then call these tools during execution just like any external tool, but they are handled internally by the runtime without network calls.
+When an agent has `spec.memory.ref` set to a Memory resource, the runtime attaches that memory backend to the agent. Built-in memory operations are granted explicitly through `spec.memory.allow`, and the runtime exposes only those allowed operations as callable built-in tools. They behave like tools during execution, but are handled internally by the runtime without network calls.
 
 ```yaml
 apiVersion: orloj.dev/v1
@@ -19,6 +19,10 @@ spec:
     - web_search
   memory:
     ref: research-memory
+    allow:
+      - read
+      - write
+      - search
   limits:
     max_steps: 10
 ```
@@ -99,7 +103,7 @@ See [Memory Providers](./providers.md) for full details on each provider, config
 
 ## Built-in Memory Tools
 
-When `spec.memory.ref` is set, the runtime injects the following tools automatically. They do not need to be listed in `spec.tools`.
+When `spec.memory.ref` is set and `spec.memory.allow` grants the corresponding operations, the runtime exposes the following built-in tools. They do not need to be listed in `spec.tools`.
 
 ### `memory.read`
 

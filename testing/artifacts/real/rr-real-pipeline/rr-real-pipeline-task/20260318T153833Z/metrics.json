@@ -1,0 +1,106 @@
+{
+  "name": "rr-real-pipeline-task",
+  "namespace": "rr-real-pipeline",
+  "generated_at": "2026-03-18T15:38:33.6921Z",
+  "totals": {
+    "messages": 2,
+    "queued": 0,
+    "running": 1,
+    "retrypending": 0,
+    "succeeded": 1,
+    "deadletter": 0,
+    "in_flight": 1,
+    "retry_count": 0,
+    "deadletters": 0,
+    "latency_ms_avg": 11349,
+    "latency_ms_p95": 11349,
+    "latency_sample_size": 1
+  },
+  "per_agent": [
+    {
+      "agent": "rr-real-pipeline-planner-agent",
+      "inbound": 1,
+      "outbound": 1,
+      "queued": 0,
+      "running": 0,
+      "retrypending": 0,
+      "succeeded": 1,
+      "deadletter": 0,
+      "in_flight": 0,
+      "retry_count": 0,
+      "deadletters": 0,
+      "latency_ms_avg": 11349,
+      "latency_ms_p95": 11349,
+      "latency_sample_size": 1
+    },
+    {
+      "agent": "rr-real-pipeline-research-agent",
+      "inbound": 1,
+      "outbound": 0,
+      "queued": 0,
+      "running": 1,
+      "retrypending": 0,
+      "succeeded": 0,
+      "deadletter": 0,
+      "in_flight": 1,
+      "retry_count": 0,
+      "deadletters": 0,
+      "latency_ms_avg": 0,
+      "latency_ms_p95": 0,
+      "latency_sample_size": 0
+    },
+    {
+      "agent": "system",
+      "inbound": 0,
+      "outbound": 1,
+      "queued": 0,
+      "running": 0,
+      "retrypending": 0,
+      "succeeded": 0,
+      "deadletter": 0,
+      "in_flight": 0,
+      "retry_count": 0,
+      "deadletters": 0,
+      "latency_ms_avg": 0,
+      "latency_ms_p95": 0,
+      "latency_sample_size": 0
+    }
+  ],
+  "per_edge": [
+    {
+      "from_agent": "rr-real-pipeline-planner-agent",
+      "to_agent": "rr-real-pipeline-research-agent",
+      "messages": 1,
+      "queued": 0,
+      "running": 1,
+      "retrypending": 0,
+      "succeeded": 0,
+      "deadletter": 0,
+      "in_flight": 1,
+      "retry_count": 0,
+      "deadletters": 0,
+      "latency_ms_avg": 0,
+      "latency_ms_p95": 0,
+      "latency_sample_size": 0
+    },
+    {
+      "from_agent": "system",
+      "to_agent": "rr-real-pipeline-planner-agent",
+      "messages": 1,
+      "queued": 0,
+      "running": 0,
+      "retrypending": 0,
+      "succeeded": 1,
+      "deadletter": 0,
+      "in_flight": 0,
+      "retry_count": 0,
+      "deadletters": 0,
+      "latency_ms_avg": 11349,
+      "latency_ms_p95": 11349,
+      "latency_sample_size": 1
+    }
+  ],
+  "filters": {
+    "phase_filtered": false
+  }
+}

@@ -11,20 +11,23 @@ import (
 	"github.com/OrlojHQ/orloj/resources"
 )
 
-var stepRegex = regexp.MustCompile(`step=([0-9]+)`)                     //nolint:gochecknoglobals
-var toolRegex = regexp.MustCompile(`tool=([^\s]+)`)                     //nolint:gochecknoglobals
-var modelErrRegex = regexp.MustCompile(`model_error=(.+)$`)             //nolint:gochecknoglobals
-var modelOutputRegex = regexp.MustCompile(`model_output=(.+)$`)         //nolint:gochecknoglobals
-var toolCodeRegex = regexp.MustCompile(`tool_code=([^\s]+)`)            //nolint:gochecknoglobals
-var toolReasonRegex = regexp.MustCompile(`tool_reason=([^\s]+)`)        //nolint:gochecknoglobals
-var retryableRegex = regexp.MustCompile(`retryable=(true|false)`)       //nolint:gochecknoglobals
-var toolContractRegex = regexp.MustCompile(`tool_contract=([^\s]+)`)    //nolint:gochecknoglobals
-var toolRequestIDRegex = regexp.MustCompile(`tool_request_id=([^\s]+)`) //nolint:gochecknoglobals
-var toolAttemptRegex = regexp.MustCompile(`tool_attempt=([0-9]+)`)      //nolint:gochecknoglobals
-var tokenRegex = regexp.MustCompile(`tokens=([0-9]+)`)                        //nolint:gochecknoglobals
-var usageSourceRegex = regexp.MustCompile(`usage_source=([^\s]+)`)            //nolint:gochecknoglobals
-var toolAuthProfileRegex = regexp.MustCompile(`tool_auth_profile=([^\s]+)`)   //nolint:gochecknoglobals
-var toolAuthSecretRefRegex = regexp.MustCompile(`tool_auth_secret=([^\s]+)`)  //nolint:gochecknoglobals
+var stepRegex = regexp.MustCompile(`step=([0-9]+)`)                          //nolint:gochecknoglobals
+var toolRegex = regexp.MustCompile(`tool=([^\s]+)`)                          //nolint:gochecknoglobals
+var modelErrRegex = regexp.MustCompile(`model_error=(.+)$`)                  //nolint:gochecknoglobals
+var modelOutputRegex = regexp.MustCompile(`model_output=(.+)$`)              //nolint:gochecknoglobals
+var toolCodeRegex = regexp.MustCompile(`tool_code=([^\s]+)`)                 //nolint:gochecknoglobals
+var toolReasonRegex = regexp.MustCompile(`tool_reason=([^\s]+)`)             //nolint:gochecknoglobals
+var retryableRegex = regexp.MustCompile(`retryable=(true|false)`)            //nolint:gochecknoglobals
+var toolContractRegex = regexp.MustCompile(`tool_contract=([^\s]+)`)         //nolint:gochecknoglobals
+var toolRequestIDRegex = regexp.MustCompile(`tool_request_id=([^\s]+)`)      //nolint:gochecknoglobals
+var toolAttemptRegex = regexp.MustCompile(`tool_attempt=([0-9]+)`)           //nolint:gochecknoglobals
+var tokenRegex = regexp.MustCompile(`tokens=([0-9]+)`)                       //nolint:gochecknoglobals
+var inputTokenRegex = regexp.MustCompile(`input_tokens=([0-9]+)`)            //nolint:gochecknoglobals
+var outputTokenRegex = regexp.MustCompile(`output_tokens=([0-9]+)`)          //nolint:gochecknoglobals
+var usageSourceRegex = regexp.MustCompile(`usage_source=([^\s]+)`)           //nolint:gochecknoglobals
+var latencyRegex = regexp.MustCompile(`(?:latency_ms|duration_ms)=([0-9]+)`) //nolint:gochecknoglobals
+var toolAuthProfileRegex = regexp.MustCompile(`tool_auth_profile=([^\s]+)`)  //nolint:gochecknoglobals
+var toolAuthSecretRefRegex = regexp.MustCompile(`tool_auth_secret=([^\s]+)`) //nolint:gochecknoglobals
 
 // AgentStepEvent is one structured runtime event emitted during agent execution.
 type AgentStepEvent struct {
@@ -39,7 +42,10 @@ type AgentStepEvent struct {
 	ToolContractVersion string
 	ToolRequestID       string
 	ToolAttempt         int
+	LatencyMS           int64
 	Tokens              int
+	InputTokens         int
+	OutputTokens        int
 	UsageSource         string
 	ToolAuthProfile     string
 	ToolAuthSecretRef   string
@@ -181,7 +187,10 @@ func parseAgentStepEvents(events []observedAgentEvent) []AgentStepEvent {
 			ToolContractVersion: toolContractVersion,
 			ToolRequestID:       toolRequestID,
 			ToolAttempt:         toolAttempt,
+			LatencyMS:           parseLatencyMS(msg),
 			Tokens:              parseTokens(msg),
+			InputTokens:         parseInputTokens(msg),
+			OutputTokens:        parseOutputTokens(msg),
 			UsageSource:         parseUsageSource(msg),
 			ToolAuthProfile:     parseToolAuthProfile(msg),
 			ToolAuthSecretRef:   parseToolAuthSecretRef(msg),
@@ -316,6 +325,42 @@ func parseTokens(msg string) int {
 		return 0
 	}
 	if value < 0 {
+		return 0
+	}
+	return value
+}
+
+func parseInputTokens(msg string) int {
+	matches := inputTokenRegex.FindStringSubmatch(msg)
+	if len(matches) < 2 {
+		return 0
+	}
+	value, err := strconv.Atoi(strings.TrimSpace(matches[1]))
+	if err != nil || value < 0 {
+		return 0
+	}
+	return value
+}
+
+func parseOutputTokens(msg string) int {
+	matches := outputTokenRegex.FindStringSubmatch(msg)
+	if len(matches) < 2 {
+		return 0
+	}
+	value, err := strconv.Atoi(strings.TrimSpace(matches[1]))
+	if err != nil || value < 0 {
+		return 0
+	}
+	return value
+}
+
+func parseLatencyMS(msg string) int64 {
+	matches := latencyRegex.FindStringSubmatch(msg)
+	if len(matches) < 2 {
+		return 0
+	}
+	value, err := strconv.ParseInt(strings.TrimSpace(matches[1]), 10, 64)
+	if err != nil || value < 0 {
 		return 0
 	}
 	return value

@@ -1,0 +1,8 @@
+apiVersion: orloj.dev/v1
+kind: Memory
+metadata:
+  name: rr-real-memory-reuse-store
+  namespace: rr-real-memory-reuse
+spec:
+  type: vector
+  provider: in-memory

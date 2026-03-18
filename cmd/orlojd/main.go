@@ -324,20 +324,29 @@ func heartbeatWorkerRegistration(
 				CurrentTasks:  0,
 			},
 		}
-		if existing, ok := workerStore.Get(workerID); ok {
-			worker.Metadata.ResourceVersion = existing.Metadata.ResourceVersion
-			worker.Metadata.Generation = existing.Metadata.Generation
-			worker.Metadata.CreatedAt = existing.Metadata.CreatedAt
-			worker.Status.ObservedGeneration = existing.Metadata.Generation
-			if strings.EqualFold(strings.TrimSpace(existing.Status.Phase), "ready") ||
-				strings.EqualFold(strings.TrimSpace(existing.Status.Phase), "pending") {
-				worker.Status.CurrentTasks = existing.Status.CurrentTasks
-			} else {
-				worker.Status.CurrentTasks = 0
+		for attempt := 0; attempt < 3; attempt++ {
+			if existing, ok := workerStore.Get(workerID); ok {
+				worker.Metadata.ResourceVersion = existing.Metadata.ResourceVersion
+				worker.Metadata.Generation = existing.Metadata.Generation
+				worker.Metadata.CreatedAt = existing.Metadata.CreatedAt
+				worker.Status.ObservedGeneration = existing.Metadata.Generation
+				if strings.EqualFold(strings.TrimSpace(existing.Status.Phase), "ready") ||
+					strings.EqualFold(strings.TrimSpace(existing.Status.Phase), "pending") {
+					worker.Status.CurrentTasks = existing.Status.CurrentTasks
+				} else {
+					worker.Status.CurrentTasks = 0
+				}
 			}
-		}
-		if _, err := workerStore.Upsert(worker); err != nil && logger != nil {
-			logger.Printf("worker heartbeat upsert failed: %v", err)
+			_, err := workerStore.Upsert(worker)
+			if err == nil {
+				break
+			}
+			if !store.IsConflict(err) {
+				if logger != nil {
+					logger.Printf("worker heartbeat upsert failed: %v", err)
+				}
+				break
+			}
 		}
 
 		select {

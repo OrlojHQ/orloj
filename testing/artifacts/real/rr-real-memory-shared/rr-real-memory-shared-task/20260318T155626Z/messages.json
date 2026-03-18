@@ -1,0 +1,35 @@
+{
+  "name": "rr-real-memory-shared-task",
+  "namespace": "rr-real-memory-shared",
+  "total": 1,
+  "filtered_from": 1,
+  "lifecycle_counts": {
+    "deadletter": 1,
+    "queued": 0,
+    "retrypending": 0,
+    "running": 0,
+    "succeeded": 0
+  },
+  "messages": [
+    {
+      "timestamp": "2026-03-18T15:56:24.178318Z",
+      "message_id": "rr-real-memory-shared/rr-real-memory-shared-task/a001/h001/system/rr-real-memory-shared-planner-agent",
+      "idempotency_key": "rr-real-memory-shared/rr-real-memory-shared-task/a001/h001/system/rr-real-memory-shared-planner-agent",
+      "task_id": "rr-real-memory-shared/rr-real-memory-shared-task",
+      "attempt": 1,
+      "system": "rr-real-memory-shared-system",
+      "from_agent": "system",
+      "to_agent": "rr-real-memory-shared-planner-agent",
+      "branch_id": "b001",
+      "type": "task_start",
+      "content": "task=rr-real-memory-shared-task attempt=1",
+      "trace_id": "rr-real-memory-shared/rr-real-memory-shared-task/a001",
+      "phase": "DeadLetter",
+      "attempts": 2,
+      "max_attempts": 2,
+      "last_error": "agent rr-real-memory-shared-planner-agent execution failed: agent rr-real-memory-shared-planner-agent model execution failed: model request failed status=400: tools.0.custom.name: String should match pattern '^[a-zA-Z0-9_-]{1,128}$'",
+      "worker": "embedded-worker",
+      "processed_at": "2026-03-18T15:56:25.989373Z"
+    }
+  ]
+}

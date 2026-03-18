@@ -1,0 +1,17 @@
+apiVersion: orloj.dev/v1
+kind: AgentSystem
+metadata:
+  name: rr-real-memory-shared-system
+  namespace: rr-real-memory-shared
+spec:
+  agents:
+    - rr-real-memory-shared-planner-agent
+    - rr-real-memory-shared-research-agent
+    - rr-real-memory-shared-writer-agent
+  graph:
+    rr-real-memory-shared-planner-agent:
+      edges:
+        - to: rr-real-memory-shared-research-agent
+    rr-real-memory-shared-research-agent:
+      edges:
+        - to: rr-real-memory-shared-writer-agent

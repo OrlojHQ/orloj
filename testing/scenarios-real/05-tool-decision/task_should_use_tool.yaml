@@ -1,0 +1,20 @@
+apiVersion: orloj.dev/v1
+kind: Task
+metadata:
+  name: rr-tool-use-task
+  namespace: rr-real-tool-decision
+spec:
+  system: rr-real-tool-decision-system
+  input:
+    goal: validate model-selected tool usage when external verification is required
+    requires_external_verification: "true"
+    claim: verify that the tool endpoint echoes payload content
+  priority: high
+  retry:
+    max_attempts: 2
+    backoff: 2s
+  message_retry:
+    max_attempts: 2
+    backoff: 250ms
+    max_backoff: 2s
+    jitter: full

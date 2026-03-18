@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // AnthropicModelGatewayConfig defines Anthropic Messages API settings.
@@ -135,8 +136,9 @@ func (g *AnthropicModelGateway) Complete(ctx context.Context, req ModelRequest) 
 			body.System = strings.TrimSpace(req.Prompt)
 		}
 	}
+	toolAliases := make(map[string]string, len(req.Tools))
 	if len(req.Tools) > 0 {
-		body.Tools = buildAnthropicTools(req.Tools)
+		body.Tools, toolAliases = buildAnthropicTools(req.Tools)
 	}
 
 	payload, err := json.Marshal(body)
@@ -194,8 +196,12 @@ func (g *AnthropicModelGateway) Complete(ctx context.Context, req ModelRequest) 
 			if name == "" {
 				continue
 			}
+			originalName := name
+			if mapped, ok := toolAliases[name]; ok && strings.TrimSpace(mapped) != "" {
+				originalName = strings.TrimSpace(mapped)
+			}
 			toolCalls = append(toolCalls, ModelToolCall{
-				Name:  name,
+				Name:  originalName,
 				Input: parseAnthropicToolUseInput(part.Input),
 			})
 		}
@@ -266,29 +272,90 @@ type anthropicToolSpec struct {
 	InputSchema map[string]any `json:"input_schema,omitempty"`
 }
 
-func buildAnthropicTools(toolNames []string) []anthropicToolSpec {
+func buildAnthropicTools(toolNames []string) ([]anthropicToolSpec, map[string]string) {
 	deduped := dedupeStrings(toolNames)
 	out := make([]anthropicToolSpec, 0, len(deduped))
+	aliases := make(map[string]string, len(deduped))
+	used := make(map[string]struct{}, len(deduped))
 	for _, name := range deduped {
 		name = strings.TrimSpace(name)
 		if name == "" {
 			continue
 		}
-		out = append(out, anthropicToolSpec{
-			Name:        name,
-			Description: "Invoke tool " + name,
-			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"input": map[string]any{
-						"type": "string",
-					},
+		providerName := anthropicToolName(name, used)
+		aliases[providerName] = name
+		description := "Invoke tool " + name
+		inputSchema := map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"input": map[string]any{
+					"type": "string",
 				},
-				"additionalProperties": true,
 			},
+			"additionalProperties": true,
+		}
+		if schema, ok := builtinToolSchemaForName(name); ok {
+			description = schema.Description
+			inputSchema = schema.Parameters
+		}
+		out = append(out, anthropicToolSpec{
+			Name:        providerName,
+			Description: description,
+			InputSchema: inputSchema,
 		})
 	}
-	return out
+	return out, aliases
+}
+
+func anthropicToolName(name string, used map[string]struct{}) string {
+	base := strings.TrimSpace(name)
+	if base == "" {
+		base = "tool"
+	}
+	var b strings.Builder
+	b.Grow(len(base))
+	lastUnderscore := false
+	for _, r := range base {
+		switch {
+		case unicode.IsLetter(r) || unicode.IsDigit(r):
+			b.WriteRune(r)
+			lastUnderscore = false
+		case r == '_' || r == '-':
+			b.WriteRune(r)
+			lastUnderscore = false
+		default:
+			if !lastUnderscore {
+				b.WriteByte('_')
+				lastUnderscore = true
+			}
+		}
+	}
+	alias := strings.Trim(strings.TrimSpace(b.String()), "_-")
+	if alias == "" {
+		alias = "tool"
+	}
+	if len(alias) > 128 {
+		alias = strings.TrimRight(alias[:128], "_-")
+		if alias == "" {
+			alias = "tool"
+		}
+	}
+	candidate := alias
+	for suffix := 2; ; suffix++ {
+		if _, exists := used[strings.ToLower(candidate)]; !exists {
+			used[strings.ToLower(candidate)] = struct{}{}
+			return candidate
+		}
+		tag := fmt.Sprintf("_%d", suffix)
+		trimmed := alias
+		if len(trimmed)+len(tag) > 128 {
+			trimmed = strings.TrimRight(trimmed[:128-len(tag)], "_-")
+			if trimmed == "" {
+				trimmed = "tool"
+			}
+		}
+		candidate = trimmed + tag
+	}
 }
 
 func parseAnthropicToolUseInput(input map[string]any) string {

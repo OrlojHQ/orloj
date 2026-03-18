@@ -1,0 +1,8 @@
+apiVersion: orloj.dev/v1
+kind: AgentSystem
+metadata:
+  name: rr-real-tool-decision-system
+  namespace: rr-real-tool-decision
+spec:
+  agents:
+    - rr-real-tool-decision-agent

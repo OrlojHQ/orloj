@@ -421,6 +421,9 @@ export interface TaskTraceEvent {
   message?: string;
   latency_ms?: number;
   tokens?: number;
+  input_tokens?: number;
+  output_tokens?: number;
+  token_usage_source?: string;
   tool_calls?: number;
 }
 

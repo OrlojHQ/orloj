@@ -1,0 +1,35 @@
+{
+  "name": "rr-real-pipeline-task",
+  "namespace": "rr-real-pipeline",
+  "total": 1,
+  "filtered_from": 1,
+  "lifecycle_counts": {
+    "deadletter": 1,
+    "queued": 0,
+    "retrypending": 0,
+    "running": 0,
+    "succeeded": 0
+  },
+  "messages": [
+    {
+      "timestamp": "2026-03-18T15:32:57.038624Z",
+      "message_id": "rr-real-pipeline/rr-real-pipeline-task/a001/h001/system/rr-real-pipeline-planner-agent",
+      "idempotency_key": "rr-real-pipeline/rr-real-pipeline-task/a001/h001/system/rr-real-pipeline-planner-agent",
+      "task_id": "rr-real-pipeline/rr-real-pipeline-task",
+      "attempt": 1,
+      "system": "rr-real-pipeline-system",
+      "from_agent": "system",
+      "to_agent": "rr-real-pipeline-planner-agent",
+      "branch_id": "b001",
+      "type": "task_start",
+      "content": "operator launch brief for an AI-assisted incident response copilot used by SaaS support teams",
+      "trace_id": "rr-real-pipeline/rr-real-pipeline-task/a001",
+      "phase": "DeadLetter",
+      "attempts": 2,
+      "max_attempts": 2,
+      "last_error": "agent rr-real-pipeline-planner-agent execution failed: agent rr-real-pipeline-planner-agent model execution failed: model request failed status=404: model: claude-3-5-haiku",
+      "worker": "embedded-worker",
+      "processed_at": "2026-03-18T15:32:59.929065Z"
+    }
+  ]
+}

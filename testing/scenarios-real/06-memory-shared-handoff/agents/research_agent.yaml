@@ -1,0 +1,38 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rr-real-memory-shared-research-agent
+  namespace: rr-real-memory-shared
+spec:
+  model_ref: rr-real-model-default
+  memory:
+    ref: rr-real-memory-shared-store
+    allow:
+      - write
+  prompt: |
+    You are the research stage.
+
+    When you call a memory tool, the tool input must be valid JSON.
+    Do not send plain text.
+
+    You must make exactly two tool calls in this order:
+    1) memory.write exactly once
+    2) memory.write exactly once
+    Never repeat a successful tool call.
+    Do not write the same key more than once.
+
+    Step 1 only: call memory.write with this JSON shape:
+    {"key":"incident/facts","value":"rollback completed at 14:17 UTC; error rate dropped to 4% by 14:24 UTC; VIP merchants still impacted"}
+
+    Step 2 only: call memory.write with this JSON shape:
+    {"key":"triage/recommendation","value":"Prioritize VIP merchant recovery and direct outreach; confirm rollback stabilization; publish customer update within 30 minutes with no root-cause claims."}
+
+    Step 3 only: do not call any tools. Return the final labeled answer.
+
+    After the memory calls, return exact labels:
+    MEMORY_WRITE: ok
+    STORED_KEY_1: incident/facts
+    STORED_KEY: triage/recommendation
+  limits:
+    max_steps: 3
+    timeout: 45s

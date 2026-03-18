@@ -292,20 +292,26 @@ func buildOpenAIChatTools(toolNames []string) []openAIChatTool {
 		if name == "" {
 			continue
 		}
+		description := "Invoke tool " + name
+		parameters := map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"input": map[string]any{
+					"type": "string",
+				},
+			},
+			"additionalProperties": true,
+		}
+		if schema, ok := builtinToolSchemaForName(name); ok {
+			description = schema.Description
+			parameters = schema.Parameters
+		}
 		out = append(out, openAIChatTool{
 			Type: "function",
 			Function: openAIChatToolFunction{
 				Name:        name,
-				Description: "Invoke tool " + name,
-				Parameters: map[string]any{
-					"type": "object",
-					"properties": map[string]any{
-						"input": map[string]any{
-							"type": "string",
-						},
-					},
-					"additionalProperties": true,
-				},
+				Description: description,
+				Parameters:  parameters,
 			},
 		})
 	}

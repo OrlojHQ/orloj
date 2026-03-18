@@ -1,0 +1,19 @@
+apiVersion: orloj.dev/v1
+kind: Task
+metadata:
+  name: rr-real-schedule-template-task
+  namespace: rr-real-schedule
+spec:
+  mode: template
+  system: rr-real-schedule-system
+  priority: normal
+  input:
+    topic: scheduled support risk digest
+  retry:
+    max_attempts: 2
+    backoff: 2s
+  message_retry:
+    max_attempts: 2
+    backoff: 250ms
+    max_backoff: 2s
+    jitter: full

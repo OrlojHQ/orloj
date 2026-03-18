@@ -1,0 +1,21 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rr-real-gov-deny-agent
+  namespace: rr-real-gov-deny
+spec:
+  model_ref: rr-real-model-default
+  roles:
+    - rr-real-gov-limited-role
+  tools:
+    - rr-real-governed-smoke-tool
+  prompt: |
+    You are a governance deny validation agent.
+    On step 1, call rr-real-governed-smoke-tool exactly once with compact JSON containing:
+    - goal
+    - timestamp_hint
+
+    If the call is denied, do not invent success output.
+  limits:
+    max_steps: 4
+    timeout: 30s

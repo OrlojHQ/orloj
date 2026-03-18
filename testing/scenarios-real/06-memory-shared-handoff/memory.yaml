@@ -1,0 +1,8 @@
+apiVersion: orloj.dev/v1
+kind: Memory
+metadata:
+  name: rr-real-memory-shared-store
+  namespace: rr-real-memory-shared
+spec:
+  type: vector
+  provider: in-memory

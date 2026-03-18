@@ -1,0 +1,467 @@
+{
+  "apiVersion": "orloj.dev/v1",
+  "kind": "Task",
+  "metadata": {
+    "name": "rr-real-memory-shared-task",
+    "namespace": "rr-real-memory-shared",
+    "resourceVersion": "9",
+    "generation": 1,
+    "createdAt": "2026-03-18T18:27:36Z"
+  },
+  "spec": {
+    "system": "rr-real-memory-shared-system",
+    "mode": "run",
+    "input": {
+      "incident_notes": "Status page updated at 14:05 UTC. 62% of checkout requests are failing with HTTP 503. Payment API pods hit CPU saturation after release 2026.03.18.2. Rollback completed at 14:17 UTC. Error rate dropped to 4% by 14:24 UTC, but VIP merchants are still impacted. Customer comms should acknowledge impact, commit to the next update in 30 minutes, and avoid root cause claims.",
+      "incident_title": "SEV-1 payment API saturation"
+    },
+    "priority": "high",
+    "retry": {
+      "max_attempts": 2,
+      "backoff": "2s"
+    },
+    "message_retry": {
+      "max_attempts": 2,
+      "backoff": "250ms",
+      "max_backoff": "2s",
+      "jitter": "full"
+    },
+    "requirements": {}
+  },
+  "status": {
+    "phase": "Succeeded",
+    "startedAt": "2026-03-18T18:27:36.515047Z",
+    "completedAt": "2026-03-18T18:28:03.736922Z",
+    "attempts": 1,
+    "output": {
+      "last_agent": "rr-real-memory-shared-writer-agent",
+      "last_duration_ms": "9359",
+      "last_estimated_tokens": "635",
+      "last_event": "max steps reached",
+      "last_output": "step=3 model_output=Now I'm at step=3, so I need to stop calling tools and return the final labeled answer using the retrieved memory and incident notes provided in the context.\n\nUSED_MEMORY: yes\n\nRETRIEVED_FACT: rollback completed at 14:17 UTC\n\nOPS_SUMMARY: SEV-1 incident caused by payment API CPU saturation following release 2026.03.18.2. 62% of checkout requests failed with HTTP 503 errors. Status page updated at 14:05 UTC, rollback completed at 14:17 UTC, and error rate dropped to 4% by 14:24 UTC. VIP merchants remain impacted.\n\nCUSTOMER_SUMMARY: Payment processing experienced significant disruption with checkout failures. Service has been restored through rollback with error rates reduced to 4%, though some VIP merchants continue to experience issues. Customer communications should acknowledge the impact and commit to updates every 30 minutes while avoiding root cause speculation.",
+      "last_steps": "3",
+      "last_token_usage_source": "provider",
+      "last_tokens_used": "5115",
+      "last_tool_calls": "2",
+      "result": "executed",
+      "runtime.entry_agent": "rr-real-memory-shared-planner-agent",
+      "runtime.mode": "message-driven",
+      "system": "rr-real-memory-shared-system",
+      "tokens_estimated_total": "1489",
+      "tokens_used_total": "11865"
+    },
+    "trace": [
+      {
+        "timestamp": "2026-03-18T18:27:36.515104Z",
+        "step_id": "a001.s0001",
+        "attempt": 1,
+        "branch_id": "b001",
+        "type": "task_runtime_kickoff",
+        "agent": "rr-real-memory-shared-planner-agent",
+        "message": "message_id=rr-real-memory-shared/rr-real-memory-shared-task/a001/h001/system/rr-real-memory-shared-planner-agent branch_id=b001"
+      },
+      {
+        "timestamp": "2026-03-18T18:27:36.515093Z",
+        "attempt": 1,
+        "branch_id": "b001",
+        "type": "agent_message_received",
+        "agent": "rr-real-memory-shared-planner-agent",
+        "message": "message_id=rr-real-memory-shared/rr-real-memory-shared-task/a001/h001/system/rr-real-memory-shared-planner-agent from=system type=task_start branch_id=b001"
+      },
+      {
+        "timestamp": "2026-03-18T18:27:38.514022Z",
+        "type": "agent_inbox",
+        "agent": "rr-real-memory-shared-planner-agent",
+        "message": "inbox from=system content=task=rr-real-memory-shared-task attempt=1"
+      },
+      {
+        "timestamp": "2026-03-18T18:27:38.514026Z",
+        "type": "agent_worker_start",
+        "agent": "rr-real-memory-shared-planner-agent",
+        "message": "worker started model= max_steps=4"
+      },
+      {
+        "timestamp": "2026-03-18T18:27:45.100794Z",
+        "step": 1,
+        "type": "model_call",
+        "agent": "rr-real-memory-shared-planner-agent",
+        "message": "step=1 model success tokens=562 usage_source=provider usage_source=provider",
+        "tokens": 562,
+        "token_usage_source": "provider"
+      },
+      {
+        "timestamp": "2026-03-18T18:27:45.100804Z",
+        "step": 1,
+        "type": "model_output",
+        "agent": "rr-real-memory-shared-planner-agent",
+        "message": "step=1 model_output=TRIAGE_OBJECTIVES:\n\n1. What is the current technical status of the payment API rollback and remaining 4% error rate - are there specific technical blockers preventing full recovery?\n\n2. Which VIP merchants are still experiencing impact and what is the exact nature of their ongoing issues (transaction failures, timeouts, data inconsistencies)?\n\n3. What are the immediate next steps required to fully restore service for affected VIP merchants within the committed 30-minute update window?\n\n4. What customer communication has already been sent and what specific messaging needs to go out in the next update to maintain transparency without premising root cause?\n\n5. Are there any cascading effects from the payment API issues affecting other system components or downstream services that need monitoring?\n\n6. What monitoring and alerting improvements need immediate implementation to prevent similar CPU saturation incidents during future releases?\n\nHANDOFF_READY: yes"
+      },
+      {
+        "timestamp": "2026-03-18T18:27:45.100806Z",
+        "step": 1,
+        "type": "agent_step",
+        "agent": "rr-real-memory-shared-planner-agent",
+        "message": "step=1 no tools configured"
+      },
+      {
+        "timestamp": "2026-03-18T18:27:45.100807Z",
+        "type": "agent_event",
+        "agent": "rr-real-memory-shared-planner-agent",
+        "message": "worker completed"
+      },
+      {
+        "timestamp": "2026-03-18T18:27:45.101296Z",
+        "attempt": 1,
+        "branch_id": "b001",
+        "type": "agent_message",
+        "agent": "rr-real-memory-shared-research-agent",
+        "message": "message_id=rr-real-memory-shared/rr-real-memory-shared-task/a001/h002/rr-real-memory-shared-planner-agent/rr-real-memory-shared-research-agent to=rr-real-memory-shared-research-agent branch_id=b001 parent_branch_id=b001"
+      },
+      {
+        "timestamp": "2026-03-18T18:27:36.515093Z",
+        "attempt": 1,
+        "branch_id": "b001",
+        "type": "agent_message_processed",
+        "agent": "rr-real-memory-shared-planner-agent",
+        "message": "message_id=rr-real-memory-shared/rr-real-memory-shared-task/a001/h001/system/rr-real-memory-shared-planner-agent status=forwarded to=rr-real-memory-shared-research-agent branch_id=b001"
+      },
+      {
+        "timestamp": "2026-03-18T18:27:45.101296Z",
+        "attempt": 1,
+        "branch_id": "b001",
+        "type": "agent_message_received",
+        "agent": "rr-real-memory-shared-research-agent",
+        "message": "message_id=rr-real-memory-shared/rr-real-memory-shared-task/a001/h002/rr-real-memory-shared-planner-agent/rr-real-memory-shared-research-agent from=rr-real-memory-shared-planner-agent type=task_handoff branch_id=b001"
+      },
+      {
+        "timestamp": "2026-03-18T18:27:45.101679Z",
+        "step": 1,
+        "type": "agent_inbox",
+        "agent": "rr-real-memory-shared-research-agent",
+        "message": "inbox from=rr-real-memory-shared-planner-agent content=step=1 model_output=TRIAGE_OBJECTIVES:\n\n1. What is the current technical status of the payment API rollback and remaining 4% error rate - are there specific technical blockers preventing full recovery?\n\n2. Which VIP merchants are still experiencing impact and what is the exact nature of their ongoing issues (transaction failures, timeouts, data inconsistencies)?\n\n3. What are the immediate next steps required to fully restore service for affected VIP merchants within the committed 30-minute update window?\n\n4. What customer communication has already been sent and what specific messaging needs to go out in the next update to maintain transparency without premising root cause?\n\n5. Are there any cascading effects from the payment API issues affecting other system components or downstream services that need monitoring?\n\n6. What monitoring and alerting improvements need immediate implementation to prevent similar CPU saturation incidents during future releases?\n\nHANDOFF_READY: yes"
+      },
+      {
+        "timestamp": "2026-03-18T18:27:45.101687Z",
+        "type": "agent_worker_start",
+        "agent": "rr-real-memory-shared-research-agent",
+        "message": "worker started model= max_steps=3"
+      },
+      {
+        "timestamp": "2026-03-18T18:27:47.829627Z",
+        "step": 1,
+        "type": "model_call",
+        "agent": "rr-real-memory-shared-research-agent",
+        "message": "step=1 model success tokens=1468 usage_source=provider usage_source=provider",
+        "tokens": 1468,
+        "token_usage_source": "provider"
+      },
+      {
+        "timestamp": "2026-03-18T18:27:47.829748Z",
+        "step": 1,
+        "type": "tool_call",
+        "agent": "rr-real-memory-shared-research-agent",
+        "tool": "memory.ingest",
+        "tool_contract_version": "v1",
+        "tool_request_id": "rr-real-memory-shared/rr-real-memory-shared-research-agent/s001/memory.ingest",
+        "tool_attempt": 1,
+        "message": "step=1 tool=memory.ingest tool_contract=v1 tool_request_id=rr-real-memory-shared/rr-real-memory-shared-research-agent/s001/memory.ingest tool_attempt=1 success",
+        "tool_calls": 1
+      },
+      {
+        "timestamp": "2026-03-18T18:27:50.314682Z",
+        "step": 2,
+        "type": "model_call",
+        "agent": "rr-real-memory-shared-research-agent",
+        "message": "step=2 model success tokens=2043 usage_source=provider usage_source=provider",
+        "tokens": 2043,
+        "token_usage_source": "provider"
+      },
+      {
+        "timestamp": "2026-03-18T18:27:50.314749Z",
+        "step": 2,
+        "type": "tool_call",
+        "agent": "rr-real-memory-shared-research-agent",
+        "tool": "memory.ingest",
+        "tool_contract_version": "v1",
+        "tool_request_id": "rr-real-memory-shared/rr-real-memory-shared-research-agent/s002/memory.ingest",
+        "tool_attempt": 1,
+        "message": "step=2 tool=memory.ingest tool_contract=v1 tool_request_id=rr-real-memory-shared/rr-real-memory-shared-research-agent/s002/memory.ingest tool_attempt=1 success",
+        "tool_calls": 1
+      },
+      {
+        "timestamp": "2026-03-18T18:27:54.377061Z",
+        "step": 3,
+        "type": "model_call",
+        "agent": "rr-real-memory-shared-research-agent",
+        "message": "step=3 model success tokens=2677 usage_source=provider usage_source=provider",
+        "tokens": 2677,
+        "token_usage_source": "provider"
+      },
+      {
+        "timestamp": "2026-03-18T18:27:54.377065Z",
+        "step": 3,
+        "type": "model_output",
+        "agent": "rr-real-memory-shared-research-agent",
+        "message": "step=3 model_output=I need to follow the exact sequence: Step 1 (memory.ingest), Step 2 (memory.write), Step 3 (no tools, return labels).\n\nSince this is step=1, I'll call memory.ingest with the incident notes:"
+      },
+      {
+        "timestamp": "2026-03-18T18:27:54.377093Z",
+        "step": 3,
+        "type": "tool_call",
+        "agent": "rr-real-memory-shared-research-agent",
+        "tool": "memory.ingest",
+        "tool_contract_version": "v1",
+        "tool_request_id": "rr-real-memory-shared/rr-real-memory-shared-research-agent/s003/memory.ingest",
+        "tool_attempt": 1,
+        "message": "step=3 tool=memory.ingest tool_contract=v1 tool_request_id=rr-real-memory-shared/rr-real-memory-shared-research-agent/s003/memory.ingest tool_attempt=1 success",
+        "tool_calls": 1
+      },
+      {
+        "timestamp": "2026-03-18T18:27:54.377095Z",
+        "type": "agent_worker_complete",
+        "agent": "rr-real-memory-shared-research-agent",
+        "message": "max steps reached"
+      },
+      {
+        "timestamp": "2026-03-18T18:27:54.37729Z",
+        "attempt": 1,
+        "branch_id": "b001",
+        "type": "agent_message",
+        "agent": "rr-real-memory-shared-writer-agent",
+        "message": "message_id=rr-real-memory-shared/rr-real-memory-shared-task/a001/h003/rr-real-memory-shared-research-agent/rr-real-memory-shared-writer-agent to=rr-real-memory-shared-writer-agent branch_id=b001 parent_branch_id=b001"
+      },
+      {
+        "timestamp": "2026-03-18T18:27:45.101296Z",
+        "attempt": 1,
+        "branch_id": "b001",
+        "type": "agent_message_processed",
+        "agent": "rr-real-memory-shared-research-agent",
+        "message": "message_id=rr-real-memory-shared/rr-real-memory-shared-task/a001/h002/rr-real-memory-shared-planner-agent/rr-real-memory-shared-research-agent status=forwarded to=rr-real-memory-shared-writer-agent branch_id=b001"
+      },
+      {
+        "timestamp": "2026-03-18T18:27:54.37729Z",
+        "attempt": 1,
+        "branch_id": "b001",
+        "type": "agent_message_received",
+        "agent": "rr-real-memory-shared-writer-agent",
+        "message": "message_id=rr-real-memory-shared/rr-real-memory-shared-task/a001/h003/rr-real-memory-shared-research-agent/rr-real-memory-shared-writer-agent from=rr-real-memory-shared-research-agent type=task_handoff branch_id=b001"
+      },
+      {
+        "timestamp": "2026-03-18T18:27:54.377421Z",
+        "step": 3,
+        "type": "agent_inbox",
+        "agent": "rr-real-memory-shared-writer-agent",
+        "message": "inbox from=rr-real-memory-shared-research-agent content=step=3 model_output=I need to follow the exact sequence: Step 1 (memory.ingest), Step 2 (memory.write), Step 3 (no tools, return labels).\n\nSince this is step=1, I'll call memory.ingest with the incident notes:"
+      },
+      {
+        "timestamp": "2026-03-18T18:27:54.377425Z",
+        "type": "agent_worker_start",
+        "agent": "rr-real-memory-shared-writer-agent",
+        "message": "worker started model= max_steps=3"
+      },
+      {
+        "timestamp": "2026-03-18T18:27:56.500487Z",
+        "step": 1,
+        "type": "model_call",
+        "agent": "rr-real-memory-shared-writer-agent",
+        "message": "step=1 model success tokens=1215 usage_source=provider usage_source=provider",
+        "tokens": 1215,
+        "token_usage_source": "provider"
+      },
+      {
+        "timestamp": "2026-03-18T18:27:56.500489Z",
+        "step": 1,
+        "type": "model_output",
+        "agent": "rr-real-memory-shared-writer-agent",
+        "message": "I'll follow the exact sequence as instructed. Since this is step=1, I need to call memory.search with the specified parameters."
+      },
+      {
+        "timestamp": "2026-03-18T18:27:56.50052Z",
+        "step": 1,
+        "type": "tool_call",
+        "agent": "rr-real-memory-shared-writer-agent",
+        "tool": "memory.search",
+        "tool_contract_version": "v1",
+        "tool_request_id": "rr-real-memory-shared/rr-real-memory-shared-writer-agent/s001/memory.search",
+        "tool_attempt": 1,
+        "message": "step=1 tool=memory.search tool_contract=v1 tool_request_id=rr-real-memory-shared/rr-real-memory-shared-writer-agent/s001/memory.search tool_attempt=1 success",
+        "tool_calls": 1
+      },
+      {
+        "timestamp": "2026-03-18T18:27:59.017129Z",
+        "step": 2,
+        "type": "model_call",
+        "agent": "rr-real-memory-shared-writer-agent",
+        "message": "step=2 model success tokens=1652 usage_source=provider usage_source=provider",
+        "tokens": 1652,
+        "token_usage_source": "provider"
+      },
+      {
+        "timestamp": "2026-03-18T18:27:59.01713Z",
+        "step": 2,
+        "type": "model_output",
+        "agent": "rr-real-memory-shared-writer-agent",
+        "message": "Now I'm at step=2, so I need to call memory.read with the specified key."
+      },
+      {
+        "timestamp": "2026-03-18T18:27:59.017147Z",
+        "step": 2,
+        "type": "tool_call",
+        "agent": "rr-real-memory-shared-writer-agent",
+        "tool": "memory.read",
+        "tool_contract_version": "v1",
+        "tool_request_id": "rr-real-memory-shared/rr-real-memory-shared-writer-agent/s002/memory.read",
+        "tool_attempt": 1,
+        "message": "step=2 tool=memory.read tool_contract=v1 tool_request_id=rr-real-memory-shared/rr-real-memory-shared-writer-agent/s002/memory.read tool_attempt=1 success",
+        "tool_calls": 1
+      },
+      {
+        "timestamp": "2026-03-18T18:28:03.73634Z",
+        "step": 3,
+        "type": "model_call",
+        "agent": "rr-real-memory-shared-writer-agent",
+        "message": "step=3 model success tokens=2248 usage_source=provider usage_source=provider",
+        "tokens": 2248,
+        "token_usage_source": "provider"
+      },
+      {
+        "timestamp": "2026-03-18T18:28:03.736345Z",
+        "step": 3,
+        "type": "model_output",
+        "agent": "rr-real-memory-shared-writer-agent",
+        "message": "step=3 model_output=Now I'm at step=3, so I need to stop calling tools and return the final labeled answer using the retrieved memory and incident notes provided in the context.\n\nUSED_MEMORY: yes\n\nRETRIEVED_FACT: rollback completed at 14:17 UTC\n\nOPS_SUMMARY: SEV-1 incident caused by payment API CPU saturation following release 2026.03.18.2. 62% of checkout requests failed with HTTP 503 errors. Status page updated at 14:05 UTC, rollback completed at 14:17 UTC, and error rate dropped to 4% by 14:24 UTC. VIP merchants remain impacted.\n\nCUSTOMER_SUMMARY: Payment processing experienced significant disruption with checkout failures. Service has been restored through rollback with error rates reduced to 4%, though some VIP merchants continue to experience issues. Customer communications should acknowledge the impact and commit to updates every 30 minutes while avoiding root cause speculation."
+      },
+      {
+        "timestamp": "2026-03-18T18:28:03.736504Z",
+        "step": 3,
+        "type": "agent_event",
+        "agent": "rr-real-memory-shared-writer-agent",
+        "message": "step=3 no tool call requested"
+      },
+      {
+        "timestamp": "2026-03-18T18:28:03.736505Z",
+        "type": "agent_worker_complete",
+        "agent": "rr-real-memory-shared-writer-agent",
+        "message": "max steps reached"
+      },
+      {
+        "timestamp": "2026-03-18T18:27:54.37729Z",
+        "attempt": 1,
+        "branch_id": "b001",
+        "type": "agent_message_processed",
+        "agent": "rr-real-memory-shared-writer-agent",
+        "message": "message_id=rr-real-memory-shared/rr-real-memory-shared-task/a001/h003/rr-real-memory-shared-research-agent/rr-real-memory-shared-writer-agent status=succeeded branch_id=b001"
+      }
+    ],
+    "history": [
+      {
+        "timestamp": "2026-03-18T18:27:36.515069Z",
+        "type": "claim",
+        "worker": "embedded-worker",
+        "message": "task claimed by worker=embedded-worker lease=30s"
+      },
+      {
+        "timestamp": "2026-03-18T18:27:36.515105Z",
+        "type": "runtime_kickoff",
+        "worker": "embedded-worker",
+        "message": "message-driven kickoff sent to rr-real-memory-shared-planner-agent branch=b001"
+      },
+      {
+        "timestamp": "2026-03-18T18:28:03.736922Z",
+        "type": "succeeded",
+        "worker": "embedded-worker",
+        "message": "all terminal branches complete; last agent rr-real-memory-shared-writer-agent"
+      }
+    ],
+    "messages": [
+      {
+        "timestamp": "2026-03-18T18:27:36.515093Z",
+        "message_id": "rr-real-memory-shared/rr-real-memory-shared-task/a001/h001/system/rr-real-memory-shared-planner-agent",
+        "idempotency_key": "rr-real-memory-shared/rr-real-memory-shared-task/a001/h001/system/rr-real-memory-shared-planner-agent",
+        "task_id": "rr-real-memory-shared/rr-real-memory-shared-task",
+        "attempt": 1,
+        "system": "rr-real-memory-shared-system",
+        "from_agent": "system",
+        "to_agent": "rr-real-memory-shared-planner-agent",
+        "branch_id": "b001",
+        "type": "task_start",
+        "content": "task=rr-real-memory-shared-task attempt=1",
+        "trace_id": "rr-real-memory-shared/rr-real-memory-shared-task/a001",
+        "phase": "Succeeded",
+        "attempts": 1,
+        "max_attempts": 2,
+        "worker": "embedded-worker",
+        "processed_at": "2026-03-18T18:27:45.101406Z"
+      },
+      {
+        "timestamp": "2026-03-18T18:27:45.101296Z",
+        "message_id": "rr-real-memory-shared/rr-real-memory-shared-task/a001/h002/rr-real-memory-shared-planner-agent/rr-real-memory-shared-research-agent",
+        "idempotency_key": "rr-real-memory-shared/rr-real-memory-shared-task/a001/h002/rr-real-memory-shared-planner-agent/rr-real-memory-shared-research-agent",
+        "task_id": "rr-real-memory-shared/rr-real-memory-shared-task",
+        "attempt": 1,
+        "system": "rr-real-memory-shared-system",
+        "from_agent": "rr-real-memory-shared-planner-agent",
+        "to_agent": "rr-real-memory-shared-research-agent",
+        "branch_id": "b001",
+        "parent_branch_id": "b001",
+        "type": "task_handoff",
+        "content": "step=1 model_output=TRIAGE_OBJECTIVES:\n\n1. What is the current technical status of the payment API rollback and remaining 4% error rate - are there specific technical blockers preventing full recovery?\n\n2. Which VIP merchants are still experiencing impact and what is the exact nature of their ongoing issues (transaction failures, timeouts, data inconsistencies)?\n\n3. What are the immediate next steps required to fully restore service for affected VIP merchants within the committed 30-minute update window?\n\n4. What customer communication has already been sent and what specific messaging needs to go out in the next update to maintain transparency without premising root cause?\n\n5. Are there any cascading effects from the payment API issues affecting other system components or downstream services that need monitoring?\n\n6. What monitoring and alerting improvements need immediate implementation to prevent similar CPU saturation incidents during future releases?\n\nHANDOFF_READY: yes",
+        "trace_id": "rr-real-memory-shared/rr-real-memory-shared-task/a001",
+        "parent_id": "rr-real-memory-shared/rr-real-memory-shared-task/a001/h001/system/rr-real-memory-shared-planner-agent",
+        "phase": "Succeeded",
+        "attempts": 1,
+        "max_attempts": 2,
+        "worker": "embedded-worker",
+        "processed_at": "2026-03-18T18:27:54.377305Z"
+      },
+      {
+        "timestamp": "2026-03-18T18:27:54.37729Z",
+        "message_id": "rr-real-memory-shared/rr-real-memory-shared-task/a001/h003/rr-real-memory-shared-research-agent/rr-real-memory-shared-writer-agent",
+        "idempotency_key": "rr-real-memory-shared/rr-real-memory-shared-task/a001/h003/rr-real-memory-shared-research-agent/rr-real-memory-shared-writer-agent",
+        "task_id": "rr-real-memory-shared/rr-real-memory-shared-task",
+        "attempt": 1,
+        "system": "rr-real-memory-shared-system",
+        "from_agent": "rr-real-memory-shared-research-agent",
+        "to_agent": "rr-real-memory-shared-writer-agent",
+        "branch_id": "b001",
+        "parent_branch_id": "b001",
+        "type": "task_handoff",
+        "content": "step=3 model_output=I need to follow the exact sequence: Step 1 (memory.ingest), Step 2 (memory.write), Step 3 (no tools, return labels).\n\nSince this is step=1, I'll call memory.ingest with the incident notes:",
+        "trace_id": "rr-real-memory-shared/rr-real-memory-shared-task/a001",
+        "parent_id": "rr-real-memory-shared/rr-real-memory-shared-task/a001/h002/rr-real-memory-shared-planner-agent/rr-real-memory-shared-research-agent",
+        "phase": "Succeeded",
+        "attempts": 1,
+        "max_attempts": 2,
+        "worker": "embedded-worker",
+        "processed_at": "2026-03-18T18:28:03.736861Z"
+      }
+    ],
+    "message_idempotency": [
+      {
+        "key": "rr-real-memory-shared/rr-real-memory-shared-task/a001/h001/system/rr-real-memory-shared-planner-agent",
+        "message_id": "rr-real-memory-shared/rr-real-memory-shared-task/a001/h001/system/rr-real-memory-shared-planner-agent",
+        "state": "completed",
+        "updated_at": "2026-03-18T18:27:45.101408Z",
+        "expires_at": "2026-04-17T18:27:45.101408Z",
+        "worker": "embedded-worker"
+      },
+      {
+        "key": "rr-real-memory-shared/rr-real-memory-shared-task/a001/h002/rr-real-memory-shared-planner-agent/rr-real-memory-shared-research-agent",
+        "message_id": "rr-real-memory-shared/rr-real-memory-shared-task/a001/h002/rr-real-memory-shared-planner-agent/rr-real-memory-shared-research-agent",
+        "state": "completed",
+        "updated_at": "2026-03-18T18:27:54.377306Z",
+        "expires_at": "2026-04-17T18:27:54.377306Z",
+        "worker": "embedded-worker"
+      },
+      {
+        "key": "rr-real-memory-shared/rr-real-memory-shared-task/a001/h003/rr-real-memory-shared-research-agent/rr-real-memory-shared-writer-agent",
+        "message_id": "rr-real-memory-shared/rr-real-memory-shared-task/a001/h003/rr-real-memory-shared-research-agent/rr-real-memory-shared-writer-agent",
+        "state": "completed",
+        "updated_at": "2026-03-18T18:28:03.736862Z",
+        "expires_at": "2026-04-17T18:28:03.736862Z",
+        "worker": "embedded-worker"
+      }
+    ],
+    "observedGeneration": 1
+  }
+}

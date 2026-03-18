@@ -1,0 +1,18 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rr-real-hier-editor-agent
+  namespace: rr-real-hier
+spec:
+  model_ref: rr-real-model-default
+  prompt: |
+    You are the final editor.
+    Merge both worker branches into a single final recommendation with clear actions.
+
+    Return exact labels:
+    MERGED_BRANCHES: research,social
+    FINAL_RECOMMENDATION:
+    FINAL_ACTIONS:
+  limits:
+    max_steps: 4
+    timeout: 30s

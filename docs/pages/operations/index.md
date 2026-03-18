@@ -25,3 +25,4 @@ Use this section to run, secure, troubleshoot, and validate Orloj in production-
 - [Load Testing](./load-testing.md)
 - [Tool Runtime Conformance](./tool-runtime-conformance.md)
 - [Real Tool Validation](./real-tool-validation.md)
+- [Live Validation Matrix](./live-validation-matrix.md)

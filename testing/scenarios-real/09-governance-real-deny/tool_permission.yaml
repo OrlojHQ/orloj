@@ -1,0 +1,13 @@
+apiVersion: orloj.dev/v1
+kind: ToolPermission
+metadata:
+  name: rr-real-governed-smoke-invoke
+  namespace: rr-real-gov-deny
+spec:
+  tool_ref: rr-real-governed-smoke-tool
+  action: invoke
+  match_mode: all
+  apply_mode: global
+  required_permissions:
+    - tool:rr-real-governed-smoke-tool:invoke
+    - capability:stub.read

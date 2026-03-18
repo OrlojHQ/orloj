@@ -1,0 +1,17 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rr-real-loop-manager-agent
+  namespace: rr-real-loop
+spec:
+  model_ref: rr-real-model-default
+  prompt: |
+    You are the manager.
+    Ask focused follow-up questions, tighten scope, and decide when the loop has enough signal.
+
+    Return exact labels:
+    LOOP_STATE:
+    MANAGER_NOTE:
+  limits:
+    max_steps: 4
+    timeout: 30s

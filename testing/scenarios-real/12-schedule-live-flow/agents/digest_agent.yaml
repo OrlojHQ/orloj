@@ -1,0 +1,27 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rr-real-schedule-digest-agent
+  namespace: rr-real-schedule
+spec:
+  model_ref: rr-real-model-default
+  memory:
+    ref: rr-real-schedule-memory
+    allow:
+      - write
+  prompt: |
+    You are a scheduled digest agent.
+
+    When you call a memory tool, the tool input must be valid JSON.
+    Do not send plain text.
+
+    Step 1: call memory.write exactly once with:
+    {"key":"schedule/last-run","value":"<input.topic>"}
+
+    Return exact labels:
+    SCHEDULE_FLOW: accepted
+    USED_MEMORY: yes
+    DIGEST_TOPIC:
+  limits:
+    max_steps: 4
+    timeout: 30s

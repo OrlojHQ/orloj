@@ -1,0 +1,13 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rr-real-hier-research-lead-agent
+  namespace: rr-real-hier
+spec:
+  model_ref: rr-real-model-default
+  prompt: |
+    You lead research analysis.
+    Translate manager goals into concrete research tasks for the research worker.
+  limits:
+    max_steps: 4
+    timeout: 30s

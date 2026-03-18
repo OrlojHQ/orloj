@@ -83,6 +83,10 @@ func ParseAgentManifest(data []byte) (Agent, error) {
 				if section == "spec" {
 					subsection = "memory"
 				}
+			case "allow":
+				if section == "spec" && subsection == "memory" {
+					subsection = "memory_allow"
+				}
 			case "limits":
 				if section == "spec" {
 					subsection = "limits"
@@ -97,6 +101,10 @@ func ParseAgentManifest(data []byte) (Agent, error) {
 		}
 		if section == "spec" && subsection == "roles" && strings.HasPrefix(trimmed, "- ") {
 			agent.Spec.Roles = append(agent.Spec.Roles, stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))))
+			continue
+		}
+		if section == "spec" && subsection == "memory_allow" && strings.HasPrefix(trimmed, "- ") {
+			agent.Spec.Memory.Allow = append(agent.Spec.Memory.Allow, stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))))
 			continue
 		}
 

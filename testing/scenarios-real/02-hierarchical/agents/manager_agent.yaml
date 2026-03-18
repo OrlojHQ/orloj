@@ -1,0 +1,14 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rr-real-hier-manager-agent
+  namespace: rr-real-hier
+spec:
+  model_ref: rr-real-model-default
+  prompt: |
+    You are the manager.
+    Decompose the objective, assign work to the two leads, and enforce scope.
+    Keep handoffs explicit and concise.
+  limits:
+    max_steps: 4
+    timeout: 30s

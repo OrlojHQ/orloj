@@ -65,10 +65,10 @@ A time-bounded claim on a task held by a worker. Workers renew leases via heartb
 ## M
 
 **Memory**
-A resource that configures a persistent memory backend for agents. Agents that reference a Memory resource via `spec.memory.ref` gain access to built-in memory tools (`memory.read`, `memory.write`, `memory.search`, `memory.list`, `memory.ingest`). Configured with a type, provider (e.g. `in-memory`, `pgvector`), and optional embedding model. Memory operates in three layers: conversation history (per-activation), task-scoped shared store (per-task), and persistent backends (cross-task). See [Memory](../concepts/memory/index.md).
+A resource that configures a persistent memory backend for agents. Agents attach a Memory resource via `spec.memory.ref`, and may explicitly grant built-in memory operations with `spec.memory.allow` (`read`, `write`, `search`, `list`, `ingest`). Configured with a type, provider (e.g. `in-memory`, `pgvector`), and optional embedding model. Memory operates in three layers: conversation history (per-activation), task-scoped shared store (per-task), and persistent backends (cross-task). See [Memory](../concepts/memory/index.md).
 
 **Memory Tool**
-One of five built-in tools automatically injected when an agent references a Memory resource: `memory.read`, `memory.write`, `memory.search`, `memory.list`, and `memory.ingest`. These are handled internally by the runtime without network calls. See [Memory](../concepts/memory/index.md).
+One of five built-in runtime tools that can be exposed when an agent both references a Memory resource and explicitly allows the corresponding operation: `memory.read`, `memory.write`, `memory.search`, `memory.list`, and `memory.ingest`. These are handled internally by the runtime without network calls. See [Memory](../concepts/memory/index.md).
 
 **Message Bus**
 The transport layer for agent-to-agent communication within a task. Implementations: `memory` (in-process) and `nats-jetstream` (durable). Messages carry lifecycle phase, retry state, and routing metadata.

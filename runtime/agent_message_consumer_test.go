@@ -869,6 +869,46 @@ func TestAgentMessageConsumerStopsCyclicBranchAtTaskMaxTurns(t *testing.T) {
 	}
 }
 
+func TestAppendRuntimeStepTraceCarriesModelOutputTokenBreakdown(t *testing.T) {
+	task := &resources.Task{}
+	events := []AgentStepEvent{
+		{
+			Timestamp:    "2026-03-18T00:00:00Z",
+			Type:         "model_call",
+			Step:         1,
+			Message:      "step=1 model success",
+			Tokens:       120,
+			InputTokens:  90,
+			OutputTokens: 30,
+			UsageSource:  "provider",
+		},
+		{
+			Timestamp: "2026-03-18T00:00:01Z",
+			Type:      "model_output",
+			Step:      1,
+			Message:   "step=1 model_output=hello",
+		},
+	}
+
+	appendRuntimeStepTrace(task, "writer-agent", events)
+	if len(task.Status.Trace) != 2 {
+		t.Fatalf("expected 2 trace events, got %d", len(task.Status.Trace))
+	}
+	modelOutput := task.Status.Trace[1]
+	if modelOutput.Type != "model_output" {
+		t.Fatalf("expected second trace type model_output, got %q", modelOutput.Type)
+	}
+	if modelOutput.InputTokens != 90 {
+		t.Fatalf("expected model_output input_tokens=90, got %d", modelOutput.InputTokens)
+	}
+	if modelOutput.OutputTokens != 30 {
+		t.Fatalf("expected model_output output_tokens=30, got %d", modelOutput.OutputTokens)
+	}
+	if modelOutput.Tokens != 30 {
+		t.Fatalf("expected model_output tokens to show output token cost=30, got %d", modelOutput.Tokens)
+	}
+}
+
 func waitForConsumer(t *testing.T, timeout time.Duration, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)

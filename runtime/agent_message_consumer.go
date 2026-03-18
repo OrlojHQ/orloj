@@ -62,30 +62,30 @@ type AgentMessageConsumerOptions struct {
 
 // AgentMessageConsumerManager watches agents and consumes runtime inbox messages per agent.
 type AgentMessageConsumerManager struct {
-	bus         AgentMessageBus
-	agents      AgentRegistry
-	systems     AgentSystemRegistry
-	tasks       TaskStateStore
-	tools       ToolResourceLookup
-	roles       AgentRoleLookup
-	toolPerms   ToolPermissionLookup
-	isolated    ToolRuntime
-	executor    *TaskExecutor
-	logger      *log.Logger
-	workerID    string
-	namespace   string
-	refresh     time.Duration
-	dedupeTTL   time.Duration
-	retryDelay  time.Duration
-	leaseExtend time.Duration
-	extensions  Extensions
-	memories       MemoryResourceLookup
-	memBackends    *PersistentMemoryBackendRegistry
-	mu             sync.Mutex
-	consumers      map[string]context.CancelFunc
-	seenMessage    map[string]time.Time
-	taskMemory     map[string]*SharedMemoryStore
-	taskMemoryMu   sync.Mutex
+	bus          AgentMessageBus
+	agents       AgentRegistry
+	systems      AgentSystemRegistry
+	tasks        TaskStateStore
+	tools        ToolResourceLookup
+	roles        AgentRoleLookup
+	toolPerms    ToolPermissionLookup
+	isolated     ToolRuntime
+	executor     *TaskExecutor
+	logger       *log.Logger
+	workerID     string
+	namespace    string
+	refresh      time.Duration
+	dedupeTTL    time.Duration
+	retryDelay   time.Duration
+	leaseExtend  time.Duration
+	extensions   Extensions
+	memories     MemoryResourceLookup
+	memBackends  *PersistentMemoryBackendRegistry
+	mu           sync.Mutex
+	consumers    map[string]context.CancelFunc
+	seenMessage  map[string]time.Time
+	taskMemory   map[string]*SharedMemoryStore
+	taskMemoryMu sync.Mutex
 }
 
 func NewAgentMessageConsumerManager(
@@ -352,9 +352,10 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 			}
 		}
 		toolRT = memRT
-		for _, name := range BuiltinMemoryToolNames() {
+		for _, name := range resources.MemoryToolNamesForOperations(agent.Spec.Memory.Allow) {
 			agent.Spec.Tools = append(agent.Spec.Tools, name)
 		}
+		agent.Spec.Tools = dedupeStrings(agent.Spec.Tools)
 	}
 	agentCtx, agentSpan := telemetry.StartAgentSpan(ctx, agent.Metadata.Name, msg.MessageID, msg.Attempt)
 	result, err := m.executor.ExecuteAgentWithRuntime(agentCtx, agent, input, toolRT)
@@ -1232,6 +1233,12 @@ func appendRuntimeStepTrace(task *resources.Task, agentName string, events []Age
 	if task == nil || len(events) == 0 {
 		return
 	}
+	type modelUsage struct {
+		input       int
+		output      int
+		usageSource string
+	}
+	modelUsageByStep := make(map[int]modelUsage, 8)
 	for _, runtimeEvent := range events {
 		traceEvent := resources.TaskTraceEvent{
 			Timestamp:           runtimeEvent.Timestamp,
@@ -1246,6 +1253,7 @@ func appendRuntimeStepTrace(task *resources.Task, agentName string, events []Age
 			Retryable:           runtimeEvent.Retryable,
 			Message:             strings.TrimSpace(runtimeEvent.Message),
 			Step:                runtimeEvent.Step,
+			LatencyMS:           runtimeEvent.LatencyMS,
 			ToolAuthProfile:     strings.TrimSpace(runtimeEvent.ToolAuthProfile),
 			ToolAuthSecretRef:   strings.TrimSpace(runtimeEvent.ToolAuthSecretRef),
 		}
@@ -1254,9 +1262,27 @@ func appendRuntimeStepTrace(task *resources.Task, agentName string, events []Age
 		}
 		if strings.EqualFold(runtimeEvent.Type, "model_call") {
 			traceEvent.Tokens = runtimeEvent.Tokens
+			traceEvent.InputTokens = runtimeEvent.InputTokens
+			traceEvent.OutputTokens = runtimeEvent.OutputTokens
 			traceEvent.TokenUsageSource = strings.TrimSpace(runtimeEvent.UsageSource)
+			if runtimeEvent.Step > 0 {
+				modelUsageByStep[runtimeEvent.Step] = modelUsage{
+					input:       runtimeEvent.InputTokens,
+					output:      runtimeEvent.OutputTokens,
+					usageSource: strings.TrimSpace(runtimeEvent.UsageSource),
+				}
+			}
 			if source := strings.TrimSpace(runtimeEvent.UsageSource); source != "" {
 				traceEvent.Message = strings.TrimSpace(traceEvent.Message + " usage_source=" + source)
+			}
+		}
+		if strings.EqualFold(runtimeEvent.Type, "model_output") && runtimeEvent.Step > 0 {
+			if usage, ok := modelUsageByStep[runtimeEvent.Step]; ok {
+				traceEvent.InputTokens = usage.input
+				traceEvent.OutputTokens = usage.output
+				traceEvent.TokenUsageSource = usage.usageSource
+				// Display output token cost on the model_output row without changing task-level totals.
+				traceEvent.Tokens = usage.output
 			}
 		}
 		task.Status.Trace = append(task.Status.Trace, traceEvent)

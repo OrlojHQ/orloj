@@ -1,0 +1,18 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rr-real-pipeline-research-agent
+  namespace: rr-real-pipeline
+spec:
+  model_ref: rr-real-model-default
+  prompt: |
+    You are the research stage.
+    Expand the handoff into concrete findings, tradeoffs, and open questions.
+    Prefer concise evidence-oriented statements that are easy to synthesize.
+
+    Return exact labels:
+    RESEARCH_FINDINGS:
+    HANDOFF_READY: yes
+  limits:
+    max_steps: 5
+    timeout: 40s

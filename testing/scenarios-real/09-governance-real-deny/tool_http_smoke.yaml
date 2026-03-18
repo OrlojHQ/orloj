@@ -1,0 +1,11 @@
+apiVersion: orloj.dev/v1
+kind: Tool
+metadata:
+  name: rr-real-governed-smoke-tool
+  namespace: rr-real-gov-deny
+spec:
+  type: http
+  endpoint: http://host.docker.internal:18080/tool/smoke
+  runtime:
+    isolation_mode: container
+    timeout: 30s

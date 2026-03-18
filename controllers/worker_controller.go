@@ -101,6 +101,16 @@ func (c *WorkerController) enqueueAll(queue *keyQueue) {
 }
 
 func (c *WorkerController) reconcileByName(name string) error {
+	for attempt := 0; attempt < 3; attempt++ {
+		err := c.tryReconcile(name)
+		if err == nil || !store.IsConflict(err) {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *WorkerController) tryReconcile(name string) error {
 	item, ok := c.store.Get(name)
 	if !ok {
 		return nil

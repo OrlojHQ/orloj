@@ -1,0 +1,18 @@
+apiVersion: orloj.dev/v1
+kind: Task
+metadata:
+  name: rr-real-gov-deny-task
+  namespace: rr-real-gov-deny
+spec:
+  system: rr-real-gov-deny-system
+  input:
+    goal: validate deny path for a governed tool call
+  priority: high
+  retry:
+    max_attempts: 1
+    backoff: 1s
+  message_retry:
+    max_attempts: 1
+    backoff: 250ms
+    max_backoff: 1s
+    jitter: none

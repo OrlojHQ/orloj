@@ -1,0 +1,13 @@
+{
+  "count": 2,
+  "entries": [
+    {
+      "key": "incident-notes/chunk-0000",
+      "value": "Status page updated at 14:05 UTC. 62% of checkout requests are failing with HTTP 503. Payment API pods hit CPU saturation after release 2026.03.18.2. Rollback completed at 14:17 UTC. Error rate dropped to 4% by 14:24 UTC, but VIP merchants are still impacted. Customer comms should acknowledge impact, commit to the next update in 30 minutes, and avoid root cause claims."
+    },
+    {
+      "key": "triage/recommendation",
+      "value": "Prioritize immediate VIP merchant impact assessment and resolution while maintaining communication cadence - rollback successful but VIP merchants require urgent attention"
+    }
+  ]
+}

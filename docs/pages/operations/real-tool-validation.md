@@ -1,6 +1,6 @@
-# Real Tool Validation (Anthropic Decision Gate)
+# Real Tool Validation (Model Decision Gate)
 
-Use this runbook to validate model-selected tool usage with Anthropic in an A/B scenario.
+Use this runbook to validate model-selected tool usage in an Anthropic-backed A/B scenario.
 
 ## Goal
 
@@ -9,14 +9,19 @@ Use this runbook to validate model-selected tool usage with Anthropic in an A/B 
 
 Scenario path:
 
-- `testing/scenarios-real/05-anthropic-tool-decision`
+- `testing/scenarios-real/05-tool-decision`
 
 ## Before You Begin
 
 1. Add a valid Anthropic key to:
-  - `testing/scenarios-real/05-anthropic-tool-decision/secret.yaml`
+  - `testing/scenarios-real/05-tool-decision/secret.yaml`
 2. Ensure Docker is available for containerized tools.
 3. Ensure API server is reachable at `http://localhost:8080` (or override `API_BASE`).
+4. Start the local deterministic stub tool service:
+
+```bash
+make real-tool-stub
+```
 
 ## Runtime Startup
 
@@ -41,27 +46,29 @@ go run ./cmd/orlojworker \
 ## Apply Scenario
 
 ```bash
-make real-apply-anthropic-tool-decision
+make real-apply-tool-decision
 ```
 
 This applies:
 
-- Anthropic `ModelEndpoint` pinned to `claude-3-5-sonnet-latest`
+- `ModelEndpoint` pinned to `claude-sonnet-4-20250514`
 - one HTTP tool with `spec.runtime.isolation_mode=container`
 - one decision agent
 - two tasks:
-  - `rr-anthropic-tool-use-task`
-  - `rr-anthropic-tool-no-use-task`
+  - `rr-tool-use-task`
+  - `rr-tool-no-use-task`
+
+The tool points at the local stub service via `http://host.docker.internal:18080/tool/decision`.
 
 ## Run Gate
 
 ```bash
-make real-gate-anthropic-tool-decision
+make real-gate-tool-decision
 ```
 
 ## Pass/Fail Criteria
 
-### `rr-anthropic-tool-use-task`
+### `rr-tool-use-task`
 
 Pass requires all:
 
@@ -70,7 +77,7 @@ Pass requires all:
 - at least one `tool_call` event in `status.trace[]`
 - `status.output["agent.1.last_event"]` contains `TOOL_USED: yes` and `EVIDENCE:`
 
-### `rr-anthropic-tool-no-use-task`
+### `rr-tool-no-use-task`
 
 Pass requires all:
 
@@ -81,11 +88,11 @@ Pass requires all:
 
 ## Reliability Target
 
-Pass `make real-gate-anthropic-tool-decision` five consecutive times.
+Pass `make real-gate-tool-decision` five consecutive times.
 
 ## Manual Inspection
 
 ```bash
-make real-check NS=rr-real-anthropic-tool-decision TASK=rr-anthropic-tool-use-task
-make real-check NS=rr-real-anthropic-tool-decision TASK=rr-anthropic-tool-no-use-task
+make real-check NS=rr-real-tool-decision TASK=rr-tool-use-task
+make real-check NS=rr-real-tool-decision TASK=rr-tool-no-use-task
 ```

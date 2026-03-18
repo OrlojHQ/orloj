@@ -1,0 +1,8 @@
+apiVersion: orloj.dev/v1
+kind: AgentSystem
+metadata:
+  name: rr-real-memory-reuse-system
+  namespace: rr-real-memory-reuse
+spec:
+  agents:
+    - rr-real-memory-reuse-agent

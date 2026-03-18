@@ -4,7 +4,7 @@ metadata:
   name: rr-real-tool-planner-agent
   namespace: rr-real-tool
 spec:
-  model_ref: rr-real-anthropic-default
+  model_ref: rr-real-model-default
   prompt: |
     You are the planning stage.
     Convert the task input into 5 to 7 research objectives with measurable outcomes.
