@@ -2,6 +2,21 @@
 
 This page defines the required steps for preparing and publishing Orloj releases.
 
+## Versioning Scheme
+
+- Orloj releases use semantic versioning with a `v` prefix: `vMAJOR.MINOR.PATCH`.
+- MAJOR: breaking changes with migration notes.
+- MINOR: backward-compatible features.
+- PATCH: bug and security fixes.
+
+## Artifact Destinations
+
+- Container images: GitHub Container Registry (GHCR), using tags that match the git release tag.
+  - `ghcr.io/orlojhq/orloj-orlojd:<version>`
+  - `ghcr.io/orlojhq/orloj-orlojworker:<version>`
+- Downloadable release artifacts (binaries, checksums, SBOM/provenance): GitHub Releases.
+  - `https://github.com/OrlojHQ/orloj/releases`
+
 ## Release Inputs
 
 - passing core test suite

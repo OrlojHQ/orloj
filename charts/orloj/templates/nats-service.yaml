@@ -1,0 +1,17 @@
+{{- if .Values.nats.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "orloj.natsFullname" . }}
+  labels:
+    {{- include "orloj.labels" . | nindent 4 }}
+    app.kubernetes.io/component: nats
+spec:
+  selector:
+    {{- include "orloj.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: nats
+  ports:
+    - name: client
+      port: {{ .Values.nats.service.port }}
+      targetPort: client
+{{- end }}

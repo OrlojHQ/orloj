@@ -1,0 +1,46 @@
+{{- if .Values.nats.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "orloj.natsFullname" . }}
+  labels:
+    {{- include "orloj.labels" . | nindent 4 }}
+    app.kubernetes.io/component: nats
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "orloj.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: nats
+  template:
+    metadata:
+      labels:
+        {{- include "orloj.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: nats
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: nats
+          image: {{ printf "%s:%s" .Values.nats.image.repository .Values.nats.image.tag | quote }}
+          imagePullPolicy: {{ .Values.nats.image.pullPolicy }}
+          {{- with .Values.nats.args }}
+          args:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: client
+              containerPort: {{ .Values.nats.service.port }}
+          {{- with .Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.nats.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}

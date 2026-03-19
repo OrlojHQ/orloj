@@ -1,0 +1,11 @@
+Orloj has been installed.
+
+1. Check rollout status:
+   kubectl -n {{ .Release.Namespace }} rollout status deploy/{{ include "orloj.orlojdFullname" . }}
+   kubectl -n {{ .Release.Namespace }} rollout status deploy/{{ include "orloj.orlojworkerFullname" . }}
+
+2. Port-forward API service:
+   kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "orloj.orlojdFullname" . }} 8080:{{ .Values.orlojd.service.port }}
+
+3. Verify health:
+   curl -s http://127.0.0.1:8080/healthz

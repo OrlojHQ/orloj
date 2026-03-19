@@ -1,0 +1,32 @@
+{{- $natsURL := printf "nats://%s:%v" (include "orloj.natsFullname" .) .Values.nats.service.port -}}
+{{- $defaultRuntimeConfig := dict -}}
+{{- if .Values.nats.enabled -}}
+{{- $defaultRuntimeConfig = dict
+  "ORLOJ_TASK_EXECUTION_MODE" "message-driven"
+  "ORLOJ_EVENT_BUS_BACKEND" "nats"
+  "ORLOJ_NATS_URL" $natsURL
+  "ORLOJ_AGENT_MESSAGE_BUS_BACKEND" "nats-jetstream"
+  "ORLOJ_AGENT_MESSAGE_NATS_URL" $natsURL
+  "ORLOJ_MODEL_GATEWAY_PROVIDER" "mock"
+  "ORLOJ_MODEL_GATEWAY_DEFAULT_MODEL" ""
+-}}
+{{- else -}}
+{{- $defaultRuntimeConfig = dict
+  "ORLOJ_TASK_EXECUTION_MODE" "message-driven"
+  "ORLOJ_EVENT_BUS_BACKEND" "memory"
+  "ORLOJ_AGENT_MESSAGE_BUS_BACKEND" "memory"
+  "ORLOJ_MODEL_GATEWAY_PROVIDER" "mock"
+  "ORLOJ_MODEL_GATEWAY_DEFAULT_MODEL" ""
+-}}
+{{- end -}}
+{{- $runtimeConfig := mergeOverwrite (deepCopy $defaultRuntimeConfig) .Values.runtimeConfig -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "orloj.runtimeConfigName" . }}
+  labels:
+    {{- include "orloj.labels" . | nindent 4 }}
+data:
+{{- range $key, $value := $runtimeConfig }}
+  {{ $key }}: {{ $value | quote }}
+{{- end }}

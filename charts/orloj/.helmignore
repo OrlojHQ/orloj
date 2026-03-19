@@ -1,0 +1,7 @@
+.git/
+.github/
+.gitignore
+.DS_Store
+.vscode/
+*.tmp
+*.swp

@@ -1,14 +1,15 @@
-# Kubernetes Deployment (Generic Manifests)
+# Kubernetes Deployment (Helm + Manifest Fallback)
 
 ## Purpose
 
-Deploy Orloj on Kubernetes using plain manifests with no Helm or Kustomize dependency.
+Deploy Orloj on Kubernetes with a Helm chart (recommended) or with raw manifests (fallback).
 
 ## Prerequisites
 
 - Kubernetes cluster access (`kubectl` context configured)
 - container registry you can push to
 - Docker (or compatible image builder)
+- Helm 3 (`helm`)
 - `curl`, `jq`, and `go` for CLI verification from operator workstation
 
 ## Install
@@ -25,24 +26,33 @@ docker push "${REGISTRY}/orloj-orlojd:${TAG}"
 docker push "${REGISTRY}/orloj-orlojworker:${TAG}"
 ```
 
-### 2. Update Manifest Image References
+### 2. Install with Helm (Recommended)
 
-Edit `docs/deploy/kubernetes/orloj-stack.yaml` and replace:
+```bash
+helm upgrade --install orloj ./charts/orloj \
+  --namespace orloj \
+  --create-namespace \
+  --set orlojd.image.repository="${REGISTRY}/orloj-orlojd" \
+  --set orlojd.image.tag="${TAG}" \
+  --set orlojworker.image.repository="${REGISTRY}/orloj-orlojworker" \
+  --set orlojworker.image.tag="${TAG}" \
+  --set postgres.auth.password='<strong-password>' \
+  --set runtimeSecret.modelGatewayApiKey='<model-provider-api-key>'
+```
 
-- `ghcr.io/example/orloj-orlojd:latest`
-- `ghcr.io/example/orloj-orlojworker:latest`
+To inspect effective values:
 
-with your pushed images.
+```bash
+helm get values orloj --namespace orloj
+```
 
-### 3. Rotate Baseline Secrets
+### 3. Manifest Fallback (No Helm)
 
-In `docs/deploy/kubernetes/orloj-stack.yaml`, update at minimum:
+If you cannot use Helm, apply the baseline manifest set:
 
-- `postgres-password`
-- `postgres-dsn` password value
-- `model-gateway-api-key` (if using real model provider)
-
-### 4. Apply Manifests
+1. Edit `docs/deploy/kubernetes/orloj-stack.yaml` image references.
+2. Rotate baseline secrets (`postgres-password`, DSN password, model API key).
+3. Apply manifests:
 
 ```bash
 kubectl apply -f docs/deploy/kubernetes/orloj-stack.yaml
@@ -51,6 +61,15 @@ kubectl apply -f docs/deploy/kubernetes/orloj-stack.yaml
 ## Verify
 
 Wait for rollouts:
+
+```bash
+kubectl -n orloj rollout status deploy/orloj-postgres
+kubectl -n orloj rollout status deploy/orloj-nats
+kubectl -n orloj rollout status deploy/orloj-orlojd
+kubectl -n orloj rollout status deploy/orloj-orlojworker
+```
+
+If you used manifest fallback instead of Helm, use:
 
 ```bash
 kubectl -n orloj rollout status deploy/postgres
@@ -62,8 +81,10 @@ kubectl -n orloj rollout status deploy/orlojworker
 Port-forward API service:
 
 ```bash
-kubectl -n orloj port-forward svc/orlojd 8080:8080
+kubectl -n orloj port-forward svc/orloj-orlojd 8080:8080
 ```
+
+For manifest fallback, port-forward `svc/orlojd` instead.
 
 In another terminal:
 
@@ -86,22 +107,28 @@ Done means:
 Scale workers:
 
 ```bash
-kubectl -n orloj scale deploy/orlojworker --replicas=3
-kubectl -n orloj rollout status deploy/orlojworker
+kubectl -n orloj scale deploy/orloj-orlojworker --replicas=3
+kubectl -n orloj rollout status deploy/orloj-orlojworker
 ```
 
 Restart control plane:
 
 ```bash
-kubectl -n orloj rollout restart deploy/orlojd
-kubectl -n orloj rollout status deploy/orlojd
+kubectl -n orloj rollout restart deploy/orloj-orlojd
+kubectl -n orloj rollout status deploy/orloj-orlojd
 ```
 
 View logs:
 
 ```bash
-kubectl -n orloj logs deploy/orlojd --tail=200
-kubectl -n orloj logs deploy/orlojworker --tail=200
+kubectl -n orloj logs deploy/orloj-orlojd --tail=200
+kubectl -n orloj logs deploy/orloj-orlojworker --tail=200
+```
+
+Upgrade chart release:
+
+```bash
+helm upgrade orloj ./charts/orloj --namespace orloj
 ```
 
 ## Troubleshoot
@@ -109,10 +136,11 @@ kubectl -n orloj logs deploy/orlojworker --tail=200
 - pods in `ImagePullBackOff`: verify image names/tags and registry access.
 - workers not processing: verify `ORLOJ_AGENT_MESSAGE_CONSUME=true` and message-bus env values.
 - tasks not created: verify port-forward is active and API endpoint is reachable.
+- Helm rollback: `helm rollback orloj <revision> --namespace orloj`.
 
 ## Security Defaults
 
-- This manifest set is a baseline, not HA.
+- This baseline is not HA.
 - Rotate secrets before non-test use.
 - Restrict namespace and service exposure based on cluster policy.
 

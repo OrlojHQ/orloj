@@ -1,9 +1,13 @@
 # Kubernetes Deployment Assets
 
-This directory contains generic manifests for a baseline Orloj deployment.
+This directory contains Kubernetes deployment assets for Orloj.
 
 ## Files
 
-- `orloj-stack.yaml`: namespace, config, secrets, Postgres, NATS, `orlojd`, and `orlojworker`.
+- `orloj-stack.yaml`: baseline raw manifests (namespace, config, secrets, Postgres, NATS, `orlojd`, `orlojworker`).
 
-Use the operator guide at `docs/pages/deployment/kubernetes.md` for image build/push, apply, verification, and operations.
+## Helm Chart
+
+- Primary Helm chart: `charts/orloj`
+
+Use the operator guide at `docs/pages/deployment/kubernetes.md` for Helm install/upgrade, manifest fallback flow, verification, and operations.

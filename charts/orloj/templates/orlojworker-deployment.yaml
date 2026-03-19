@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "orloj.orlojworkerFullname" . }}
+  labels:
+    {{- include "orloj.labels" . | nindent 4 }}
+    app.kubernetes.io/component: orlojworker
+spec:
+  replicas: {{ .Values.orlojworker.replicas }}
+  selector:
+    matchLabels:
+      {{- include "orloj.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: orlojworker
+  template:
+    metadata:
+      labels:
+        {{- include "orloj.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: orlojworker
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: orlojworker
+          image: {{ printf "%s:%s" .Values.orlojworker.image.repository .Values.orlojworker.image.tag | quote }}
+          imagePullPolicy: {{ .Values.orlojworker.image.pullPolicy }}
+          command:
+            {{- toYaml .Values.orlojworker.command | nindent 12 }}
+          args:
+            {{- toYaml .Values.orlojworker.args | nindent 12 }}
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: ORLOJ_POSTGRES_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "orloj.runtimeSecretName" . }}
+                  key: postgres-dsn
+            - name: ORLOJ_MODEL_GATEWAY_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "orloj.runtimeSecretName" . }}
+                  key: model-gateway-api-key
+            - name: ORLOJ_AGENT_MESSAGE_CONSUME
+              value: {{ ternary "true" "false" .Values.orlojworker.agentMessageConsume | quote }}
+            {{- with .Values.orlojworker.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "orloj.runtimeConfigName" . }}
+          {{- with .Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.orlojworker.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}

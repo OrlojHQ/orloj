@@ -1,0 +1,92 @@
+nameOverride: ""
+fullnameOverride: ""
+
+commonLabels: {}
+
+namespace:
+  create: false
+
+imagePullSecrets: []
+
+podSecurityContext:
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  runAsNonRoot: true
+  allowPrivilegeEscalation: false
+
+runtimeSecret:
+  modelGatewayApiKey: ""
+
+runtimeConfig: {}
+
+postgres:
+  auth:
+    user: orloj
+    password: change-me
+    database: orloj
+    dsn: ""
+  image:
+    repository: postgres
+    tag: 16-alpine
+    pullPolicy: IfNotPresent
+  service:
+    port: 5432
+  persistence:
+    enabled: true
+    size: 20Gi
+    storageClass: ""
+  resources: {}
+
+nats:
+  enabled: true
+  image:
+    repository: nats
+    tag: 2.10-alpine
+    pullPolicy: IfNotPresent
+  args:
+    - -js
+  service:
+    port: 4222
+  resources: {}
+
+orlojd:
+  replicas: 1
+  image:
+    repository: ghcr.io/example/orloj-orlojd
+    tag: latest
+    pullPolicy: IfNotPresent
+  args:
+    - --addr=:8080
+    - --storage-backend=postgres
+  service:
+    type: ClusterIP
+    port: 8080
+  readinessProbe:
+    enabled: true
+    path: /healthz
+    initialDelaySeconds: 5
+    periodSeconds: 5
+  livenessProbe:
+    enabled: true
+    path: /healthz
+    initialDelaySeconds: 10
+    periodSeconds: 10
+  extraEnv: []
+  resources: {}
+
+orlojworker:
+  replicas: 2
+  image:
+    repository: ghcr.io/example/orloj-orlojworker
+    tag: latest
+    pullPolicy: IfNotPresent
+  command:
+    - /bin/sh
+    - -c
+  args:
+    - exec /usr/local/bin/app --storage-backend=postgres --worker-id="${POD_NAME}" --region=default --max-concurrent-tasks=4
+  agentMessageConsume: true
+  extraEnv: []
+  resources: {}

@@ -2,6 +2,11 @@
 
 *Named after the [Prague Orloj](https://en.wikipedia.org/wiki/Prague_astronomical_clock), an astronomical clock that has coordinated complex mechanisms for over 600 years.*
 
+[![Release](https://img.shields.io/github/v/release/OrlojHQ/orloj?display_name=tag&sort=semver)](https://github.com/OrlojHQ/orloj/releases)
+[![CI](https://img.shields.io/github/actions/workflow/status/OrlojHQ/orloj/ci.yml?branch=main&label=ci)](https://github.com/OrlojHQ/orloj/actions/workflows/ci.yml)
+[![Docs](https://img.shields.io/github/actions/workflow/status/OrlojHQ/orloj/docs.yml?branch=main&label=docs)](https://github.com/OrlojHQ/orloj/actions/workflows/docs.yml)
+[![License](https://img.shields.io/github/license/OrlojHQ/orloj)](LICENSE)
+
 **A lightweight orchestration plane for multi-agent AI systems.**
 
 Define agents, tools, policies, and workflows as declarative YAML. Orloj handles scheduling, execution, model routing, governance enforcement, and reliability -- so you can run multi-agent systems in production with the same operational rigor you expect from infrastructure.
@@ -78,7 +83,7 @@ When you are ready to scale, switch to message-driven mode with distributed work
 
 ## Resources
 
-Orloj manages 13 resource types, all defined as declarative YAML with `apiVersion`, `kind`, `metadata`, `spec`, and `status` fields:
+Orloj manages 15 resource types, all defined as declarative YAML with `apiVersion`, `kind`, `metadata`, `spec`, and `status` fields:
 
 | Resource | Purpose |
 |---|---|
@@ -91,10 +96,12 @@ Orloj manages 13 resource types, all defined as declarative YAML with `apiVersio
 | AgentPolicy | Token, model, and tool constraints |
 | AgentRole | Named permission set bound to agents |
 | ToolPermission | Required permissions for tool invocation |
+| ToolApproval | Approval record for gated tool invocations |
 | Task | Request to execute an AgentSystem |
 | TaskSchedule | Cron-based task creation |
 | TaskWebhook | Event-triggered task creation |
 | Worker | Execution unit with capability declaration |
+| McpServer | MCP server connection that discovers/syncs MCP tools |
 
 ## Documentation
 
@@ -120,6 +127,27 @@ Run the full stack (Postgres + server + 2 workers) with Docker Compose:
 docker compose up --build -d
 docker compose ps
 ```
+
+## Kubernetes (Helm)
+
+Deploy with the Helm chart in `charts/orloj`:
+
+```bash
+export REGISTRY=ghcr.io/<your-org-or-user>
+export TAG=v0.1.0
+
+helm upgrade --install orloj ./charts/orloj \
+  --namespace orloj \
+  --create-namespace \
+  --set orlojd.image.repository="${REGISTRY}/orloj-orlojd" \
+  --set orlojd.image.tag="${TAG}" \
+  --set orlojworker.image.repository="${REGISTRY}/orloj-orlojworker" \
+  --set orlojworker.image.tag="${TAG}" \
+  --set postgres.auth.password='<strong-password>' \
+  --set runtimeSecret.modelGatewayApiKey='<model-provider-api-key>'
+```
+
+See the Kubernetes runbook for full operations and troubleshooting: [docs/pages/deployment/kubernetes.md](docs/pages/deployment/kubernetes.md).
 
 ## Contributing
 

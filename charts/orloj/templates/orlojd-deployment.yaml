@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "orloj.orlojdFullname" . }}
+  labels:
+    {{- include "orloj.labels" . | nindent 4 }}
+    app.kubernetes.io/component: orlojd
+spec:
+  replicas: {{ .Values.orlojd.replicas }}
+  selector:
+    matchLabels:
+      {{- include "orloj.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: orlojd
+  template:
+    metadata:
+      labels:
+        {{- include "orloj.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: orlojd
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: orlojd
+          image: {{ printf "%s:%s" .Values.orlojd.image.repository .Values.orlojd.image.tag | quote }}
+          imagePullPolicy: {{ .Values.orlojd.image.pullPolicy }}
+          args:
+            {{- toYaml .Values.orlojd.args | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.orlojd.service.port }}
+          env:
+            - name: ORLOJ_POSTGRES_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "orloj.runtimeSecretName" . }}
+                  key: postgres-dsn
+            - name: ORLOJ_MODEL_GATEWAY_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "orloj.runtimeSecretName" . }}
+                  key: model-gateway-api-key
+            {{- with .Values.orlojd.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "orloj.runtimeConfigName" . }}
+          {{- if .Values.orlojd.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.orlojd.readinessProbe.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.orlojd.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.orlojd.readinessProbe.periodSeconds }}
+          {{- end }}
+          {{- if .Values.orlojd.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.orlojd.livenessProbe.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.orlojd.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.orlojd.livenessProbe.periodSeconds }}
+          {{- end }}
+          {{- with .Values.containerSecurityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.orlojd.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}

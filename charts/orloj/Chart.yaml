@@ -1,0 +1,6 @@
+apiVersion: v2
+name: orloj
+description: Helm chart for deploying Orloj (orlojd, orlojworker, Postgres, and NATS)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

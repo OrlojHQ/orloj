@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "orloj.orlojdFullname" . }}
+  labels:
+    {{- include "orloj.labels" . | nindent 4 }}
+    app.kubernetes.io/component: orlojd
+spec:
+  type: {{ .Values.orlojd.service.type }}
+  selector:
+    {{- include "orloj.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: orlojd
+  ports:
+    - name: http
+      port: {{ .Values.orlojd.service.port }}
+      targetPort: http

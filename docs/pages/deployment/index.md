@@ -23,7 +23,7 @@ Choose a deployment path based on your environment and required operational beha
 
 1. [Local Deployment](./local.md)
 2. [VPS Deployment (Compose + systemd)](./vps.md)
-3. [Kubernetes Deployment (Generic Manifests)](./kubernetes.md)
+3. [Kubernetes Deployment (Helm + Manifest Fallback)](./kubernetes.md)
 
 ## Security Defaults
 
