@@ -143,6 +143,13 @@ func main() {
 	agentSystemController := controllers.NewAgentSystemController(stores.AgentSystems, logger, *reconcile)
 	modelEndpointController := controllers.NewModelEndpointController(stores.ModelEPs, logger, 5*time.Second)
 	toolController := controllers.NewToolController(stores.Tools, logger, 5*time.Second)
+	mcpServerController := controllers.NewMcpServerController(stores.McpServers, stores.Tools, logger, 10*time.Second)
+	mcpSecretResolver := agentruntime.NewChainSecretResolver(
+		agentruntime.NewStoreSecretResolver(stores.Secrets, "value"),
+		agentruntime.NewEnvSecretResolver("ORLOJ_SECRET_"),
+	)
+	mcpSessionManager := agentruntime.NewMcpSessionManager(mcpSecretResolver)
+	mcpServerController.SetSessionManager(mcpSessionManager)
 	memoryBackendRegistry := agentruntime.NewPersistentMemoryBackendRegistry()
 	memoryController := controllers.NewMemoryController(stores.Memories, logger, 5*time.Second)
 	memoryController.SetBackendRegistry(memoryBackendRegistry)
@@ -187,6 +194,7 @@ func main() {
 		logger.Fatalf("failed to configure isolated tool runtime: %v", err)
 	}
 	taskController.SetIsolatedToolRuntime(isolatedToolRuntime)
+	taskController.SetMcpRuntime(mcpSessionManager, stores.McpServers)
 
 	server := api.NewServerWithOptions(api.Stores{
 		Agents:        stores.Agents,
@@ -204,6 +212,7 @@ func main() {
 		TaskWebhooks:  stores.TaskWebhooks,
 		WebhookDedupe: stores.WebhookDedupe,
 		Workers:       stores.Workers,
+		McpServers:    stores.McpServers,
 	}, runtime, logger, api.ServerOptions{
 		Authorizer: api.NewAPIKeyAuthorizer(*apiKey),
 		Extensions: extensions,
@@ -245,6 +254,7 @@ func main() {
 	go taskSchedulerController.Start(ctx)
 	go taskScheduleController.Start(ctx)
 	go workerController.Start(ctx)
+	go mcpServerController.Start(ctx)
 	if *runTaskWorker || *embeddedWorker {
 		go heartbeatWorkerRegistration(ctx, stores.Workers, logger, *taskWorkerID, resources.WorkerSpec{
 			Region:             *taskWorkerRegion,
@@ -266,10 +276,12 @@ func main() {
 						Tools:               stores.Tools,
 						Roles:               stores.Roles,
 						ToolPermissions:     stores.ToolPerms,
-						IsolatedToolRuntime: isolatedToolRuntime,
-						Extensions:          extensions,
-						Memories:            stores.Memories,
-						MemoryBackends:      memoryBackendRegistry,
+					IsolatedToolRuntime: isolatedToolRuntime,
+					McpSessionManager:   mcpSessionManager,
+					McpServerStore:      stores.McpServers,
+					Extensions:          extensions,
+					Memories:            stores.Memories,
+					MemoryBackends:      memoryBackendRegistry,
 					},
 				)
 				go consumer.Start(ctx)

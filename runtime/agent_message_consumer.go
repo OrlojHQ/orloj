@@ -55,6 +55,8 @@ type AgentMessageConsumerOptions struct {
 	Roles               AgentRoleLookup
 	ToolPermissions     ToolPermissionLookup
 	IsolatedToolRuntime ToolRuntime
+	McpSessionManager   *McpSessionManager
+	McpServerStore      McpServerLookup
 	Extensions          Extensions
 	Memories            MemoryResourceLookup
 	MemoryBackends      *PersistentMemoryBackendRegistry
@@ -69,9 +71,11 @@ type AgentMessageConsumerManager struct {
 	tools        ToolResourceLookup
 	roles        AgentRoleLookup
 	toolPerms    ToolPermissionLookup
-	isolated     ToolRuntime
-	executor     *TaskExecutor
-	logger       *log.Logger
+	isolated       ToolRuntime
+	mcpSessionMgr  *McpSessionManager
+	mcpServerStore McpServerLookup
+	executor       *TaskExecutor
+	logger         *log.Logger
 	workerID     string
 	namespace    string
 	refresh      time.Duration
@@ -124,8 +128,10 @@ func NewAgentMessageConsumerManager(
 		tools:       opts.Tools,
 		roles:       opts.Roles,
 		toolPerms:   opts.ToolPermissions,
-		isolated:    opts.IsolatedToolRuntime,
-		executor:    executor,
+		isolated:       opts.IsolatedToolRuntime,
+		mcpSessionMgr:  opts.McpSessionManager,
+		mcpServerStore: opts.McpServerStore,
+		executor:       executor,
 		logger:      logger,
 		workerID:    strings.TrimSpace(opts.WorkerID),
 		namespace:   strings.TrimSpace(opts.Namespace),
@@ -342,6 +348,9 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 		ns,
 		agent,
 	)
+	if m.mcpSessionMgr != nil && m.mcpServerStore != nil {
+		ConfigureMcpRuntime(toolRT, m.mcpSessionMgr, m.mcpServerStore, ns)
+	}
 	if memRef := strings.TrimSpace(agent.Spec.Memory.Ref); memRef != "" {
 		sharedMem := m.taskSharedMemory(taskKey)
 		memRT := NewMemoryToolRuntime(toolRT, sharedMem)

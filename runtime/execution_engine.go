@@ -90,6 +90,9 @@ func (e *ReActExecutionEngine) Execute(ctx context.Context, agent resources.Agen
 
 	memory := e.newMemoryStore()
 	worker := NewAgentWorkerWithIntervalAndGatewayAndInput(agent, e.toolRuntime, memory, e.modelGateway, input, appendObserved, e.stepEvery)
+	if resolver, ok := e.toolRuntime.(ToolSchemaResolver); ok {
+		worker.SetToolSchemas(resolver.ResolveToolSchemas(agent.Spec.Tools))
+	}
 	worker.Run(runCtx)
 
 	duration := time.Since(start)

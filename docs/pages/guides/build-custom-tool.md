@@ -326,3 +326,4 @@ See [Tool Runtime Conformance](../operations/tool-runtime-conformance.md) for de
 - [WASM Tool Module Contract v1](../reference/wasm-tool-module-contract-v1.md) -- WASM-specific contract
 - [Tools and Isolation](../concepts/tools-and-isolation.md) -- concept deep-dive
 - [Tool Runtime Conformance](../operations/tool-runtime-conformance.md) -- running the test harness
+- [Connect an MCP Server](./connect-mcp-server.md) -- for MCP-compatible tool servers instead of custom implementations

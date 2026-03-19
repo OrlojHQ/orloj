@@ -113,6 +113,10 @@ type Tool struct {
 type ToolSpec struct {
 	Type             string            `json:"type,omitempty"`
 	Endpoint         string            `json:"endpoint,omitempty"`
+	Description      string            `json:"description,omitempty"`
+	InputSchema      map[string]any    `json:"input_schema,omitempty"`
+	McpServerRef     string            `json:"mcp_server_ref,omitempty"`
+	McpToolName      string            `json:"mcp_tool_name,omitempty"`
 	Capabilities     []string          `json:"capabilities,omitempty"`
 	OperationClasses []string          `json:"operation_classes,omitempty"`
 	RiskLevel        string            `json:"risk_level,omitempty"`
@@ -195,10 +199,20 @@ func (t *Tool) Normalize() error {
 		toolType = "http"
 	}
 	switch toolType {
-	case "http", "external", "grpc", "queue", "webhook-callback":
+	case "http", "external", "grpc", "queue", "webhook-callback", "mcp":
 		t.Spec.Type = toolType
 	default:
-		return fmt.Errorf("invalid spec.type %q: expected http, external, grpc, queue, or webhook-callback", t.Spec.Type)
+		return fmt.Errorf("invalid spec.type %q: expected http, external, grpc, queue, webhook-callback, or mcp", t.Spec.Type)
+	}
+	t.Spec.McpServerRef = strings.TrimSpace(t.Spec.McpServerRef)
+	t.Spec.McpToolName = strings.TrimSpace(t.Spec.McpToolName)
+	if toolType == "mcp" {
+		if t.Spec.McpServerRef == "" {
+			return fmt.Errorf("spec.mcp_server_ref is required when spec.type is mcp")
+		}
+		if t.Spec.McpToolName == "" {
+			return fmt.Errorf("spec.mcp_tool_name is required when spec.type is mcp")
+		}
 	}
 	normalizedCaps := make([]string, 0, len(t.Spec.Capabilities))
 	seenCaps := make(map[string]struct{}, len(t.Spec.Capabilities))
@@ -1360,6 +1374,113 @@ func (w *Worker) Normalize() error {
 	}
 	if w.Status.Phase == "" {
 		w.Status.Phase = "Pending"
+	}
+	return nil
+}
+
+// McpServer declares an MCP (Model Context Protocol) server connection.
+// The controller connects to the server, discovers tools via tools/list,
+// and auto-generates Tool resources for each discovered tool.
+type McpServer struct {
+	APIVersion string          `json:"apiVersion"`
+	Kind       string          `json:"kind"`
+	Metadata   ObjectMeta      `json:"metadata"`
+	Spec       McpServerSpec   `json:"spec"`
+	Status     McpServerStatus `json:"status,omitempty"`
+}
+
+type McpServerSpec struct {
+	Transport  string             `json:"transport"`
+	Command    string             `json:"command,omitempty"`
+	Args       []string           `json:"args,omitempty"`
+	Env        []McpServerEnvVar  `json:"env,omitempty"`
+	Endpoint   string             `json:"endpoint,omitempty"`
+	Auth       ToolAuth           `json:"auth,omitempty"`
+	ToolFilter McpToolFilter      `json:"tool_filter,omitempty"`
+	Reconnect  McpReconnectPolicy `json:"reconnect,omitempty"`
+}
+
+type McpServerEnvVar struct {
+	Name      string `json:"name"`
+	Value     string `json:"value,omitempty"`
+	SecretRef string `json:"secretRef,omitempty"`
+}
+
+type McpToolFilter struct {
+	Include []string `json:"include,omitempty"`
+}
+
+type McpReconnectPolicy struct {
+	MaxAttempts int    `json:"max_attempts,omitempty"`
+	Backoff     string `json:"backoff,omitempty"`
+}
+
+type McpServerStatus struct {
+	Phase              string   `json:"phase,omitempty"`
+	DiscoveredTools    []string `json:"discoveredTools,omitempty"`
+	GeneratedTools     []string `json:"generatedTools,omitempty"`
+	LastSyncedAt       string   `json:"lastSyncedAt,omitempty"`
+	LastError          string   `json:"lastError,omitempty"`
+	ObservedGeneration int64    `json:"observedGeneration,omitempty"`
+}
+
+type McpServerList struct {
+	Items []McpServer `json:"items"`
+}
+
+func (m *McpServer) Normalize() error {
+	if m.APIVersion == "" {
+		m.APIVersion = "orloj.dev/v1"
+	}
+	if m.Kind == "" {
+		m.Kind = "McpServer"
+	}
+	if !strings.EqualFold(m.Kind, "McpServer") {
+		return fmt.Errorf("unsupported kind %q for McpServer", m.Kind)
+	}
+	NormalizeObjectMetaNamespace(&m.Metadata)
+	if m.Metadata.Name == "" {
+		return fmt.Errorf("metadata.name is required")
+	}
+	transport := strings.ToLower(strings.TrimSpace(m.Spec.Transport))
+	if transport == "" {
+		return fmt.Errorf("spec.transport is required (stdio or http)")
+	}
+	switch transport {
+	case "stdio", "http":
+		m.Spec.Transport = transport
+	default:
+		return fmt.Errorf("invalid spec.transport %q: expected stdio or http", m.Spec.Transport)
+	}
+	if transport == "stdio" && strings.TrimSpace(m.Spec.Command) == "" {
+		return fmt.Errorf("spec.command is required for stdio transport")
+	}
+	if transport == "http" && strings.TrimSpace(m.Spec.Endpoint) == "" {
+		return fmt.Errorf("spec.endpoint is required for http transport")
+	}
+	m.Spec.Command = strings.TrimSpace(m.Spec.Command)
+	m.Spec.Endpoint = strings.TrimSpace(m.Spec.Endpoint)
+	for i, env := range m.Spec.Env {
+		m.Spec.Env[i].Name = strings.TrimSpace(env.Name)
+		m.Spec.Env[i].Value = strings.TrimSpace(env.Value)
+		m.Spec.Env[i].SecretRef = strings.TrimSpace(env.SecretRef)
+	}
+	normalized := make([]string, 0, len(m.Spec.ToolFilter.Include))
+	for _, name := range m.Spec.ToolFilter.Include {
+		name = strings.TrimSpace(name)
+		if name != "" {
+			normalized = append(normalized, name)
+		}
+	}
+	m.Spec.ToolFilter.Include = normalized
+	if m.Spec.Reconnect.MaxAttempts <= 0 {
+		m.Spec.Reconnect.MaxAttempts = 3
+	}
+	if strings.TrimSpace(m.Spec.Reconnect.Backoff) == "" {
+		m.Spec.Reconnect.Backoff = "2s"
+	}
+	if m.Status.Phase == "" {
+		m.Status.Phase = "Pending"
 	}
 	return nil
 }

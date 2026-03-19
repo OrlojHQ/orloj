@@ -22,6 +22,7 @@ GOV_DENY_SCENARIO := 09-governance-real-deny
 TOOL_RETRY_SCENARIO := 10-tool-retry-recovery
 WEBHOOK_SCENARIO := 11-webhook-live-flow
 SCHEDULE_SCENARIO := 12-schedule-live-flow
+MCP_SCENARIO := 14-mcp-tool-smoke
 
 PIPELINE_NS := rr-real-pipeline
 HIER_NS := rr-real-hier
@@ -35,6 +36,7 @@ GOV_DENY_NS := rr-real-gov-deny
 TOOL_RETRY_NS := rr-real-tool-retry
 WEBHOOK_NS := rr-real-webhook
 SCHEDULE_NS := rr-real-schedule
+MCP_NS := rr-real-mcp
 
 PIPELINE_TASK := rr-real-pipeline-task
 HIER_TASK := rr-real-hier-task
@@ -54,6 +56,9 @@ MEMORY_REUSE_NAME := rr-real-memory-reuse-store
 WEBHOOK_MEMORY_NAME := rr-real-webhook-memory
 SCHEDULE_MEMORY_NAME := rr-real-schedule-memory
 
+MCP_TASK := rr-real-mcp-task
+MCP_SERVER_NAME := rr-real-mcp-everything
+
 WEBHOOK_NAME := rr-real-webhook-ingest
 SCHEDULE_NAME := rr-real-minute-digest
 
@@ -68,7 +73,7 @@ REAL_SCHEDULE_TIMEOUT_SECONDS ?= 120
 	real-apply-pipeline real-apply-hier real-apply-loop real-apply-tool real-apply-tool-decision real-apply-anthropic-tool-decision \
 	real-apply-memory-shared real-apply-memory-reuse real-apply-memory-reuse-query \
 	real-apply-tool-auth real-apply-governance-deny real-apply-tool-retry \
-	real-apply-webhook real-apply-schedule \
+	real-apply-webhook real-apply-schedule real-apply-mcp \
 	real-get real-messages real-metrics real-check \
 	real-check-pipeline real-check-hier real-check-loop real-check-tool \
 	real-check-tool-use real-check-tool-no-use real-check-anthropic-tool-use real-check-anthropic-tool-no-use \
@@ -78,8 +83,8 @@ REAL_SCHEDULE_TIMEOUT_SECONDS ?= 120
 	real-gate-pipeline real-gate-hier real-gate-loop real-gate-tool \
 	real-gate-tool-decision real-gate-anthropic-tool-decision real-gate-memory-shared real-gate-memory-reuse \
 	real-gate-tool-auth real-gate-governance-deny real-gate-tool-retry \
-	real-gate-webhook real-gate-schedule \
-	real-gate-wave0 real-gate-wave1 real-gate-wave2 real-gate-wave3 \
+	real-gate-webhook real-gate-schedule real-gate-mcp \
+	real-gate-wave0 real-gate-wave1 real-gate-wave2 real-gate-wave3 real-gate-wave4 \
 	real-check-all
 
 build:
@@ -130,6 +135,7 @@ real-help:
 	@echo "  make real-apply-tool-retry"
 	@echo "  make real-apply-webhook"
 	@echo "  make real-apply-schedule"
+	@echo "  make real-apply-mcp"
 	@echo ""
 	@echo "Scenario gates:"
 	@echo "  make real-gate-pipeline"
@@ -144,12 +150,14 @@ real-help:
 	@echo "  make real-gate-tool-retry"
 	@echo "  make real-gate-webhook"
 	@echo "  make real-gate-schedule"
+	@echo "  make real-gate-mcp"
 	@echo ""
 	@echo "Grouped gates:"
 	@echo "  make real-gate-wave0"
 	@echo "  make real-gate-wave1"
 	@echo "  make real-gate-wave2"
 	@echo "  make real-gate-wave3"
+	@echo "  make real-gate-wave4"
 	@echo ""
 	@echo "Repeated runs:"
 	@echo "  make real-repeat TARGET=real-gate-pipeline COUNT=3"
@@ -303,10 +311,36 @@ real-apply-schedule:
 	curl -s -o /dev/null -w "%{http_code}" -X DELETE "$(API_BASE)/v1/task-schedules/$(SCHEDULE_NAME)?namespace=$(SCHEDULE_NS)" >/dev/null || true
 	@$(MAKE) real-apply SCENARIO=$(SCHEDULE_SCENARIO)
 
+real-apply-mcp:
+	@$(MAKE) real-delete-task NS=$(MCP_NS) TASK=$(MCP_TASK)
+	@set -eu; \
+	find "$(SCENARIOS_REAL_DIR)/$(MCP_SCENARIO)" -name '*.yaml' ! -name 'task*.yaml' -print | sort | while IFS= read -r file; do \
+		[ -n "$$file" ] || continue; \
+		$(AGENTCTL) apply -f "$$file"; \
+	done; \
+	echo "waiting for MCP server to discover tools..."; \
+	deadline=$$(( $$(date +%s) + 60 )); \
+	while true; do \
+		mcp_phase=$$(curl -sf "$(API_BASE)/v1/mcp-servers/$(MCP_SERVER_NAME)?namespace=$(MCP_NS)" | jq -r '.status.phase // ""' 2>/dev/null || echo ""); \
+		if [ "$$mcp_phase" = "Ready" ]; then \
+			echo "MCP server ready, tools generated"; \
+			break; \
+		fi; \
+		if [ $$(date +%s) -gt $$deadline ]; then \
+			echo "timeout waiting for MCP server to become Ready (phase=$$mcp_phase)"; \
+			exit 1; \
+		fi; \
+		sleep 2; \
+	done; \
+	find "$(SCENARIOS_REAL_DIR)/$(MCP_SCENARIO)" -name 'task*.yaml' -print | sort | while IFS= read -r file; do \
+		[ -n "$$file" ] || continue; \
+		$(AGENTCTL) apply -f "$$file"; \
+	done
+
 real-apply-all: \
 	real-apply-pipeline real-apply-hier real-apply-loop real-apply-tool real-apply-tool-decision \
 	real-apply-memory-shared real-apply-memory-reuse real-apply-tool-auth real-apply-governance-deny \
-	real-apply-tool-retry real-apply-webhook real-apply-schedule
+	real-apply-tool-retry real-apply-webhook real-apply-schedule real-apply-mcp
 
 real-get:
 	@if [ -z "$(NS)" ] || [ -z "$(TASK)" ]; then \
@@ -744,6 +778,32 @@ real-gate-schedule:
 	verdict="passed"; \
 	echo "schedule gate passed (task=$$schedule_task)"
 
+real-gate-mcp:
+	@set -eu; \
+	verdict="failed"; \
+	fail() { verdict="failed: $$1"; echo "$$1"; exit 1; }; \
+	trap 'API_BASE="$(API_BASE)" ARTIFACT_ROOT="$(REAL_ARTIFACTS_DIR)" testing/scenarios-real/capture.sh "$(MCP_NS)" "$(MCP_TASK)" "$$verdict" >/dev/null || true' EXIT; \
+	$(MAKE) real-apply-mcp; \
+	$(MAKE) real-wait-task-succeeded NS=$(MCP_NS) TASK=$(MCP_TASK); \
+	task_json=$$(curl -sSf "$(API_BASE)/v1/tasks/$(MCP_TASK)?namespace=$(MCP_NS)"); \
+	last_output=$$(printf '%s\n' "$$task_json" | jq -r '.status.output["last_output"] // ""'); \
+	printf '%s\n' "$$last_output" | grep -qi 'ECHO_RESULT:' || fail "missing ECHO_RESULT marker"; \
+	printf '%s\n' "$$last_output" | grep -qi 'mcp-smoke-test-marker' || fail "echo tool did not return expected marker"; \
+	printf '%s\n' "$$last_output" | grep -qi 'SUM_RESULT:' || fail "missing SUM_RESULT marker"; \
+	printf '%s\n' "$$last_output" | grep -q '42' || fail "get-sum tool did not return expected sum (42)"; \
+	printf '%s\n' "$$last_output" | grep -qi 'MCP_SERVER:' || fail "missing MCP_SERVER marker"; \
+	trace_tool_calls=$$(printf '%s\n' "$$task_json" | jq -r '[.status.trace[]? | select((.type // "") == "tool_call")] | length'); \
+	[ "$$trace_tool_calls" -ge 2 ] || fail "expected at least 2 tool_call trace events, got $$trace_tool_calls"; \
+	tools_json=$$(curl -sSf "$(API_BASE)/v1/tools?namespace=$(MCP_NS)"); \
+	echo_tool=$$(printf '%s\n' "$$tools_json" | jq -r '.items[] | select(.metadata.name == "rr-real-mcp-everything--echo") | .spec.type // ""'); \
+	[ "$$echo_tool" = "mcp" ] || fail "expected echo tool type=mcp, got $$echo_tool"; \
+	sum_tool=$$(printf '%s\n' "$$tools_json" | jq -r '.items[] | select(.metadata.name == "rr-real-mcp-everything--get-sum") | .spec.type // ""'); \
+	[ "$$sum_tool" = "mcp" ] || fail "expected get-sum tool type=mcp, got $$sum_tool"; \
+	total_tools=$$(printf '%s\n' "$$tools_json" | jq '[.items[] | select(.spec.type == "mcp")] | length'); \
+	[ "$$total_tools" -eq 2 ] || fail "tool_filter should produce exactly 2 tools, got $$total_tools"; \
+	verdict="passed"; \
+	echo "mcp gate passed"
+
 real-gate-wave0: real-gate-pipeline real-gate-hier real-gate-loop real-gate-tool real-gate-tool-decision
 	@echo "wave 0 gates passed"
 
@@ -755,5 +815,8 @@ real-gate-wave2: real-gate-tool-auth real-gate-governance-deny real-gate-tool-re
 
 real-gate-wave3: real-gate-webhook real-gate-schedule
 	@echo "wave 3 gates passed"
+
+real-gate-wave4: real-gate-mcp
+	@echo "wave 4 gates passed"
 
 real-check-all: real-check-pipeline real-check-hier real-check-loop real-check-tool

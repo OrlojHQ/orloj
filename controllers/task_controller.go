@@ -44,6 +44,8 @@ type TaskController struct {
 	agentMessageBus  agentruntime.AgentMessageBus
 	executionMode    string
 	isolatedTools    agentruntime.ToolRuntime
+	mcpSessionMgr    *agentruntime.McpSessionManager
+	mcpServerStore   *store.McpServerStore
 	extensions       agentruntime.Extensions
 }
 
@@ -134,6 +136,11 @@ func (c *TaskController) SetExecutor(executor *agentruntime.TaskExecutor) {
 
 func (c *TaskController) SetExtensions(ext agentruntime.Extensions) {
 	c.extensions = agentruntime.NormalizeExtensions(ext)
+}
+
+func (c *TaskController) SetMcpRuntime(sessionMgr *agentruntime.McpSessionManager, mcpServerStore *store.McpServerStore) {
+	c.mcpSessionMgr = sessionMgr
+	c.mcpServerStore = mcpServerStore
 }
 
 func (c *TaskController) Start(ctx context.Context) {
@@ -1112,6 +1119,9 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 			task.Metadata.Namespace,
 			agent,
 		)
+		if c.mcpSessionMgr != nil && c.mcpServerStore != nil {
+			agentruntime.ConfigureMcpRuntime(toolRuntime, c.mcpSessionMgr, c.mcpServerStore, task.Metadata.Namespace)
+		}
 		result, err := c.executor.ExecuteAgentWithRuntime(agentCtx, agent, runtimeInput, toolRuntime)
 		if err != nil {
 			category := "failure"

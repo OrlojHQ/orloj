@@ -1,0 +1,18 @@
+apiVersion: orloj.dev/v1
+kind: McpServer
+metadata:
+  name: rr-real-mcp-everything
+  namespace: rr-real-mcp
+spec:
+  transport: stdio
+  command: npx
+  args:
+    - "-y"
+    - "@modelcontextprotocol/server-everything"
+  tool_filter:
+    include:
+      - echo
+      - get-sum
+  reconnect:
+    max_attempts: 3
+    backoff: 2s

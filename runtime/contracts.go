@@ -32,17 +32,25 @@ type ChatToolCall struct {
 	Input string
 }
 
+// ToolSchemaInfo carries optional description and JSON Schema for a tool.
+// When present, model gateways use these instead of the generic fallback.
+type ToolSchemaInfo struct {
+	Description string
+	InputSchema map[string]any
+}
+
 // ModelRequest defines one model inference request for an agent step.
 type ModelRequest struct {
-	Model     string
-	ModelRef  string
-	Namespace string
-	Agent     string
-	Prompt    string
-	Step      int
-	Tools     []string
-	Context   map[string]string
-	Messages  []ChatMessage
+	Model       string
+	ModelRef    string
+	Namespace   string
+	Agent       string
+	Prompt      string
+	Step        int
+	Tools       []string
+	ToolSchemas map[string]ToolSchemaInfo
+	Context     map[string]string
+	Messages    []ChatMessage
 }
 
 // ModelResponse captures model output used by the runtime loop.
@@ -66,6 +74,13 @@ type ModelToolCall struct {
 	ID    string
 	Name  string
 	Input string
+}
+
+// ToolSchemaResolver resolves rich tool schemas for model gateway formatting.
+// Implementations that wrap tool registries (e.g. GovernedToolRuntime) can
+// provide per-tool descriptions and JSON Schemas to the LLM.
+type ToolSchemaResolver interface {
+	ResolveToolSchemas(toolNames []string) map[string]ToolSchemaInfo
 }
 
 // ModelGateway abstracts model-provider calls for agent execution.

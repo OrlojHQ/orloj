@@ -275,6 +275,13 @@ func buildApplyRequest(kind string, raw []byte) (string, []byte, string, error) 
 		}
 		payload, err := json.Marshal(obj)
 		return "/v1/workers", payload, obj.Metadata.Name, err
+	case "mcpserver":
+		obj, err := resources.ParseMcpServerManifest(raw)
+		if err != nil {
+			return "", nil, "", err
+		}
+		payload, err := json.Marshal(obj)
+		return "/v1/mcp-servers", payload, obj.Metadata.Name, err
 	default:
 		return "", nil, "", fmt.Errorf("unsupported kind %q", kind)
 	}
@@ -528,6 +535,24 @@ func runGet(args []string) error {
 			)
 		}
 		_ = tw.Flush()
+	case "mcp-servers":
+		var list resources.McpServerList
+		if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
+			return fmt.Errorf("failed to decode response: %w", err)
+		}
+		tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+		fmt.Fprintln(tw, "NAME\tTRANSPORT\tSTATUS\tTOOLS\tLAST_SYNCED")
+		for _, item := range list.Items {
+			toolCount := len(item.Status.GeneratedTools)
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%s\n",
+				item.Metadata.Name,
+				item.Spec.Transport,
+				item.Status.Phase,
+				toolCount,
+				item.Status.LastSyncedAt,
+			)
+		}
+		_ = tw.Flush()
 	}
 
 	return nil
@@ -561,6 +586,8 @@ func normalizeResource(resource string) string {
 		return "task-webhooks"
 	case "workers", "worker":
 		return "workers"
+	case "mcp-servers", "mcpservers", "mcpserver":
+		return "mcp-servers"
 	default:
 		return ""
 	}
@@ -594,6 +621,8 @@ func listEndpointForResource(resource string) (string, error) {
 		return "/v1/task-webhooks", nil
 	case "workers":
 		return "/v1/workers", nil
+	case "mcp-servers":
+		return "/v1/mcp-servers", nil
 	default:
 		return "", fmt.Errorf("unsupported resource %q", resource)
 	}

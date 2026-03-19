@@ -26,6 +26,7 @@ const (
 	tableTaskWebhooks    = "task_webhooks"
 	tableWorkers         = "workers"
 	tableToolApprovals   = "tool_approvals"
+	tableMcpServers      = "mcp_servers"
 )
 
 // EnsurePostgresSchema runs all pending database migrations. New schema changes
@@ -851,6 +852,27 @@ func getWebhookDedupeSQL(db *sql.DB, endpointID, eventID string, now time.Time) 
 
 func pruneWebhookDedupeSQL(db *sql.DB, now time.Time) error {
 	_, err := db.Exec(`DELETE FROM webhook_dedupe WHERE expires_at <= $1`, now.UTC())
+	return err
+}
+
+func upsertMcpServerSQL(db *sql.DB, name string, item resources.McpServer) error {
+	payload, err := json.Marshal(item)
+	if err != nil {
+		return err
+	}
+	_, err = db.Exec(
+		`INSERT INTO mcp_servers(name, namespace, status_phase, payload, updated_at)
+		 VALUES($1, $2, $3, $4::jsonb, NOW())
+		 ON CONFLICT(name) DO UPDATE SET
+		     namespace = EXCLUDED.namespace,
+		     status_phase = EXCLUDED.status_phase,
+		     payload = EXCLUDED.payload,
+		     updated_at = NOW()`,
+		name,
+		resources.NormalizeNamespace(item.Metadata.Namespace),
+		strings.ToLower(strings.TrimSpace(item.Status.Phase)),
+		string(payload),
+	)
 	return err
 }
 

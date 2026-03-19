@@ -24,6 +24,7 @@ type AgentWorker struct {
 	onEvent      func(string)
 	stepEvery    time.Duration
 	input        map[string]string
+	toolSchemas  map[string]ToolSchemaInfo
 	history      []ChatMessage
 }
 
@@ -76,6 +77,13 @@ func NewAgentWorkerWithIntervalAndGatewayAndInput(
 		stepEvery:    stepEvery,
 		input:        copyStringMap(input),
 	}
+}
+
+// SetToolSchemas attaches per-tool description and JSON Schema metadata.
+// Model gateways use these to provide rich tool definitions to the LLM
+// instead of the generic {input: string} fallback.
+func (w *AgentWorker) SetToolSchemas(schemas map[string]ToolSchemaInfo) {
+	w.toolSchemas = schemas
 }
 
 func (w *AgentWorker) Run(ctx context.Context) {
@@ -182,15 +190,16 @@ func (w *AgentWorker) Run(ctx context.Context) {
 			})
 			modelStart := time.Now()
 			modelResp, modelErr := w.modelGateway.Complete(ctx, ModelRequest{
-				Model:     w.agent.Spec.Model,
-				ModelRef:  w.agent.Spec.ModelRef,
-				Namespace: w.agent.Metadata.Namespace,
-				Agent:     w.agent.Metadata.Name,
-				Prompt:    w.agent.Spec.Prompt,
-				Step:      step,
-				Tools:     append([]string(nil), availableTools...),
-				Context:   w.modelContext(step),
-				Messages:  append([]ChatMessage(nil), w.history...),
+				Model:       w.agent.Spec.Model,
+				ModelRef:    w.agent.Spec.ModelRef,
+				Namespace:   w.agent.Metadata.Namespace,
+				Agent:       w.agent.Metadata.Name,
+				Prompt:      w.agent.Spec.Prompt,
+				Step:        step,
+				Tools:       append([]string(nil), availableTools...),
+				ToolSchemas: w.toolSchemas,
+				Context:     w.modelContext(step),
+				Messages:    append([]ChatMessage(nil), w.history...),
 			})
 			modelLatencyMS := time.Since(modelStart).Milliseconds()
 			if modelErr != nil {

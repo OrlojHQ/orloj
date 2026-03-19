@@ -18,6 +18,10 @@ Create policies, roles, and tool permissions. Deploy a governed agent system and
 *For platform engineers who need to route agents to different model providers.*
 Set up ModelEndpoints for OpenAI and Anthropic, bind agents to endpoints by reference, and verify that requests route correctly.
 
+**[Connect an MCP Server](./connect-mcp-server.md)**
+*For platform engineers who want to integrate MCP-compatible tool servers.*
+Register an MCP server (stdio or HTTP), verify tool discovery, filter imported tools, and assign them to agents.
+
 **[Build a Custom Tool](./build-custom-tool.md)**
 *For developers who need to extend agent capabilities with external tools.*
 Implement the Tool Contract v1, register the tool as a resource, configure isolation and retry, and validate with the conformance harness.

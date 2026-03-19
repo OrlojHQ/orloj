@@ -13,6 +13,8 @@ type ToolIsolationBackendOptions struct {
 	SecretResolver      SecretResolver
 	WASMConfig          WASMToolRuntimeConfig
 	WASMExecutorFactory WASMToolExecutorFactory
+	McpSessionManager   *McpSessionManager
+	McpServerStore      McpServerLookup
 }
 
 type ToolIsolationBackendFactory func(options ToolIsolationBackendOptions) (ToolRuntime, error)
@@ -123,6 +125,12 @@ func DefaultToolIsolationBackendRegistry() *ToolIsolationBackendRegistry {
 				resolver = NewEnvSecretResolver("ORLOJ_SECRET_")
 			}
 			return NewWebhookCallbackToolRuntime(nil, resolver, nil, 0), nil
+		})
+		_ = registry.Register("mcp", func(options ToolIsolationBackendOptions) (ToolRuntime, error) {
+			if options.McpSessionManager == nil {
+				return nil, fmt.Errorf("mcp isolation backend requires McpSessionManager")
+			}
+			return NewMCPToolRuntime(nil, options.McpSessionManager, options.McpServerStore), nil
 		})
 		defaultToolIsolationBackendRegistry = registry
 	})

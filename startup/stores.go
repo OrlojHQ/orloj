@@ -28,6 +28,7 @@ type StoreSet struct {
 	TaskWebhooks  *store.TaskWebhookStore
 	WebhookDedupe *store.WebhookDedupeStore
 	Workers       *store.WorkerStore
+	McpServers    *store.McpServerStore
 	DB            *sql.DB
 }
 
@@ -66,6 +67,7 @@ func OpenStores(cfg StoreConfig, logger *log.Logger) (*StoreSet, error) {
 		ToolApprovals: store.NewToolApprovalStore(),
 		Tasks:         store.NewTaskStore(),
 		Workers:      store.NewWorkerStore(),
+		McpServers:   store.NewMcpServerStore(),
 	}
 	if cfg.IncludeScheduleStores {
 		s.TaskSchedules = store.NewTaskScheduleStore()
@@ -130,6 +132,7 @@ func OpenStores(cfg StoreConfig, logger *log.Logger) (*StoreSet, error) {
 		s.ToolApprovals = store.NewToolApprovalStoreWithDB(db)
 		s.Tasks = store.NewTaskStoreWithDB(db)
 		s.Workers = store.NewWorkerStoreWithDB(db)
+		s.McpServers = store.NewMcpServerStoreWithDB(db)
 		if cfg.IncludeScheduleStores {
 			s.TaskSchedules = store.NewTaskScheduleStoreWithDB(db)
 			s.TaskWebhooks = store.NewTaskWebhookStoreWithDB(db)

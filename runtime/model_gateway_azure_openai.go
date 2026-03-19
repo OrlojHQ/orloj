@@ -111,7 +111,7 @@ func (g *AzureOpenAIModelGateway) Complete(ctx context.Context, req ModelRequest
 		}
 	}
 	if len(req.Tools) > 0 {
-		body.Tools = buildOpenAIChatTools(req.Tools)
+		body.Tools = buildOpenAIChatTools(req.Tools, req.ToolSchemas)
 		body.ToolChoice = "auto"
 	}
 

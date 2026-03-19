@@ -106,6 +106,14 @@ Critical readiness rule:
 - Minute-level schedule creates a run task that writes to memory.
 - Gate checks schedule trigger status, downstream task success, and memory entry creation.
 
+### Wave 4: MCP integration
+
+14. `14-mcp-tool-smoke`
+- Registers `@modelcontextprotocol/server-everything` as an MCP server (stdio transport).
+- Controller discovers tools, `tool_filter.include` limits to `echo` and `get-sum`.
+- Agent calls both MCP-generated tools and returns labeled markers.
+- Gate checks tool auto-generation (type=mcp), tool_filter enforcement (exactly 2 tools), tool_call trace events, and deterministic output markers (echo returns `mcp-smoke-test-marker`, get-sum returns `42`).
+
 ## Key Targets
 
 Apply a single scenario:
@@ -114,6 +122,7 @@ Apply a single scenario:
 make real-apply-pipeline
 make real-apply-memory-shared
 make real-apply-tool-auth
+make real-apply-mcp
 ```
 
 Run a single gate:
@@ -123,6 +132,7 @@ make real-gate-pipeline
 make real-gate-memory-shared
 make real-gate-governance-deny
 make real-gate-webhook
+make real-gate-mcp
 ```
 
 Run grouped gates:
@@ -132,6 +142,7 @@ make real-gate-wave0
 make real-gate-wave1
 make real-gate-wave2
 make real-gate-wave3
+make real-gate-wave4
 ```
 
 Repeat a gate for release-candidate confidence:
@@ -162,3 +173,4 @@ Captured files include:
 - Tool-backed scenarios use `http://host.docker.internal:18080/...` in the manifests because the tool call originates inside the container isolation runtime.
 - `07-memory-persistent-reuse` is applied in two steps by the `Makefile`: base resources + seed task first, then the query task.
 - `11-webhook-live-flow` and `12-schedule-live-flow` create run tasks dynamically, so their `real-check-*` targets resolve the latest triggered task from resource status.
+- `14-mcp-tool-smoke` requires `npx` (Node.js) on the host since the MCP server runs as a stdio child process. The first run may take longer while `@modelcontextprotocol/server-everything` is downloaded.

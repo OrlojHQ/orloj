@@ -35,6 +35,7 @@ type Stores struct {
 	TaskWebhooks  *store.TaskWebhookStore
 	WebhookDedupe *store.WebhookDedupeStore
 	Workers       *store.WorkerStore
+	McpServers    *store.McpServerStore
 }
 
 // ServerOptions configures optional extension points.
@@ -80,6 +81,9 @@ func NewServerWithOptions(stores Stores, runtime *agentruntime.Manager, logger *
 	}
 	if stores.WebhookDedupe == nil {
 		stores.WebhookDedupe = store.NewWebhookDedupeStore()
+	}
+	if stores.McpServers == nil {
+		stores.McpServers = store.NewMcpServerStore()
 	}
 	extensions := agentruntime.NormalizeExtensions(opts.Extensions)
 	authorizer := opts.Authorizer
@@ -174,6 +178,9 @@ func (s *Server) routes() {
 
 	s.mux.HandleFunc("/v1/workers", s.handleWorkers)
 	s.mux.HandleFunc("/v1/workers/", s.handleWorkerByName)
+
+	s.mux.HandleFunc("/v1/mcp-servers", s.handleMcpServers)
+	s.mux.HandleFunc("/v1/mcp-servers/", s.handleMcpServerByName)
 
 	s.mux.HandleFunc("/v1/namespaces", s.handleNamespaces)
 }
@@ -1997,4 +2004,83 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+func (s *Server) handleMcpServers(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		items := s.stores.McpServers.List()
+		ns, hasNS := namespaceFilter(r)
+		selector, err := labelSelectorFilter(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if hasNS || len(selector) > 0 {
+			filtered := make([]resources.McpServer, 0, len(items))
+			for _, item := range items {
+				if !matchMetadataFilters(item.Metadata, ns, hasNS, selector) {
+					continue
+				}
+				filtered = append(filtered, item)
+			}
+			items = filtered
+		}
+		writeJSON(w, http.StatusOK, resources.McpServerList{Items: items})
+	case http.MethodPost:
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "failed to read request body", http.StatusBadRequest)
+			return
+		}
+		obj, err := resources.ParseMcpServerManifest(body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if err := applyRequestNamespace(r, &obj.Metadata); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if existing, ok := s.stores.McpServers.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name)); ok {
+			obj.Status = existing.Status
+		}
+		obj, err = s.stores.McpServers.Upsert(obj)
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		s.logApply("McpServer", obj.Metadata.Name)
+		s.publishResourceEvent("McpServer", obj.Metadata.Name, "created", obj)
+		writeJSON(w, http.StatusCreated, obj)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleMcpServerByName(w http.ResponseWriter, r *http.Request) {
+	name := strings.Trim(strings.TrimPrefix(r.URL.Path, "/v1/mcp-servers/"), "/")
+	if name == "" {
+		http.Error(w, "mcp-server name is required", http.StatusBadRequest)
+		return
+	}
+	key := scopedNameForRequest(r, name)
+	switch r.Method {
+	case http.MethodGet:
+		obj, ok := s.stores.McpServers.Get(key)
+		if !ok {
+			http.Error(w, fmt.Sprintf("mcp-server %q not found", name), http.StatusNotFound)
+			return
+		}
+		writeJSON(w, http.StatusOK, obj)
+	case http.MethodDelete:
+		if err := s.stores.McpServers.Delete(key); err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		s.publishResourceEvent("McpServer", name, "deleted", nil)
+		writeJSON(w, http.StatusOK, map[string]string{"deleted": name})
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
 }

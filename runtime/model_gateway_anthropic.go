@@ -138,7 +138,7 @@ func (g *AnthropicModelGateway) Complete(ctx context.Context, req ModelRequest) 
 	}
 	toolAliases := make(map[string]string, len(req.Tools))
 	if len(req.Tools) > 0 {
-		body.Tools, toolAliases = buildAnthropicTools(req.Tools)
+		body.Tools, toolAliases = buildAnthropicTools(req.Tools, req.ToolSchemas)
 	}
 
 	payload, err := json.Marshal(body)
@@ -274,7 +274,7 @@ type anthropicToolSpec struct {
 	InputSchema map[string]any `json:"input_schema,omitempty"`
 }
 
-func buildAnthropicTools(toolNames []string) ([]anthropicToolSpec, map[string]string) {
+func buildAnthropicTools(toolNames []string, schemas map[string]ToolSchemaInfo) ([]anthropicToolSpec, map[string]string) {
 	deduped := dedupeStrings(toolNames)
 	out := make([]anthropicToolSpec, 0, len(deduped))
 	aliases := make(map[string]string, len(deduped))
@@ -295,6 +295,14 @@ func buildAnthropicTools(toolNames []string) ([]anthropicToolSpec, map[string]st
 				},
 			},
 			"additionalProperties": true,
+		}
+		if info, ok := schemas[name]; ok {
+			if info.Description != "" {
+				description = info.Description
+			}
+			if len(info.InputSchema) > 0 {
+				inputSchema = info.InputSchema
+			}
 		}
 		if schema, ok := builtinToolSchemaForName(name); ok {
 			description = schema.Description

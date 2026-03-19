@@ -109,7 +109,7 @@ func (g *OpenAIModelGateway) Complete(ctx context.Context, req ModelRequest) (Mo
 		}
 	}
 	if len(req.Tools) > 0 {
-		body.Tools = buildOpenAIChatTools(req.Tools)
+		body.Tools = buildOpenAIChatTools(req.Tools, req.ToolSchemas)
 		body.ToolChoice = "auto"
 	}
 
@@ -287,7 +287,7 @@ type openAIChatToolFunctionCall struct {
 	Arguments string `json:"arguments,omitempty"`
 }
 
-func buildOpenAIChatTools(toolNames []string) []openAIChatTool {
+func buildOpenAIChatTools(toolNames []string, schemas map[string]ToolSchemaInfo) []openAIChatTool {
 	deduped := dedupeStrings(toolNames)
 	out := make([]openAIChatTool, 0, len(deduped))
 	for _, name := range deduped {
@@ -304,6 +304,14 @@ func buildOpenAIChatTools(toolNames []string) []openAIChatTool {
 				},
 			},
 			"additionalProperties": true,
+		}
+		if info, ok := schemas[name]; ok {
+			if info.Description != "" {
+				description = info.Description
+			}
+			if len(info.InputSchema) > 0 {
+				parameters = info.InputSchema
+			}
 		}
 		if schema, ok := builtinToolSchemaForName(name); ok {
 			description = schema.Description

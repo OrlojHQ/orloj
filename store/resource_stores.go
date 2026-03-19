@@ -1883,3 +1883,118 @@ func parseTimestamp(value string) (time.Time, error) {
 	}
 	return time.Parse(time.RFC3339, v)
 }
+
+// McpServerStore manages McpServer resources.
+type McpServerStore struct {
+	mu    sync.RWMutex
+	items map[string]resources.McpServer
+	db    *sql.DB
+}
+
+func NewMcpServerStore() *McpServerStore {
+	return &McpServerStore{items: make(map[string]resources.McpServer)}
+}
+
+func NewMcpServerStoreWithDB(db *sql.DB) *McpServerStore {
+	return &McpServerStore{items: make(map[string]resources.McpServer), db: db}
+}
+
+func (s *McpServerStore) Upsert(item resources.McpServer) (resources.McpServer, error) {
+	if err := item.Normalize(); err != nil {
+		return resources.McpServer{}, err
+	}
+	key := scopedNameFromMeta(item.Metadata)
+	if s.db != nil {
+		existing, found, err := getFromTable[resources.McpServer](s.db, tableMcpServers, key)
+		if err != nil {
+			return resources.McpServer{}, err
+		}
+		if !found {
+			if err := initializeCreateMetadata("McpServer", &item.Metadata); err != nil {
+				return resources.McpServer{}, err
+			}
+		} else {
+			specChanged := !reflect.DeepEqual(existing.Spec, item.Spec)
+			if err := initializeUpdateMetadata("McpServer", &item.Metadata, existing.Metadata, specChanged); err != nil {
+				return resources.McpServer{}, err
+			}
+		}
+		if err := upsertMcpServerSQL(s.db, key, item); err != nil {
+			return resources.McpServer{}, err
+		}
+		return item, nil
+	}
+	s.mu.Lock()
+	existing, found := s.items[key]
+	if !found {
+		if err := initializeCreateMetadata("McpServer", &item.Metadata); err != nil {
+			s.mu.Unlock()
+			return resources.McpServer{}, err
+		}
+	} else {
+		specChanged := !reflect.DeepEqual(existing.Spec, item.Spec)
+		if err := initializeUpdateMetadata("McpServer", &item.Metadata, existing.Metadata, specChanged); err != nil {
+			s.mu.Unlock()
+			return resources.McpServer{}, err
+		}
+	}
+	s.items[key] = item
+	s.mu.Unlock()
+	return item, nil
+}
+
+func (s *McpServerStore) Get(name string) (resources.McpServer, bool) {
+	key := normalizeLookupName(name)
+	if s.db != nil {
+		item, ok, err := getFromTable[resources.McpServer](s.db, tableMcpServers, key)
+		if err != nil {
+			return resources.McpServer{}, false
+		}
+		return item, ok
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	item, ok := s.items[key]
+	return item, ok
+}
+
+func (s *McpServerStore) List() []resources.McpServer {
+	if s.db != nil {
+		items, err := listFromTable[resources.McpServer](s.db, tableMcpServers)
+		if err != nil {
+			return []resources.McpServer{}
+		}
+		return items
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]resources.McpServer, 0, len(s.items))
+	for _, item := range s.items {
+		out = append(out, item)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Metadata.Name < out[j].Metadata.Name
+	})
+	return out
+}
+
+func (s *McpServerStore) Delete(name string) error {
+	key := normalizeLookupName(name)
+	if s.db != nil {
+		deleted, err := deleteFromTable(s.db, tableMcpServers, key)
+		if err != nil {
+			return err
+		}
+		if !deleted {
+			return fmt.Errorf("mcp-server %q not found", name)
+		}
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.items[key]; !ok {
+		return fmt.Errorf("mcp-server %q not found", name)
+	}
+	delete(s.items, key)
+	return nil
+}

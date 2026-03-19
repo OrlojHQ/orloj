@@ -1,0 +1,8 @@
+apiVersion: orloj.dev/v1
+kind: AgentSystem
+metadata:
+  name: rr-real-mcp-system
+  namespace: rr-real-mcp
+spec:
+  agents:
+    - rr-real-mcp-tool-agent

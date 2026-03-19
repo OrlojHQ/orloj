@@ -103,7 +103,7 @@ func (g *OllamaModelGateway) Complete(ctx context.Context, req ModelRequest) (Mo
 		}
 	}
 	if len(req.Tools) > 0 {
-		body.Tools = buildOpenAIChatTools(req.Tools)
+		body.Tools = buildOpenAIChatTools(req.Tools, req.ToolSchemas)
 	}
 
 	payload, err := json.Marshal(body)

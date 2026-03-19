@@ -93,6 +93,7 @@ func (r *UnsupportedIsolatedToolRuntime) Call(_ context.Context, tool string, _ 
 type GovernedToolRuntime struct {
 	baseRuntime     ToolRuntime
 	isolatedRuntime ToolRuntime
+	mcpRuntime      ToolRuntime
 	registry        ToolCapabilityRegistry
 	authorizer      ToolCallAuthorizer
 	strict          bool
@@ -201,7 +202,33 @@ func buildGovernedToolRuntime(
 			isolatedRuntime = aware.WithRegistry(NewStaticToolCapabilityRegistry(specs))
 		}
 	}
-	return NewGovernedToolRuntimeWithAuthorizer(baseRuntime, isolatedRuntime, NewStaticToolCapabilityRegistry(specs), authorizer, true)
+	governed := NewGovernedToolRuntimeWithAuthorizer(baseRuntime, isolatedRuntime, NewStaticToolCapabilityRegistry(specs), authorizer, true)
+	return governed
+}
+
+// SetMcpRuntime configures the MCP tool runtime used for type=mcp tools.
+func (r *GovernedToolRuntime) SetMcpRuntime(mcpRuntime ToolRuntime) {
+	if r != nil {
+		r.mcpRuntime = mcpRuntime
+	}
+}
+
+// ConfigureMcpRuntime builds and attaches an MCP runtime using the given
+// session manager and server store. The runtime is scoped to the governed
+// runtime's registry and the provided namespace.
+func ConfigureMcpRuntime(rt ToolRuntime, sessionManager *McpSessionManager, mcpServerStore McpServerLookup, namespace string) {
+	governed, ok := rt.(*GovernedToolRuntime)
+	if !ok || governed == nil {
+		return
+	}
+	var mcpRT ToolRuntime = NewMCPToolRuntime(governed.registry, sessionManager, mcpServerStore)
+	if scoped, ok := mcpRT.(namespaceAwareToolRuntime); ok {
+		mcpRT = scoped.WithNamespace(namespace)
+	}
+	if aware, ok := mcpRT.(registryAwareToolRuntime); ok && governed.registry != nil {
+		mcpRT = aware.WithRegistry(governed.registry)
+	}
+	governed.mcpRuntime = mcpRT
 }
 
 func (r *GovernedToolRuntime) Call(ctx context.Context, tool string, input string) (string, error) {
@@ -261,33 +288,79 @@ func (r *GovernedToolRuntime) resolve(tool string) (resources.ToolSpec, bool) {
 	return r.registry.Resolve(tool)
 }
 
-func (r *GovernedToolRuntime) callWithPolicy(ctx context.Context, tool string, input string, spec resources.ToolSpec) (string, error) {
-	target := r.baseRuntime
-	mode := strings.ToLower(strings.TrimSpace(spec.Runtime.IsolationMode))
-	if mode == "" {
-		risk := strings.ToLower(strings.TrimSpace(spec.RiskLevel))
-		if risk == "high" || risk == "critical" {
-			mode = "sandboxed"
-		} else {
-			mode = "none"
+// ResolveToolSchemas returns description and input schema metadata for the
+// given tool names, sourced from the underlying ToolCapabilityRegistry.
+func (r *GovernedToolRuntime) ResolveToolSchemas(toolNames []string) map[string]ToolSchemaInfo {
+	if r == nil || r.registry == nil {
+		return nil
+	}
+	out := make(map[string]ToolSchemaInfo, len(toolNames))
+	for _, name := range toolNames {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		spec, ok := r.registry.Resolve(name)
+		if !ok {
+			continue
+		}
+		if spec.Description == "" && len(spec.InputSchema) == 0 {
+			continue
+		}
+		out[name] = ToolSchemaInfo{
+			Description: spec.Description,
+			InputSchema: spec.InputSchema,
 		}
 	}
-	if mode != "" && mode != "none" {
-		if r.isolatedRuntime == nil {
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func (r *GovernedToolRuntime) callWithPolicy(ctx context.Context, tool string, input string, spec resources.ToolSpec) (string, error) {
+	target := r.baseRuntime
+	toolType := strings.ToLower(strings.TrimSpace(spec.Type))
+	if toolType == "mcp" {
+		if r.mcpRuntime == nil {
 			return "", NewToolError(
 				ToolStatusError,
 				ToolCodeIsolationUnavailable,
 				ToolReasonIsolationUnavailable,
 				false,
-				fmt.Sprintf("tool isolation runtime unavailable for tool=%s mode=%s", tool, mode),
+				fmt.Sprintf("mcp runtime unavailable for tool=%s", tool),
 				ErrToolIsolationUnavailable,
-				map[string]string{
-					"tool":           tool,
-					"isolation_mode": mode,
-				},
+				map[string]string{"tool": tool, "type": "mcp"},
 			)
 		}
-		target = r.isolatedRuntime
+		target = r.mcpRuntime
+	} else {
+		mode := strings.ToLower(strings.TrimSpace(spec.Runtime.IsolationMode))
+		if mode == "" {
+			risk := strings.ToLower(strings.TrimSpace(spec.RiskLevel))
+			if risk == "high" || risk == "critical" {
+				mode = "sandboxed"
+			} else {
+				mode = "none"
+			}
+		}
+		if mode != "" && mode != "none" {
+			if r.isolatedRuntime == nil {
+				return "", NewToolError(
+					ToolStatusError,
+					ToolCodeIsolationUnavailable,
+					ToolReasonIsolationUnavailable,
+					false,
+					fmt.Sprintf("tool isolation runtime unavailable for tool=%s mode=%s", tool, mode),
+					ErrToolIsolationUnavailable,
+					map[string]string{
+						"tool":           tool,
+						"isolation_mode": mode,
+					},
+				)
+			}
+			target = r.isolatedRuntime
+		}
 	}
 
 	maxAttempts := spec.Runtime.Retry.MaxAttempts

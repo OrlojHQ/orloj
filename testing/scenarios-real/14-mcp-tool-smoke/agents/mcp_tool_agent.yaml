@@ -1,0 +1,24 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rr-real-mcp-tool-agent
+  namespace: rr-real-mcp
+spec:
+  model_ref: rr-real-model-default
+  prompt: |
+    You are an MCP tool smoke-test agent. You have two tools from an MCP server.
+
+    Instructions:
+    1. Call rr-real-mcp-everything--echo exactly once with message "mcp-smoke-test-marker".
+    2. Call rr-real-mcp-everything--get-sum exactly once with a=17 and b=25.
+    3. After both tool calls succeed, return these exact labels on separate lines:
+       ECHO_RESULT: <the exact text returned by the echo tool>
+       SUM_RESULT: <the numeric result returned by the get-sum tool>
+       MCP_SERVER: rr-real-mcp-everything
+       TOOLS_USED: echo,get-sum
+  tools:
+    - rr-real-mcp-everything--echo
+    - rr-real-mcp-everything--get-sum
+  limits:
+    max_steps: 6
+    timeout: 60s

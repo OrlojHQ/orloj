@@ -1343,3 +1343,152 @@ func ParseWorkerManifest(data []byte) (Worker, error) {
 	}
 	return out, nil
 }
+
+// ParseMcpServerManifest parses McpServer resources from JSON or constrained YAML.
+func ParseMcpServerManifest(data []byte) (McpServer, error) {
+	var out McpServer
+	if json.Valid(data) {
+		if err := json.Unmarshal(data, &out); err != nil {
+			return McpServer{}, fmt.Errorf("failed to decode JSON manifest: %w", err)
+		}
+		if err := out.Normalize(); err != nil {
+			return McpServer{}, err
+		}
+		return out, nil
+	}
+
+	lines := strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n")
+	section := ""
+	subsection := ""
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		indent := leadingSpaces(line)
+		if section == "spec" && indent <= 2 && !strings.HasSuffix(trimmed, ":") && !strings.HasPrefix(trimmed, "- ") {
+			subsection = ""
+		}
+		if section == "metadata" && indent <= 2 && !strings.HasSuffix(trimmed, ":") && !strings.HasPrefix(trimmed, "- ") {
+			subsection = ""
+		}
+
+		if strings.HasSuffix(trimmed, ":") {
+			label := strings.TrimSuffix(trimmed, ":")
+			switch label {
+			case "metadata":
+				section = "metadata"
+				subsection = ""
+			case "spec":
+				section = "spec"
+				subsection = ""
+			case "labels":
+				if section == "metadata" {
+					subsection = "labels"
+				}
+			case "env":
+				if section == "spec" {
+					subsection = "env"
+				}
+			case "auth":
+				if section == "spec" {
+					subsection = "auth"
+				}
+			case "tool_filter", "toolFilter":
+				if section == "spec" {
+					subsection = "tool_filter"
+				}
+			case "include":
+				if section == "spec" && subsection == "tool_filter" {
+					subsection = "tool_filter_include"
+				}
+			case "args":
+				if section == "spec" {
+					subsection = "args"
+				}
+			case "reconnect":
+				if section == "spec" {
+					subsection = "reconnect"
+				}
+			}
+			continue
+		}
+
+		if section == "spec" && subsection == "args" && strings.HasPrefix(trimmed, "- ") {
+			out.Spec.Args = append(out.Spec.Args, stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))))
+			continue
+		}
+		if section == "spec" && subsection == "tool_filter_include" && strings.HasPrefix(trimmed, "- ") {
+			out.Spec.ToolFilter.Include = append(out.Spec.ToolFilter.Include, stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))))
+			continue
+		}
+		if section == "spec" && subsection == "env" && strings.HasPrefix(trimmed, "- ") {
+			entry := McpServerEnvVar{}
+			rest := strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))
+			if k, v, ok := parseKeyValue(rest); ok {
+				if k == "name" {
+					entry.Name = stripQuotes(v)
+				}
+			}
+			out.Spec.Env = append(out.Spec.Env, entry)
+			continue
+		}
+
+		key, value, ok := parseKeyValue(trimmed)
+		if !ok {
+			continue
+		}
+		value = stripQuotes(value)
+
+		switch {
+		case key == "apiVersion":
+			out.APIVersion = value
+		case key == "kind":
+			out.Kind = value
+		case section == "metadata" && subsection == "labels" && indent >= 4:
+			if out.Metadata.Labels == nil {
+				out.Metadata.Labels = make(map[string]string)
+			}
+			out.Metadata.Labels[key] = value
+		case section == "metadata":
+			if err := applyObjectMetaField(&out.Metadata, key, value); err != nil {
+				return McpServer{}, err
+			}
+		case section == "spec" && subsection == "" && key == "transport":
+			out.Spec.Transport = value
+		case section == "spec" && subsection == "" && key == "command":
+			out.Spec.Command = value
+		case section == "spec" && subsection == "" && key == "endpoint":
+			out.Spec.Endpoint = value
+		case section == "spec" && subsection == "auth" && (key == "secretRef" || key == "secret_ref"):
+			out.Spec.Auth.SecretRef = value
+		case section == "spec" && subsection == "auth" && key == "profile":
+			out.Spec.Auth.Profile = value
+		case section == "spec" && subsection == "reconnect" && (key == "max_attempts" || key == "maxAttempts"):
+			v, err := strconv.Atoi(value)
+			if err != nil {
+				return McpServer{}, fmt.Errorf("invalid spec.reconnect.max_attempts value %q", value)
+			}
+			out.Spec.Reconnect.MaxAttempts = v
+		case section == "spec" && subsection == "reconnect" && key == "backoff":
+			out.Spec.Reconnect.Backoff = value
+		case section == "spec" && subsection == "env" && indent >= 6:
+			if len(out.Spec.Env) > 0 {
+				last := &out.Spec.Env[len(out.Spec.Env)-1]
+				switch key {
+				case "name":
+					last.Name = value
+				case "value":
+					last.Value = value
+				case "secretRef", "secret_ref":
+					last.SecretRef = value
+				}
+			}
+		}
+	}
+
+	if err := out.Normalize(); err != nil {
+		return McpServer{}, err
+	}
+	return out, nil
+}
