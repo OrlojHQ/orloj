@@ -2,6 +2,7 @@ package agentruntime
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"testing"
 	"time"
@@ -367,6 +368,56 @@ func TestEnvSecretResolverSupportsPrefixedNormalizedKey(t *testing.T) {
 	}
 	if value != "token-123" {
 		t.Fatalf("unexpected resolved value %q", value)
+	}
+}
+
+func TestContainerToolRuntimeWithNamespaceRebindsAuthSecretResolver(t *testing.T) {
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
+		"web_search": {
+			Type:     "http",
+			Endpoint: "https://api.example/search",
+			Auth: resources.ToolAuth{
+				Profile:    "api_key_header",
+				SecretRef:  "search-key",
+				HeaderName: "X-API-Key",
+			},
+		},
+	})
+	runner := &captureContainerRunner{stdout: "ok"}
+	secrets := staticSecretLookup{
+		items: map[string]resources.Secret{
+			"team-a/search-key": {
+				Metadata: resources.ObjectMeta{Name: "search-key", Namespace: "team-a"},
+				Spec: resources.SecretSpec{
+					Data: map[string]string{
+						"value": base64.StdEncoding.EncodeToString([]byte("team-a-token")),
+					},
+				},
+			},
+		},
+	}
+	chain := NewChainSecretResolver(
+		NewStoreSecretResolver(secrets, "value"),
+		NewEnvSecretResolver("ORLOJ_SECRET_"),
+	)
+	runtime := NewContainerToolRuntimeWithRunnerAndSecrets(
+		registry,
+		DefaultContainerToolRuntimeConfig(),
+		runner,
+		chain,
+	)
+
+	scoped := runtime.WithNamespace("team-a")
+	out, err := scoped.Call(context.Background(), "web_search", "topic=agents")
+	if err != nil {
+		t.Fatalf("expected successful namespaced secret resolution, got %v", err)
+	}
+	if out != "ok" {
+		t.Fatalf("expected output ok, got %q", out)
+	}
+	assertArgsContain(t, runner.args, []string{"--env", "TOOL_AUTH_HEADER_NAME", "--env", "TOOL_AUTH_HEADER_VALUE"})
+	if got := runner.env["TOOL_AUTH_HEADER_VALUE"]; got != "team-a-token" {
+		t.Fatalf("expected namespaced auth token injection, got %q", got)
 	}
 }
 

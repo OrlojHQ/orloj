@@ -1,0 +1,20 @@
+apiVersion: orloj.dev/v1
+kind: Task
+metadata:
+  name: rr-multi-tool-calculate-task
+  namespace: rr-real-multi-tool
+spec:
+  system: rr-real-multi-tool-system
+  input:
+    goal: compute the monthly cost projection
+    task_type: calculate
+    expression_hint: "1250 * 12 + 500"
+  priority: high
+  retry:
+    max_attempts: 2
+    backoff: 2s
+  message_retry:
+    max_attempts: 2
+    backoff: 250ms
+    max_backoff: 2s
+    jitter: full

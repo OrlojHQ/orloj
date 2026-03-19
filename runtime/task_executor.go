@@ -215,6 +215,8 @@ func classifyAgentStepEvent(msg string) string {
 		return "model_output"
 	case strings.Contains(msg, "model_error="):
 		return "model_error"
+	case strings.Contains(strings.ToLower(msg), "agent_contract_violation"):
+		return "agent_contract_violation"
 	case strings.Contains(msg, "tool=") && strings.Contains(msg, " success"):
 		return "tool_call"
 	case strings.Contains(strings.ToLower(msg), "tool_status=denied"),

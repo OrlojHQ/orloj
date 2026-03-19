@@ -64,6 +64,8 @@ func main() {
 	mux.HandleFunc("/tool/decision", server.handleDecision)
 	mux.HandleFunc("/tool/auth", server.handleAuth)
 	mux.HandleFunc("/tool/retry-once", server.handleRetryOnce)
+	mux.HandleFunc("/tool/lookup", server.handleLookup)
+	mux.HandleFunc("/tool/calculate", server.handleCalculate)
 
 	logger.Printf("listening on %s", strings.TrimSpace(*listenAddr))
 	if err := http.ListenAndServe(*listenAddr, mux); err != nil {
@@ -129,6 +131,24 @@ func (s *stubServer) handleRetryOnce(w http.ResponseWriter, r *http.Request) {
 		attempt,
 		valueFor(payload, "retry_case"),
 		key,
+	)
+	s.writeContract(w, result)
+}
+
+func (s *stubServer) handleLookup(w http.ResponseWriter, r *http.Request) {
+	_, payload := s.readBody(r)
+	result := fmt.Sprintf(
+		"TOOL_ENDPOINT=lookup SOURCE=external-database ECHO_QUERY=%s MATCH_COUNT=3 TOP_RESULT=item-7842",
+		valueFor(payload, "query"),
+	)
+	s.writeContract(w, result)
+}
+
+func (s *stubServer) handleCalculate(w http.ResponseWriter, r *http.Request) {
+	_, payload := s.readBody(r)
+	result := fmt.Sprintf(
+		"TOOL_ENDPOINT=calculate EXPRESSION=%s COMPUTED_RESULT=42 PRECISION=exact",
+		valueFor(payload, "expression"),
 	)
 	s.writeContract(w, result)
 }

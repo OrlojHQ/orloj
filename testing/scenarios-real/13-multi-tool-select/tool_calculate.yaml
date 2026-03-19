@@ -1,0 +1,11 @@
+apiVersion: orloj.dev/v1
+kind: Tool
+metadata:
+  name: rr-real-multi-calculate-tool
+  namespace: rr-real-multi-tool
+spec:
+  type: http
+  endpoint: http://host.docker.internal:18080/tool/calculate
+  runtime:
+    isolation_mode: container
+    timeout: 30s

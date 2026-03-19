@@ -123,6 +123,22 @@ func (e *ReActExecutionEngine) Execute(ctx context.Context, agent resources.Agen
 			strings.TrimSpace(denied.Message),
 		)
 	}
+	if violation, ok := firstContractViolation(stepEvents); ok {
+		if !strings.EqualFold(strings.TrimSpace(agent.Spec.Execution.OnContractViolation), resources.AgentContractViolationPolicyObserve) {
+			return result, NewToolError(
+				ToolStatusError,
+				ToolCodeRuntimePolicyInvalid,
+				ToolReasonAgentContractViolation,
+				false,
+				fmt.Sprintf("agent contract violation: agent=%s step=%d error=%s", agent.Metadata.Name, violation.Step, strings.TrimSpace(violation.Message)),
+				nil,
+				map[string]string{
+					"agent": agent.Metadata.Name,
+					"step":  strconv.Itoa(violation.Step),
+				},
+			)
+		}
+	}
 	if modelErr := allModelCallsFailed(stepEvents); modelErr != "" {
 		return result, fmt.Errorf("agent %s model execution failed: %s", agent.Metadata.Name, modelErr)
 	}
@@ -174,6 +190,15 @@ func countToolSuccesses(events []string) int {
 func firstToolPermissionDenied(events []AgentStepEvent) (AgentStepEvent, bool) {
 	for _, event := range events {
 		if strings.EqualFold(strings.TrimSpace(event.Type), "tool_permission_denied") {
+			return event, true
+		}
+	}
+	return AgentStepEvent{}, false
+}
+
+func firstContractViolation(events []AgentStepEvent) (AgentStepEvent, bool) {
+	for _, event := range events {
+		if strings.EqualFold(strings.TrimSpace(event.Type), "agent_contract_violation") {
 			return event, true
 		}
 	}

@@ -35,3 +35,6 @@ coverage.out
 # Docs site dependencies and build outputs
 /node_modules/
 /docs/dist/
+
+# Testing artifacts
+/testing/artifacts/

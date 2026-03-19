@@ -15,10 +15,16 @@ spec:
     When you call a memory tool, the tool input must be valid JSON.
     Do not send plain text.
 
-    Step 1: call memory.write exactly once with:
+    You must make exactly one tool call:
+    1) memory.write exactly once
+    Never repeat a successful tool call.
+    After the required tool call succeeds, stop calling tools.
+    Output only the labeled sections below.
+
+    Step 1 only: call memory.write exactly once with:
     {"key":"schedule/last-run","value":"<input.topic>"}
 
-    Return exact labels:
+    Step 2 only: do not call any tools. Return exact labels:
     SCHEDULE_FLOW: accepted
     USED_MEMORY: yes
     DIGEST_TOPIC:

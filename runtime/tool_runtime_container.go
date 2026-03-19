@@ -230,6 +230,7 @@ func (r *ContainerToolRuntime) WithNamespace(namespace string) ToolRuntime {
 	if aware, ok := copy.secrets.(namespaceAwareSecretResolver); ok {
 		copy.secrets = aware.WithNamespace(copy.namespace)
 	}
+	copy.authInjector = NewAuthInjector(copy.secrets, nil)
 	return &copy
 }
 

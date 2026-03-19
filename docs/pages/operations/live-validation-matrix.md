@@ -59,6 +59,11 @@ make real-tool-stub
 
 5. Replace all `replace-me` provider secrets in `testing/scenarios-real/`.
 
+Important readiness rule:
+
+- Keep `orlojd` and the matching `orlojworker` running before any `make real-apply-*` or `make real-gate-*` command. If they are not up, tasks can fail immediately or stall.
+- Quick check: `curl -sf http://localhost:8080/healthz >/dev/null` should exit 0 before running gates.
+
 ## Matrix Overview
 
 ### Wave 0
@@ -84,6 +89,18 @@ make real-tool-stub
 
 - `make real-gate-webhook`
 - `make real-gate-schedule`
+
+## Contract Enforcement Notes
+
+Scenario `08-tool-auth-and-contract` uses `execution.profile: contract` with `on_contract_violation: observe`. This means:
+
+- The agent's tool sequence is tracked and violations are logged as `agent_contract_violation` events in the task trace.
+- Violations do **not** deadletter the task; the agent continues to completion.
+- Duplicate tool calls are short-circuited (cached result reused) in all scenarios, including `04-tool-call-smoke` which uses `profile: dynamic`.
+- Tool results use the provider's native structured tool calling protocol (`role: "tool"` with `tool_call_id` for OpenAI, `tool_result` content blocks for Anthropic), preventing models from re-calling tools.
+- Pipeline stages can use `tool_use_behavior: stop_on_first_tool` to exit immediately after the first successful tool call (1 model call + 1 tool call total).
+
+If a gate deadletters unexpectedly, check whether `on_contract_violation` is set to `non_retryable_error`. Switch to `observe` to collect telemetry without disrupting the flow.
 
 ## Acceptance Targets
 

@@ -201,6 +201,7 @@ func (g *AnthropicModelGateway) Complete(ctx context.Context, req ModelRequest) 
 				originalName = strings.TrimSpace(mapped)
 			}
 			toolCalls = append(toolCalls, ModelToolCall{
+				ID:    strings.TrimSpace(part.ID),
 				Name:  originalName,
 				Input: parseAnthropicToolUseInput(part.Input),
 			})
@@ -238,8 +239,8 @@ type anthropicMessagesRequest struct {
 }
 
 type anthropicMessagesInput struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role    string      `json:"role"`
+	Content interface{} `json:"content"`
 }
 
 type anthropicMessagesResponse struct {
@@ -250,6 +251,7 @@ type anthropicMessagesResponse struct {
 
 type anthropicMessagesOutput struct {
 	Type  string         `json:"type"`
+	ID    string         `json:"id,omitempty"`
 	Text  string         `json:"text,omitempty"`
 	Name  string         `json:"name,omitempty"`
 	Input map[string]any `json:"input,omitempty"`
@@ -384,10 +386,11 @@ func chatMessagesToAnthropic(msgs []ChatMessage) (string, []anthropicMessagesInp
 	for _, m := range msgs {
 		role := strings.TrimSpace(m.Role)
 		content := strings.TrimSpace(m.Content)
-		if content == "" {
-			continue
-		}
+
 		if role == "system" {
+			if content == "" {
+				continue
+			}
 			if system == "" {
 				system = content
 			} else {
@@ -395,10 +398,53 @@ func chatMessagesToAnthropic(msgs []ChatMessage) (string, []anthropicMessagesInp
 			}
 			continue
 		}
-		apiRole := role
-		if apiRole == "tool" {
-			apiRole = "user"
+
+		if role == "assistant" && len(m.ToolCalls) > 0 {
+			blocks := make([]map[string]interface{}, 0, len(m.ToolCalls)+1)
+			if content != "" {
+				blocks = append(blocks, map[string]interface{}{
+					"type": "text",
+					"text": content,
+				})
+			}
+			for _, tc := range m.ToolCalls {
+				inputMap := map[string]interface{}{"input": tc.Input}
+				if parsed := parseJSONLoose(tc.Input); parsed != nil {
+					inputMap = parsed
+				}
+				blocks = append(blocks, map[string]interface{}{
+					"type":  "tool_use",
+					"id":    tc.ID,
+					"name":  tc.Name,
+					"input": inputMap,
+				})
+			}
+			out = append(out, anthropicMessagesInput{
+				Role:    "assistant",
+				Content: blocks,
+			})
+			continue
 		}
+
+		if role == "tool" && m.ToolCallID != "" {
+			blocks := []map[string]interface{}{
+				{
+					"type":        "tool_result",
+					"tool_use_id": m.ToolCallID,
+					"content":     content,
+				},
+			}
+			out = append(out, anthropicMessagesInput{
+				Role:    "user",
+				Content: blocks,
+			})
+			continue
+		}
+
+		if content == "" {
+			continue
+		}
+		apiRole := role
 		if apiRole != "user" && apiRole != "assistant" {
 			apiRole = "user"
 		}
@@ -408,6 +454,18 @@ func chatMessagesToAnthropic(msgs []ChatMessage) (string, []anthropicMessagesInp
 		})
 	}
 	return system, out
+}
+
+func parseJSONLoose(s string) map[string]interface{} {
+	s = strings.TrimSpace(s)
+	if s == "" || s[0] != '{' {
+		return nil
+	}
+	var m map[string]interface{}
+	if err := json.Unmarshal([]byte(s), &m); err != nil {
+		return nil
+	}
+	return m
 }
 
 func parseAnthropicUsage(raw *anthropicMessagesUsage) ModelUsage {

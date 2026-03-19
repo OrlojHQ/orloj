@@ -324,3 +324,62 @@ func TestAnthropicModelGatewayCompleteMapsToolAliasesBackToRuntimeNames(t *testi
 		t.Fatalf("expected runtime tool name memory.write, got %q", resp.ToolCalls[0].Name)
 	}
 }
+
+func TestChatMessagesToAnthropicStructuredToolMessages(t *testing.T) {
+	msgs := []ChatMessage{
+		{Role: "system", Content: "be helpful"},
+		{Role: "user", Content: "step=1"},
+		{Role: "assistant", Content: "thinking", ToolCalls: []ChatToolCall{
+			{ID: "toolu_01A", Name: "search", Input: `{"q":"test"}`},
+		}},
+		{Role: "tool", Content: "result data", ToolCallID: "toolu_01A"},
+		{Role: "user", Content: "step=2"},
+	}
+
+	system, anthropicMsgs := chatMessagesToAnthropic(msgs)
+	if system != "be helpful" {
+		t.Fatalf("expected system=be helpful, got %q", system)
+	}
+	if len(anthropicMsgs) != 4 {
+		t.Fatalf("expected 4 messages (user, assistant, user-tool-result, user), got %d", len(anthropicMsgs))
+	}
+
+	assistantMsg := anthropicMsgs[1]
+	if assistantMsg.Role != "assistant" {
+		t.Fatalf("expected assistant role, got %q", assistantMsg.Role)
+	}
+	blocks, ok := assistantMsg.Content.([]map[string]interface{})
+	if !ok {
+		t.Fatalf("expected structured content blocks, got %T", assistantMsg.Content)
+	}
+	var foundToolUse bool
+	for _, block := range blocks {
+		if block["type"] == "tool_use" {
+			if block["id"] != "toolu_01A" {
+				t.Fatalf("expected tool_use id=toolu_01A, got %v", block["id"])
+			}
+			foundToolUse = true
+		}
+	}
+	if !foundToolUse {
+		t.Fatal("expected tool_use content block in assistant message")
+	}
+
+	toolResultMsg := anthropicMsgs[2]
+	if toolResultMsg.Role != "user" {
+		t.Fatalf("expected user role for tool_result, got %q", toolResultMsg.Role)
+	}
+	resultBlocks, ok := toolResultMsg.Content.([]map[string]interface{})
+	if !ok {
+		t.Fatalf("expected structured content blocks for tool result, got %T", toolResultMsg.Content)
+	}
+	if len(resultBlocks) != 1 {
+		t.Fatalf("expected 1 tool_result block, got %d", len(resultBlocks))
+	}
+	if resultBlocks[0]["type"] != "tool_result" {
+		t.Fatalf("expected type=tool_result, got %v", resultBlocks[0]["type"])
+	}
+	if resultBlocks[0]["tool_use_id"] != "toolu_01A" {
+		t.Fatalf("expected tool_use_id=toolu_01A, got %v", resultBlocks[0]["tool_use_id"])
+	}
+}

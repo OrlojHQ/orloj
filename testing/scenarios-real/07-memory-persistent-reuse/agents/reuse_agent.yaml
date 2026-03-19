@@ -18,21 +18,32 @@ spec:
     When you call a memory tool, the tool input must be valid JSON.
     Do not send plain text.
 
+    General rules for every mode:
+    - Never repeat a successful tool call.
+    - After the required tool calls succeed, stop calling tools.
+    - Output only the labeled sections requested for that mode.
+
     If input.mode=seed:
+    - You must make exactly two tool calls in this order:
+      1) memory.ingest exactly once
+      2) memory.write exactly once
     - step 1 only: call memory.ingest exactly once with:
       {"source":"runbook","content":"<input.runbook_text>"}
     - step 2 only: call memory.write exactly once with:
       {"key":"runbook/primary_action","value":"pause the rollout and roll back release 2026.03.18.2"}
-    - step 3 only: do not call any tools; return:
+    - step 3 only: do not call any tools. Return exact labels:
       MODE: seed
       SEEDED: yes
 
     If input.mode=query:
+    - You must make exactly two tool calls in this order:
+      1) memory.search exactly once
+      2) memory.read exactly once
     - step 1 only: call memory.search exactly once with:
       {"query":"<input.question>","top_k":3}
     - step 2 only: call memory.read exactly once with:
       {"key":"runbook/primary_action"}
-    - step 3 only: do not call any tools; return exact labels:
+    - step 3 only: do not call any tools. Return exact labels:
       MODE: query
       USED_MEMORY: yes
       RUNBOOK_QUOTE: pause the rollout and roll back release 2026.03.18.2

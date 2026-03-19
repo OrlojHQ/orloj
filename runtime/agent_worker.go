@@ -83,6 +83,69 @@ func (w *AgentWorker) Run(ctx context.Context) {
 	if maxSteps <= 0 {
 		maxSteps = 10
 	}
+	contractEnabled := strings.EqualFold(strings.TrimSpace(w.agent.Spec.Execution.Profile), resources.AgentExecutionProfileContract)
+	contractSequence := append([]string(nil), w.agent.Spec.Execution.ToolSequence...)
+	contractRequiredMarkers := append([]string(nil), w.agent.Spec.Execution.RequiredOutputMarkers...)
+	duplicatePolicy := strings.TrimSpace(w.agent.Spec.Execution.DuplicateToolCallPolicy)
+	if duplicatePolicy == "" {
+		duplicatePolicy = resources.AgentDuplicateToolCallPolicyShortCircuit
+	}
+	violationPolicy := strings.TrimSpace(w.agent.Spec.Execution.OnContractViolation)
+	if violationPolicy == "" {
+		violationPolicy = resources.AgentContractViolationPolicyNonRetryableError
+	}
+	toolUseBehavior := strings.TrimSpace(w.agent.Spec.Execution.ToolUseBehavior)
+
+	contractRemaining := make(map[string]bool, len(contractSequence))
+	contractSequenceSet := make(map[string]bool, len(contractSequence))
+	for _, t := range contractSequence {
+		key := normalizeToolKey(strings.TrimSpace(t))
+		contractRemaining[key] = true
+		contractSequenceSet[key] = true
+	}
+
+	toolResultCache := make(map[string]string)
+	toolCalled := make(map[string]bool)
+
+	normalizeContractMessage := func(message string) string {
+		message = strings.TrimSpace(message)
+		if message == "" {
+			return "contract violation"
+		}
+		return strings.Join(strings.Fields(message), " ")
+	}
+	markersSatisfied := func(output string) bool {
+		if len(contractRequiredMarkers) == 0 {
+			return true
+		}
+		if strings.TrimSpace(output) == "" {
+			return false
+		}
+		for _, marker := range contractRequiredMarkers {
+			if !strings.Contains(output, marker) {
+				return false
+			}
+		}
+		return true
+	}
+	emitContractViolation := func(step int, message string) bool {
+		if w.onEvent != nil {
+			w.onEvent(fmt.Sprintf(
+				"step=%d agent_contract_violation tool_code=%s tool_reason=%s retryable=false message=%s",
+				step,
+				ToolCodeRuntimePolicyInvalid,
+				ToolReasonAgentContractViolation,
+				normalizeContractMessage(message),
+			))
+		}
+		if strings.EqualFold(violationPolicy, resources.AgentContractViolationPolicyNonRetryableError) {
+			if w.onEvent != nil {
+				w.onEvent("worker stopped contract violation")
+			}
+			return true
+		}
+		return false
+	}
 	if w.onEvent != nil {
 		w.onEvent(fmt.Sprintf("worker started model=%s max_steps=%d", w.agent.Spec.Model, maxSteps))
 	}
@@ -102,9 +165,20 @@ func (w *AgentWorker) Run(ctx context.Context) {
 			}
 			return
 		case <-ticker.C:
+			availableTools := w.agent.Spec.Tools
+			if strings.EqualFold(duplicatePolicy, resources.AgentDuplicateToolCallPolicyShortCircuit) && len(toolCalled) > 0 {
+				filtered := make([]string, 0, len(w.agent.Spec.Tools))
+				for _, t := range w.agent.Spec.Tools {
+					if !toolCalled[normalizeToolKey(t)] {
+						filtered = append(filtered, t)
+					}
+				}
+				availableTools = filtered
+			}
+
 			w.history = append(w.history, ChatMessage{
 				Role:    "user",
-				Content: buildOpenAIUserContent(ModelRequest{Step: step, Tools: w.agent.Spec.Tools, Context: w.modelContext(step)}),
+				Content: buildOpenAIUserContent(ModelRequest{Step: step, Tools: availableTools, Context: w.modelContext(step)}),
 			})
 			modelStart := time.Now()
 			modelResp, modelErr := w.modelGateway.Complete(ctx, ModelRequest{
@@ -114,7 +188,7 @@ func (w *AgentWorker) Run(ctx context.Context) {
 				Agent:     w.agent.Metadata.Name,
 				Prompt:    w.agent.Spec.Prompt,
 				Step:      step,
-				Tools:     append([]string(nil), w.agent.Spec.Tools...),
+				Tools:     append([]string(nil), availableTools...),
 				Context:   w.modelContext(step),
 				Messages:  append([]ChatMessage(nil), w.history...),
 			})
@@ -143,15 +217,40 @@ func (w *AgentWorker) Run(ctx context.Context) {
 				}
 			}
 
-			if modelOutput != "" {
+			if len(modelResp.ToolCalls) > 0 {
+				chatCalls := make([]ChatToolCall, len(modelResp.ToolCalls))
+				for i, tc := range modelResp.ToolCalls {
+					chatCalls[i] = ChatToolCall{ID: tc.ID, Name: tc.Name, Input: tc.Input}
+				}
+				w.history = append(w.history, ChatMessage{
+					Role: "assistant", Content: modelOutput, ToolCalls: chatCalls,
+				})
+			} else if modelOutput != "" {
 				w.history = append(w.history, ChatMessage{Role: "assistant", Content: modelOutput})
 			}
+			if contractEnabled && len(contractRemaining) == 0 && markersSatisfied(modelOutput) {
+				if w.onEvent != nil {
+					w.onEvent("worker completed")
+				}
+				return
+			}
 
-			if len(w.agent.Spec.Tools) == 0 {
+			if len(availableTools) == 0 {
 				if w.onEvent != nil {
 					w.onEvent(fmt.Sprintf("step=%d no tools configured", step))
 				}
 				if modelOutput != "" {
+					if contractEnabled {
+						if len(contractRemaining) > 0 {
+							next := anyMapKey(contractRemaining)
+							if emitContractViolation(step, fmt.Sprintf("expected tool=%s before completion", next)) {
+								return
+							}
+						}
+						if !markersSatisfied(modelOutput) {
+							continue
+						}
+					}
 					if w.onEvent != nil {
 						w.onEvent("worker completed")
 					}
@@ -160,7 +259,7 @@ func (w *AgentWorker) Run(ctx context.Context) {
 				continue
 			}
 
-			requestedCalls, selectErr := selectAuthorizedToolCalls(modelResp, w.agent.Spec.Tools)
+			requestedCalls, selectErr := selectAuthorizedToolCalls(modelResp, availableTools)
 			if selectErr != nil {
 				failedTool := "model_tool_selection"
 				if toolErr, ok := AsToolError(selectErr); ok {
@@ -197,6 +296,12 @@ func (w *AgentWorker) Run(ctx context.Context) {
 				if w.onEvent != nil {
 					w.onEvent(fmt.Sprintf("step=%d no tool call requested", step))
 				}
+				if modelOutput != "" && !contractEnabled {
+					if w.onEvent != nil {
+						w.onEvent("worker completed")
+					}
+					return
+				}
 				continue
 			}
 
@@ -205,9 +310,39 @@ func (w *AgentWorker) Run(ctx context.Context) {
 				if tool == "" {
 					continue
 				}
+				toolKey := normalizeToolKey(tool)
+
 				input := strings.TrimSpace(requested.Input)
 				if input == "" {
 					input = fmt.Sprintf("agent=%s step=%d", w.agent.Metadata.Name, step)
+				}
+				cacheKey := toolKey + "\x00" + input
+
+				if toolCalled[toolKey] {
+					if contractEnabled && strings.EqualFold(duplicatePolicy, resources.AgentDuplicateToolCallPolicyDeny) {
+						if emitContractViolation(step, fmt.Sprintf("duplicate successful tool call denied tool=%s", tool)) {
+							return
+						}
+						continue
+					}
+					if priorResult, seen := toolResultCache[cacheKey]; seen {
+						w.memory.Put(fmt.Sprintf("%s:%d", tool, step), priorResult)
+						if w.onEvent != nil {
+							w.onEvent(fmt.Sprintf("step=%d tool=%s tool_contract=%s tool_request_id=%s tool_attempt=%d duration_ms=%d success short_circuit=true", step, tool, ToolContractVersionV1, fmt.Sprintf("%s/%s/s%03d/%s", resources.NormalizeNamespace(w.agent.Metadata.Namespace), strings.TrimSpace(w.agent.Metadata.Name), step, normalizeToolKey(tool)), 1, 0))
+						}
+						w.history = append(w.history, ChatMessage{
+							Role:       "tool",
+							Content:    priorResult,
+							ToolCallID: requested.ID,
+						})
+						continue
+					}
+				}
+
+				if contractEnabled && !contractSequenceSet[toolKey] {
+					if emitContractViolation(step, fmt.Sprintf("tool not in declared sequence tool=%s", tool)) {
+						return
+					}
 				}
 				reqID := fmt.Sprintf(
 					"%s/%s/s%03d/%s",
@@ -272,21 +407,61 @@ func (w *AgentWorker) Run(ctx context.Context) {
 					}
 					continue
 				}
+				toolResultCache[cacheKey] = result
+				toolCalled[toolKey] = true
+				if contractEnabled {
+					delete(contractRemaining, toolKey)
+				}
 				w.memory.Put(fmt.Sprintf("%s:%d", tool, step), result)
 				if w.onEvent != nil {
 					w.onEvent(fmt.Sprintf("step=%d tool=%s tool_contract=%s tool_request_id=%s tool_attempt=%d duration_ms=%d success", step, tool, contractVersion, toolRequestID, toolAttempt, toolDurationMS))
 				}
 				w.history = append(w.history, ChatMessage{
-					Role:    "user",
-					Content: fmt.Sprintf("[tool_result tool=%s]\n%s", tool, result),
+					Role:       "tool",
+					Content:    result,
+					ToolCallID: requested.ID,
 				})
+				if strings.EqualFold(toolUseBehavior, resources.AgentToolUseBehaviorStopOnFirstTool) {
+					if w.onEvent != nil {
+						w.onEvent(fmt.Sprintf("step=%d tool=%s stop_on_first_tool", step, tool))
+						w.onEvent("worker completed")
+					}
+					return
+				}
+			}
+			if contractEnabled && len(contractRemaining) == 0 && markersSatisfied(modelOutput) {
+				if w.onEvent != nil {
+					w.onEvent("worker completed")
+				}
+				return
 			}
 		}
 	}
 
+	if contractEnabled {
+		if len(contractRemaining) > 0 {
+			next := anyMapKey(contractRemaining)
+			if emitContractViolation(maxSteps, fmt.Sprintf("max_steps reached before tool sequence completion expected tool=%s", next)) {
+				return
+			}
+		} else {
+			if w.onEvent != nil {
+				w.onEvent("contract_warning max_steps reached before required output markers were satisfied")
+				w.onEvent("worker completed")
+			}
+			return
+		}
+	}
 	if w.onEvent != nil {
 		w.onEvent("max steps reached")
 	}
+}
+
+func anyMapKey(m map[string]bool) string {
+	for key := range m {
+		return key
+	}
+	return "unknown"
 }
 
 func normalizeModelUsageWithFallback(usage ModelUsage, agent resources.Agent, resp ModelResponse, step int) ModelUsage {

@@ -72,6 +72,7 @@ func normalizeModelToolCalls(raw []ModelToolCall) []ModelToolCall {
 			continue
 		}
 		out = append(out, ModelToolCall{
+			ID:    strings.TrimSpace(call.ID),
 			Name:  name,
 			Input: strings.TrimSpace(call.Input),
 		})

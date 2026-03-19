@@ -31,21 +31,22 @@ const (
 )
 
 const (
-	ToolReasonInvalidInput         = "tool_invalid_input"
-	ToolReasonToolUnsupported      = "tool_unsupported"
-	ToolReasonRuntimePolicyInvalid = "tool_runtime_policy_invalid"
-	ToolReasonIsolationUnavailable = "tool_isolation_unavailable"
-	ToolReasonPermissionDenied     = "tool_permission_denied"
-	ToolReasonSecretResolution     = "tool_secret_resolution_failed"
-	ToolReasonExecutionTimeout     = "tool_execution_timeout"
-	ToolReasonExecutionCanceled    = "tool_execution_canceled"
-	ToolReasonBackendFailure       = "tool_backend_failure"
-	ToolReasonAuthExpired          = "tool_auth_expired"
-	ToolReasonAuthInvalid          = "tool_auth_invalid"
-	ToolReasonAuthForbidden        = "tool_auth_forbidden"
-	ToolReasonApprovalPending      = "tool_approval_pending"
-	ToolReasonApprovalDenied       = "tool_approval_denied"
-	ToolReasonApprovalTimeout      = "tool_approval_timeout"
+	ToolReasonInvalidInput           = "tool_invalid_input"
+	ToolReasonToolUnsupported        = "tool_unsupported"
+	ToolReasonRuntimePolicyInvalid   = "tool_runtime_policy_invalid"
+	ToolReasonIsolationUnavailable   = "tool_isolation_unavailable"
+	ToolReasonPermissionDenied       = "tool_permission_denied"
+	ToolReasonSecretResolution       = "tool_secret_resolution_failed"
+	ToolReasonExecutionTimeout       = "tool_execution_timeout"
+	ToolReasonExecutionCanceled      = "tool_execution_canceled"
+	ToolReasonBackendFailure         = "tool_backend_failure"
+	ToolReasonAuthExpired            = "tool_auth_expired"
+	ToolReasonAuthInvalid            = "tool_auth_invalid"
+	ToolReasonAuthForbidden          = "tool_auth_forbidden"
+	ToolReasonApprovalPending        = "tool_approval_pending"
+	ToolReasonApprovalDenied         = "tool_approval_denied"
+	ToolReasonApprovalTimeout        = "tool_approval_timeout"
+	ToolReasonAgentContractViolation = "agent_contract_violation"
 )
 
 // ToolError is the canonical runtime tool error envelope.

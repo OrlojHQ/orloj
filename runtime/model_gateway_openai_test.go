@@ -248,3 +248,85 @@ func TestOpenAIModelGatewayCompleteToolCallResponse(t *testing.T) {
 		t.Fatalf("unexpected tool call input %q", resp.ToolCalls[0].Input)
 	}
 }
+
+func TestChatMessagesToOpenAIStructuredToolMessages(t *testing.T) {
+	msgs := []ChatMessage{
+		{Role: "system", Content: "be helpful"},
+		{Role: "user", Content: "step=1"},
+		{Role: "assistant", Content: "calling tool", ToolCalls: []ChatToolCall{
+			{ID: "call_abc", Name: "search", Input: `{"q":"test"}`},
+		}},
+		{Role: "tool", Content: "result data", ToolCallID: "call_abc"},
+		{Role: "user", Content: "step=2"},
+	}
+
+	openaiMsgs := chatMessagesToOpenAI(msgs)
+	if len(openaiMsgs) != 5 {
+		t.Fatalf("expected 5 messages, got %d", len(openaiMsgs))
+	}
+
+	assistantMsg := openaiMsgs[2]
+	if assistantMsg.Role != "assistant" {
+		t.Fatalf("expected assistant role, got %q", assistantMsg.Role)
+	}
+	if len(assistantMsg.ToolCalls) != 1 {
+		t.Fatalf("expected 1 tool call in assistant msg, got %d", len(assistantMsg.ToolCalls))
+	}
+	if assistantMsg.ToolCalls[0].ID != "call_abc" {
+		t.Fatalf("expected tool call ID=call_abc, got %q", assistantMsg.ToolCalls[0].ID)
+	}
+	if assistantMsg.ToolCalls[0].Function.Name != "search" {
+		t.Fatalf("expected tool name=search, got %q", assistantMsg.ToolCalls[0].Function.Name)
+	}
+
+	toolMsg := openaiMsgs[3]
+	if toolMsg.Role != "tool" {
+		t.Fatalf("expected tool role, got %q", toolMsg.Role)
+	}
+	if toolMsg.ToolCallID != "call_abc" {
+		t.Fatalf("expected tool_call_id=call_abc, got %q", toolMsg.ToolCallID)
+	}
+	contentStr, ok := toolMsg.Content.(string)
+	if !ok {
+		t.Fatalf("expected string content, got %T", toolMsg.Content)
+	}
+	if contentStr != "result data" {
+		t.Fatalf("expected content=result data, got %q", contentStr)
+	}
+
+	raw, err := json.Marshal(openaiMsgs)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+	jsonStr := string(raw)
+	if !strings.Contains(jsonStr, `"tool_call_id":"call_abc"`) {
+		t.Fatalf("expected tool_call_id in JSON, got %s", jsonStr)
+	}
+	if !strings.Contains(jsonStr, `"tool_calls"`) {
+		t.Fatalf("expected tool_calls in JSON, got %s", jsonStr)
+	}
+}
+
+func TestParseOpenAIModelToolCallsPreservesID(t *testing.T) {
+	raw := []openAIChatToolCall{
+		{
+			ID:   "call_xyz",
+			Type: "function",
+			Function: openAIChatToolFunctionCall{
+				Name:      "get_weather",
+				Arguments: `{"location":"Paris"}`,
+			},
+		},
+	}
+
+	calls := parseOpenAIModelToolCalls(raw)
+	if len(calls) != 1 {
+		t.Fatalf("expected 1 call, got %d", len(calls))
+	}
+	if calls[0].ID != "call_xyz" {
+		t.Fatalf("expected ID=call_xyz, got %q", calls[0].ID)
+	}
+	if calls[0].Name != "get_weather" {
+		t.Fatalf("expected Name=get_weather, got %q", calls[0].Name)
+	}
+}

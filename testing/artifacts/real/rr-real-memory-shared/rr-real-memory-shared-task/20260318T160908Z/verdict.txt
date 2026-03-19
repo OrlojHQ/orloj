@@ -1,1 +1,0 @@
-failed: missing USED_MEMORY marker

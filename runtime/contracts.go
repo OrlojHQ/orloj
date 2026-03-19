@@ -19,8 +19,17 @@ type MemoryStore interface {
 
 // ChatMessage represents one message in a multi-turn conversation.
 type ChatMessage struct {
-	Role    string // "system", "user", "assistant"
-	Content string
+	Role       string // "system", "user", "assistant", "tool"
+	Content    string
+	ToolCallID string         // role="tool": the ID of the tool call this result answers
+	ToolCalls  []ChatToolCall // role="assistant": tool calls the model made this turn
+}
+
+// ChatToolCall captures one tool invocation from an assistant message.
+type ChatToolCall struct {
+	ID    string
+	Name  string
+	Input string
 }
 
 // ModelRequest defines one model inference request for an agent step.
@@ -54,6 +63,7 @@ type ModelUsage struct {
 
 // ModelToolCall is one model-selected tool invocation request.
 type ModelToolCall struct {
+	ID    string
 	Name  string
 	Input string
 }

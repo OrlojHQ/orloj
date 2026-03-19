@@ -1,0 +1,21 @@
+apiVersion: orloj.dev/v1
+kind: Task
+metadata:
+  name: rr-multi-tool-both-task
+  namespace: rr-real-multi-tool
+spec:
+  system: rr-real-multi-tool-system
+  input:
+    goal: look up current unit price then calculate total for 150 units
+    task_type: lookup_and_calculate
+    query_hint: unit price for widget-A
+    expression_hint: "unit_price * 150"
+  priority: high
+  retry:
+    max_attempts: 2
+    backoff: 2s
+  message_retry:
+    max_attempts: 2
+    backoff: 250ms
+    max_backoff: 2s
+    jitter: full

@@ -1,1 +1,0 @@
-failed: expected research to call memory.write at least once, got 0

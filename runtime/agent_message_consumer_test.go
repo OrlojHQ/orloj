@@ -459,6 +459,143 @@ func TestAgentMessageConsumerNonRetryableInvalidSystemDeadLettersImmediately(t *
 	}
 }
 
+func TestAgentMessageConsumerContractViolationDeadLettersWithoutRetry(t *testing.T) {
+	bus := NewMemoryAgentMessageBus("orloj.agentmsg", 256, time.Minute)
+	defer func() { _ = bus.Close() }()
+
+	agentStore := store.NewAgentStore()
+	systemStore := store.NewAgentSystemStore()
+	taskStore := store.NewTaskStore()
+
+	if _, err := agentStore.Upsert(resources.Agent{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Agent",
+		Metadata:   resources.ObjectMeta{Name: "contract-agent"},
+		Spec: resources.AgentSpec{
+			Model:  "gpt-4o",
+			Prompt: "contract run",
+			Tools:  []string{"tool.alpha", "tool.beta"},
+			Execution: resources.AgentExecutionSpec{
+				Profile:               resources.AgentExecutionProfileContract,
+				ToolSequence:          []string{"tool.alpha", "tool.beta"},
+				RequiredOutputMarkers: []string{"DONE"},
+			},
+			Limits: resources.AgentLimits{MaxSteps: 3},
+		},
+	}); err != nil {
+		t.Fatalf("upsert agent failed: %v", err)
+	}
+	if _, err := systemStore.Upsert(resources.AgentSystem{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "AgentSystem",
+		Metadata:   resources.ObjectMeta{Name: "contract-system"},
+		Spec: resources.AgentSystemSpec{
+			Agents: []string{"contract-agent"},
+		},
+	}); err != nil {
+		t.Fatalf("upsert system failed: %v", err)
+	}
+	if _, err := taskStore.Upsert(resources.Task{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Task",
+		Metadata:   resources.ObjectMeta{Name: "contract-task"},
+		Spec: resources.TaskSpec{
+			System: "contract-system",
+			MessageRetry: resources.TaskMessageRetryPolicy{
+				MaxAttempts: 4,
+				Backoff:     "150ms",
+				MaxBackoff:  "2s",
+				Jitter:      "none",
+			},
+		},
+		Status: resources.TaskStatus{
+			Phase:     "Running",
+			ClaimedBy: "worker-a",
+			Attempts:  1,
+		},
+	}); err != nil {
+		t.Fatalf("upsert task failed: %v", err)
+	}
+
+	executor := NewTaskExecutorWithRuntime(nil, &staticToolRuntime{}, &scriptedModelGateway{
+		responses: map[int]ModelResponse{
+			1: {
+				Content: "out of order",
+				ToolCalls: []ModelToolCall{
+					{Name: "tool.beta", Input: `{"q":"wrong-order"}`},
+				},
+			},
+		},
+	}, nil)
+
+	manager := NewAgentMessageConsumerManager(
+		bus,
+		agentStore,
+		systemStore,
+		taskStore,
+		nil,
+		AgentMessageConsumerOptions{
+			WorkerID:            "worker-a",
+			RefreshEvery:        20 * time.Millisecond,
+			DedupeWindow:        time.Minute,
+			LeaseExtendDuration: 30 * time.Second,
+			Executor:            executor,
+		},
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go manager.Start(ctx)
+	time.Sleep(40 * time.Millisecond)
+
+	if _, err := bus.Publish(context.Background(), AgentMessage{
+		MessageID: "msg-contract-violation",
+		TaskID:    "default/contract-task",
+		Namespace: "default",
+		FromAgent: "system",
+		ToAgent:   "contract-agent",
+		Type:      "task_start",
+		Payload:   "start",
+		Attempt:   1,
+	}); err != nil {
+		t.Fatalf("publish failed: %v", err)
+	}
+
+	waitForConsumer(t, 2*time.Second, func() bool {
+		task, ok := taskStore.Get("contract-task")
+		return ok && strings.EqualFold(task.Status.Phase, "deadletter")
+	})
+
+	task, _ := taskStore.Get("contract-task")
+	if countTraceByTypeAndMessage(task.Status.Trace, "agent_message_retry_scheduled", "msg-contract-violation") != 0 {
+		t.Fatalf("expected no retry for contract violation, trace=%+v", task.Status.Trace)
+	}
+	if countTraceByTypeAndMessage(task.Status.Trace, "agent_message_non_retryable", "msg-contract-violation") == 0 {
+		t.Fatal("expected non_retryable trace marker for contract violation")
+	}
+	sawContractReason := false
+	for _, event := range task.Status.Trace {
+		if !strings.EqualFold(strings.TrimSpace(event.Type), "agent_message_non_retryable") {
+			continue
+		}
+		if strings.Contains(event.Message, "reason="+ToolReasonAgentContractViolation) {
+			sawContractReason = true
+			break
+		}
+	}
+	if !sawContractReason {
+		payload, _ := json.Marshal(task.Status.Trace)
+		t.Fatalf("expected non_retryable reason %q in trace: %s", ToolReasonAgentContractViolation, string(payload))
+	}
+	message, ok := taskMessageByID(task.Status.Messages, "msg-contract-violation")
+	if !ok {
+		t.Fatal("expected deadletter message record")
+	}
+	if message.Attempts != 1 {
+		t.Fatalf("expected attempts=1 for non-retryable contract violation, got %d", message.Attempts)
+	}
+}
+
 func TestComputeMessageRetryDelayCappedAndJitterModes(t *testing.T) {
 	msg := AgentMessage{MessageID: "msg-delay", TaskID: "default/delay-task", ToAgent: "writer-agent"}
 

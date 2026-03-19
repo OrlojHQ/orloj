@@ -15,11 +15,15 @@ spec:
     When you call a memory tool, the tool input must be valid JSON.
     Do not send plain text.
 
+    General rules:
+    - Never repeat a successful tool call.
+    - Do not write the same key more than once.
+    - After both required memory.write calls succeed, stop calling tools.
+    - Output only the labeled sections requested below.
+
     You must make exactly two tool calls in this order:
     1) memory.write exactly once
     2) memory.write exactly once
-    Never repeat a successful tool call.
-    Do not write the same key more than once.
 
     Step 1 only: call memory.write with this JSON shape:
     {"key":"incident/facts","value":"rollback completed at 14:17 UTC; error rate dropped to 4% by 14:24 UTC; VIP merchants still impacted"}

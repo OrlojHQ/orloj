@@ -234,8 +234,10 @@ type openAIChatCompletionRequest struct {
 }
 
 type openAIChatCompletionMessage struct {
-	Role    string      `json:"role"`
-	Content interface{} `json:"content"`
+	Role       string               `json:"role"`
+	Content    interface{}          `json:"content"`
+	ToolCalls  []openAIChatToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string               `json:"tool_call_id,omitempty"`
 }
 
 type openAIChatCompletionResponse struct {
@@ -275,6 +277,7 @@ type openAIChatToolFunction struct {
 }
 
 type openAIChatToolCall struct {
+	ID       string                     `json:"id,omitempty"`
 	Type     string                     `json:"type,omitempty"`
 	Function openAIChatToolFunctionCall `json:"function"`
 }
@@ -326,6 +329,7 @@ func parseOpenAIModelToolCalls(raw []openAIChatToolCall) []ModelToolCall {
 			continue
 		}
 		out = append(out, ModelToolCall{
+			ID:    strings.TrimSpace(item.ID),
 			Name:  name,
 			Input: parseOpenAIToolCallInput(item.Function.Arguments),
 		})
@@ -361,12 +365,47 @@ func parseOpenAIToolCallInput(arguments string) string {
 func chatMessagesToOpenAI(msgs []ChatMessage) []openAIChatCompletionMessage {
 	out := make([]openAIChatCompletionMessage, 0, len(msgs))
 	for _, m := range msgs {
+		role := strings.TrimSpace(m.Role)
 		content := strings.TrimSpace(m.Content)
+
+		if role == "tool" && m.ToolCallID != "" {
+			out = append(out, openAIChatCompletionMessage{
+				Role:       "tool",
+				Content:    content,
+				ToolCallID: m.ToolCallID,
+			})
+			continue
+		}
+
+		if role == "assistant" && len(m.ToolCalls) > 0 {
+			calls := make([]openAIChatToolCall, len(m.ToolCalls))
+			for i, tc := range m.ToolCalls {
+				calls[i] = openAIChatToolCall{
+					ID:   tc.ID,
+					Type: "function",
+					Function: openAIChatToolFunctionCall{
+						Name:      tc.Name,
+						Arguments: tc.Input,
+					},
+				}
+			}
+			var msgContent interface{}
+			if content != "" {
+				msgContent = content
+			}
+			out = append(out, openAIChatCompletionMessage{
+				Role:      "assistant",
+				Content:   msgContent,
+				ToolCalls: calls,
+			})
+			continue
+		}
+
 		if content == "" {
 			continue
 		}
 		out = append(out, openAIChatCompletionMessage{
-			Role:    strings.TrimSpace(m.Role),
+			Role:    role,
 			Content: content,
 		})
 	}

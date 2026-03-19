@@ -164,11 +164,32 @@ func (g *OllamaModelGateway) Complete(ctx context.Context, req ModelRequest) (Mo
 func chatMessagesToOllama(msgs []ChatMessage) []ollamaChatMessage {
 	out := make([]ollamaChatMessage, 0, len(msgs))
 	for _, m := range msgs {
+		role := strings.TrimSpace(m.Role)
 		content := strings.TrimSpace(m.Content)
+
+		if role == "tool" {
+			out = append(out, ollamaChatMessage{Role: "tool", Content: content})
+			continue
+		}
+
+		if role == "assistant" && len(m.ToolCalls) > 0 {
+			calls := make([]ollamaToolCall, len(m.ToolCalls))
+			for i, tc := range m.ToolCalls {
+				args, _ := json.Marshal(map[string]string{"input": tc.Input})
+				calls[i] = ollamaToolCall{
+					Function: ollamaToolCallFunction{
+						Name:      tc.Name,
+						Arguments: args,
+					},
+				}
+			}
+			out = append(out, ollamaChatMessage{Role: "assistant", Content: content, ToolCalls: calls})
+			continue
+		}
+
 		if content == "" {
 			continue
 		}
-		role := strings.TrimSpace(m.Role)
 		if role != "system" && role != "assistant" {
 			role = "user"
 		}

@@ -1,0 +1,20 @@
+apiVersion: orloj.dev/v1
+kind: Task
+metadata:
+  name: rr-multi-tool-lookup-task
+  namespace: rr-real-multi-tool
+spec:
+  system: rr-real-multi-tool-system
+  input:
+    goal: find the latest deployment status from the external database
+    task_type: lookup
+    query_hint: deployment status march 2026
+  priority: high
+  retry:
+    max_attempts: 2
+    backoff: 2s
+  message_retry:
+    max_attempts: 2
+    backoff: 250ms
+    max_backoff: 2s
+    jitter: full

@@ -49,8 +49,8 @@ When the runtime activates an agent during a task, it:
 1. Initializes the agent's conversation history with the system prompt and current task context.
 2. If `memory.ref` is set, wires the backing memory store into the runtime. If `memory.allow` is also set, the runtime exposes only those built-in memory operations as available tools.
 3. Routes the request to the configured model via the model gateway, sending the full conversation history.
-4. If the model selects tool calls, the runtime checks governance (AgentPolicy, AgentRole, ToolPermission) and executes authorized tools. Memory tool calls are handled internally without network calls.
-5. Results (including tool outputs) are appended to the conversation history and sent back to the model for the next step, up to `max_steps` or `timeout`.
+4. If the model selects tool calls, the runtime checks governance (AgentPolicy, AgentRole, ToolPermission) and executes authorized tools. Memory tool calls are handled internally without network calls. Tool results are sent back using the provider's native structured tool protocol (`role: "tool"` with `tool_call_id` for OpenAI, `tool_result` content blocks for Anthropic).
+5. Results are appended to the conversation history and sent back to the model for the next step. The agent completes when the model produces text output without requesting further tools, or when `max_steps` / `timeout` is reached. Already-called tools are removed from the available list to prevent duplicate calls.
 
 Conversation history is maintained for the full duration of the agent's activation, giving the model continuity across reasoning and tool-use steps. See [Memory](./memory/index.md) for details on memory layers and built-in tools.
 

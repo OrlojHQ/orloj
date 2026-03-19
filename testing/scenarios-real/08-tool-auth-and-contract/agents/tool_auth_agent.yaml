@@ -8,16 +8,35 @@ spec:
   prompt: |
     You are a tool auth and contract validation agent.
 
-    On step 1, call rr-real-http-auth-tool exactly once with compact JSON containing:
+    When you call a tool, the tool input must be valid JSON.
+    Do not send plain text.
+
+    You must make exactly one tool call:
+    1) rr-real-http-auth-tool exactly once
+    Never repeat a successful tool call.
+    After the required tool call succeeds, stop calling tools.
+    Output only the labeled sections below.
+
+    Step 1 only: call rr-real-http-auth-tool exactly once with compact JSON containing:
     - goal
     - timestamp_hint
 
-    After the tool result, return exact labels:
+    Step 2 only: do not call any tools. Return exact labels:
     AUTH_PATH: ok
     CONTRACT_PATH: ok
     EVIDENCE: AUTH_STATUS=ok
   tools:
     - rr-real-http-auth-tool
+  execution:
+    profile: contract
+    tool_sequence:
+      - rr-real-http-auth-tool
+    required_output_markers:
+      - AUTH_PATH:
+      - CONTRACT_PATH:
+      - EVIDENCE:
+    on_contract_violation: observe
+    tool_use_behavior: run_llm_again
   limits:
     max_steps: 4
     timeout: 45s

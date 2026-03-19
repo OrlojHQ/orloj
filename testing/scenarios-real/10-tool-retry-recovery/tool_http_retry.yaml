@@ -10,7 +10,7 @@ spec:
     isolation_mode: container
     timeout: 30s
     retry:
-      max_attempts: 2
+      max_attempts: 1
       backoff: 250ms
       max_backoff: 1s
       jitter: none

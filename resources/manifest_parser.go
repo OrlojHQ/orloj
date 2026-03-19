@@ -58,6 +58,17 @@ func ParseAgentManifest(data []byte) (Agent, error) {
 		if section == "metadata" && indent <= 2 && !strings.HasPrefix(trimmed, "- ") && !strings.HasSuffix(trimmed, ":") {
 			subsection = ""
 		}
+		if section == "spec" &&
+			(subsection == "memory_allow" || subsection == "execution_tool_sequence" || subsection == "execution_required_output_markers") &&
+			indent <= 4 &&
+			!strings.HasPrefix(trimmed, "- ") &&
+			!strings.HasSuffix(trimmed, ":") {
+			if subsection == "memory_allow" {
+				subsection = "memory"
+			} else {
+				subsection = "execution"
+			}
+		}
 
 		if strings.HasSuffix(trimmed, ":") {
 			switch strings.TrimSuffix(trimmed, ":") {
@@ -91,6 +102,18 @@ func ParseAgentManifest(data []byte) (Agent, error) {
 				if section == "spec" {
 					subsection = "limits"
 				}
+			case "execution":
+				if section == "spec" {
+					subsection = "execution"
+				}
+			case "tool_sequence":
+				if section == "spec" && (subsection == "execution" || subsection == "execution_tool_sequence" || subsection == "execution_required_output_markers") {
+					subsection = "execution_tool_sequence"
+				}
+			case "required_output_markers":
+				if section == "spec" && (subsection == "execution" || subsection == "execution_tool_sequence" || subsection == "execution_required_output_markers") {
+					subsection = "execution_required_output_markers"
+				}
 			}
 			continue
 		}
@@ -105,6 +128,14 @@ func ParseAgentManifest(data []byte) (Agent, error) {
 		}
 		if section == "spec" && subsection == "memory_allow" && strings.HasPrefix(trimmed, "- ") {
 			agent.Spec.Memory.Allow = append(agent.Spec.Memory.Allow, stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))))
+			continue
+		}
+		if section == "spec" && subsection == "execution_tool_sequence" && strings.HasPrefix(trimmed, "- ") {
+			agent.Spec.Execution.ToolSequence = append(agent.Spec.Execution.ToolSequence, stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))))
+			continue
+		}
+		if section == "spec" && subsection == "execution_required_output_markers" && strings.HasPrefix(trimmed, "- ") {
+			agent.Spec.Execution.RequiredOutputMarkers = append(agent.Spec.Execution.RequiredOutputMarkers, stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))))
 			continue
 		}
 
@@ -153,6 +184,14 @@ func ParseAgentManifest(data []byte) (Agent, error) {
 			agent.Spec.Limits.MaxSteps = maxSteps
 		case section == "spec" && subsection == "limits" && key == "timeout":
 			agent.Spec.Limits.Timeout = stripQuotes(value)
+		case section == "spec" && subsection == "execution" && key == "profile":
+			agent.Spec.Execution.Profile = stripQuotes(value)
+		case section == "spec" && subsection == "execution" && (key == "duplicate_tool_call_policy" || key == "duplicateToolCallPolicy"):
+			agent.Spec.Execution.DuplicateToolCallPolicy = stripQuotes(value)
+		case section == "spec" && subsection == "execution" && (key == "on_contract_violation" || key == "onContractViolation"):
+			agent.Spec.Execution.OnContractViolation = stripQuotes(value)
+		case section == "spec" && subsection == "execution" && (key == "tool_use_behavior" || key == "toolUseBehavior"):
+			agent.Spec.Execution.ToolUseBehavior = stripQuotes(value)
 		}
 	}
 

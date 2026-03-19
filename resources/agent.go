@@ -54,14 +54,39 @@ type AgentList struct {
 
 // AgentSpec defines desired runtime behavior.
 type AgentSpec struct {
-	Model        string      `json:"model,omitempty"`
-	ModelRef     string      `json:"model_ref,omitempty"`
-	Prompt       string      `json:"prompt"`
-	Tools        []string    `json:"tools,omitempty"`
-	AllowedTools []string    `json:"allowed_tools,omitempty"`
-	Roles        []string    `json:"roles,omitempty"`
-	Memory       MemorySpec  `json:"memory,omitempty"`
-	Limits       AgentLimits `json:"limits,omitempty"`
+	Model        string             `json:"model,omitempty"`
+	ModelRef     string             `json:"model_ref,omitempty"`
+	Prompt       string             `json:"prompt"`
+	Tools        []string           `json:"tools,omitempty"`
+	AllowedTools []string           `json:"allowed_tools,omitempty"`
+	Roles        []string           `json:"roles,omitempty"`
+	Memory       MemorySpec         `json:"memory,omitempty"`
+	Execution    AgentExecutionSpec `json:"execution,omitempty"`
+	Limits       AgentLimits        `json:"limits,omitempty"`
+}
+
+const (
+	AgentExecutionProfileDynamic  = "dynamic"
+	AgentExecutionProfileContract = "contract"
+
+	AgentDuplicateToolCallPolicyShortCircuit = "short_circuit"
+	AgentDuplicateToolCallPolicyDeny         = "deny"
+
+	AgentContractViolationPolicyObserve           = "observe"
+	AgentContractViolationPolicyNonRetryableError = "non_retryable_error"
+
+	AgentToolUseBehaviorRunLLMAgain     = "run_llm_again"
+	AgentToolUseBehaviorStopOnFirstTool = "stop_on_first_tool"
+)
+
+// AgentExecutionSpec configures optional per-agent execution contracts.
+type AgentExecutionSpec struct {
+	Profile                 string   `json:"profile,omitempty"`
+	ToolSequence            []string `json:"tool_sequence,omitempty"`
+	RequiredOutputMarkers   []string `json:"required_output_markers,omitempty"`
+	DuplicateToolCallPolicy string   `json:"duplicate_tool_call_policy,omitempty"`
+	OnContractViolation     string   `json:"on_contract_violation,omitempty"`
+	ToolUseBehavior         string   `json:"tool_use_behavior,omitempty"`
 }
 
 // MemorySpec configures runtime memory backend.
@@ -146,6 +171,78 @@ func (a *Agent) Normalize() error {
 		normalizedAllowed = append(normalizedAllowed, t)
 	}
 	a.Spec.AllowedTools = normalizedAllowed
+	a.Spec.Execution.Profile = strings.ToLower(strings.TrimSpace(a.Spec.Execution.Profile))
+	if a.Spec.Execution.Profile == "" {
+		a.Spec.Execution.Profile = AgentExecutionProfileDynamic
+	}
+	switch a.Spec.Execution.Profile {
+	case AgentExecutionProfileDynamic, AgentExecutionProfileContract:
+	default:
+		return fmt.Errorf("invalid spec.execution.profile %q", a.Spec.Execution.Profile)
+	}
+
+	normalizedSequence := make([]string, 0, len(a.Spec.Execution.ToolSequence))
+	seenSequence := make(map[string]struct{}, len(a.Spec.Execution.ToolSequence))
+	for _, tool := range a.Spec.Execution.ToolSequence {
+		tool = strings.TrimSpace(tool)
+		if tool == "" {
+			continue
+		}
+		key := strings.ToLower(tool)
+		if _, exists := seenSequence[key]; exists {
+			continue
+		}
+		seenSequence[key] = struct{}{}
+		normalizedSequence = append(normalizedSequence, tool)
+	}
+	a.Spec.Execution.ToolSequence = normalizedSequence
+
+	normalizedMarkers := make([]string, 0, len(a.Spec.Execution.RequiredOutputMarkers))
+	seenMarkers := make(map[string]struct{}, len(a.Spec.Execution.RequiredOutputMarkers))
+	for _, marker := range a.Spec.Execution.RequiredOutputMarkers {
+		marker = strings.TrimSpace(marker)
+		if marker == "" {
+			continue
+		}
+		if _, exists := seenMarkers[marker]; exists {
+			continue
+		}
+		seenMarkers[marker] = struct{}{}
+		normalizedMarkers = append(normalizedMarkers, marker)
+	}
+	a.Spec.Execution.RequiredOutputMarkers = normalizedMarkers
+
+	a.Spec.Execution.DuplicateToolCallPolicy = strings.ToLower(strings.TrimSpace(a.Spec.Execution.DuplicateToolCallPolicy))
+	if a.Spec.Execution.DuplicateToolCallPolicy == "" {
+		a.Spec.Execution.DuplicateToolCallPolicy = AgentDuplicateToolCallPolicyShortCircuit
+	}
+	switch a.Spec.Execution.DuplicateToolCallPolicy {
+	case AgentDuplicateToolCallPolicyShortCircuit, AgentDuplicateToolCallPolicyDeny:
+	default:
+		return fmt.Errorf("invalid spec.execution.duplicate_tool_call_policy %q", a.Spec.Execution.DuplicateToolCallPolicy)
+	}
+
+	a.Spec.Execution.OnContractViolation = strings.ToLower(strings.TrimSpace(a.Spec.Execution.OnContractViolation))
+	if a.Spec.Execution.OnContractViolation == "" {
+		a.Spec.Execution.OnContractViolation = AgentContractViolationPolicyNonRetryableError
+	}
+	switch a.Spec.Execution.OnContractViolation {
+	case AgentContractViolationPolicyObserve, AgentContractViolationPolicyNonRetryableError:
+	default:
+		return fmt.Errorf("invalid spec.execution.on_contract_violation %q", a.Spec.Execution.OnContractViolation)
+	}
+	a.Spec.Execution.ToolUseBehavior = strings.ToLower(strings.TrimSpace(a.Spec.Execution.ToolUseBehavior))
+	if a.Spec.Execution.ToolUseBehavior == "" {
+		a.Spec.Execution.ToolUseBehavior = AgentToolUseBehaviorRunLLMAgain
+	}
+	switch a.Spec.Execution.ToolUseBehavior {
+	case AgentToolUseBehaviorRunLLMAgain, AgentToolUseBehaviorStopOnFirstTool:
+	default:
+		return fmt.Errorf("invalid spec.execution.tool_use_behavior %q", a.Spec.Execution.ToolUseBehavior)
+	}
+	if a.Spec.Execution.Profile == AgentExecutionProfileContract && len(a.Spec.Execution.ToolSequence) == 0 {
+		return fmt.Errorf("spec.execution.tool_sequence is required when spec.execution.profile=contract")
+	}
 	if a.Spec.Limits.MaxSteps <= 0 {
 		a.Spec.Limits.MaxSteps = 10
 	}

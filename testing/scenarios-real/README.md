@@ -43,6 +43,11 @@ make real-tool-stub
 
 5. Replace every provider `Secret.spec.stringData.value: replace-me` with a real API key before applying a scenario.
 
+Critical readiness rule:
+
+- Keep both `orlojd` and the matching `orlojworker` running before `make real-apply-*` or `make real-gate-*`. Applying or running tasks before services are up can produce immediate task failures or false gate failures.
+- Quick check: `curl -sf http://localhost:8080/healthz >/dev/null` should exit 0 before you start.
+
 ## Scenario Matrix
 
 ### Wave 0: existing flow hardening

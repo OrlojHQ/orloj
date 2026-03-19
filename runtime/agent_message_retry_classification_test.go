@@ -21,3 +21,23 @@ func TestClassifyMessageRetryabilityUsesToolErrorMetadata(t *testing.T) {
 		t.Fatalf("expected reason %q, got %q", ToolReasonPermissionDenied, classification.Reason)
 	}
 }
+
+func TestClassifyMessageRetryabilityTreatsContractViolationAsNonRetryable(t *testing.T) {
+	policy := resources.TaskMessageRetryPolicy{}
+	err := NewToolError(
+		ToolStatusError,
+		ToolCodeRuntimePolicyInvalid,
+		ToolReasonAgentContractViolation,
+		false,
+		"agent contract violation",
+		nil,
+		nil,
+	)
+	classification := classifyMessageRetryability(policy, err)
+	if classification.Retryable {
+		t.Fatal("expected non-retryable classification for contract violation")
+	}
+	if classification.Reason != ToolReasonAgentContractViolation {
+		t.Fatalf("expected reason %q, got %q", ToolReasonAgentContractViolation, classification.Reason)
+	}
+}
