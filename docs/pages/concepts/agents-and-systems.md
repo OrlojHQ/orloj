@@ -32,8 +32,7 @@ spec:
 
 | Field | Description |
 |---|---|
-| `model` | Direct model identifier (e.g. `gpt-4o`). Defaults to `gpt-4o-mini` if neither `model` nor `model_ref` is set. |
-| `model_ref` | Reference to a [ModelEndpoint](./model-routing.md) resource for provider-aware routing. |
+| `model_ref` | Required reference to a [ModelEndpoint](./model-routing.md) resource for provider-aware routing. |
 | `prompt` | The system instruction that defines the agent's behavior. |
 | `tools` | List of [Tool](./tools-and-isolation.md) names this agent may call. Tool calls are subject to governance checks. |
 | `roles` | Bound [AgentRole](./governance.md) names. Roles carry permissions that authorize tool usage. |

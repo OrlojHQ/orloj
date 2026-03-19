@@ -43,6 +43,11 @@ spec:
                 secretKeyRef:
                   name: {{ include "orloj.runtimeSecretName" . }}
                   key: model-gateway-api-key
+            - name: ORLOJ_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "orloj.runtimeSecretName" . }}
+                  key: api-token
             {{- with .Values.orlojd.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

@@ -155,7 +155,7 @@ kind: Agent
 metadata:
   name: research-agent-governed
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are a research assistant.
     Produce concise evidence-backed answers.

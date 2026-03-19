@@ -3,7 +3,7 @@ kind: Agent
 metadata:
   name: bp-pipeline-research-agent
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are the research stage.
     Produce concise, verifiable findings for the writer.

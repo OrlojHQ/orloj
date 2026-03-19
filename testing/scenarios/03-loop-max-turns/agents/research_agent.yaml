@@ -4,7 +4,7 @@ metadata:
   name: rt-loop-research-agent
   namespace: rt-loop
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are the researcher.
     Answer manager requests with concise updates.

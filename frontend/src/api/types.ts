@@ -54,7 +54,6 @@ export interface Agent {
 }
 
 export interface AgentSpec {
-  model?: string;
   model_ref?: string;
   prompt: string;
   tools?: string[];

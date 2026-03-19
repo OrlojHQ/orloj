@@ -251,6 +251,12 @@ func main() {
 		},
 	}
 
+	if cfg.setup || cfg.injectTimeoutSystemRate > 0 {
+		if err := ensureLoadtestModelEndpoint(ctx, client, cfg.namespace); err != nil {
+			fatalf("failed to ensure model endpoint for loadtest resources: %v", err)
+		}
+	}
+
 	if cfg.setup {
 		logf("applying baseline manifests namespace=%s", cfg.namespace)
 		if err := applyBaseline(ctx, client, cfg.namespace); err != nil {
@@ -562,9 +568,9 @@ func ensureTimeoutScenarioResources(ctx context.Context, client *apiClient, cfg 
 			Namespace: cfg.namespace,
 		},
 		Spec: resources.AgentSpec{
-			Model:  "gpt-4o",
-			Prompt: "Retry stress agent intentionally times out to exercise retry/deadletter behavior.",
-			Limits: resources.AgentLimits{MaxSteps: 2, Timeout: cfg.timeoutAgentDuration},
+			ModelRef: "openai-default",
+			Prompt:   "Retry stress agent intentionally times out to exercise retry/deadletter behavior.",
+			Limits:   resources.AgentLimits{MaxSteps: 2, Timeout: cfg.timeoutAgentDuration},
 		},
 	}
 	system := resources.AgentSystem{
@@ -592,6 +598,39 @@ func ensureTimeoutScenarioResources(ctx context.Context, client *apiClient, cfg 
 	if err := client.postRaw(ctx, "agent-systems", cfg.namespace, payloadSystem); err != nil {
 		return fmt.Errorf("upsert timeout system failed: %w", err)
 	}
+	return nil
+}
+
+func ensureLoadtestModelEndpoint(ctx context.Context, client *apiClient, namespace string) error {
+	const modelRefName = "openai-default"
+
+	var existing resources.ModelEndpoint
+	if err := client.getJSON(ctx, "model-endpoints/"+url.PathEscape(modelRefName), namespace, &existing); err == nil {
+		return nil
+	} else if !strings.Contains(err.Error(), "status=404") {
+		return fmt.Errorf("lookup model endpoint %q failed: %w", modelRefName, err)
+	}
+
+	endpoint := resources.ModelEndpoint{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "ModelEndpoint",
+		Metadata: resources.ObjectMeta{
+			Name:      modelRefName,
+			Namespace: namespace,
+		},
+		Spec: resources.ModelEndpointSpec{
+			Provider:     "mock",
+			DefaultModel: "gpt-4o",
+		},
+	}
+	payload, err := json.Marshal(endpoint)
+	if err != nil {
+		return fmt.Errorf("marshal model endpoint failed: %w", err)
+	}
+	if err := client.postRaw(ctx, "model-endpoints", namespace, payload); err != nil {
+		return fmt.Errorf("create model endpoint %q failed: %w", modelRefName, err)
+	}
+	logf("created fallback model endpoint name=%s provider=mock default_model=gpt-4o", modelRefName)
 	return nil
 }
 

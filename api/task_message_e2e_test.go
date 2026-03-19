@@ -26,6 +26,7 @@ func TestTaskExecutionPublishesAgentMessages(t *testing.T) {
 	memoryStore := store.NewMemoryStore()
 	policyStore := store.NewAgentPolicyStore()
 	taskStore := store.NewTaskStore()
+	modelEPStore := store.NewModelEndpointStore()
 
 	server := api.NewServer(api.Stores{
 		Agents:       agentStore,
@@ -33,6 +34,7 @@ func TestTaskExecutionPublishesAgentMessages(t *testing.T) {
 		Tools:        toolStore,
 		Memories:     memoryStore,
 		Policies:     policyStore,
+		ModelEPs:     modelEPStore,
 		Tasks:        taskStore,
 		Workers:      store.NewWorkerStore(),
 	}, agentruntime.NewManager(logger), logger)
@@ -51,6 +53,17 @@ func TestTaskExecutionPublishesAgentMessages(t *testing.T) {
 		logger,
 		5*time.Millisecond,
 	)
+	controller.SetModelEndpointStore(modelEPStore)
+
+	postJSON(t, httpServer.URL+"/v1/model-endpoints", resources.ModelEndpoint{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "ModelEndpoint",
+		Metadata:   resources.ObjectMeta{Name: "openai-default"},
+		Spec: resources.ModelEndpointSpec{
+			Provider:     "mock",
+			DefaultModel: "gpt-4o",
+		},
+	})
 
 	postJSON(t, httpServer.URL+"/v1/tools", resources.Tool{
 		APIVersion: "orloj.dev/v1",
@@ -64,10 +77,10 @@ func TestTaskExecutionPublishesAgentMessages(t *testing.T) {
 		Kind:       "Agent",
 		Metadata:   resources.ObjectMeta{Name: "planner"},
 		Spec: resources.AgentSpec{
-			Model:  "gpt-4o",
-			Prompt: "Plan steps.",
-			Tools:  []string{"web-search"},
-			Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
+			ModelRef: "openai-default",
+			Prompt:   "Plan steps.",
+			Tools:    []string{"web-search"},
+			Limits:   resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
 		},
 	})
 	postJSON(t, httpServer.URL+"/v1/agents", resources.Agent{
@@ -75,10 +88,10 @@ func TestTaskExecutionPublishesAgentMessages(t *testing.T) {
 		Kind:       "Agent",
 		Metadata:   resources.ObjectMeta{Name: "writer"},
 		Spec: resources.AgentSpec{
-			Model:  "gpt-4o",
-			Prompt: "Write output.",
-			Tools:  []string{"web-search"},
-			Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
+			ModelRef: "openai-default",
+			Prompt:   "Write output.",
+			Tools:    []string{"web-search"},
+			Limits:   resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
 		},
 	})
 

@@ -3,7 +3,7 @@ kind: Agent
 metadata:
   name: bp-pipeline-writer-agent
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are the writing stage.
     Synthesize prior handoffs into a polished final output.

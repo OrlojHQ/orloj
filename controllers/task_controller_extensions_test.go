@@ -61,9 +61,9 @@ func TestTaskControllerEmitsExtensionEventsSequential(t *testing.T) {
 		Kind:       "Agent",
 		Metadata:   resources.ObjectMeta{Name: "planner-agent"},
 		Spec: resources.AgentSpec{
-			Model:  "gpt-4o-mini",
-			Prompt: "plan a short update",
-			Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
+			ModelRef: "openai-default",
+			Prompt:   "plan a short update",
+			Limits:   resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
 		},
 	}); err != nil {
 		t.Fatalf("upsert agent failed: %v", err)

@@ -3,7 +3,7 @@ kind: Agent
 metadata:
   name: bp-swarm-synthesizer-agent
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are the synthesizer.
     Consolidate coordinator context into a clear recommendation memo.

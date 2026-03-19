@@ -10,7 +10,8 @@ func TestAgentNormalizeExecutionDefaults(t *testing.T) {
 		Kind:     "Agent",
 		Metadata: ObjectMeta{Name: "runner"},
 		Spec: AgentSpec{
-			Prompt: "test",
+			Prompt:   "test",
+			ModelRef: "openai-default",
 		},
 	}
 	if err := agent.Normalize(); err != nil {
@@ -76,7 +77,8 @@ func TestAgentNormalizeRejectsContractWithoutToolSequence(t *testing.T) {
 		Kind:     "Agent",
 		Metadata: ObjectMeta{Name: "contract-agent"},
 		Spec: AgentSpec{
-			Prompt: "test",
+			Prompt:   "test",
+			ModelRef: "openai-default",
 			Execution: AgentExecutionSpec{
 				Profile: AgentExecutionProfileContract,
 			},
@@ -96,7 +98,8 @@ func TestAgentNormalizeAcceptsObserveViolationPolicy(t *testing.T) {
 		Kind:     "Agent",
 		Metadata: ObjectMeta{Name: "contract-agent"},
 		Spec: AgentSpec{
-			Prompt: "test",
+			Prompt:   "test",
+			ModelRef: "openai-default",
 			Execution: AgentExecutionSpec{
 				Profile:             AgentExecutionProfileContract,
 				ToolSequence:        []string{"tool.alpha"},
@@ -117,7 +120,8 @@ func TestAgentNormalizeRejectsInvalidViolationPolicy(t *testing.T) {
 		Kind:     "Agent",
 		Metadata: ObjectMeta{Name: "contract-agent"},
 		Spec: AgentSpec{
-			Prompt: "test",
+			Prompt:   "test",
+			ModelRef: "openai-default",
 			Execution: AgentExecutionSpec{
 				Profile:             AgentExecutionProfileContract,
 				ToolSequence:        []string{"tool.alpha"},
@@ -139,7 +143,8 @@ func TestAgentNormalizeRejectsInvalidExecutionProfile(t *testing.T) {
 		Kind:     "Agent",
 		Metadata: ObjectMeta{Name: "contract-agent"},
 		Spec: AgentSpec{
-			Prompt: "test",
+			Prompt:   "test",
+			ModelRef: "openai-default",
 			Execution: AgentExecutionSpec{
 				Profile: "static",
 			},

@@ -85,11 +85,23 @@ func TestFailureInjectionWorkerCrashLeaseTakeover(t *testing.T) {
 
 	agentStore := store.NewAgentStore()
 	systemStore := store.NewAgentSystemStore()
+	modelEPStore := store.NewModelEndpointStore()
 	toolStore := store.NewToolStore()
 	memoryStore := store.NewMemoryStore()
 	policyStore := store.NewAgentPolicyStore()
 	taskStore := store.NewTaskStore()
 	workerStore := store.NewWorkerStore()
+	if _, err := modelEPStore.Upsert(resources.ModelEndpoint{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "ModelEndpoint",
+		Metadata:   resources.ObjectMeta{Name: "openai-default", Namespace: "default"},
+		Spec: resources.ModelEndpointSpec{
+			Provider:     "mock",
+			DefaultModel: "gpt-4o",
+		},
+	}); err != nil {
+		t.Fatalf("upsert model endpoint failed: %v", err)
+	}
 
 	if _, err := toolStore.Upsert(resources.Tool{
 		APIVersion: "orloj.dev/v1",
@@ -104,10 +116,10 @@ func TestFailureInjectionWorkerCrashLeaseTakeover(t *testing.T) {
 		Kind:       "Agent",
 		Metadata:   resources.ObjectMeta{Name: "agent-a"},
 		Spec: resources.AgentSpec{
-			Model:  "gpt-4o",
-			Prompt: "run",
-			Tools:  []string{"web_search"},
-			Limits: resources.AgentLimits{MaxSteps: 2, Timeout: "1s"},
+			ModelRef: "openai-default",
+			Prompt:   "run",
+			Tools:    []string{"web_search"},
+			Limits:   resources.AgentLimits{MaxSteps: 2, Timeout: "1s"},
 		},
 	}); err != nil {
 		t.Fatalf("upsert agent failed: %v", err)
@@ -186,6 +198,7 @@ func TestFailureInjectionWorkerCrashLeaseTakeover(t *testing.T) {
 		5*time.Millisecond,
 	)
 	controllerB.ConfigureWorker("worker-b", 50*time.Millisecond, 10*time.Millisecond)
+	controllerB.SetModelEndpointStore(modelEPStore)
 	if err := controllerB.ReconcileOnce(context.Background()); err != nil {
 		t.Fatalf("worker-b reconcile failed: %v", err)
 	}

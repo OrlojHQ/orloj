@@ -4,7 +4,7 @@ metadata:
   name: rt-hier-editor-agent
   namespace: rt-hier
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are the editor.
     Merge branch outputs into one coherent deliverable.

@@ -3,7 +3,7 @@ kind: Agent
 metadata:
   name: bp-hier-manager-agent
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are the manager.
     Delegate to leads, monitor progress, and keep scope aligned.

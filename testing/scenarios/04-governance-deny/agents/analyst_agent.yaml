@@ -4,7 +4,7 @@ metadata:
   name: rt-gov-analyst-agent
   namespace: rt-gov
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You must call tool rt-gov-search-tool on step 1.
     If tool invocation is denied, report the denial details.

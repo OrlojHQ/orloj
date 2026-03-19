@@ -18,13 +18,26 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/eventbus"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 const defaultServer = "http://127.0.0.1:8080"
 
 func Run(args []string) error {
+	cleanArgs, token, err := extractGlobalAPIToken(args)
+	if err != nil {
+		return err
+	}
+	if token == "" {
+		token = strings.TrimSpace(os.Getenv("ORLOJCTL_API_TOKEN"))
+	}
+	if token == "" {
+		token = strings.TrimSpace(os.Getenv("ORLOJ_API_TOKEN"))
+	}
+	configureDefaultHTTPClient(token)
+	args = cleanArgs
+
 	if len(args) == 0 {
 		printUsage()
 		return nil
@@ -51,6 +64,8 @@ func Run(args []string) error {
 		return runGraph(args[1:])
 	case "events":
 		return runEvents(args[1:])
+	case "admin":
+		return runAdmin(args[1:])
 	case "rollback":
 		return fmt.Errorf("%q is not implemented in MVP", args[0])
 	case "help", "-h", "--help":
@@ -59,6 +74,56 @@ func Run(args []string) error {
 	default:
 		return fmt.Errorf("unknown command %q", args[0])
 	}
+}
+
+type authRoundTripper struct {
+	base  http.RoundTripper
+	token string
+}
+
+func (t authRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	if strings.TrimSpace(t.token) == "" {
+		return t.base.RoundTrip(req)
+	}
+	if strings.TrimSpace(req.Header.Get("Authorization")) != "" {
+		return t.base.RoundTrip(req)
+	}
+	next := req.Clone(req.Context())
+	next.Header = req.Header.Clone()
+	next.Header.Set("Authorization", "Bearer "+strings.TrimSpace(t.token))
+	return t.base.RoundTrip(next)
+}
+
+func configureDefaultHTTPClient(token string) {
+	base := http.DefaultTransport
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	http.DefaultClient = &http.Client{
+		Transport: authRoundTripper{base: base, token: strings.TrimSpace(token)},
+	}
+}
+
+func extractGlobalAPIToken(args []string) ([]string, string, error) {
+	clean := make([]string, 0, len(args))
+	var token string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if strings.HasPrefix(arg, "--api-token=") {
+			token = strings.TrimSpace(strings.TrimPrefix(arg, "--api-token="))
+			continue
+		}
+		if arg == "--api-token" {
+			if i+1 >= len(args) {
+				return nil, "", fmt.Errorf("--api-token requires a value")
+			}
+			token = strings.TrimSpace(args[i+1])
+			i++
+			continue
+		}
+		clean = append(clean, arg)
+	}
+	return clean, token, nil
 }
 
 func runApply(args []string) error {
@@ -119,6 +184,42 @@ func runCreate(args []string) error {
 		return runCreateSecret(args[1:])
 	default:
 		return fmt.Errorf("unsupported create resource %q (supported: secret)", args[0])
+	}
+}
+
+func runAdmin(args []string) error {
+	if len(args) == 0 {
+		return errors.New("usage: orlojctl admin reset-password [--server URL] [--username name] --new-password value")
+	}
+	switch strings.ToLower(strings.TrimSpace(args[0])) {
+	case "reset-password":
+		fs := flag.NewFlagSet("admin reset-password", flag.ContinueOnError)
+		server := fs.String("server", defaultServer, "Orloj server URL")
+		username := fs.String("username", "", "admin username (optional)")
+		newPassword := fs.String("new-password", "", "new admin password")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if strings.TrimSpace(*newPassword) == "" {
+			return errors.New("--new-password is required")
+		}
+		payload, _ := json.Marshal(map[string]string{
+			"username":     strings.TrimSpace(*username),
+			"new_password": strings.TrimSpace(*newPassword),
+		})
+		resp, err := http.Post(strings.TrimRight(*server, "/")+"/v1/auth/admin/reset-password", "application/json", bytes.NewReader(payload))
+		if err != nil {
+			return fmt.Errorf("password reset request failed: %w", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode >= 300 {
+			body, _ := io.ReadAll(resp.Body)
+			return fmt.Errorf("password reset failed: %s", bytes.TrimSpace(body))
+		}
+		fmt.Println("admin password reset")
+		return nil
+	default:
+		return fmt.Errorf("unsupported admin subcommand %q (supported: reset-password)", args[0])
 	}
 }
 
@@ -332,9 +433,9 @@ func runGet(args []string) error {
 			return fmt.Errorf("failed to decode response: %w", err)
 		}
 		tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-		fmt.Fprintln(tw, "NAME\tMODEL\tSTATUS\tTOOLS")
+		fmt.Fprintln(tw, "NAME\tMODEL_REF\tSTATUS\tTOOLS")
 		for _, item := range list.Items {
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%d\n", item.Metadata.Name, item.Spec.Model, item.Status.Phase, len(item.Spec.Tools))
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%d\n", item.Metadata.Name, item.Spec.ModelRef, item.Status.Phase, len(item.Spec.Tools))
 		}
 		_ = tw.Flush()
 	case "agent-systems":
@@ -1352,6 +1453,10 @@ Usage:
   orlojctl trace task <task-name>
   orlojctl graph system|task <name>
   orlojctl events [--source=<s>] [--type=<t>] [--kind=<k>] [--name=<n>] [--namespace=<ns>] [--since=<id>] [--once] [--timeout=<duration>] [--raw]
+  orlojctl admin reset-password [--server <url>] [--username <name>] --new-password <value>
+
+Global options:
+  --api-token <token>   Bearer token applied to all HTTP requests (also ORLOJCTL_API_TOKEN or ORLOJ_API_TOKEN)
 `)
 }
 
@@ -1387,7 +1492,7 @@ func watchTasks(server string) error {
 			continue
 		}
 		var event struct {
-			Type     string    `json:"type"`
+			Type     string         `json:"type"`
 			Resource resources.Task `json:"resource"`
 		}
 		if err := json.Unmarshal([]byte(payload), &event); err != nil {

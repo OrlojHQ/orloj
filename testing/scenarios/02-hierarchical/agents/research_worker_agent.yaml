@@ -4,7 +4,7 @@ metadata:
   name: rt-hier-research-worker-agent
   namespace: rt-hier
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are the research worker.
     Return concise findings for the editor.

@@ -76,7 +76,8 @@ func TestAgentNormalizeRejectsMemoryAllowWithoutRef(t *testing.T) {
 		Kind:     "Agent",
 		Metadata: ObjectMeta{Name: "memory-agent"},
 		Spec: AgentSpec{
-			Prompt: "test",
+			Prompt:   "test",
+			ModelRef: "openai-default",
 			Memory: MemorySpec{
 				Allow: []string{"read"},
 			},
@@ -87,6 +88,60 @@ func TestAgentNormalizeRejectsMemoryAllowWithoutRef(t *testing.T) {
 		t.Fatal("expected error for memory.allow without memory.ref")
 	}
 	if !strings.Contains(err.Error(), "spec.memory.ref is required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestAgentNormalizeRequiresModelRef(t *testing.T) {
+	agent := Agent{
+		Kind:     "Agent",
+		Metadata: ObjectMeta{Name: "researcher"},
+		Spec: AgentSpec{
+			Prompt: "test",
+		},
+	}
+	err := agent.Normalize()
+	if err == nil {
+		t.Fatal("expected error for missing model_ref")
+	}
+	if !strings.Contains(err.Error(), "spec.model_ref is required") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestParseAgentManifestRejectsLegacyModelYAML(t *testing.T) {
+	raw := []byte(`apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: researcher
+spec:
+  model: gpt-4o
+  prompt: test
+`)
+	_, err := ParseAgentManifest(raw)
+	if err == nil {
+		t.Fatal("expected legacy model field to be rejected")
+	}
+	if !strings.Contains(err.Error(), "spec.model has been removed; use spec.model_ref") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestParseAgentManifestRejectsLegacyModelJSON(t *testing.T) {
+	raw := []byte(`{
+  "apiVersion": "orloj.dev/v1",
+  "kind": "Agent",
+  "metadata": { "name": "researcher" },
+  "spec": {
+    "model": "gpt-4o",
+    "prompt": "test"
+  }
+}`)
+	_, err := ParseAgentManifest(raw)
+	if err == nil {
+		t.Fatal("expected legacy model field to be rejected")
+	}
+	if !strings.Contains(err.Error(), "spec.model has been removed; use spec.model_ref") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

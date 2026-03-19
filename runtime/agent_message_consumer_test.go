@@ -11,6 +11,23 @@ import (
 	"github.com/OrlojHQ/orloj/store"
 )
 
+func newTestModelEndpointStore(t *testing.T) *store.ModelEndpointStore {
+	t.Helper()
+	modelEPStore := store.NewModelEndpointStore()
+	if _, err := modelEPStore.Upsert(resources.ModelEndpoint{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "ModelEndpoint",
+		Metadata:   resources.ObjectMeta{Name: "openai-default", Namespace: "default"},
+		Spec: resources.ModelEndpointSpec{
+			Provider:     "mock",
+			DefaultModel: "gpt-4o",
+		},
+	}); err != nil {
+		t.Fatalf("upsert model endpoint failed: %v", err)
+	}
+	return modelEPStore
+}
+
 func TestAgentMessageConsumerExecutesGraphAndCompletesTask(t *testing.T) {
 	bus := NewMemoryAgentMessageBus("orloj.agentmsg", 256, time.Minute)
 	defer func() { _ = bus.Close() }()
@@ -25,9 +42,9 @@ func TestAgentMessageConsumerExecutesGraphAndCompletesTask(t *testing.T) {
 			Kind:       "Agent",
 			Metadata:   resources.ObjectMeta{Name: "planner-agent"},
 			Spec: resources.AgentSpec{
-				Model:  "gpt-4o",
-				Prompt: "plan",
-				Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
+				ModelRef: "openai-default",
+				Prompt:   "plan",
+				Limits:   resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
 			},
 		},
 		{
@@ -35,9 +52,9 @@ func TestAgentMessageConsumerExecutesGraphAndCompletesTask(t *testing.T) {
 			Kind:       "Agent",
 			Metadata:   resources.ObjectMeta{Name: "writer-agent"},
 			Spec: resources.AgentSpec{
-				Model:  "gpt-4o",
-				Prompt: "write",
-				Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
+				ModelRef: "openai-default",
+				Prompt:   "write",
+				Limits:   resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
 			},
 		},
 	} {
@@ -83,7 +100,7 @@ func TestAgentMessageConsumerExecutesGraphAndCompletesTask(t *testing.T) {
 		systemStore,
 		taskStore,
 		nil,
-		AgentMessageConsumerOptions{
+		AgentMessageConsumerOptions{ModelEndpoints: newTestModelEndpointStore(t),
 			WorkerID:            "worker-a",
 			RefreshEvery:        20 * time.Millisecond,
 			DedupeWindow:        time.Minute,
@@ -152,7 +169,7 @@ func TestAgentMessageConsumerWaitsForLeaseThenTakesOver(t *testing.T) {
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
 		Metadata:   resources.ObjectMeta{Name: "research-agent"},
-		Spec:       resources.AgentSpec{Model: "gpt-4o", Prompt: "research"},
+		Spec:       resources.AgentSpec{ModelRef: "openai-default", Prompt: "research"},
 	}); err != nil {
 		t.Fatalf("upsert agent failed: %v", err)
 	}
@@ -186,7 +203,7 @@ func TestAgentMessageConsumerWaitsForLeaseThenTakesOver(t *testing.T) {
 		systemStore,
 		taskStore,
 		nil,
-		AgentMessageConsumerOptions{
+		AgentMessageConsumerOptions{ModelEndpoints: newTestModelEndpointStore(t),
 			WorkerID:     "worker-other",
 			RefreshEvery: 20 * time.Millisecond,
 			DedupeWindow: time.Minute,
@@ -253,9 +270,9 @@ func TestAgentMessageConsumerRetriesThenDeadLettersMessage(t *testing.T) {
 		Kind:       "Agent",
 		Metadata:   resources.ObjectMeta{Name: "planner-agent"},
 		Spec: resources.AgentSpec{
-			Model:  "gpt-4o",
-			Prompt: "plan",
-			Limits: resources.AgentLimits{MaxSteps: 50, Timeout: "1ms"},
+			ModelRef: "openai-default",
+			Prompt:   "plan",
+			Limits:   resources.AgentLimits{MaxSteps: 50, Timeout: "1ms"},
 		},
 	}); err != nil {
 		t.Fatalf("upsert agent failed: %v", err)
@@ -300,7 +317,7 @@ func TestAgentMessageConsumerRetriesThenDeadLettersMessage(t *testing.T) {
 		systemStore,
 		taskStore,
 		nil,
-		AgentMessageConsumerOptions{
+		AgentMessageConsumerOptions{ModelEndpoints: newTestModelEndpointStore(t),
 			WorkerID:            "worker-a",
 			RefreshEvery:        20 * time.Millisecond,
 			DedupeWindow:        time.Minute,
@@ -380,7 +397,7 @@ func TestAgentMessageConsumerNonRetryableInvalidSystemDeadLettersImmediately(t *
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
 		Metadata:   resources.ObjectMeta{Name: "runner-agent"},
-		Spec:       resources.AgentSpec{Model: "gpt-4o", Prompt: "run"},
+		Spec:       resources.AgentSpec{ModelRef: "openai-default", Prompt: "run"},
 	}); err != nil {
 		t.Fatalf("upsert agent failed: %v", err)
 	}
@@ -412,7 +429,7 @@ func TestAgentMessageConsumerNonRetryableInvalidSystemDeadLettersImmediately(t *
 		systemStore,
 		taskStore,
 		nil,
-		AgentMessageConsumerOptions{
+		AgentMessageConsumerOptions{ModelEndpoints: newTestModelEndpointStore(t),
 			WorkerID:            "worker-a",
 			RefreshEvery:        20 * time.Millisecond,
 			DedupeWindow:        time.Minute,
@@ -472,9 +489,9 @@ func TestAgentMessageConsumerContractViolationDeadLettersWithoutRetry(t *testing
 		Kind:       "Agent",
 		Metadata:   resources.ObjectMeta{Name: "contract-agent"},
 		Spec: resources.AgentSpec{
-			Model:  "gpt-4o",
-			Prompt: "contract run",
-			Tools:  []string{"tool.alpha", "tool.beta"},
+			ModelRef: "openai-default",
+			Prompt:   "contract run",
+			Tools:    []string{"tool.alpha", "tool.beta"},
 			Execution: resources.AgentExecutionSpec{
 				Profile:               resources.AgentExecutionProfileContract,
 				ToolSequence:          []string{"tool.alpha", "tool.beta"},
@@ -534,7 +551,7 @@ func TestAgentMessageConsumerContractViolationDeadLettersWithoutRetry(t *testing
 		systemStore,
 		taskStore,
 		nil,
-		AgentMessageConsumerOptions{
+		AgentMessageConsumerOptions{ModelEndpoints: newTestModelEndpointStore(t),
 			WorkerID:            "worker-a",
 			RefreshEvery:        20 * time.Millisecond,
 			DedupeWindow:        time.Minute,
@@ -640,25 +657,25 @@ func TestAgentMessageConsumerFanOutJoinWaitForAll(t *testing.T) {
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Agent",
 			Metadata:   resources.ObjectMeta{Name: "planner-agent"},
-			Spec:       resources.AgentSpec{Model: "gpt-4o", Prompt: "plan", Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"}},
+			Spec:       resources.AgentSpec{ModelRef: "openai-default", Prompt: "plan", Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"}},
 		},
 		{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Agent",
 			Metadata:   resources.ObjectMeta{Name: "researcher-agent"},
-			Spec:       resources.AgentSpec{Model: "gpt-4o", Prompt: "research", Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"}},
+			Spec:       resources.AgentSpec{ModelRef: "openai-default", Prompt: "research", Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"}},
 		},
 		{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Agent",
 			Metadata:   resources.ObjectMeta{Name: "reviewer-agent"},
-			Spec:       resources.AgentSpec{Model: "gpt-4o", Prompt: "review", Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"}},
+			Spec:       resources.AgentSpec{ModelRef: "openai-default", Prompt: "review", Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"}},
 		},
 		{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Agent",
 			Metadata:   resources.ObjectMeta{Name: "writer-agent"},
-			Spec:       resources.AgentSpec{Model: "gpt-4o", Prompt: "write", Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"}},
+			Spec:       resources.AgentSpec{ModelRef: "openai-default", Prompt: "write", Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"}},
 		},
 	} {
 		if _, err := agentStore.Upsert(agent); err != nil {
@@ -710,7 +727,7 @@ func TestAgentMessageConsumerFanOutJoinWaitForAll(t *testing.T) {
 		systemStore,
 		taskStore,
 		nil,
-		AgentMessageConsumerOptions{
+		AgentMessageConsumerOptions{ModelEndpoints: newTestModelEndpointStore(t),
 			WorkerID:            "worker-a",
 			RefreshEvery:        20 * time.Millisecond,
 			DedupeWindow:        time.Minute,
@@ -793,7 +810,7 @@ func TestAgentMessageConsumerJoinWaitPersistsIdempotencyAndSkipsDuplicate(t *tes
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
 		Metadata:   resources.ObjectMeta{Name: "writer-agent"},
-		Spec:       resources.AgentSpec{Model: "gpt-4o", Prompt: "write", Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"}},
+		Spec:       resources.AgentSpec{ModelRef: "openai-default", Prompt: "write", Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"}},
 	}); err != nil {
 		t.Fatalf("upsert writer failed: %v", err)
 	}
@@ -832,7 +849,7 @@ func TestAgentMessageConsumerJoinWaitPersistsIdempotencyAndSkipsDuplicate(t *tes
 		systemStore,
 		taskStore,
 		nil,
-		AgentMessageConsumerOptions{WorkerID: "worker-a", RefreshEvery: 20 * time.Millisecond},
+		AgentMessageConsumerOptions{ModelEndpoints: newTestModelEndpointStore(t), WorkerID: "worker-a", RefreshEvery: 20 * time.Millisecond},
 	)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -905,13 +922,13 @@ func TestAgentMessageConsumerStopsCyclicBranchAtTaskMaxTurns(t *testing.T) {
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Agent",
 			Metadata:   resources.ObjectMeta{Name: "manager-agent"},
-			Spec:       resources.AgentSpec{Model: "gpt-4o", Prompt: "manage", Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"}},
+			Spec:       resources.AgentSpec{ModelRef: "openai-default", Prompt: "manage", Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"}},
 		},
 		{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Agent",
 			Metadata:   resources.ObjectMeta{Name: "research-agent"},
-			Spec:       resources.AgentSpec{Model: "gpt-4o", Prompt: "research", Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"}},
+			Spec:       resources.AgentSpec{ModelRef: "openai-default", Prompt: "research", Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"}},
 		},
 	} {
 		if _, err := agentStore.Upsert(agent); err != nil {
@@ -957,7 +974,7 @@ func TestAgentMessageConsumerStopsCyclicBranchAtTaskMaxTurns(t *testing.T) {
 		systemStore,
 		taskStore,
 		nil,
-		AgentMessageConsumerOptions{
+		AgentMessageConsumerOptions{ModelEndpoints: newTestModelEndpointStore(t),
 			WorkerID:            "worker-a",
 			RefreshEvery:        20 * time.Millisecond,
 			DedupeWindow:        time.Minute,

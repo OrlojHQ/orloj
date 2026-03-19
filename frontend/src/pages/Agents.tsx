@@ -16,7 +16,7 @@ export function Agents() {
 
   const columns: Column<Agent>[] = [
     { key: "name", header: "Name", render: (r) => <span className="mono">{r.metadata.name}</span> },
-    { key: "model", header: "Model", render: (r) => r.spec.model || r.spec.model_ref || "—" },
+    { key: "model", header: "Model Ref", render: (r) => r.spec.model_ref || "—" },
     { key: "tools", header: "Tools", render: (r) => r.spec.tools?.length ?? 0, width: "80px" },
     { key: "roles", header: "Roles", render: (r) => r.spec.roles?.length ?? 0, width: "80px" },
     { key: "maxSteps", header: "Max Steps", render: (r) => r.spec.limits?.max_steps ?? 10, width: "100px" },

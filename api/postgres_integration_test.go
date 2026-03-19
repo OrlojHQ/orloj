@@ -49,15 +49,24 @@ func TestPostgresTaskLifecycleApplyScheduleRunTrace(t *testing.T) {
 			Endpoint: "https://api.search.example",
 		},
 	})
+	postJSON(t, h.url+"/v1/model-endpoints", resources.ModelEndpoint{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "ModelEndpoint",
+		Metadata:   resources.ObjectMeta{Name: "openai-default"},
+		Spec: resources.ModelEndpointSpec{
+			Provider:     "mock",
+			DefaultModel: "gpt-4o",
+		},
+	})
 	postJSON(t, h.url+"/v1/agents", resources.Agent{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
 		Metadata:   resources.ObjectMeta{Name: "research-agent"},
 		Spec: resources.AgentSpec{
-			Model:  "gpt-4o",
-			Prompt: "You are a research assistant.",
-			Tools:  []string{"web_search"},
-			Limits: resources.AgentLimits{MaxSteps: 2, Timeout: "1s"},
+			ModelRef: "openai-default",
+			Prompt:   "You are a research assistant.",
+			Tools:    []string{"web_search"},
+			Limits:   resources.AgentLimits{MaxSteps: 2, Timeout: "1s"},
 		},
 	})
 	postJSON(t, h.url+"/v1/agent-systems", resources.AgentSystem{
@@ -143,15 +152,24 @@ func TestPostgresMultiWorkerSingleExecutionWithAssignment(t *testing.T) {
 		Metadata:   resources.ObjectMeta{Name: "web_search"},
 		Spec:       resources.ToolSpec{Type: "http", Endpoint: "https://example"},
 	})
+	postJSON(t, h.url+"/v1/model-endpoints", resources.ModelEndpoint{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "ModelEndpoint",
+		Metadata:   resources.ObjectMeta{Name: "openai-default"},
+		Spec: resources.ModelEndpointSpec{
+			Provider:     "mock",
+			DefaultModel: "gpt-4o",
+		},
+	})
 	postJSON(t, h.url+"/v1/agents", resources.Agent{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
 		Metadata:   resources.ObjectMeta{Name: "research-agent"},
 		Spec: resources.AgentSpec{
-			Model:  "gpt-4o",
-			Prompt: "run",
-			Tools:  []string{"web_search"},
-			Limits: resources.AgentLimits{MaxSteps: 2, Timeout: "1s"},
+			ModelRef: "openai-default",
+			Prompt:   "run",
+			Tools:    []string{"web_search"},
+			Limits:   resources.AgentLimits{MaxSteps: 2, Timeout: "1s"},
 		},
 	})
 	postJSON(t, h.url+"/v1/agent-systems", resources.AgentSystem{
@@ -178,8 +196,10 @@ func TestPostgresMultiWorkerSingleExecutionWithAssignment(t *testing.T) {
 	}
 
 	east := controllers.NewTaskController(h.taskStore, h.systemStore, h.agentStore, h.toolStore, h.memoryStore, h.policyStore, h.workerStore, log.New(io.Discard, "", 0), 5*time.Millisecond)
+	east.SetModelEndpointStore(h.modelEPStore)
 	east.ConfigureWorker("worker-east", 50*time.Millisecond, 10*time.Millisecond)
 	west := controllers.NewTaskController(h.taskStore, h.systemStore, h.agentStore, h.toolStore, h.memoryStore, h.policyStore, h.workerStore, log.New(io.Discard, "", 0), 5*time.Millisecond)
+	west.SetModelEndpointStore(h.modelEPStore)
 	west.ConfigureWorker("worker-west", 50*time.Millisecond, 10*time.Millisecond)
 
 	var wg sync.WaitGroup
@@ -242,13 +262,14 @@ func newPostgresPhase1Harness(t *testing.T, workerID string) *phase1Harness {
 
 	logger := log.New(io.Discard, "", 0)
 	h := &phase1Harness{
-		agentStore:  store.NewAgentStoreWithDB(db),
-		systemStore: store.NewAgentSystemStoreWithDB(db),
-		toolStore:   store.NewToolStoreWithDB(db),
-		memoryStore: store.NewMemoryStoreWithDB(db),
-		policyStore: store.NewAgentPolicyStoreWithDB(db),
-		taskStore:   store.NewTaskStoreWithDB(db),
-		workerStore: store.NewWorkerStoreWithDB(db),
+		agentStore:   store.NewAgentStoreWithDB(db),
+		systemStore:  store.NewAgentSystemStoreWithDB(db),
+		toolStore:    store.NewToolStoreWithDB(db),
+		memoryStore:  store.NewMemoryStoreWithDB(db),
+		policyStore:  store.NewAgentPolicyStoreWithDB(db),
+		modelEPStore: store.NewModelEndpointStoreWithDB(db),
+		taskStore:    store.NewTaskStoreWithDB(db),
+		workerStore:  store.NewWorkerStoreWithDB(db),
 	}
 
 	runtimeMgr := agentruntime.NewManager(logger)
@@ -258,6 +279,7 @@ func newPostgresPhase1Harness(t *testing.T, workerID string) *phase1Harness {
 		Tools:        h.toolStore,
 		Memories:     h.memoryStore,
 		Policies:     h.policyStore,
+		ModelEPs:     h.modelEPStore,
 		Tasks:        h.taskStore,
 		Workers:      h.workerStore,
 	}, runtimeMgr, logger)
@@ -277,6 +299,7 @@ func newPostgresPhase1Harness(t *testing.T, workerID string) *phase1Harness {
 		logger,
 		5*time.Millisecond,
 	)
+	h.taskController.SetModelEndpointStore(h.modelEPStore)
 	h.taskController.ConfigureWorker(workerID, 50*time.Millisecond, 10*time.Millisecond)
 	return h
 }

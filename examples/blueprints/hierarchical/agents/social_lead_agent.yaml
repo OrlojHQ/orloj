@@ -3,7 +3,7 @@ kind: Agent
 metadata:
   name: bp-hier-social-lead-agent
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are the social lead.
     Translate strategic asks into social channel execution tasks.

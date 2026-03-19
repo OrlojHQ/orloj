@@ -63,7 +63,7 @@ Workers run as `orlojworker` and execute the actual agent workflows:
 
 **Task Worker** -- Claims assigned tasks via the lease mechanism, executes the agent graph step by step, and reports results back through status updates. Supports concurrent task execution up to `max_concurrent_tasks`.
 
-**Model Gateway** -- Routes model requests to the appropriate provider based on the agent's `model_ref` or `model` configuration. Handles provider-specific request formatting, authentication, and response parsing for OpenAI, Anthropic, Azure OpenAI, Ollama, and mock backends.
+**Model Gateway** -- Routes model requests to the appropriate provider based on the agent's `model_ref` configuration. Handles provider-specific request formatting, authentication, and response parsing for OpenAI, Anthropic, Azure OpenAI, Ollama, and mock backends.
 
 **Tool Runtime** -- Executes tool invocations with the configured isolation backend (none, sandboxed, container, or WASM). Enforces timeouts, manages retries with capped exponential backoff and jitter, and normalizes responses into the standard tool contract envelope.
 

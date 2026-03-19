@@ -14,7 +14,7 @@ metadata:
   resourceVersion: "7"
   generation: 3
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: hello
 `)
 

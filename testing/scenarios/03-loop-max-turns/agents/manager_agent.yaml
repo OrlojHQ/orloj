@@ -4,7 +4,7 @@ metadata:
   name: rt-loop-manager-agent
   namespace: rt-loop
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are the manager.
     Ask focused follow-up questions and decide completion.

@@ -312,7 +312,7 @@ function buildTree(
     const agent = agentMap.get(aName);
     const hasJoin = (incoming[aName]?.length ?? 0) > 1;
     const agentPhase = runningAgents?.has(aName) ? "Running" : agent?.status?.phase;
-    regNode(aid, "agent", aName, agentPhase, agent?.spec.model || agent?.spec.model_ref, {
+    regNode(aid, "agent", aName, agentPhase, agent?.spec.model_ref, {
       isEntry: entries.has(aName),
       isTerminal: terminals.has(aName),
       hasJoin,

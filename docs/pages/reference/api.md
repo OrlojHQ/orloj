@@ -30,6 +30,21 @@ Namespace defaults to `default` and can be overridden with `?namespace=<ns>`.
   - returns deployment capability flags for feature discovery in UI/CLI integrations
   - extension providers may add capabilities without changing core API shape
 
+## Authentication Endpoints
+
+- `GET /v1/auth/config`
+  - returns auth mode and login/setup requirements
+- `POST /v1/auth/setup`
+  - one-time local admin bootstrap when auth mode is `local`
+- `POST /v1/auth/login`
+  - local username/password login; sets session cookie
+- `POST /v1/auth/logout`
+  - clears local session cookie
+- `GET /v1/auth/me`
+  - returns current auth state for UI bootstrap
+- `POST /v1/auth/admin/reset-password`
+  - admin-authenticated local password rotation endpoint
+
 ## Status and Logs
 
 - `GET|PUT /v1/<resource>/{name}/status`
@@ -108,7 +123,7 @@ Content-Type: application/json
     "namespace": "default"
   },
   "spec": {
-    "model": "gpt-4o",
+    "model_ref": "openai-default",
     "prompt": "You are a research assistant.",
     "tools": ["web_search"],
     "limits": {

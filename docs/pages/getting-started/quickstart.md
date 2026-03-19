@@ -21,6 +21,8 @@ go run ./cmd/orlojd \
 
 This runs the server and a built-in worker in a single process. No separate worker needed.
 
+**Web console:** Open [http://127.0.0.1:8080/ui/](http://127.0.0.1:8080/ui/) in your browser to view agents, systems, tasks, and the task trace. You can use it to inspect the pipeline and task status as you run the steps below.
+
 ## 2. Apply a Starter Blueprint
 
 ```bash
@@ -65,35 +67,9 @@ See [Execution and Messaging](../architecture/execution-model.md) for details on
 
 ## Try with a Real Model
 
-The quickstart above uses the mock gateway, which returns placeholder output. To see actual AI reasoning flow through your pipeline, swap in a real model provider.
-
-### Using OpenAI
-
-Set your API key and restart the server:
-
-```bash
-export ORLOJ_SECRET_OPENAI_API_KEY=sk-...
-
-go run ./cmd/orlojd \
-  --storage-backend=memory \
-  --task-execution-mode=sequential \
-  --embedded-worker \
-  --model-gateway-provider=openai
-```
-
-The pipeline agents reference `gpt-4o` by default. Apply the same blueprint and watch the task produce real output:
-
-```bash
-go run ./cmd/orlojctl apply -f examples/blueprints/pipeline/
-go run ./cmd/orlojctl run --system bp-pipeline-system topic="state of enterprise AI copilots"
-```
-
-### Using Ollama (Local Models)
-
-If you prefer to run models locally, start an [Ollama](https://ollama.com) server, then create a ModelEndpoint that points to it. See [Configure Model Routing](../guides/configure-model-routing.md) for the full walkthrough.
+The quickstart above uses the mock gateway, which returns placeholder output. To use a real provider (OpenAI, Anthropic, Ollama, etc.), create a **Secret** resource for your API key, create a **ModelEndpoint** that references it via `auth.secretRef`, and point your agents at that endpoint with `model_ref`. See [Configure Model Routing](../guides/configure-model-routing.md) for the full steps.
 
 ## Next Steps
 
 - [Starter Blueprints](../architecture/starter-blueprints.md) -- pipeline, hierarchical, and swarm-loop topologies
-- [Production Checklist](./production-checklist.md) -- readiness gates for production rollout
 - [Configuration](../operations/configuration.md) -- all flags and environment variables

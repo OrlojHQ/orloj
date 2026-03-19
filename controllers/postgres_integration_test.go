@@ -41,10 +41,10 @@ func TestPostgresTaskClaimSingleExecutionAcrossWorkers(t *testing.T) {
 		Kind:       "Agent",
 		Metadata:   resources.ObjectMeta{Name: "research-agent"},
 		Spec: resources.AgentSpec{
-			Model:  "gpt-4o",
-			Prompt: "run",
-			Tools:  []string{"web_search"},
-			Limits: resources.AgentLimits{MaxSteps: 2, Timeout: "1s"},
+			ModelRef: "openai-default",
+			Prompt:   "run",
+			Tools:    []string{"web_search"},
+			Limits:   resources.AgentLimits{MaxSteps: 2, Timeout: "1s"},
 		},
 	}); err != nil {
 		t.Fatalf("upsert agent failed: %v", err)

@@ -20,9 +20,9 @@ func TestTaskControllerMessageDrivenKickoff(t *testing.T) {
 			Kind:       "Agent",
 			Metadata:   resources.ObjectMeta{Name: "planner-agent"},
 			Spec: resources.AgentSpec{
-				Model:  "gpt-4o",
-				Prompt: "plan",
-				Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
+				ModelRef: "openai-default",
+				Prompt:   "plan",
+				Limits:   resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
 			},
 		},
 		{
@@ -30,9 +30,9 @@ func TestTaskControllerMessageDrivenKickoff(t *testing.T) {
 			Kind:       "Agent",
 			Metadata:   resources.ObjectMeta{Name: "writer-agent"},
 			Spec: resources.AgentSpec{
-				Model:  "gpt-4o",
-				Prompt: "write",
-				Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
+				ModelRef: "openai-default",
+				Prompt:   "write",
+				Limits:   resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
 			},
 		},
 	} {
@@ -126,13 +126,13 @@ func TestTaskControllerMessageDrivenRejectsCycleWithoutMaxTurns(t *testing.T) {
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Agent",
 			Metadata:   resources.ObjectMeta{Name: "manager-agent"},
-			Spec:       resources.AgentSpec{Model: "gpt-4o", Prompt: "manage"},
+			Spec:       resources.AgentSpec{ModelRef: "openai-default", Prompt: "manage"},
 		},
 		{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Agent",
 			Metadata:   resources.ObjectMeta{Name: "research-agent"},
-			Spec:       resources.AgentSpec{Model: "gpt-4o", Prompt: "research"},
+			Spec:       resources.AgentSpec{ModelRef: "openai-default", Prompt: "research"},
 		},
 	} {
 		if _, err := stores.agentStore.Upsert(agent); err != nil {
@@ -191,13 +191,13 @@ func TestTaskControllerMessageDrivenAllowsCycleWithMaxTurns(t *testing.T) {
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Agent",
 			Metadata:   resources.ObjectMeta{Name: "manager-agent"},
-			Spec:       resources.AgentSpec{Model: "gpt-4o", Prompt: "manage"},
+			Spec:       resources.AgentSpec{ModelRef: "openai-default", Prompt: "manage"},
 		},
 		{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Agent",
 			Metadata:   resources.ObjectMeta{Name: "research-agent"},
-			Spec:       resources.AgentSpec{Model: "gpt-4o", Prompt: "research"},
+			Spec:       resources.AgentSpec{ModelRef: "openai-default", Prompt: "research"},
 		},
 	} {
 		if _, err := stores.agentStore.Upsert(agent); err != nil {

@@ -40,7 +40,7 @@ func main() {
 	modelGatewayAPIKey := flag.String("model-gateway-api-key", env("ORLOJ_MODEL_GATEWAY_API_KEY", ""), "API key used by task model gateway provider")
 	modelGatewayBaseURL := flag.String("model-gateway-base-url", env("ORLOJ_MODEL_GATEWAY_BASE_URL", ""), "base URL used by task model gateway provider (provider defaults applied when empty)")
 	modelGatewayTimeout := flag.Duration("model-gateway-timeout", envDuration("ORLOJ_MODEL_GATEWAY_TIMEOUT", 30*time.Second), "HTTP timeout for task model gateway requests")
-	modelGatewayDefaultModel := flag.String("model-gateway-default-model", env("ORLOJ_MODEL_GATEWAY_DEFAULT_MODEL", ""), "default model used when agent spec.model is empty (provider defaults applied when empty)")
+	modelGatewayDefaultModel := flag.String("model-gateway-default-model", env("ORLOJ_MODEL_GATEWAY_DEFAULT_MODEL", ""), "fallback default model for gateway providers when endpoint/default values are not set")
 	modelSecretEnvPrefix := flag.String("model-secret-env-prefix", env("ORLOJ_MODEL_SECRET_ENV_PREFIX", "ORLOJ_SECRET_"), "environment variable prefix used to resolve ModelEndpoint.spec.auth.secretRef")
 	toolIsolationBackend := flag.String("tool-isolation-backend", env("ORLOJ_TOOL_ISOLATION_BACKEND", "none"), "isolated tool executor backend: none|container|wasm")
 	toolContainerRuntime := flag.String("tool-container-runtime", env("ORLOJ_TOOL_CONTAINER_RUNTIME", "docker"), "container runtime binary for isolated tool execution")
@@ -218,6 +218,7 @@ func main() {
 					Extensions:          extensions,
 					Memories:            stores.Memories,
 					MemoryBackends:      memoryBackendRegistry,
+					ModelEndpoints:      stores.ModelEPs,
 				},
 			)
 			go consumer.Start(ctx)

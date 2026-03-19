@@ -54,7 +54,8 @@ type AgentList struct {
 
 // AgentSpec defines desired runtime behavior.
 type AgentSpec struct {
-	Model        string             `json:"model,omitempty"`
+	// Model stores the resolved model id for runtime execution and is not part of the external Agent API.
+	Model        string             `json:"-"`
 	ModelRef     string             `json:"model_ref,omitempty"`
 	Prompt       string             `json:"prompt"`
 	Tools        []string           `json:"tools,omitempty"`
@@ -127,8 +128,8 @@ func (a *Agent) Normalize() error {
 	}
 	a.Spec.Model = strings.TrimSpace(a.Spec.Model)
 	a.Spec.ModelRef = strings.TrimSpace(a.Spec.ModelRef)
-	if a.Spec.Model == "" && a.Spec.ModelRef == "" {
-		a.Spec.Model = "gpt-4o-mini"
+	if a.Spec.ModelRef == "" && a.Spec.Model == "" {
+		return fmt.Errorf("spec.model_ref is required")
 	}
 	a.Spec.Memory.Ref = strings.TrimSpace(a.Spec.Memory.Ref)
 	a.Spec.Memory.Type = strings.TrimSpace(a.Spec.Memory.Type)

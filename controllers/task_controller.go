@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/eventbus"
+	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/runtime"
 	"github.com/OrlojHQ/orloj/store"
 	"github.com/OrlojHQ/orloj/telemetry"
@@ -23,30 +23,30 @@ var traceStepIDPattern = regexp.MustCompile(`^a([0-9]+)\.s([0-9]+)$`) //nolint:g
 
 // TaskController reconciles Task resources.
 type TaskController struct {
-	taskStore        *store.TaskStore
-	agentSystemStore *store.AgentSystemStore
-	agentStore       *store.AgentStore
-	toolStore        *store.ToolStore
-	memoryStore      *store.MemoryStore
-	policyStore      *store.AgentPolicyStore
-	modelEPStore     *store.ModelEndpointStore
-	roleStore        *store.AgentRoleStore
-	toolPermStore    *store.ToolPermissionStore
+	taskStore         *store.TaskStore
+	agentSystemStore  *store.AgentSystemStore
+	agentStore        *store.AgentStore
+	toolStore         *store.ToolStore
+	memoryStore       *store.MemoryStore
+	policyStore       *store.AgentPolicyStore
+	modelEPStore      *store.ModelEndpointStore
+	roleStore         *store.AgentRoleStore
+	toolPermStore     *store.ToolPermissionStore
 	toolApprovalStore *store.ToolApprovalStore
-	workerStore      *store.WorkerStore
-	executor         *agentruntime.TaskExecutor
-	reconcileEvery   time.Duration
-	leaseDuration    time.Duration
-	heartbeatEvery   time.Duration
-	workerID         string
-	logger           *log.Logger
-	eventBus         eventbus.Bus
-	agentMessageBus  agentruntime.AgentMessageBus
-	executionMode    string
-	isolatedTools    agentruntime.ToolRuntime
-	mcpSessionMgr    *agentruntime.McpSessionManager
-	mcpServerStore   *store.McpServerStore
-	extensions       agentruntime.Extensions
+	workerStore       *store.WorkerStore
+	executor          *agentruntime.TaskExecutor
+	reconcileEvery    time.Duration
+	leaseDuration     time.Duration
+	heartbeatEvery    time.Duration
+	workerID          string
+	logger            *log.Logger
+	eventBus          eventbus.Bus
+	agentMessageBus   agentruntime.AgentMessageBus
+	executionMode     string
+	isolatedTools     agentruntime.ToolRuntime
+	mcpSessionMgr     *agentruntime.McpSessionManager
+	mcpServerStore    *store.McpServerStore
+	extensions        agentruntime.Extensions
 }
 
 func NewTaskController(
@@ -776,11 +776,10 @@ func (c *TaskController) validateTask(task resources.Task) (resources.AgentSyste
 				}
 			}
 		}
-		if c.modelEPStore != nil && strings.TrimSpace(agent.Spec.ModelRef) != "" {
-			refNamespace, refName := parseModelEndpointRef(task.Metadata.Namespace, agent.Spec.ModelRef)
-			if _, ok := c.modelEPStore.Get(store.ScopedName(refNamespace, refName)); !ok {
-				errs = append(errs, fmt.Sprintf("agent %q references missing model endpoint %q", name, agent.Spec.ModelRef))
-			}
+		if strings.TrimSpace(agent.Spec.ModelRef) == "" {
+			errs = append(errs, fmt.Sprintf("agent %q must set spec.model_ref", name))
+		} else if _, _, err := resolveAgentEffectiveModel(task.Metadata.Namespace, agent, c.modelEPStore); err != nil {
+			errs = append(errs, fmt.Sprintf("agent %q model resolution failed: %s", name, err.Error()))
 		}
 
 		if strings.TrimSpace(agent.Spec.Memory.Ref) != "" {
@@ -902,14 +901,11 @@ func hasGraphEntrypoint(system resources.AgentSystem, agentSet map[string]struct
 	return false
 }
 
-func parseModelEndpointRef(defaultNamespace string, ref string) (namespace string, name string) {
-	ref = strings.TrimSpace(ref)
-	namespace = resources.NormalizeNamespace(defaultNamespace)
-	if strings.Contains(ref, "/") {
-		parts := strings.SplitN(ref, "/", 2)
-		return resources.NormalizeNamespace(strings.TrimSpace(parts[0])), strings.TrimSpace(parts[1])
+func resolveAgentEffectiveModel(defaultNamespace string, agent resources.Agent, modelEPStore *store.ModelEndpointStore) (resources.ModelEndpoint, string, error) {
+	if modelEPStore == nil {
+		return resources.ModelEndpoint{}, "", fmt.Errorf("no model endpoint store configured")
 	}
-	return namespace, ref
+	return resources.ResolveAgentModelRef(defaultNamespace, agent.Spec.ModelRef, modelEPStore)
 }
 
 func executionOrder(system resources.AgentSystem) []string {
@@ -1087,18 +1083,30 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 			})
 			return nil, fmt.Errorf("agent %q not found", agentName)
 		}
-		c.appendTaskLog(taskScopedName(*task), fmt.Sprintf("agent start: %s model=%s tools=%d", agent.Metadata.Name, agent.Spec.Model, len(agent.Spec.Tools)))
+		_, effectiveModel, err := resolveAgentEffectiveModel(task.Metadata.Namespace, agent, c.modelEPStore)
+		if err != nil {
+			c.appendTaskLog(taskScopedName(*task), fmt.Sprintf("agent model resolution failed: %s error=%s", agent.Metadata.Name, err))
+			c.appendTaskTrace(task, resources.TaskTraceEvent{
+				Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+				Type:      "model_resolution_error",
+				Agent:     agent.Metadata.Name,
+				Message:   err.Error(),
+			})
+			return nil, fmt.Errorf("agent %q model resolution failed: %w", agentName, err)
+		}
+		agent.Spec.Model = effectiveModel
+		c.appendTaskLog(taskScopedName(*task), fmt.Sprintf("agent start: %s model=%s model_ref=%s tools=%d", agent.Metadata.Name, effectiveModel, agent.Spec.ModelRef, len(agent.Spec.Tools)))
 		c.appendTaskTrace(task, resources.TaskTraceEvent{
 			Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 			Type:      "agent_start",
 			Agent:     agent.Metadata.Name,
-			Message:   fmt.Sprintf("model=%s tools=%d", agent.Spec.Model, len(agent.Spec.Tools)),
+			Message:   fmt.Sprintf("model=%s model_ref=%s tools=%d", effectiveModel, agent.Spec.ModelRef, len(agent.Spec.Tools)),
 		})
 
 		agentCtx, agentSpan := telemetry.StartAgentSpan(ctx, agent.Metadata.Name,
 			fmt.Sprintf("a%d.s%d", task.Status.Attempts, idx+1), task.Status.Attempts)
 
-		if err := enforcePoliciesForAgent(agent, policies); err != nil {
+		if err := enforcePoliciesForAgent(agent, effectiveModel, policies); err != nil {
 			c.appendTaskLog(taskScopedName(*task), fmt.Sprintf("agent policy violation: %s error=%s", agent.Metadata.Name, err))
 			c.appendTaskTrace(task, resources.TaskTraceEvent{
 				Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
@@ -1198,7 +1206,7 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 			attribute.Int("orloj.tool_calls", result.ToolCalls),
 			attribute.Int64("orloj.latency_ms", result.Duration.Milliseconds()),
 		)
-		telemetry.RecordAgentExecution(result.Agent, agent.Spec.Model, result.Duration.Seconds(), result.TokensUsed, result.EstimatedTokens)
+		telemetry.RecordAgentExecution(result.Agent, effectiveModel, result.Duration.Seconds(), result.TokensUsed, result.EstimatedTokens)
 
 		totalEstimatedTokens += result.EstimatedTokens
 		totalUsedTokens += result.TokensUsed
@@ -1297,10 +1305,10 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 	return output, nil
 }
 
-func enforcePoliciesForAgent(agent resources.Agent, policies []resources.AgentPolicy) error {
+func enforcePoliciesForAgent(agent resources.Agent, effectiveModel string, policies []resources.AgentPolicy) error {
 	for _, policy := range policies {
-		if len(policy.Spec.AllowedModels) > 0 && !containsFold(policy.Spec.AllowedModels, agent.Spec.Model) {
-			return fmt.Errorf("policy %q disallows model %q for agent %q", policy.Metadata.Name, agent.Spec.Model, agent.Metadata.Name)
+		if len(policy.Spec.AllowedModels) > 0 && !containsFold(policy.Spec.AllowedModels, effectiveModel) {
+			return fmt.Errorf("policy %q disallows model %q (model_ref=%q) for agent %q", policy.Metadata.Name, effectiveModel, agent.Spec.ModelRef, agent.Metadata.Name)
 		}
 		for _, tool := range agent.Spec.Tools {
 			if containsFold(policy.Spec.BlockedTools, tool) {

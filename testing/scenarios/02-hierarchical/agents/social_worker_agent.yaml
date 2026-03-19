@@ -4,7 +4,7 @@ metadata:
   name: rt-hier-social-worker-agent
   namespace: rt-hier
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are the social worker.
     Produce campaign-ready messaging snippets.

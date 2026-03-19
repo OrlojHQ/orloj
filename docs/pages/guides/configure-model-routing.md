@@ -168,16 +168,9 @@ spec:
   default_model: llama3.1
 ```
 
-## Using Direct Model References
+## Agent Requirement
 
-For simpler setups where you do not need provider abstraction, agents can set `spec.model` directly:
-
-```yaml
-spec:
-  model: gpt-4o
-```
-
-The runtime uses the default provider configuration. If neither `model` nor `model_ref` is set, the agent defaults to `gpt-4o-mini`.
+Agents must set `spec.model_ref` to a valid ModelEndpoint.
 
 ## Constraining Models with Policy
 

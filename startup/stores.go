@@ -21,14 +21,16 @@ type StoreSet struct {
 	Memories      *store.MemoryStore
 	Policies      *store.AgentPolicyStore
 	Roles         *store.AgentRoleStore
-	ToolPerms      *store.ToolPermissionStore
-	ToolApprovals  *store.ToolApprovalStore
-	Tasks          *store.TaskStore
+	ToolPerms     *store.ToolPermissionStore
+	ToolApprovals *store.ToolApprovalStore
+	Tasks         *store.TaskStore
 	TaskSchedules *store.TaskScheduleStore
 	TaskWebhooks  *store.TaskWebhookStore
 	WebhookDedupe *store.WebhookDedupeStore
 	Workers       *store.WorkerStore
 	McpServers    *store.McpServerStore
+	LocalAdmins   *store.LocalAdminStore
+	AuthSessions  *store.AuthSessionStore
 	DB            *sql.DB
 }
 
@@ -55,19 +57,21 @@ type StoreConfig struct {
 
 func OpenStores(cfg StoreConfig, logger *log.Logger) (*StoreSet, error) {
 	s := &StoreSet{
-		Agents:       store.NewAgentStore(),
-		AgentSystems: store.NewAgentSystemStore(),
-		ModelEPs:     store.NewModelEndpointStore(),
-		Tools:        store.NewToolStore(),
-		Secrets:      store.NewSecretStore(),
-		Memories:     store.NewMemoryStore(),
-		Policies:     store.NewAgentPolicyStore(),
-		Roles:        store.NewAgentRoleStore(),
+		Agents:        store.NewAgentStore(),
+		AgentSystems:  store.NewAgentSystemStore(),
+		ModelEPs:      store.NewModelEndpointStore(),
+		Tools:         store.NewToolStore(),
+		Secrets:       store.NewSecretStore(),
+		Memories:      store.NewMemoryStore(),
+		Policies:      store.NewAgentPolicyStore(),
+		Roles:         store.NewAgentRoleStore(),
 		ToolPerms:     store.NewToolPermissionStore(),
 		ToolApprovals: store.NewToolApprovalStore(),
 		Tasks:         store.NewTaskStore(),
-		Workers:      store.NewWorkerStore(),
-		McpServers:   store.NewMcpServerStore(),
+		Workers:       store.NewWorkerStore(),
+		McpServers:    store.NewMcpServerStore(),
+		LocalAdmins:   store.NewLocalAdminStore(),
+		AuthSessions:  store.NewAuthSessionStore(),
 	}
 	if cfg.IncludeScheduleStores {
 		s.TaskSchedules = store.NewTaskScheduleStore()
@@ -133,6 +137,8 @@ func OpenStores(cfg StoreConfig, logger *log.Logger) (*StoreSet, error) {
 		s.Tasks = store.NewTaskStoreWithDB(db)
 		s.Workers = store.NewWorkerStoreWithDB(db)
 		s.McpServers = store.NewMcpServerStoreWithDB(db)
+		s.LocalAdmins = store.NewLocalAdminStoreWithDB(db)
+		s.AuthSessions = store.NewAuthSessionStoreWithDB(db)
 		if cfg.IncludeScheduleStores {
 			s.TaskSchedules = store.NewTaskScheduleStoreWithDB(db)
 			s.TaskWebhooks = store.NewTaskWebhookStoreWithDB(db)

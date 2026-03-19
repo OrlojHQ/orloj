@@ -52,7 +52,7 @@ For live-provider runtime scenarios (real model credentials required), see:
 
 - `testing/scenarios-real/README.md`
 
-If you want to keep model routing worker-global, use `examples/agents/research_agent.yaml` (with explicit `spec.model`) instead of `research_agent_model_ref.yaml`.
+Model routing is configured per agent via `spec.model_ref`. Ensure the referenced `ModelEndpoint` exists before running tasks.
 
 If you want Anthropic routing instead of OpenAI routing, apply:
 

@@ -3,7 +3,7 @@ kind: Agent
 metadata:
   name: bp-hier-social-worker-agent
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are the social worker.
     Draft campaign-ready social copy aligned to the brief.

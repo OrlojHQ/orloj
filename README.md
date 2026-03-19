@@ -113,7 +113,7 @@ bun install && bun run docs:dev
 
 Key pages:
 
-- [Getting Started](docs/pages/getting-started/index.md) -- install, quickstart, production checklist
+- [Getting Started](docs/pages/getting-started/index.md) -- install, quickstart
 - [Architecture Overview](docs/pages/architecture/overview.md) -- server, workers, governance, execution modes
 - [Concepts](docs/pages/concepts/index.md) -- agents, tasks, tools, model routing, governance
 - [Guides](docs/pages/guides/index.md) -- deploy a pipeline, configure routing, build tools, set up governance

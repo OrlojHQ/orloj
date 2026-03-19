@@ -60,36 +60,38 @@ type AgentMessageConsumerOptions struct {
 	Extensions          Extensions
 	Memories            MemoryResourceLookup
 	MemoryBackends      *PersistentMemoryBackendRegistry
+	ModelEndpoints      resources.ModelEndpointLookup
 }
 
 // AgentMessageConsumerManager watches agents and consumes runtime inbox messages per agent.
 type AgentMessageConsumerManager struct {
-	bus          AgentMessageBus
-	agents       AgentRegistry
-	systems      AgentSystemRegistry
-	tasks        TaskStateStore
-	tools        ToolResourceLookup
-	roles        AgentRoleLookup
-	toolPerms    ToolPermissionLookup
+	bus            AgentMessageBus
+	agents         AgentRegistry
+	systems        AgentSystemRegistry
+	tasks          TaskStateStore
+	tools          ToolResourceLookup
+	roles          AgentRoleLookup
+	toolPerms      ToolPermissionLookup
 	isolated       ToolRuntime
 	mcpSessionMgr  *McpSessionManager
 	mcpServerStore McpServerLookup
 	executor       *TaskExecutor
 	logger         *log.Logger
-	workerID     string
-	namespace    string
-	refresh      time.Duration
-	dedupeTTL    time.Duration
-	retryDelay   time.Duration
-	leaseExtend  time.Duration
-	extensions   Extensions
-	memories     MemoryResourceLookup
-	memBackends  *PersistentMemoryBackendRegistry
-	mu           sync.Mutex
-	consumers    map[string]context.CancelFunc
-	seenMessage  map[string]time.Time
-	taskMemory   map[string]*SharedMemoryStore
-	taskMemoryMu sync.Mutex
+	workerID       string
+	namespace      string
+	refresh        time.Duration
+	dedupeTTL      time.Duration
+	retryDelay     time.Duration
+	leaseExtend    time.Duration
+	extensions     Extensions
+	memories       MemoryResourceLookup
+	memBackends    *PersistentMemoryBackendRegistry
+	modelEPs       resources.ModelEndpointLookup
+	mu             sync.Mutex
+	consumers      map[string]context.CancelFunc
+	seenMessage    map[string]time.Time
+	taskMemory     map[string]*SharedMemoryStore
+	taskMemoryMu   sync.Mutex
 }
 
 func NewAgentMessageConsumerManager(
@@ -121,30 +123,31 @@ func NewAgentMessageConsumerManager(
 		executor = NewTaskExecutor(logger)
 	}
 	return &AgentMessageConsumerManager{
-		bus:         bus,
-		agents:      agents,
-		systems:     systems,
-		tasks:       tasks,
-		tools:       opts.Tools,
-		roles:       opts.Roles,
-		toolPerms:   opts.ToolPermissions,
+		bus:            bus,
+		agents:         agents,
+		systems:        systems,
+		tasks:          tasks,
+		tools:          opts.Tools,
+		roles:          opts.Roles,
+		toolPerms:      opts.ToolPermissions,
 		isolated:       opts.IsolatedToolRuntime,
 		mcpSessionMgr:  opts.McpSessionManager,
 		mcpServerStore: opts.McpServerStore,
 		executor:       executor,
-		logger:      logger,
-		workerID:    strings.TrimSpace(opts.WorkerID),
-		namespace:   strings.TrimSpace(opts.Namespace),
-		refresh:     refresh,
-		dedupeTTL:   dedupe,
-		retryDelay:  retry,
-		leaseExtend: lease,
-		memories:    opts.Memories,
-		memBackends: opts.MemoryBackends,
-		extensions:  NormalizeExtensions(opts.Extensions),
-		consumers:   make(map[string]context.CancelFunc),
-		seenMessage: make(map[string]time.Time),
-		taskMemory:  make(map[string]*SharedMemoryStore),
+		logger:         logger,
+		workerID:       strings.TrimSpace(opts.WorkerID),
+		namespace:      strings.TrimSpace(opts.Namespace),
+		refresh:        refresh,
+		dedupeTTL:      dedupe,
+		retryDelay:     retry,
+		leaseExtend:    lease,
+		memories:       opts.Memories,
+		memBackends:    opts.MemoryBackends,
+		modelEPs:       opts.ModelEndpoints,
+		extensions:     NormalizeExtensions(opts.Extensions),
+		consumers:      make(map[string]context.CancelFunc),
+		seenMessage:    make(map[string]time.Time),
+		taskMemory:     make(map[string]*SharedMemoryStore),
 	}
 }
 
@@ -320,6 +323,18 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 		}
 		return nil
 	}
+	_, effectiveModel, err := resources.ResolveAgentModelRef(ns, agent.Spec.ModelRef, m.modelEPs)
+	if err != nil {
+		retryScheduled, delay, markErr := m.recordRetryOrDeadLetter(taskKey, msg, record, fmt.Errorf("agent %s model resolution failed: %w", agent.Metadata.Name, err))
+		if markErr != nil {
+			return markErr
+		}
+		if retryScheduled {
+			return RetryAfter(delay, nil)
+		}
+		return nil
+	}
+	agent.Spec.Model = effectiveModel
 
 	input := copyStringMap(task.Spec.Input)
 	input["inbox.from"] = strings.TrimSpace(msg.FromAgent)
@@ -388,7 +403,7 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 		attribute.Int("orloj.tool_calls", result.ToolCalls),
 		attribute.Int64("orloj.latency_ms", result.Duration.Milliseconds()),
 	)
-	telemetry.RecordAgentExecution(agent.Metadata.Name, agent.Spec.Model, result.Duration.Seconds(), result.TokensUsed, result.EstimatedTokens)
+	telemetry.RecordAgentExecution(agent.Metadata.Name, effectiveModel, result.Duration.Seconds(), result.TokensUsed, result.EstimatedTokens)
 	telemetry.RecordMessagePhase("succeeded", strings.TrimSpace(msg.ToAgent))
 	if tokenBudgetExceeded(task, result) {
 		reason := fmt.Errorf(

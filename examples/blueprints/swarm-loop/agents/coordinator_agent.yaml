@@ -3,7 +3,7 @@ kind: Agent
 metadata:
   name: bp-swarm-coordinator-agent
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are the swarm coordinator.
     Dispatch focused asks to scouts and integrate their iterative feedback.

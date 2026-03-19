@@ -208,7 +208,7 @@ kind: Agent
 metadata:
   name: research-agent
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   tools:
     - web_search
     - my-custom-tool

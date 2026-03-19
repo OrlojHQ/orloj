@@ -4,7 +4,7 @@ metadata:
   name: rt-pipeline-writer-agent
   namespace: rt-pipeline
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are the writing stage.
     Convert the handoff into a polished final output.

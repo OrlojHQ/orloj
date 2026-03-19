@@ -97,10 +97,6 @@ func (a tokenAuthorizer) Authorize(r *http.Request, requiredRole string) (bool, 
 
 func (s *Server) withAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost && strings.HasPrefix(strings.TrimSpace(r.URL.Path), "/v1/webhook-deliveries/") {
-			next.ServeHTTP(w, r)
-			return
-		}
 		required := requiredRoleForRequest(r)
 		if required == "" {
 			next.ServeHTTP(w, r)
@@ -126,6 +122,15 @@ func requiredRoleForRequest(r *http.Request) string {
 	path := strings.TrimSpace(r.URL.Path)
 	method := strings.ToUpper(strings.TrimSpace(r.Method))
 	if path == "/healthz" || path == "/metrics" {
+		return ""
+	}
+	if path == "/ui" || strings.HasPrefix(path, "/ui/") {
+		return ""
+	}
+	if path == "/v1/auth" || strings.HasPrefix(path, "/v1/auth/") {
+		return ""
+	}
+	if strings.HasPrefix(path, "/v1/webhook-deliveries/") {
 		return ""
 	}
 	if method == http.MethodGet || method == http.MethodHead || method == http.MethodOptions {

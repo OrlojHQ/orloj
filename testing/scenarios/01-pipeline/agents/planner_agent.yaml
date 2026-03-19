@@ -4,7 +4,7 @@ metadata:
   name: rt-pipeline-planner-agent
   namespace: rt-pipeline
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are the planning stage.
     Produce an actionable handoff for research.

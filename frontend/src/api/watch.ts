@@ -14,7 +14,6 @@ function createReconnectingSource(
   apiBase: string,
   path: string,
   namespace: string,
-  token: string,
   onEvent: (evt: WatchEvent) => void,
   abortSignal: AbortSignal,
 ): void {
@@ -27,9 +26,6 @@ function createReconnectingSource(
     const base = apiBase.replace(/\/$/, "");
     const url = new URL(`/v1/${path}`, base);
     url.searchParams.set("namespace", namespace);
-    if (token.trim()) {
-      url.searchParams.set("token", token.trim());
-    }
 
     const es = new EventSource(url.toString());
 
@@ -66,7 +62,6 @@ export function useWatchInvalidation() {
   const qc = useQueryClient();
   const apiBase = useAppStore((s) => s.apiBase);
   const namespace = useAppStore((s) => s.namespace);
-  const token = useAppStore((s) => s.token);
   const connected = useAppStore((s) => s.connected);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -79,7 +74,7 @@ export function useWatchInvalidation() {
     const paths = ["tasks/watch", "agents/watch", "task-schedules/watch", "task-webhooks/watch", "events/watch"];
 
     for (const path of paths) {
-      createReconnectingSource(apiBase, path, namespace, token, (evt) => {
+      createReconnectingSource(apiBase, path, namespace, (evt) => {
         const eventType = (evt.type ?? "").toLowerCase();
         if (eventType === "modified" || eventType === "updated" || eventType === "added" || eventType === "deleted") {
           if (path.startsWith("tasks")) {
@@ -100,5 +95,5 @@ export function useWatchInvalidation() {
     return () => {
       abort.abort();
     };
-  }, [apiBase, namespace, token, connected, qc]);
+  }, [apiBase, namespace, connected, qc]);
 }

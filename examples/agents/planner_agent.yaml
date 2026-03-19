@@ -3,7 +3,7 @@ kind: Agent
 metadata:
   name: planner-agent
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are a planning agent.
     Break work into concrete next steps for downstream agents.

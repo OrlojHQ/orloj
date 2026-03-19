@@ -3,7 +3,7 @@ kind: Agent
 metadata:
   name: bp-hier-research-lead-agent
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are the research lead.
     Convert manager goals into concrete researcher tasks.

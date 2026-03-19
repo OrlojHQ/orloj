@@ -4,7 +4,7 @@ metadata:
   name: rt-hier-research-lead-agent
   namespace: rt-hier
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are the research lead.
     Convert manager goals into concrete researcher tasks.

@@ -5,7 +5,7 @@ This directory is the canonical source for the Vocs documentation site.
 ## Structure
 
 - `pages/index.md`: docs landing page.
-- `pages/getting-started/`: onboarding and production readiness checklists.
+- `pages/getting-started/`: onboarding (install, quickstart).
 - `pages/concepts/`: conceptual explanations and mental model.
 - `pages/architecture/`: system architecture and execution model docs.
 - `pages/reference/`: resource and API reference docs.

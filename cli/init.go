@@ -66,7 +66,7 @@ kind: Agent
 metadata:
   name: %s-planner-agent
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are the planning stage.
     Break the task into concrete research and writing requirements.
@@ -79,7 +79,7 @@ kind: Agent
 metadata:
   name: %s-research-agent
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are the research stage.
     Produce concise, verifiable findings for the writer.
@@ -92,7 +92,7 @@ kind: Agent
 metadata:
   name: %s-writer-agent
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are the writing stage.
     Synthesize prior handoffs into a polished final output.
@@ -100,6 +100,17 @@ spec:
     max_steps: 4
     timeout: 20s
 `, p),
+		"model-endpoint.yaml": `apiVersion: orloj.dev/v1
+kind: ModelEndpoint
+metadata:
+  name: openai-default
+spec:
+  provider: openai
+  base_url: https://api.openai.com/v1
+  default_model: gpt-4o
+  auth:
+    secretRef: openai-api-key
+`,
 		"agent-system.yaml": fmt.Sprintf(`apiVersion: orloj.dev/v1
 kind: AgentSystem
 metadata:
@@ -148,7 +159,7 @@ kind: Agent
 metadata:
   name: %s-manager-agent
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are the manager. Decompose the task into sub-tasks
     and delegate to your lead agents.
@@ -161,7 +172,7 @@ kind: Agent
 metadata:
   name: %s-research-lead-agent
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You lead the research track.
     Coordinate your worker to gather findings.
@@ -174,7 +185,7 @@ kind: Agent
 metadata:
   name: %s-research-worker-agent
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are a research worker.
     Produce concise, verifiable findings.
@@ -187,7 +198,7 @@ kind: Agent
 metadata:
   name: %s-social-lead-agent
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You lead the social/comms track.
     Coordinate your worker to produce messaging.
@@ -200,7 +211,7 @@ kind: Agent
 metadata:
   name: %s-social-worker-agent
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are a social/comms worker.
     Draft messaging and positioning materials.
@@ -213,7 +224,7 @@ kind: Agent
 metadata:
   name: %s-editor-agent
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are the editor. Synthesize all track outputs
     into a cohesive final deliverable.
@@ -221,6 +232,17 @@ spec:
     max_steps: 4
     timeout: 20s
 `, p),
+		"model-endpoint.yaml": `apiVersion: orloj.dev/v1
+kind: ModelEndpoint
+metadata:
+  name: openai-default
+spec:
+  provider: openai
+  base_url: https://api.openai.com/v1
+  default_model: gpt-4o
+  auth:
+    secretRef: openai-api-key
+`,
 		"agent-system.yaml": fmt.Sprintf(`apiVersion: orloj.dev/v1
 kind: AgentSystem
 metadata:
@@ -285,7 +307,7 @@ kind: Agent
 metadata:
   name: %s-coordinator-agent
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are the swarm coordinator. Dispatch exploration tasks
     to scouts and synthesize their findings across iterations.
@@ -298,7 +320,7 @@ kind: Agent
 metadata:
   name: %s-scout-alpha-agent
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are scout alpha. Explore your assigned area
     and report findings back to the coordinator.
@@ -311,7 +333,7 @@ kind: Agent
 metadata:
   name: %s-scout-beta-agent
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are scout beta. Explore your assigned area
     and report findings back to the coordinator.
@@ -324,7 +346,7 @@ kind: Agent
 metadata:
   name: %s-scout-gamma-agent
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are scout gamma. Explore your assigned area
     and report findings back to the coordinator.
@@ -337,7 +359,7 @@ kind: Agent
 metadata:
   name: %s-synthesizer-agent
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are the synthesizer. Produce a final summary
     from the coordinator's accumulated findings.
@@ -345,6 +367,17 @@ spec:
     max_steps: 4
     timeout: 20s
 `, p),
+		"model-endpoint.yaml": `apiVersion: orloj.dev/v1
+kind: ModelEndpoint
+metadata:
+  name: openai-default
+spec:
+  provider: openai
+  base_url: https://api.openai.com/v1
+  default_model: gpt-4o
+  auth:
+    secretRef: openai-api-key
+`,
 		"agent-system.yaml": fmt.Sprintf(`apiVersion: orloj.dev/v1
 kind: AgentSystem
 metadata:

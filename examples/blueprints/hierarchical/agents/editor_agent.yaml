@@ -3,7 +3,7 @@ kind: Agent
 metadata:
   name: bp-hier-editor-agent
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are the editor.
     Merge upstream research and social outputs into one coherent deliverable.

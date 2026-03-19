@@ -20,9 +20,9 @@ func TestTaskRetrySchedulesNextAttemptOnTimeout(t *testing.T) {
 		Kind:       "Agent",
 		Metadata:   resources.ObjectMeta{Name: "retry-agent"},
 		Spec: resources.AgentSpec{
-			Model:  "gpt-4o",
-			Prompt: "retry test",
-			Limits: resources.AgentLimits{MaxSteps: 5, Timeout: "1ms"},
+			ModelRef: "openai-default",
+			Prompt:   "retry test",
+			Limits:   resources.AgentLimits{MaxSteps: 5, Timeout: "1ms"},
 		},
 	}
 	if _, err := stores.agentStore.Upsert(agent); err != nil {
@@ -113,9 +113,9 @@ func TestTaskNonRetryablePolicyViolationFailsImmediately(t *testing.T) {
 		Kind:       "Agent",
 		Metadata:   resources.ObjectMeta{Name: "policy-agent"},
 		Spec: resources.AgentSpec{
-			Model:  "gpt-4o",
-			Prompt: "policy test",
-			Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
+			ModelRef: "openai-default",
+			Prompt:   "policy test",
+			Limits:   resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
 		},
 	}
 	if _, err := stores.agentStore.Upsert(agent); err != nil {
@@ -182,6 +182,7 @@ type taskControllerHarness struct {
 	taskStore        *store.TaskStore
 	agentSystemStore *store.AgentSystemStore
 	agentStore       *store.AgentStore
+	modelEPStore     *store.ModelEndpointStore
 	toolStore        *store.ToolStore
 	memoryStore      *store.MemoryStore
 	policyStore      *store.AgentPolicyStore
@@ -194,10 +195,22 @@ func newTaskControllerHarness() (*TaskController, taskControllerHarness) {
 		taskStore:        store.NewTaskStore(),
 		agentSystemStore: store.NewAgentSystemStore(),
 		agentStore:       store.NewAgentStore(),
+		modelEPStore:     store.NewModelEndpointStore(),
 		toolStore:        store.NewToolStore(),
 		memoryStore:      store.NewMemoryStore(),
 		policyStore:      store.NewAgentPolicyStore(),
 		workerStore:      store.NewWorkerStore(),
+	}
+	if _, err := h.modelEPStore.Upsert(resources.ModelEndpoint{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "ModelEndpoint",
+		Metadata:   resources.ObjectMeta{Name: "openai-default", Namespace: "default"},
+		Spec: resources.ModelEndpointSpec{
+			Provider:     "mock",
+			DefaultModel: "gpt-4o",
+		},
+	}); err != nil {
+		panic(err)
 	}
 	if _, err := h.workerStore.Upsert(resources.Worker{
 		APIVersion: "orloj.dev/v1",
@@ -223,5 +236,6 @@ func newTaskControllerHarness() (*TaskController, taskControllerHarness) {
 		5*time.Millisecond,
 	)
 	controller.ConfigureWorker("test-worker", 30*time.Second, 10*time.Second)
+	controller.SetModelEndpointStore(h.modelEPStore)
 	return controller, h
 }

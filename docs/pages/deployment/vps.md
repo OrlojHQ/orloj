@@ -114,10 +114,10 @@ Upgrade flow:
 
 - This is a single-node baseline, not HA.
 - Bind or firewall `8080` to trusted networks only.
-- API auth is disabled by default in `.env.vps.example`; enable deliberately only after planning client auth flow.
+- API auth defaults to `ORLOJ_AUTH_MODE=local`; complete `/ui/setup` on first boot.
+- Set and rotate `ORLOJ_API_TOKEN` for CLI/automation access.
 
 ## Related Docs
 
 - [Deployment Assets (`docs/deploy/vps`)](../../deploy/vps/README.md)
 - [Operations Runbook](../operations/runbook.md)
-- [Production Checklist](../getting-started/production-checklist.md)

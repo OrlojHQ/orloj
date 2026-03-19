@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -31,6 +32,10 @@ func main() {
 
 	addr := flag.String("addr", ":8080", "server listen address")
 	apiKey := flag.String("api-key", env("ORLOJ_API_TOKEN", ""), "API key for bearer token auth (empty disables auth; env fallback: ORLOJ_API_TOKEN or ORLOJ_API_TOKENS)")
+	authModeRaw := flag.String("auth-mode", env("ORLOJ_AUTH_MODE", "off"), "API auth mode: off|local|sso (sso requires enterprise build)")
+	authSessionTTL := flag.Duration("auth-session-ttl", envDuration("ORLOJ_AUTH_SESSION_TTL", 24*time.Hour), "session TTL for local auth mode")
+	authResetAdminUsername := flag.String("auth-reset-admin-username", env("ORLOJ_AUTH_RESET_ADMIN_USERNAME", ""), "optional username for one-shot local admin password reset")
+	authResetAdminPassword := flag.String("auth-reset-admin-password", env("ORLOJ_AUTH_RESET_ADMIN_PASSWORD", ""), "one-shot local admin password reset value; when set, reset password and exit")
 	reconcile := flag.Duration("reconcile-interval", 2*time.Second, "agent reconcile interval")
 	runTaskWorker := flag.Bool("run-task-worker", false, "run embedded task worker in orlojd process")
 	embeddedWorker := flag.Bool("embedded-worker", false, "alias for --run-task-worker")
@@ -43,7 +48,7 @@ func main() {
 	modelGatewayAPIKey := flag.String("model-gateway-api-key", env("ORLOJ_MODEL_GATEWAY_API_KEY", ""), "API key used by task model gateway provider")
 	modelGatewayBaseURL := flag.String("model-gateway-base-url", env("ORLOJ_MODEL_GATEWAY_BASE_URL", ""), "base URL used by task model gateway provider (provider defaults applied when empty)")
 	modelGatewayTimeout := flag.Duration("model-gateway-timeout", envDuration("ORLOJ_MODEL_GATEWAY_TIMEOUT", 30*time.Second), "HTTP timeout for task model gateway requests")
-	modelGatewayDefaultModel := flag.String("model-gateway-default-model", env("ORLOJ_MODEL_GATEWAY_DEFAULT_MODEL", ""), "default model used when agent spec.model is empty (provider defaults applied when empty)")
+	modelGatewayDefaultModel := flag.String("model-gateway-default-model", env("ORLOJ_MODEL_GATEWAY_DEFAULT_MODEL", ""), "fallback default model for gateway providers when endpoint/default values are not set")
 	modelSecretEnvPrefix := flag.String("model-secret-env-prefix", env("ORLOJ_MODEL_SECRET_ENV_PREFIX", "ORLOJ_SECRET_"), "environment variable prefix used to resolve ModelEndpoint.spec.auth.secretRef")
 	toolIsolationBackend := flag.String("tool-isolation-backend", env("ORLOJ_TOOL_ISOLATION_BACKEND", "none"), "isolated tool executor backend: none|container|wasm")
 	toolContainerRuntime := flag.String("tool-container-runtime", env("ORLOJ_TOOL_CONTAINER_RUNTIME", "docker"), "container runtime binary for isolated tool execution")
@@ -78,6 +83,12 @@ func main() {
 	postgresMaxIdleConns := flag.Int("postgres-max-idle-conns", 5, "max idle postgres connections")
 	postgresConnMaxLifetime := flag.Duration("postgres-conn-max-lifetime", 30*time.Minute, "max lifetime of postgres connections")
 	flag.Parse()
+
+	authMode, authModeErr := parseAuthMode(*authModeRaw)
+	if authModeErr != nil {
+		logger := telemetry.NewBridgeLogger(telemetry.NewLogger("orlojd"))
+		logger.Fatalf("%v", authModeErr)
+	}
 
 	slogger := telemetry.NewLogger("orlojd")
 	logger := telemetry.NewBridgeLogger(slogger)
@@ -115,6 +126,13 @@ func main() {
 		logger.Fatalf("%v", err)
 	}
 	defer stores.Close()
+	if strings.TrimSpace(*authResetAdminPassword) != "" {
+		if err := runLocalAdminPasswordReset(stores, strings.TrimSpace(*authResetAdminUsername), strings.TrimSpace(*authResetAdminPassword)); err != nil {
+			logger.Fatalf("admin password reset failed: %v", err)
+		}
+		logger.Printf("admin password reset completed")
+		return
+	}
 
 	resolvedModelGatewayAPIKey := startup.ResolveModelGatewayAPIKey(*modelGatewayProvider, *modelGatewayAPIKey)
 	baseModelGateway, err := startup.NewModelGateway(startup.ModelGatewayConfig{
@@ -196,6 +214,10 @@ func main() {
 	taskController.SetIsolatedToolRuntime(isolatedToolRuntime)
 	taskController.SetMcpRuntime(mcpSessionManager, stores.McpServers)
 
+	var requestAuthorizer api.RequestAuthorizer
+	if strings.TrimSpace(*apiKey) != "" {
+		requestAuthorizer = api.NewAPIKeyAuthorizer(*apiKey)
+	}
 	server := api.NewServerWithOptions(api.Stores{
 		Agents:        stores.Agents,
 		AgentSystems:  stores.AgentSystems,
@@ -205,17 +227,21 @@ func main() {
 		Memories:      stores.Memories,
 		Policies:      stores.Policies,
 		AgentRoles:    stores.Roles,
-		ToolPerms:      stores.ToolPerms,
-		ToolApprovals:  stores.ToolApprovals,
-		Tasks:          stores.Tasks,
+		ToolPerms:     stores.ToolPerms,
+		ToolApprovals: stores.ToolApprovals,
+		Tasks:         stores.Tasks,
 		TaskSchedules: stores.TaskSchedules,
 		TaskWebhooks:  stores.TaskWebhooks,
 		WebhookDedupe: stores.WebhookDedupe,
 		Workers:       stores.Workers,
 		McpServers:    stores.McpServers,
+		LocalAdmins:   stores.LocalAdmins,
+		AuthSessions:  stores.AuthSessions,
 	}, runtime, logger, api.ServerOptions{
-		Authorizer: api.NewAPIKeyAuthorizer(*apiKey),
+		Authorizer: requestAuthorizer,
 		Extensions: extensions,
+		AuthMode:   authMode,
+		SessionTTL: *authSessionTTL,
 	})
 	bus, closeBus := newEventBus(logger, *eventBusBackend, *natsURL, *natsSubjectPrefix)
 	if closeBus != nil {
@@ -276,12 +302,13 @@ func main() {
 						Tools:               stores.Tools,
 						Roles:               stores.Roles,
 						ToolPermissions:     stores.ToolPerms,
-					IsolatedToolRuntime: isolatedToolRuntime,
-					McpSessionManager:   mcpSessionManager,
-					McpServerStore:      stores.McpServers,
-					Extensions:          extensions,
-					Memories:            stores.Memories,
-					MemoryBackends:      memoryBackendRegistry,
+						IsolatedToolRuntime: isolatedToolRuntime,
+						McpSessionManager:   mcpSessionManager,
+						McpServerStore:      stores.McpServers,
+						Extensions:          extensions,
+						Memories:            stores.Memories,
+						MemoryBackends:      memoryBackendRegistry,
+						ModelEndpoints:      stores.ModelEPs,
 					},
 				)
 				go consumer.Start(ctx)
@@ -375,6 +402,53 @@ func heartbeatWorkerRegistration(
 			return
 		case <-ticker.C:
 		}
+	}
+}
+
+func runLocalAdminPasswordReset(stores *startup.StoreSet, username, password string) error {
+	if stores == nil || stores.LocalAdmins == nil || stores.AuthSessions == nil {
+		return fmt.Errorf("auth stores are not initialized")
+	}
+	if err := store.ValidatePasswordPolicy(password, 12); err != nil {
+		return err
+	}
+
+	current, hasAdmin, err := stores.LocalAdmins.Get()
+	if err != nil {
+		return err
+	}
+	username = strings.TrimSpace(username)
+	if username == "" {
+		if hasAdmin {
+			username = current.Username
+		} else {
+			return fmt.Errorf("auth-reset-admin-username is required when no admin account exists")
+		}
+	}
+
+	hash, err := store.GeneratePasswordHash(password)
+	if err != nil {
+		return err
+	}
+	if err := stores.LocalAdmins.Upsert(username, hash); err != nil {
+		return err
+	}
+	if hasAdmin {
+		_ = stores.AuthSessions.DeleteByUsername(current.Username)
+	}
+	_ = stores.AuthSessions.DeleteByUsername(username)
+	return nil
+}
+
+func parseAuthMode(raw string) (api.AuthMode, error) {
+	mode := api.AuthMode(strings.ToLower(strings.TrimSpace(raw)))
+	switch mode {
+	case api.AuthModeOff, api.AuthModeLocal:
+		return mode, nil
+	case api.AuthModeSSO:
+		return mode, fmt.Errorf("auth mode %q requires enterprise build/adapter", mode)
+	default:
+		return mode, fmt.Errorf("invalid auth mode %q (expected off, local, sso)", strings.TrimSpace(raw))
 	}
 }
 

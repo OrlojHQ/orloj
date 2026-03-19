@@ -30,7 +30,7 @@ kind: Agent
 metadata:
   name: bp-pipeline-planner-agent
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are the planning stage.
     Break the task into concrete research and writing requirements.
@@ -46,7 +46,7 @@ kind: Agent
 metadata:
   name: bp-pipeline-research-agent
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are the research stage.
     Produce concise, verifiable findings for the writer.
@@ -62,7 +62,7 @@ kind: Agent
 metadata:
   name: bp-pipeline-writer-agent
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are the writing stage.
     Synthesize prior handoffs into a polished final output.

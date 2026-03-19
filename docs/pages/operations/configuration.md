@@ -27,6 +27,8 @@ Example:
 | `ORLOJ_EVENT_BUS_BACKEND` | `orlojd` | Server event bus (`memory|nats`). |
 | `ORLOJ_NATS_URL` | `orlojd`, `orlojworker` | NATS URL and fallback for runtime message bus URL. |
 | `ORLOJ_AGENT_MESSAGE_BUS_BACKEND` | `orlojd`, `orlojworker` | Runtime message bus (`none|memory|nats-jetstream`). |
+| `ORLOJ_AUTH_MODE` | `orlojd` | API auth mode (`off|local|sso`). OSS supports `off` and `local`; `sso` requires enterprise adapter. |
+| `ORLOJ_AUTH_SESSION_TTL` | `orlojd` | Session TTL for local auth mode (example: `24h`). |
 | `ORLOJ_SECRET_ENCRYPTION_KEY` | `orlojd`, `orlojworker` | 256-bit AES key (hex or base64) for encrypting Secret resource data at rest. |
 | `ORLOJ_TOOL_ISOLATION_BACKEND` | `orlojd`, `orlojworker` | Tool isolation (`none|container|wasm`). |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `orlojd`, `orlojworker` | OTLP gRPC endpoint for OpenTelemetry trace export. Empty disables export. |

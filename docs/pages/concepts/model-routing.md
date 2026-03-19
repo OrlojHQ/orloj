@@ -68,11 +68,7 @@ spec:
 
 ## Binding Agents to Models
 
-There are two ways to configure which model an agent uses:
-
-### Direct model reference
-
-Set `spec.model` to a model identifier. The runtime uses the default provider configuration.
+Agents configure model routing through `spec.model_ref`, which points to a ModelEndpoint:
 
 ```yaml
 apiVersion: orloj.dev/v1
@@ -80,33 +76,16 @@ kind: Agent
 metadata:
   name: writer-agent
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are a writing agent.
 ```
-
-### ModelEndpoint reference
-
-Set `spec.model_ref` to the name of a ModelEndpoint resource. This is the preferred approach because it decouples agents from provider configuration.
-
-```yaml
-apiVersion: orloj.dev/v1
-kind: Agent
-metadata:
-  name: research-agent
-spec:
-  model_ref: openai-default
-  prompt: |
-    You are a research assistant.
-```
-
-If neither `model` nor `model_ref` is set, the agent defaults to `gpt-4o-mini`.
 
 ## How Routing Works
 
 When a worker executes an agent turn:
 
-1. The runtime resolves the agent's model configuration -- either the direct `model` value or the referenced ModelEndpoint.
+1. The runtime resolves the agent's referenced ModelEndpoint from `model_ref`.
 2. The model gateway constructs a provider-specific API request using the endpoint's `base_url`, `default_model`, `options`, and auth credentials.
 3. The request is sent to the provider and the response is returned to the agent execution loop.
 
@@ -151,7 +130,7 @@ spec:
   max_tokens_per_run: 50000
 ```
 
-If an agent's configured model is not in the policy's `allowed_models` list, execution is denied.
+If an agent's resolved endpoint `default_model` is not in the policy's `allowed_models` list, execution is denied.
 
 ## Related Resources
 

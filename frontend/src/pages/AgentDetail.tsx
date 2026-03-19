@@ -49,7 +49,7 @@ export function AgentDetail() {
           </button>
           <div>
             <h1 className="page__title">{agent.metadata.name}</h1>
-            <p className="page__subtitle">{agent.spec.model || agent.spec.model_ref} &middot; {agent.metadata.namespace}</p>
+            <p className="page__subtitle">{agent.spec.model_ref} &middot; {agent.metadata.namespace}</p>
           </div>
           <StatusBadge phase={agent.status?.phase} size="md" />
         </div>
@@ -78,8 +78,8 @@ export function AgentDetail() {
         {tab === "overview" && (
           <div className="detail-grid">
             <div className="detail-field">
-              <span className="detail-field__label">Model</span>
-              <span className="detail-field__value mono">{agent.spec.model || agent.spec.model_ref || "—"}</span>
+              <span className="detail-field__label">Model Ref</span>
+              <span className="detail-field__value mono">{agent.spec.model_ref || "—"}</span>
             </div>
             <div className="detail-field">
               <span className="detail-field__label">Max Steps</span>

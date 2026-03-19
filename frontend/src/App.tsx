@@ -1,8 +1,9 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, useEffect, useCallback } from "react";
 import { useAppStore } from "./store";
 import { useWatchInvalidation } from "./api/watch";
+import { getAuthConfig, getAuthMe, type AuthConfigResponse } from "./api/client";
 import { Sidebar } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import { ToastContainer } from "./components/Toast";
@@ -37,6 +38,8 @@ import { ToolPermissionDetail } from "./pages/ToolPermissionDetail";
 import { ToolApprovals } from "./pages/ToolApprovals";
 import { ToolApprovalDetail } from "./pages/ToolApprovalDetail";
 import { NotFound } from "./pages/NotFound";
+import { Login } from "./pages/Login";
+import { Setup } from "./pages/Setup";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import clsx from "clsx";
 
@@ -60,6 +63,12 @@ function ThemeProvider({ children }: { children: React.ReactNode }) {
 function WatchProvider({ children }: { children: React.ReactNode }) {
   useWatchInvalidation();
   return <>{children}</>;
+}
+
+interface AuthBootstrapState {
+  loading: boolean;
+  config: AuthConfigResponse | null;
+  authenticated: boolean;
 }
 
 function AppLayout() {
@@ -128,13 +137,70 @@ function AppLayout() {
 }
 
 export function App() {
+  const [refreshAuthNonce, setRefreshAuthNonce] = useState(0);
+  const [auth, setAuth] = useState<AuthBootstrapState>({
+    loading: true,
+    config: null,
+    authenticated: false,
+  });
+
+  const refreshAuth = useCallback(() => {
+    setRefreshAuthNonce((n) => n + 1);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const config = await getAuthConfig();
+        let authenticated = true;
+        if (config.mode === "local" && !config.setup_required) {
+          const me = await getAuthMe();
+          authenticated = me.authenticated === true;
+        }
+        if (!cancelled) {
+          setAuth({ loading: false, config, authenticated });
+        }
+      } catch {
+        if (!cancelled) {
+          setAuth({
+            loading: false,
+            config: { mode: "off", setup_required: false, login_methods: [] },
+            authenticated: true,
+          });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshAuthNonce]);
+
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <BrowserRouter basename={import.meta.env.DEV ? "" : "/ui"}>
-          <WatchProvider>
-            <AppLayout />
-          </WatchProvider>
+          {auth.loading ? (
+            <div className="page">
+              <div className="page__header">
+                <h1 className="page__title">Loading</h1>
+              </div>
+            </div>
+          ) : auth.config?.mode === "local" && auth.config.setup_required ? (
+            <Routes>
+              <Route path="/setup" element={<Setup onSuccess={refreshAuth} />} />
+              <Route path="*" element={<Navigate to="/setup" replace />} />
+            </Routes>
+          ) : auth.config?.mode === "local" && !auth.authenticated ? (
+            <Routes>
+              <Route path="/login" element={<Login onSuccess={refreshAuth} />} />
+              <Route path="*" element={<Navigate to="/login" replace />} />
+            </Routes>
+          ) : (
+            <WatchProvider>
+              <AppLayout />
+            </WatchProvider>
+          )}
         </BrowserRouter>
       </ThemeProvider>
     </QueryClientProvider>

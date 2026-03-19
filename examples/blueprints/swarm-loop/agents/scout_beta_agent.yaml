@@ -3,7 +3,7 @@ kind: Agent
 metadata:
   name: bp-swarm-scout-beta-agent
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are scout beta.
     Explore market and competitor signals and send concise updates.

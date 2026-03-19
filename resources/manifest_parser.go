@@ -12,6 +12,9 @@ func ParseAgentManifest(data []byte) (Agent, error) {
 	var agent Agent
 
 	if json.Valid(data) {
+		if err := rejectLegacyModelFieldFromAgentJSON(data); err != nil {
+			return Agent{}, err
+		}
 		if err := json.Unmarshal(data, &agent); err != nil {
 			return Agent{}, fmt.Errorf("failed to decode JSON manifest: %w", err)
 		}
@@ -160,7 +163,7 @@ func ParseAgentManifest(data []byte) (Agent, error) {
 				return Agent{}, err
 			}
 		case section == "spec" && subsection == "" && key == "model":
-			agent.Spec.Model = stripQuotes(value)
+			return Agent{}, fmt.Errorf("spec.model has been removed; use spec.model_ref")
 		case section == "spec" && subsection == "" && (key == "model_ref" || key == "modelRef"):
 			agent.Spec.ModelRef = stripQuotes(value)
 		case section == "spec" && subsection == "" && key == "prompt":
@@ -229,6 +232,22 @@ func stripQuotes(s string) string {
 		}
 	}
 	return s
+}
+
+func rejectLegacyModelFieldFromAgentJSON(data []byte) error {
+	var probe struct {
+		Spec map[string]json.RawMessage `json:"spec"`
+	}
+	if err := json.Unmarshal(data, &probe); err != nil {
+		return fmt.Errorf("failed to decode JSON manifest: %w", err)
+	}
+	if probe.Spec == nil {
+		return nil
+	}
+	if _, ok := probe.Spec["model"]; ok {
+		return fmt.Errorf("spec.model has been removed; use spec.model_ref")
+	}
+	return nil
 }
 
 func applyObjectMetaField(meta *ObjectMeta, key string, value string) error {

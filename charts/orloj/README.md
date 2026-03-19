@@ -18,7 +18,8 @@ helm upgrade --install orloj ./charts/orloj \
   --set orlojd.image.tag=v0.1.0 \
   --set orlojworker.image.tag=v0.1.0 \
   --set postgres.auth.password='<strong-password>' \
-  --set runtimeSecret.modelGatewayApiKey='<model-provider-api-key>'
+  --set runtimeSecret.modelGatewayApiKey='<model-provider-api-key>' \
+  --set runtimeSecret.apiToken='<automation-api-token>'
 ```
 
 ## Uninstall
@@ -33,6 +34,7 @@ helm uninstall orloj --namespace orloj
 - `orlojworker.image.repository`, `orlojworker.image.tag`
 - `postgres.auth.user`, `postgres.auth.password`, `postgres.auth.database`, `postgres.auth.dsn`
 - `runtimeSecret.modelGatewayApiKey`
+- `runtimeSecret.apiToken`
 - `runtimeConfig.*` (Orloj runtime env vars)
 
 ## Notes

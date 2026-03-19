@@ -8,7 +8,7 @@ kind: Agent
 metadata:
   name: researcher
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: test
   roles:
     - analyst

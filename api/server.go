@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/eventbus"
 	"github.com/OrlojHQ/orloj/frontend"
+	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/runtime"
 	"github.com/OrlojHQ/orloj/store"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -28,20 +28,24 @@ type Stores struct {
 	Memories      *store.MemoryStore
 	Policies      *store.AgentPolicyStore
 	AgentRoles    *store.AgentRoleStore
-	ToolPerms      *store.ToolPermissionStore
-	ToolApprovals  *store.ToolApprovalStore
-	Tasks          *store.TaskStore
+	ToolPerms     *store.ToolPermissionStore
+	ToolApprovals *store.ToolApprovalStore
+	Tasks         *store.TaskStore
 	TaskSchedules *store.TaskScheduleStore
 	TaskWebhooks  *store.TaskWebhookStore
 	WebhookDedupe *store.WebhookDedupeStore
 	Workers       *store.WorkerStore
 	McpServers    *store.McpServerStore
+	LocalAdmins   *store.LocalAdminStore
+	AuthSessions  *store.AuthSessionStore
 }
 
 // ServerOptions configures optional extension points.
 type ServerOptions struct {
 	Authorizer RequestAuthorizer
 	Extensions agentruntime.Extensions
+	AuthMode   AuthMode
+	SessionTTL time.Duration
 }
 
 // Server exposes CRUD endpoints for control plane resources.
@@ -51,6 +55,8 @@ type Server struct {
 	logger         *log.Logger
 	mux            *http.ServeMux
 	authorizer     RequestAuthorizer
+	authMode       AuthMode
+	sessionTTL     time.Duration
 	bus            eventbus.Bus
 	extensions     agentruntime.Extensions
 	memoryBackends *agentruntime.PersistentMemoryBackendRegistry
@@ -85,10 +91,28 @@ func NewServerWithOptions(stores Stores, runtime *agentruntime.Manager, logger *
 	if stores.McpServers == nil {
 		stores.McpServers = store.NewMcpServerStore()
 	}
+	if stores.LocalAdmins == nil {
+		stores.LocalAdmins = store.NewLocalAdminStore()
+	}
+	if stores.AuthSessions == nil {
+		stores.AuthSessions = store.NewAuthSessionStore()
+	}
+	rawAuthMode := strings.ToLower(strings.TrimSpace(string(opts.AuthMode)))
+	authMode := normalizeAuthMode(rawAuthMode)
+	authModeExplicit := rawAuthMode != ""
+	sessionTTL := opts.SessionTTL
+	if sessionTTL <= 0 {
+		sessionTTL = 24 * time.Hour
+	}
 	extensions := agentruntime.NormalizeExtensions(opts.Extensions)
 	authorizer := opts.Authorizer
-	if authorizer == nil {
+	if authMode == AuthModeOff && authModeExplicit {
+		authorizer = noAuthAuthorizer{}
+	} else if authorizer == nil {
 		authorizer = newTokenAuthorizerFromEnv()
+	}
+	if authMode == AuthModeLocal {
+		authorizer = newLocalModeAuthorizer(authorizer, stores.LocalAdmins, stores.AuthSessions, sessionTTL)
 	}
 	s := &Server{
 		stores:     stores,
@@ -96,6 +120,8 @@ func NewServerWithOptions(stores Stores, runtime *agentruntime.Manager, logger *
 		logger:     logger,
 		mux:        http.NewServeMux(),
 		authorizer: authorizer,
+		authMode:   authMode,
+		sessionTTL: sessionTTL,
 		bus:        eventbus.NewMemoryBus(4096),
 		extensions: extensions,
 	}
@@ -128,6 +154,12 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/healthz", s.handleHealth)
 	s.mux.Handle("/metrics", promhttp.Handler())
 	s.mux.HandleFunc("/v1/capabilities", s.handleCapabilities)
+	s.mux.HandleFunc("/v1/auth/config", s.handleAuthConfig)
+	s.mux.HandleFunc("/v1/auth/setup", s.handleAuthSetup)
+	s.mux.HandleFunc("/v1/auth/login", s.handleAuthLogin)
+	s.mux.HandleFunc("/v1/auth/logout", s.handleAuthLogout)
+	s.mux.HandleFunc("/v1/auth/me", s.handleAuthMe)
+	s.mux.HandleFunc("/v1/auth/admin/reset-password", s.handleAuthAdminResetPassword)
 	s.mux.HandleFunc("/ui", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/ui/", http.StatusTemporaryRedirect)
 	})

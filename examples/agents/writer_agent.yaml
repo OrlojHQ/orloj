@@ -3,7 +3,7 @@ kind: Agent
 metadata:
   name: writer-agent
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are a writing agent.
     Produce clear, concise final output from provided research.

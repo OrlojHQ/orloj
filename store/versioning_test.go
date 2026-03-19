@@ -13,7 +13,7 @@ func TestAgentStoreVersioningAndConflict(t *testing.T) {
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
 		Metadata:   resources.ObjectMeta{Name: "a1"},
-		Spec:       resources.AgentSpec{Model: "gpt-4o", Prompt: "p1"},
+		Spec:       resources.AgentSpec{ModelRef: "openai-default", Prompt: "p1"},
 	})
 	if err != nil {
 		t.Fatalf("create upsert failed: %v", err)
@@ -39,7 +39,7 @@ func TestAgentStoreVersioningAndConflict(t *testing.T) {
 	}
 
 	// spec update should bump generation.
-	statusUpdated.Spec.Model = "gpt-4o-mini"
+	statusUpdated.Spec.ModelRef = "openai-v2"
 	specUpdated, err := s.Upsert(statusUpdated)
 	if err != nil {
 		t.Fatalf("spec upsert failed: %v", err)

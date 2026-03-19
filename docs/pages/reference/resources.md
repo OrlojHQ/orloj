@@ -37,7 +37,6 @@ This document describes the current resource schemas in `orloj.dev/v1`, based on
 
 ### `spec`
 
-- `model` (string): direct model id.
 - `model_ref` (string): reference to a `ModelEndpoint` (`name` or `namespace/name`).
 - `prompt` (string): agent instruction prompt.
 - `tools` ([]string): tool names available to the agent.
@@ -113,7 +112,7 @@ Step 1: model calls `external-api-tool` → done (1 model call). The next agent 
 
 ### Defaults and Validation
 
-- If both `model` and `model_ref` are empty, `model` defaults to `gpt-4o-mini`.
+- `model_ref` is required.
 - `roles` are trimmed and deduplicated (case-insensitive).
 - `memory.allow` is trimmed, normalized, and deduplicated. It requires `memory.ref`.
 - `limits.max_steps` defaults to `10` when `<= 0`.

@@ -25,6 +25,7 @@ orlojctl logs <agent-name>|task/<task-name>
 orlojctl trace task <task-name>
 orlojctl graph system|task <name>
 orlojctl events [filters...]
+orlojctl admin reset-password --new-password <value> [--username <name>]
 ```
 
 ### `orlojctl create secret`
@@ -107,6 +108,7 @@ Supported resources:
 Common flags:
 
 - `--server` (default `http://127.0.0.1:8080`)
+- `--api-token` (global; also via `ORLOJCTL_API_TOKEN` or `ORLOJ_API_TOKEN`)
 - `--namespace` on namespaced operations
 - `-w` for watch mode on supported `get` commands
 - `events` filters: `--source`, `--type`, `--kind`, `--name`, `--namespace`, `--since`, `--once`, `--timeout`, `--raw`
@@ -122,7 +124,10 @@ go run ./cmd/orlojd -h
 Critical flags:
 
 - `--addr`
+- `--auth-mode` (`off|local|sso`; OSS supports `off` and `local`)
+- `--auth-session-ttl`
 - `--api-key` (enable bearer token auth; env fallback: `ORLOJ_API_TOKEN`)
+- `--auth-reset-admin-username`, `--auth-reset-admin-password` (one-shot local admin password reset and exit)
 - `--secret-encryption-key` (256-bit AES key for encrypting Secret data at rest; env fallback: `ORLOJ_SECRET_ENCRYPTION_KEY`)
 - `--storage-backend` (`memory|postgres`)
 - `--postgres-dsn`

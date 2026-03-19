@@ -1,5 +1,6 @@
 import { useAppStore } from "../store";
 import { useHealthCheck } from "../api/hooks";
+import { logoutLocalAuth } from "../api/client";
 import { Sun, Moon, Wifi, WifiOff, Settings } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { NamespaceSelector } from "./NamespaceSelector";
@@ -13,8 +14,6 @@ export function TopBar() {
   const connected = useAppStore((s) => s.connected);
   const apiBase = useAppStore((s) => s.apiBase);
   const setApiBase = useAppStore((s) => s.setApiBase);
-  const token = useAppStore((s) => s.token);
-  const setToken = useAppStore((s) => s.setToken);
 
   const [showSettings, setShowSettings] = useState(false);
   const health = useHealthCheck();
@@ -81,13 +80,17 @@ export function TopBar() {
             />
           </label>
           <label className="topbar__settings-label">
-            Bearer Token
-            <input
-              type="password"
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-              placeholder="optional"
-            />
+            Session
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={async () => {
+                await logoutLocalAuth();
+                window.location.href = "/ui/login";
+              }}
+            >
+              Sign Out
+            </button>
           </label>
         </div>
       )}

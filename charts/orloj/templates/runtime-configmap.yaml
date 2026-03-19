@@ -9,6 +9,7 @@
   "ORLOJ_AGENT_MESSAGE_NATS_URL" $natsURL
   "ORLOJ_MODEL_GATEWAY_PROVIDER" "mock"
   "ORLOJ_MODEL_GATEWAY_DEFAULT_MODEL" ""
+  "ORLOJ_AUTH_MODE" "local"
 -}}
 {{- else -}}
 {{- $defaultRuntimeConfig = dict
@@ -17,6 +18,7 @@
   "ORLOJ_AGENT_MESSAGE_BUS_BACKEND" "memory"
   "ORLOJ_MODEL_GATEWAY_PROVIDER" "mock"
   "ORLOJ_MODEL_GATEWAY_DEFAULT_MODEL" ""
+  "ORLOJ_AUTH_MODE" "local"
 -}}
 {{- end -}}
 {{- $runtimeConfig := mergeOverwrite (deepCopy $defaultRuntimeConfig) .Values.runtimeConfig -}}

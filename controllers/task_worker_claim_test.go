@@ -17,21 +17,33 @@ func TestTaskClaimSingleExecutionAcrossWorkers(t *testing.T) {
 
 	agentStore := store.NewAgentStore()
 	agentSystemStore := store.NewAgentSystemStore()
+	modelEPStore := store.NewModelEndpointStore()
 	toolStore := store.NewToolStore()
 	memoryStore := store.NewMemoryStore()
 	policyStore := store.NewAgentPolicyStore()
 	taskStore := store.NewTaskStore()
 	workerStore := store.NewWorkerStore()
+	if _, err := modelEPStore.Upsert(resources.ModelEndpoint{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "ModelEndpoint",
+		Metadata:   resources.ObjectMeta{Name: "openai-default", Namespace: "default"},
+		Spec: resources.ModelEndpointSpec{
+			Provider:     "mock",
+			DefaultModel: "gpt-4o",
+		},
+	}); err != nil {
+		t.Fatalf("upsert model endpoint failed: %v", err)
+	}
 
 	agent := resources.Agent{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
 		Metadata:   resources.ObjectMeta{Name: "research-agent"},
 		Spec: resources.AgentSpec{
-			Model:  "gpt-4o",
-			Prompt: "You are a research assistant.",
-			Tools:  []string{"web_search"},
-			Limits: resources.AgentLimits{MaxSteps: 2, Timeout: "1s"},
+			ModelRef: "openai-default",
+			Prompt:   "You are a research assistant.",
+			Tools:    []string{"web_search"},
+			Limits:   resources.AgentLimits{MaxSteps: 2, Timeout: "1s"},
 		},
 	}
 	if _, err := agentStore.Upsert(agent); err != nil {
@@ -89,8 +101,10 @@ func TestTaskClaimSingleExecutionAcrossWorkers(t *testing.T) {
 
 	worker1 := NewTaskController(taskStore, agentSystemStore, agentStore, toolStore, memoryStore, policyStore, workerStore, logger, 5*time.Millisecond)
 	worker1.ConfigureWorker("worker-1", 100*time.Millisecond, 20*time.Millisecond)
+	worker1.SetModelEndpointStore(modelEPStore)
 	worker2 := NewTaskController(taskStore, agentSystemStore, agentStore, toolStore, memoryStore, policyStore, workerStore, logger, 5*time.Millisecond)
 	worker2.ConfigureWorker("worker-2", 100*time.Millisecond, 20*time.Millisecond)
+	worker2.SetModelEndpointStore(modelEPStore)
 
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -124,21 +138,33 @@ func TestTaskClaimHonorsAssignedWorker(t *testing.T) {
 
 	agentStore := store.NewAgentStore()
 	agentSystemStore := store.NewAgentSystemStore()
+	modelEPStore := store.NewModelEndpointStore()
 	toolStore := store.NewToolStore()
 	memoryStore := store.NewMemoryStore()
 	policyStore := store.NewAgentPolicyStore()
 	taskStore := store.NewTaskStore()
 	workerStore := store.NewWorkerStore()
+	if _, err := modelEPStore.Upsert(resources.ModelEndpoint{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "ModelEndpoint",
+		Metadata:   resources.ObjectMeta{Name: "openai-default", Namespace: "default"},
+		Spec: resources.ModelEndpointSpec{
+			Provider:     "mock",
+			DefaultModel: "gpt-4o",
+		},
+	}); err != nil {
+		t.Fatalf("upsert model endpoint failed: %v", err)
+	}
 
 	agent := resources.Agent{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
 		Metadata:   resources.ObjectMeta{Name: "research-agent"},
 		Spec: resources.AgentSpec{
-			Model:  "gpt-4o",
-			Prompt: "You are a research assistant.",
-			Tools:  []string{"web_search"},
-			Limits: resources.AgentLimits{MaxSteps: 2, Timeout: "1s"},
+			ModelRef: "openai-default",
+			Prompt:   "You are a research assistant.",
+			Tools:    []string{"web_search"},
+			Limits:   resources.AgentLimits{MaxSteps: 2, Timeout: "1s"},
 		},
 	}
 	if _, err := agentStore.Upsert(agent); err != nil {
@@ -197,8 +223,10 @@ func TestTaskClaimHonorsAssignedWorker(t *testing.T) {
 
 	worker1 := NewTaskController(taskStore, agentSystemStore, agentStore, toolStore, memoryStore, policyStore, workerStore, logger, 5*time.Millisecond)
 	worker1.ConfigureWorker("worker-1", 100*time.Millisecond, 20*time.Millisecond)
+	worker1.SetModelEndpointStore(modelEPStore)
 	worker2 := NewTaskController(taskStore, agentSystemStore, agentStore, toolStore, memoryStore, policyStore, workerStore, logger, 5*time.Millisecond)
 	worker2.ConfigureWorker("worker-2", 100*time.Millisecond, 20*time.Millisecond)
+	worker2.SetModelEndpointStore(modelEPStore)
 
 	var wg sync.WaitGroup
 	wg.Add(2)

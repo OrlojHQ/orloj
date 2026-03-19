@@ -47,7 +47,7 @@ kind: Agent
 metadata:
   name: research-agent
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   tools:
     - web_search
     - vector_db
@@ -97,7 +97,7 @@ kind: Agent
 metadata:
   name: research-agent-governed-allow
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   roles:
     - analyst-role
     - vector-reader-role
@@ -225,7 +225,7 @@ kind: Agent
 metadata:
   name: research-agent-governed
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   roles:
     - analyst-role
   tools:

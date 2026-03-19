@@ -167,7 +167,7 @@ kind: Agent
 metadata:
   name: github-agent
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are a GitHub assistant. Use your tools to help
     the user manage issues and search repositories.

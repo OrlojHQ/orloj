@@ -3,7 +3,7 @@ kind: Agent
 metadata:
   name: bp-pipeline-planner-agent
 spec:
-  model: gpt-4o
+  model_ref: openai-default
   prompt: |
     You are the planning stage.
     Break the task into concrete research and writing requirements.

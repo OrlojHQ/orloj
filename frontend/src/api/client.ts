@@ -38,6 +38,7 @@ async function request<T>(
   const { token } = getConnection();
   const resp = await fetch(url, {
     ...options,
+    credentials: "same-origin",
     headers: { ...buildHeaders(token), ...options.headers },
   });
   if (!resp.ok) {
@@ -93,6 +94,7 @@ export async function del(resourcePath: string, name: string): Promise<void> {
   const { token } = getConnection();
   const resp = await fetch(url, {
     method: "DELETE",
+    credentials: "same-origin",
     headers: buildHeaders(token),
   });
   if (!resp.ok) {
@@ -120,7 +122,7 @@ export async function getStatus<T>(resourcePath: string, name: string): Promise<
 export async function getLogs(resourcePath: string, name: string): Promise<string> {
   const { namespace, token } = getConnection();
   const url = buildUrl(`${resourcePath}/${name}/logs`, namespace);
-  const resp = await fetch(url, { headers: buildHeaders(token) });
+  const resp = await fetch(url, { headers: buildHeaders(token), credentials: "same-origin" });
   if (!resp.ok) {
     const body = await resp.text();
     throw new Error(`${resp.status} ${resp.statusText}${body ? `: ${body}` : ""}`);
@@ -171,6 +173,7 @@ export async function listNamespaces(): Promise<string[]> {
   const base = apiBase.replace(/\/$/, "");
   const resp = await fetch(`${base}/v1/namespaces`, {
     headers: buildHeaders(token),
+    credentials: "same-origin",
   });
   if (!resp.ok) return ["default"];
   const data = (await resp.json()) as { namespaces: string[] };
@@ -189,9 +192,95 @@ export async function healthCheck(): Promise<boolean> {
     const base = apiBase.replace(/\/$/, "");
     const resp = await fetch(`${base}/healthz`, {
       headers: buildHeaders(token),
+      credentials: "same-origin",
     });
     return resp.ok;
   } catch {
     return false;
+  }
+}
+
+export interface AuthConfigResponse {
+  mode: "off" | "local" | "sso" | string;
+  setup_required: boolean;
+  login_methods: string[];
+}
+
+export interface AuthMeResponse {
+  authenticated: boolean;
+  username?: string;
+  method?: string;
+}
+
+export async function getAuthConfig(): Promise<AuthConfigResponse> {
+  const { apiBase, token } = getConnection();
+  const base = apiBase.replace(/\/$/, "");
+  const resp = await fetch(`${base}/v1/auth/config`, {
+    headers: buildHeaders(token),
+    credentials: "same-origin",
+  });
+  if (!resp.ok) {
+    const body = await resp.text();
+    throw new Error(`${resp.status} ${resp.statusText}${body ? `: ${body}` : ""}`);
+  }
+  return (await resp.json()) as AuthConfigResponse;
+}
+
+export async function getAuthMe(): Promise<AuthMeResponse> {
+  const { apiBase, token } = getConnection();
+  const base = apiBase.replace(/\/$/, "");
+  const resp = await fetch(`${base}/v1/auth/me`, {
+    headers: buildHeaders(token),
+    credentials: "same-origin",
+  });
+  if (!resp.ok) {
+    return { authenticated: false };
+  }
+  return (await resp.json()) as AuthMeResponse;
+}
+
+export async function setupLocalAuth(username: string, password: string): Promise<AuthMeResponse> {
+  const { apiBase } = getConnection();
+  const base = apiBase.replace(/\/$/, "");
+  const resp = await fetch(`${base}/v1/auth/setup`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!resp.ok) {
+    const body = await resp.text();
+    throw new Error(`${resp.status} ${resp.statusText}${body ? `: ${body}` : ""}`);
+  }
+  return (await resp.json()) as AuthMeResponse;
+}
+
+export async function loginLocalAuth(username: string, password: string): Promise<AuthMeResponse> {
+  const { apiBase } = getConnection();
+  const base = apiBase.replace(/\/$/, "");
+  const resp = await fetch(`${base}/v1/auth/login`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!resp.ok) {
+    const body = await resp.text();
+    throw new Error(`${resp.status} ${resp.statusText}${body ? `: ${body}` : ""}`);
+  }
+  return (await resp.json()) as AuthMeResponse;
+}
+
+export async function logoutLocalAuth(): Promise<void> {
+  const { apiBase, token } = getConnection();
+  const base = apiBase.replace(/\/$/, "");
+  const resp = await fetch(`${base}/v1/auth/logout`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: buildHeaders(token),
+  });
+  if (!resp.ok) {
+    const body = await resp.text();
+    throw new Error(`${resp.status} ${resp.statusText}${body ? `: ${body}` : ""}`);
   }
 }

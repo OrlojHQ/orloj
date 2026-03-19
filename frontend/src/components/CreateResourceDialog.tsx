@@ -10,7 +10,7 @@ const TEMPLATES: Record<string, string> = {
     apiVersion: "orloj.dev/v1",
     kind: "Agent",
     metadata: { name: "my-agent", namespace: "default" },
-    spec: { model: "gpt-4o-mini", prompt: "You are a helpful assistant.", tools: [], limits: { max_steps: 10 } },
+    spec: { model_ref: "openai-default", prompt: "You are a helpful assistant.", tools: [], limits: { max_steps: 10 } },
   }, null, 2),
   AgentSystem: JSON.stringify({
     apiVersion: "orloj.dev/v1",

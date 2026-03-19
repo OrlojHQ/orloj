@@ -54,9 +54,9 @@ func TestTaskControllerPublishesAgentHandoffMessages(t *testing.T) {
 			Kind:       "Agent",
 			Metadata:   resources.ObjectMeta{Name: "planner-agent"},
 			Spec: resources.AgentSpec{
-				Model:  "gpt-4o",
-				Prompt: "plan",
-				Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
+				ModelRef: "openai-default",
+				Prompt:   "plan",
+				Limits:   resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
 			},
 		},
 		{
@@ -64,9 +64,9 @@ func TestTaskControllerPublishesAgentHandoffMessages(t *testing.T) {
 			Kind:       "Agent",
 			Metadata:   resources.ObjectMeta{Name: "writer-agent"},
 			Spec: resources.AgentSpec{
-				Model:  "gpt-4o",
-				Prompt: "write",
-				Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
+				ModelRef: "openai-default",
+				Prompt:   "write",
+				Limits:   resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
 			},
 		},
 	} {
@@ -158,9 +158,9 @@ func TestTaskControllerFailsTaskWhenMessagePublishFails(t *testing.T) {
 			Kind:       "Agent",
 			Metadata:   resources.ObjectMeta{Name: "planner-agent"},
 			Spec: resources.AgentSpec{
-				Model:  "gpt-4o",
-				Prompt: "plan",
-				Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
+				ModelRef: "openai-default",
+				Prompt:   "plan",
+				Limits:   resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
 			},
 		},
 		{
@@ -168,9 +168,9 @@ func TestTaskControllerFailsTaskWhenMessagePublishFails(t *testing.T) {
 			Kind:       "Agent",
 			Metadata:   resources.ObjectMeta{Name: "writer-agent"},
 			Spec: resources.AgentSpec{
-				Model:  "gpt-4o",
-				Prompt: "write",
-				Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
+				ModelRef: "openai-default",
+				Prompt:   "write",
+				Limits:   resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
 			},
 		},
 	} {

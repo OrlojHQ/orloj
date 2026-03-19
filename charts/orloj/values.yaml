@@ -18,6 +18,7 @@ containerSecurityContext:
 
 runtimeSecret:
   modelGatewayApiKey: ""
+  apiToken: ""
 
 runtimeConfig: {}
 
