@@ -1,6 +1,15 @@
 import { defineConfig } from 'vocs'
 
+// Optional: set for production deploys (e.g. GitHub Actions manual Pages workflow).
+// VOCS_BASE_URL — public origin, e.g. https://docs.example.com (canonical / OG URLs).
+// VOCS_BASE_PATH — path prefix if the site is not at the domain root, e.g. /orloj for
+// https://org.github.io/orloj/. Leave unset for a custom domain serving the site at /.
+const vocsBasePath = process.env.VOCS_BASE_PATH?.trim()
+const vocsBaseUrl = process.env.VOCS_BASE_URL?.trim()
+
 export default defineConfig({
+  ...(vocsBasePath ? { basePath: vocsBasePath } : {}),
+  ...(vocsBaseUrl ? { baseUrl: vocsBaseUrl } : {}),
   title: 'orloj Docs',
   description: 'Lightweight orchestration plane for agents, tools, policies, and task execution.',
   rootDir: 'docs',
@@ -38,6 +47,7 @@ export default defineConfig({
         { text: 'VPS Deployment', link: '/deployment/vps' },
         { text: 'Kubernetes Deployment', link: '/deployment/kubernetes' },
         { text: 'Remote CLI and API access', link: '/deployment/remote-cli-access' },
+        { text: 'GitHub Pages (docs site)', link: '/deployment/github-pages' },
       ],
     },
     {

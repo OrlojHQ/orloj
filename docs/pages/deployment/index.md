@@ -21,6 +21,10 @@ Choose a deployment path based on your environment and required operational beha
 3. [Kubernetes Deployment (Helm + Manifest Fallback)](./kubernetes.md)
 4. [Remote CLI and API access](./remote-cli-access.md) — tokens, `orlojctl` profiles, and `config.json` after you expose the control plane
 
+## Publishing the documentation site
+
+- **[GitHub Pages](./github-pages.md)** — manual workflow for maintainers (custom domain or `github.io`)
+
 ## Security Defaults
 
 - Rotate default secrets before non-local use.
