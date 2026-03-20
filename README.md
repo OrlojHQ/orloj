@@ -118,6 +118,8 @@ Key pages:
 - [Concepts](docs/pages/concepts/index.md) -- agents, tasks, tools, model routing, governance
 - [Guides](docs/pages/guides/index.md) -- deploy a pipeline, configure routing, build tools, set up governance
 - [Reference](docs/pages/reference/index.md) -- CLI, API, resource schemas, contracts
+- [Deployment](docs/pages/deployment/index.md) -- local, VPS, Kubernetes, [remote CLI access](docs/pages/deployment/remote-cli-access.md)
+- [Security and Isolation](docs/pages/operations/security.md) -- control plane API tokens (`openssl rand`), secrets, tool isolation
 
 ## Docker Compose
 

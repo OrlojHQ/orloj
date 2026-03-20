@@ -212,6 +212,10 @@ export interface AuthMeResponse {
   method?: string;
 }
 
+export interface AuthChangePasswordResponse {
+  status: string;
+}
+
 export async function getAuthConfig(): Promise<AuthConfigResponse> {
   const { apiBase, token } = getConnection();
   const base = apiBase.replace(/\/$/, "");
@@ -283,4 +287,30 @@ export async function logoutLocalAuth(): Promise<void> {
     const body = await resp.text();
     throw new Error(`${resp.status} ${resp.statusText}${body ? `: ${body}` : ""}`);
   }
+}
+
+export async function changeLocalAuthPassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<AuthChangePasswordResponse> {
+  const { apiBase, token } = getConnection();
+  const base = apiBase.replace(/\/$/, "");
+  const resp = await fetch(`${base}/v1/auth/change-password`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: {
+      ...buildHeaders(token),
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({
+      current_password: currentPassword,
+      new_password: newPassword,
+    }),
+  });
+  if (!resp.ok) {
+    const body = await resp.text();
+    throw new Error(`${resp.status} ${resp.statusText}${body ? `: ${body}` : ""}`);
+  }
+  return (await resp.json()) as AuthChangePasswordResponse;
 }

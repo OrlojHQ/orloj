@@ -22,18 +22,25 @@ import (
 	"github.com/OrlojHQ/orloj/resources"
 )
 
-const defaultServer = "http://127.0.0.1:8080"
-
 func Run(args []string) error {
 	cleanArgs, token, err := extractGlobalAPIToken(args)
 	if err != nil {
 		return err
 	}
+	cfg, err := loadOrlojctlConfig()
+	if err != nil {
+		return fmt.Errorf("orlojctl config: %w", err)
+	}
+	resolvedCliConfig = cfg
+
 	if token == "" {
 		token = strings.TrimSpace(os.Getenv("ORLOJCTL_API_TOKEN"))
 	}
 	if token == "" {
 		token = strings.TrimSpace(os.Getenv("ORLOJ_API_TOKEN"))
+	}
+	if token == "" {
+		token = tokenFromProfile(cfg)
 	}
 	configureDefaultHTTPClient(token)
 	args = cleanArgs
@@ -66,6 +73,8 @@ func Run(args []string) error {
 		return runEvents(args[1:])
 	case "admin":
 		return runAdmin(args[1:])
+	case "config":
+		return runConfig(args[1:])
 	case "rollback":
 		return fmt.Errorf("%q is not implemented in MVP", args[0])
 	case "help", "-h", "--help":
@@ -129,7 +138,7 @@ func extractGlobalAPIToken(args []string) ([]string, string, error) {
 func runApply(args []string) error {
 	fs := flag.NewFlagSet("apply", flag.ContinueOnError)
 	manifestPath := fs.String("f", "", "path to resource manifest")
-	server := fs.String("server", defaultServer, "Agent API server URL")
+	server := fs.String("server", defaultServerResolved(resolvedCliConfig), "Agent API server URL")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -194,7 +203,7 @@ func runAdmin(args []string) error {
 	switch strings.ToLower(strings.TrimSpace(args[0])) {
 	case "reset-password":
 		fs := flag.NewFlagSet("admin reset-password", flag.ContinueOnError)
-		server := fs.String("server", defaultServer, "Orloj server URL")
+		server := fs.String("server", defaultServerResolved(resolvedCliConfig), "Orloj server URL")
 		username := fs.String("username", "", "admin username (optional)")
 		newPassword := fs.String("new-password", "", "new admin password")
 		if err := fs.Parse(args[1:]); err != nil {
@@ -225,7 +234,7 @@ func runAdmin(args []string) error {
 
 func runCreateSecret(args []string) error {
 	fs := flag.NewFlagSet("create secret", flag.ContinueOnError)
-	server := fs.String("server", defaultServer, "Orloj server URL")
+	server := fs.String("server", defaultServerResolved(resolvedCliConfig), "Orloj server URL")
 	var ns string
 	fs.StringVar(&ns, "namespace", "default", "secret namespace")
 	fs.StringVar(&ns, "n", "default", "secret namespace (shorthand)")
@@ -399,7 +408,7 @@ func runGet(args []string) error {
 	}
 
 	fs := flag.NewFlagSet("get", flag.ContinueOnError)
-	server := fs.String("server", defaultServer, "Agent API server URL")
+	server := fs.String("server", defaultServerResolved(resolvedCliConfig), "Agent API server URL")
 	watch := fs.Bool("w", false, "watch for incremental updates (tasks only)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
@@ -731,7 +740,7 @@ func listEndpointForResource(resource string) (string, error) {
 
 func runLogs(args []string) error {
 	fs := flag.NewFlagSet("logs", flag.ContinueOnError)
-	server := fs.String("server", defaultServer, "Agent API server URL")
+	server := fs.String("server", defaultServerResolved(resolvedCliConfig), "Agent API server URL")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -778,7 +787,7 @@ func runLogs(args []string) error {
 
 func runDelete(args []string) error {
 	fs := flag.NewFlagSet("delete", flag.ContinueOnError)
-	server := fs.String("server", defaultServer, "Agent API server URL")
+	server := fs.String("server", defaultServerResolved(resolvedCliConfig), "Agent API server URL")
 	var ns string
 	fs.StringVar(&ns, "namespace", "", "resource namespace override")
 	fs.StringVar(&ns, "n", "", "resource namespace override (shorthand)")
@@ -825,7 +834,7 @@ func runDelete(args []string) error {
 
 func runTrace(args []string) error {
 	fs := flag.NewFlagSet("trace", flag.ContinueOnError)
-	server := fs.String("server", defaultServer, "Agent API server URL")
+	server := fs.String("server", defaultServerResolved(resolvedCliConfig), "Agent API server URL")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -926,7 +935,7 @@ func runTrace(args []string) error {
 
 func runGraph(args []string) error {
 	fs := flag.NewFlagSet("graph", flag.ContinueOnError)
-	server := fs.String("server", defaultServer, "Agent API server URL")
+	server := fs.String("server", defaultServerResolved(resolvedCliConfig), "Agent API server URL")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -1337,7 +1346,7 @@ func parseInt64OrZero(value string) int64 {
 func runRun(args []string) error {
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	system := fs.String("system", "", "AgentSystem name to execute (required)")
-	server := fs.String("server", defaultServer, "Orloj server URL")
+	server := fs.String("server", defaultServerResolved(resolvedCliConfig), "Orloj server URL")
 	var ns string
 	fs.StringVar(&ns, "namespace", "default", "namespace for the task")
 	fs.StringVar(&ns, "n", "default", "namespace for the task (shorthand)")
@@ -1454,9 +1463,15 @@ Usage:
   orlojctl graph system|task <name>
   orlojctl events [--source=<s>] [--type=<t>] [--kind=<k>] [--name=<n>] [--namespace=<ns>] [--since=<id>] [--once] [--timeout=<duration>] [--raw]
   orlojctl admin reset-password [--server <url>] [--username <name>] --new-password <value>
+  orlojctl config path|get|use <name>|set-profile <name> [--server URL] [--token value] [--token-env NAME]
 
 Global options:
-  --api-token <token>   Bearer token applied to all HTTP requests (also ORLOJCTL_API_TOKEN or ORLOJ_API_TOKEN)
+  --api-token <token>   Bearer token applied to all HTTP requests
+
+Token resolution (first match wins): --api-token, ORLOJCTL_API_TOKEN, ORLOJ_API_TOKEN, active profile token or token_env.
+
+Default --server when omitted: ORLOJCTL_SERVER, ORLOJ_SERVER, profile server, else http://127.0.0.1:8080.
+Profile file: see "orlojctl config path".
 `)
 }
 
@@ -1516,7 +1531,7 @@ func watchTasks(server string) error {
 
 func runEvents(args []string) error {
 	fs := flag.NewFlagSet("events", flag.ContinueOnError)
-	server := fs.String("server", defaultServer, "Agent API server URL")
+	server := fs.String("server", defaultServerResolved(resolvedCliConfig), "Agent API server URL")
 	since := fs.Uint64("since", 0, "event id to resume from")
 	source := fs.String("source", "", "filter by event source (example: apiserver)")
 	eventType := fs.String("type", "", "filter by event type (example: resource.created)")

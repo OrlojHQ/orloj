@@ -37,6 +37,7 @@ export default defineConfig({
         { text: 'Local Deployment', link: '/deployment/local' },
         { text: 'VPS Deployment', link: '/deployment/vps' },
         { text: 'Kubernetes Deployment', link: '/deployment/kubernetes' },
+        { text: 'Remote CLI and API access', link: '/deployment/remote-cli-access' },
       ],
     },
     {

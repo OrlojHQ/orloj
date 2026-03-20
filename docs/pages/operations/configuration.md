@@ -1,6 +1,6 @@
 # Configuration
 
-This page defines runtime configuration for `orlojd` and `orlojworker`.
+This page defines runtime configuration for `orlojd`, `orlojworker`, and client-side defaults for `orlojctl` (see also [CLI reference](../reference/cli.md)).
 
 ## Precedence
 
@@ -34,6 +34,9 @@ Example:
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `orlojd`, `orlojworker` | OTLP gRPC endpoint for OpenTelemetry trace export. Empty disables export. |
 | `OTEL_EXPORTER_OTLP_INSECURE` | `orlojd`, `orlojworker` | Set to `true` for non-TLS OTLP connections (development). |
 | `ORLOJ_LOG_FORMAT` | `orlojd`, `orlojworker` | Log output format: `json` (default) or `text`. |
+| `ORLOJ_SERVER` | `orlojctl` | Default API base URL when `--server` is omitted (after `ORLOJCTL_SERVER`). |
+| `ORLOJCTL_SERVER` | `orlojctl` | Default API base URL when `--server` is omitted (highest precedence among env defaults). |
+| `ORLOJCTL_API_TOKEN` | `orlojctl` | Bearer token for API calls (same semantics as `ORLOJ_API_TOKEN` for the client). |
 
 ## Server Flags
 

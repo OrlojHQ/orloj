@@ -26,6 +26,23 @@ orlojctl trace task <task-name>
 orlojctl graph system|task <name>
 orlojctl events [filters...]
 orlojctl admin reset-password --new-password <value> [--username <name>]
+orlojctl config path|get|use <name>|set-profile <name> [--server URL] [--token value] [--token-env NAME]
+```
+
+### Remote API and authentication
+
+For **hosted / remote** control planes: operator-generated bearer tokens, env defaults, `orlojctl config` profiles, when `config.json` is created, and full precedence rules—see **[Remote CLI and API access](../deployment/remote-cli-access.md)**.
+
+Quick reference:
+
+- **Token order:** `--api-token`, then `ORLOJCTL_API_TOKEN`, then `ORLOJ_API_TOKEN`, then active profile `token` / `token_env`.
+- **Default `--server`:** `ORLOJCTL_SERVER`, `ORLOJ_SERVER`, active profile `server`, else `http://127.0.0.1:8080`.
+- Token generation and server configuration: [Control plane API tokens](../operations/security.md#control-plane-api-tokens).
+
+```bash
+orlojctl config path
+orlojctl config set-profile production --server https://orloj.example.com --token-env ORLOJ_PROD_TOKEN
+orlojctl config use production
 ```
 
 ### `orlojctl create secret`
@@ -48,7 +65,7 @@ Flags:
 
 - `--from-literal` (required, repeatable): `key=value` pair to include in the secret.
 - `--namespace` (default `default`): namespace for the secret.
-- `--server` (default `http://127.0.0.1:8080`): Orloj server URL.
+- `--server` (same default resolution as [Remote CLI and API access](../deployment/remote-cli-access.md#precedence)): Orloj server URL.
 
 Values are automatically base64-encoded via `stringData` semantics. The plaintext never touches disk.
 
@@ -107,8 +124,8 @@ Supported resources:
 
 Common flags:
 
-- `--server` (default `http://127.0.0.1:8080`)
-- `--api-token` (global; also via `ORLOJCTL_API_TOKEN` or `ORLOJ_API_TOKEN`)
+- `--server` (default: `ORLOJCTL_SERVER`, `ORLOJ_SERVER`, active profile, then `http://127.0.0.1:8080`)
+- `--api-token` (global; also via `ORLOJCTL_API_TOKEN`, `ORLOJ_API_TOKEN`, or profile `token` / `token_env`)
 - `--namespace` on namespaced operations
 - `-w` for watch mode on supported `get` commands
 - `events` filters: `--source`, `--type`, `--kind`, `--name`, `--namespace`, `--since`, `--once`, `--timeout`, `--raw`

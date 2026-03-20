@@ -3,9 +3,17 @@ import { useHealthCheck } from "../api/hooks";
 import { logoutLocalAuth } from "../api/client";
 import { Sun, Moon, Wifi, WifiOff, Settings } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { NamespaceSelector } from "./NamespaceSelector";
 
-export function TopBar() {
+interface TopBarProps {
+  onAuthStateChanged?: () => void;
+  localAuthEnabled?: boolean;
+  username?: string;
+}
+
+export function TopBar({ onAuthStateChanged, localAuthEnabled = false, username }: TopBarProps) {
+  const navigate = useNavigate();
   const namespace = useAppStore((s) => s.namespace);
   const setNamespace = useAppStore((s) => s.setNamespace);
   const theme = useAppStore((s) => s.theme);
@@ -79,19 +87,47 @@ export function TopBar() {
               placeholder="http://127.0.0.1:8080"
             />
           </label>
-          <label className="topbar__settings-label">
-            Session
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={async () => {
-                await logoutLocalAuth();
-                window.location.href = "/ui/login";
-              }}
-            >
-              Sign Out
-            </button>
-          </label>
+          {localAuthEnabled ? (
+            <>
+              <label className="topbar__settings-label">
+                Current User
+                <span className="topbar__settings-value mono">{username?.trim() || "local-admin"}</span>
+              </label>
+              <label className="topbar__settings-label">
+                Account
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => {
+                    setShowSettings(false);
+                    navigate("/account");
+                  }}
+                >
+                  Account Settings
+                </button>
+              </label>
+              <label className="topbar__settings-label">
+                Session
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={async () => {
+                    try {
+                      await logoutLocalAuth();
+                    } finally {
+                      setShowSettings(false);
+                      onAuthStateChanged?.();
+                      navigate("/", { replace: true });
+                    }
+                  }}
+                >
+                  Sign Out
+                </button>
+              </label>
+            </>
+          ) : (
+            <p className="topbar__settings-empty">Local account controls are unavailable in this auth mode.</p>
+          )}
         </div>
       )}
     </header>

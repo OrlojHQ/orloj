@@ -20,6 +20,7 @@ import {
   Webhook,
   PanelLeftClose,
   PanelLeftOpen,
+  CircleUserRound,
 } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -48,7 +49,12 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/approvals", icon: <ShieldCheck size={18} />, label: "Approvals", group: "Governance" },
 ];
 
-export function Sidebar() {
+interface SidebarProps {
+  localAuthEnabled?: boolean;
+  username?: string;
+}
+
+export function Sidebar({ localAuthEnabled = false, username }: SidebarProps) {
   const collapsed = useAppStore((s) => s.sidebarCollapsed);
   const toggle = useAppStore((s) => s.toggleSidebar);
   const approvals = useToolApprovals();
@@ -92,6 +98,26 @@ export function Sidebar() {
           );
         })}
       </nav>
+
+      {localAuthEnabled && (
+        <div className="sidebar__account">
+          <NavLink
+            to="/account"
+            className={({ isActive }) => clsx("sidebar__account-link", isActive && "sidebar__account-link--active")}
+            title={collapsed ? "Account Settings" : undefined}
+          >
+            <span className="sidebar__account-avatar">
+              <CircleUserRound size={16} />
+            </span>
+            {!collapsed && (
+              <span className="sidebar__account-meta">
+                <span className="sidebar__account-label">Signed in as</span>
+                <span className="sidebar__account-name mono">{username?.trim() || "local-admin"}</span>
+              </span>
+            )}
+          </NavLink>
+        </div>
+      )}
 
       <button className="sidebar__toggle" onClick={toggle} aria-label="Toggle sidebar">
         {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}

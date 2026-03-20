@@ -159,6 +159,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/v1/auth/login", s.handleAuthLogin)
 	s.mux.HandleFunc("/v1/auth/logout", s.handleAuthLogout)
 	s.mux.HandleFunc("/v1/auth/me", s.handleAuthMe)
+	s.mux.HandleFunc("/v1/auth/change-password", s.handleAuthChangePassword)
 	s.mux.HandleFunc("/v1/auth/admin/reset-password", s.handleAuthAdminResetPassword)
 	s.mux.HandleFunc("/ui", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/ui/", http.StatusTemporaryRedirect)

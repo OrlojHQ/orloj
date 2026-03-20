@@ -19,12 +19,14 @@ Choose a deployment path based on your environment and required operational beha
 1. [Local Deployment](./local.md)
 2. [VPS Deployment (Compose + systemd)](./vps.md)
 3. [Kubernetes Deployment (Helm + Manifest Fallback)](./kubernetes.md)
+4. [Remote CLI and API access](./remote-cli-access.md) — tokens, `orlojctl` profiles, and `config.json` after you expose the control plane
 
 ## Security Defaults
 
 - Rotate default secrets before non-local use.
 - Restrict network exposure to required interfaces.
 - Keep API auth strategy explicit for each target.
+- After deployment, configure [remote CLI access](./remote-cli-access.md) (API tokens, env vars, optional `orlojctl config` profiles).
 
 ## Related Docs
 

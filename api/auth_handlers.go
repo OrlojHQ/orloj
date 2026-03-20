@@ -31,6 +31,11 @@ type authResetPasswordRequest struct {
 	NewPassword string `json:"new_password"`
 }
 
+type authChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
 func (s *Server) handleAuthConfig(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -199,6 +204,85 @@ func (s *Server) handleAuthMe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, authMeResponse{Authenticated: false})
+}
+
+func (s *Server) handleAuthChangePassword(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.authMode != AuthModeLocal {
+		http.Error(w, "password change is only available in local mode", http.StatusBadRequest)
+		return
+	}
+
+	var req authChangePasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(req.CurrentPassword) == "" {
+		http.Error(w, "current_password is required", http.StatusBadRequest)
+		return
+	}
+	if err := store.ValidatePasswordPolicy(req.NewPassword, 12); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	admin, hasAdmin, err := s.stores.LocalAdmins.Get()
+	if err != nil {
+		http.Error(w, "auth store error", http.StatusInternalServerError)
+		return
+	}
+	if !hasAdmin {
+		http.Error(w, "admin setup required", http.StatusConflict)
+		return
+	}
+
+	authenticated := false
+	if sessionID := readSessionID(r); sessionID != "" {
+		session, ok, sessionErr := s.stores.AuthSessions.Get(sessionID)
+		if sessionErr != nil {
+			http.Error(w, "session lookup failed", http.StatusInternalServerError)
+			return
+		}
+		if ok {
+			expiresAt, parseErr := time.Parse(time.RFC3339Nano, session.ExpiresAt)
+			if parseErr == nil && expiresAt.After(time.Now().UTC()) && strings.EqualFold(session.Username, admin.Username) {
+				authenticated = true
+			} else if parseErr != nil || !expiresAt.After(time.Now().UTC()) {
+				_ = s.stores.AuthSessions.Delete(sessionID)
+			}
+		}
+	}
+	if !authenticated && s.authorizer != nil {
+		allowed, _, _ := s.authorizer.Authorize(r, "admin")
+		authenticated = allowed
+	}
+	if !authenticated {
+		http.Error(w, "authentication required", http.StatusUnauthorized)
+		return
+	}
+
+	ok, verifyErr := store.VerifyPasswordHash(admin.PasswordHash, req.CurrentPassword)
+	if verifyErr != nil || !ok {
+		http.Error(w, "invalid current password", http.StatusUnauthorized)
+		return
+	}
+
+	hash, hashErr := store.GeneratePasswordHash(req.NewPassword)
+	if hashErr != nil {
+		http.Error(w, "failed to hash password", http.StatusInternalServerError)
+		return
+	}
+	if upsertErr := s.stores.LocalAdmins.Upsert(admin.Username, hash); upsertErr != nil {
+		http.Error(w, "failed to update password", http.StatusInternalServerError)
+		return
+	}
+	_ = s.stores.AuthSessions.DeleteByUsername(admin.Username)
+	s.clearSessionCookie(w, r)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "password changed"})
 }
 
 func (s *Server) handleAuthAdminResetPassword(w http.ResponseWriter, r *http.Request) {

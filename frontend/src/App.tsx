@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, useEffect, useCallback } from "react";
 import { useAppStore } from "./store";
 import { useWatchInvalidation } from "./api/watch";
-import { getAuthConfig, getAuthMe, type AuthConfigResponse } from "./api/client";
+import { getAuthConfig, getAuthMe, type AuthConfigResponse, type AuthMeResponse } from "./api/client";
 import { Sidebar } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import { ToastContainer } from "./components/Toast";
@@ -40,6 +40,7 @@ import { ToolApprovalDetail } from "./pages/ToolApprovalDetail";
 import { NotFound } from "./pages/NotFound";
 import { Login } from "./pages/Login";
 import { Setup } from "./pages/Setup";
+import { AccountPage } from "./pages/Account";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import clsx from "clsx";
 
@@ -69,9 +70,24 @@ interface AuthBootstrapState {
   loading: boolean;
   config: AuthConfigResponse | null;
   authenticated: boolean;
+  me: AuthMeResponse | null;
 }
 
-function AppLayout() {
+interface AppLayoutProps {
+  onAuthStateChanged: () => void;
+  localAuthEnabled: boolean;
+  username?: string;
+  authMode: string;
+  authMethod?: string;
+}
+
+function AppLayout({
+  onAuthStateChanged,
+  localAuthEnabled,
+  username,
+  authMode,
+  authMethod,
+}: AppLayoutProps) {
   const collapsed = useAppStore((s) => s.sidebarCollapsed);
   const [searchOpen, setSearchOpen] = useState(false);
 
@@ -90,13 +106,34 @@ function AppLayout() {
   return (
     <div className={clsx("app-layout", collapsed && "app-layout--collapsed")}>
       <a href="#main-content" className="skip-link">Skip to main content</a>
-      <Sidebar />
+      <Sidebar localAuthEnabled={localAuthEnabled} username={username} />
       <div className="app-layout__main">
-        <TopBar />
+        <TopBar
+          onAuthStateChanged={onAuthStateChanged}
+          localAuthEnabled={localAuthEnabled}
+          username={username}
+        />
         <main id="main-content" className="app-layout__content" role="main">
           <ErrorBoundary>
             <Routes>
               <Route path="/" element={<Dashboard />} />
+              <Route path="/setup" element={<Navigate to="/" replace />} />
+              <Route path="/login" element={<Navigate to="/" replace />} />
+              <Route
+                path="/account"
+                element={
+                  localAuthEnabled ? (
+                    <AccountPage
+                      authMode={authMode}
+                      authMethod={authMethod}
+                      username={username}
+                      onAuthStateChanged={onAuthStateChanged}
+                    />
+                  ) : (
+                    <Navigate to="/" replace />
+                  )
+                }
+              />
               <Route path="/systems" element={<AgentSystems />} />
               <Route path="/systems/:name" element={<AgentSystemDetail />} />
               <Route path="/agents" element={<Agents />} />
@@ -142,6 +179,7 @@ export function App() {
     loading: true,
     config: null,
     authenticated: false,
+    me: null,
   });
 
   const refreshAuth = useCallback(() => {
@@ -154,12 +192,13 @@ export function App() {
       try {
         const config = await getAuthConfig();
         let authenticated = true;
+        let me: AuthMeResponse | null = null;
         if (config.mode === "local" && !config.setup_required) {
-          const me = await getAuthMe();
+          me = await getAuthMe();
           authenticated = me.authenticated === true;
         }
         if (!cancelled) {
-          setAuth({ loading: false, config, authenticated });
+          setAuth({ loading: false, config, authenticated, me });
         }
       } catch {
         if (!cancelled) {
@@ -167,6 +206,7 @@ export function App() {
             loading: false,
             config: { mode: "off", setup_required: false, login_methods: [] },
             authenticated: true,
+            me: null,
           });
         }
       }
@@ -198,7 +238,13 @@ export function App() {
             </Routes>
           ) : (
             <WatchProvider>
-              <AppLayout />
+              <AppLayout
+                onAuthStateChanged={refreshAuth}
+                localAuthEnabled={auth.config?.mode === "local"}
+                username={auth.me?.username}
+                authMode={auth.config?.mode ?? "off"}
+                authMethod={auth.me?.method}
+              />
             </WatchProvider>
           )}
         </BrowserRouter>

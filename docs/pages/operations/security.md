@@ -10,6 +10,57 @@ This page describes current runtime security controls and expected operator prac
 - Unsupported tools and disallowed runtime requests fail closed.
 - Permission denials are terminal for the current execution path.
 
+## Control plane API tokens
+
+The HTTP API (including `orlojctl`) authenticates automation with **`Authorization: Bearer <token>`** when you enable token validation on the server. Orloj **does not** mint or email API keys: the **operator** chooses a secret string, configures it on `orlojd`, and distributes the **same** value to people and CI that need API access.
+
+**See also:** [Remote CLI and API access](../deployment/remote-cli-access.md) — end-to-end flow for self-hosters (env vars, `orlojctl config`, `config.json` lifecycle).
+
+This is separate from **local UI sign-in** (`--auth-mode=local`), which uses an admin username/password and **session cookies** in the browser. The CLI does not use that password for API calls; use a bearer token as below (or run with auth disabled in trusted dev environments only).
+
+### 1. Generate a token
+
+Use a cryptographically random value (length is flexible; treat it like a password):
+
+```bash
+# Hex (64 characters); easy to paste into env files
+openssl rand -hex 32
+
+# Or base64 (~44 characters)
+openssl rand -base64 32
+```
+
+Store the output in your secrets manager, Kubernetes Secret, or password manager—**not** in git.
+
+### 2. Configure the server
+
+Pick **one** of these (same token string you generated):
+
+- **Flag:** `orlojd --api-key='<token>'`
+- **Environment:** `ORLOJ_API_TOKEN='<token>'` (also read when `--api-key` is unset; see server help)
+
+For **multiple** distinct tokens with different roles (reader vs admin-style access), use:
+
+```bash
+export ORLOJ_API_TOKENS='reader-token-here:reader,automation-token-here:admin'
+```
+
+Format is comma-separated `token:role` pairs. When `ORLOJ_API_TOKENS` is set, it populates the token map and a single `ORLOJ_API_TOKEN` is only used if that list is empty (see `loadAuthConfig` in `api/authz.go`).
+
+### 3. Configure clients (`orlojctl` and automation)
+
+Use the **same** token the server expects:
+
+- **Environment:** `ORLOJ_API_TOKEN` or `ORLOJCTL_API_TOKEN`
+- **Flag:** `orlojctl --api-token '<token>' ...`
+- **Profile:** `orlojctl config set-profile ... --token-env VAR` so the token stays in the environment, not on disk
+
+See [Remote CLI and API access](../deployment/remote-cli-access.md) for client precedence, default `--server` resolution, and profiles.
+
+### 4. Local auth mode and APIs
+
+If you use `--auth-mode=local`, the UI still requires a bearer token (or session cookie) for protected API routes. Configure `ORLOJ_API_TOKEN` / `--api-key` on the server so `orlojctl` and other API clients can authenticate with `Authorization: Bearer`—the admin password alone is not used for programmatic access.
+
 ## Tool Types
 
 All tool types (`http`, `external`, `grpc`, `webhook-callback`) flow through the governed runtime pipeline, so policy enforcement, retry, auth injection, and error handling behave identically regardless of transport. See [Tools and Isolation](../concepts/tools-and-isolation.md) for type details.
