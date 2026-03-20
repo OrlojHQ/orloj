@@ -1,0 +1,60 @@
+apiVersion: orloj.dev/v1
+kind: AgentSystem
+metadata:
+  name: rr-real-kitchen-system
+  namespace: rr-real-kitchen
+spec:
+  agents:
+    - rr-real-kitchen-commander-agent
+    - rr-real-kitchen-knowledge-lead-agent
+    - rr-real-kitchen-knowledge-worker-agent
+    - rr-real-kitchen-analytics-lead-agent
+    - rr-real-kitchen-analytics-worker-agent
+    - rr-real-kitchen-mcp-lead-agent
+    - rr-real-kitchen-mcp-worker-agent
+    - rr-real-kitchen-sec-lead-agent
+    - rr-real-kitchen-auth-worker-agent
+    - rr-real-kitchen-ops-lead-agent
+    - rr-real-kitchen-retry-worker-agent
+    - rr-real-kitchen-editor-agent
+  graph:
+    rr-real-kitchen-commander-agent:
+      edges:
+        - to: rr-real-kitchen-knowledge-lead-agent
+        - to: rr-real-kitchen-analytics-lead-agent
+        - to: rr-real-kitchen-mcp-lead-agent
+        - to: rr-real-kitchen-sec-lead-agent
+        - to: rr-real-kitchen-ops-lead-agent
+    rr-real-kitchen-knowledge-lead-agent:
+      edges:
+        - to: rr-real-kitchen-knowledge-worker-agent
+    rr-real-kitchen-analytics-lead-agent:
+      edges:
+        - to: rr-real-kitchen-analytics-worker-agent
+    rr-real-kitchen-mcp-lead-agent:
+      edges:
+        - to: rr-real-kitchen-mcp-worker-agent
+    rr-real-kitchen-sec-lead-agent:
+      edges:
+        - to: rr-real-kitchen-auth-worker-agent
+    rr-real-kitchen-ops-lead-agent:
+      edges:
+        - to: rr-real-kitchen-retry-worker-agent
+    rr-real-kitchen-knowledge-worker-agent:
+      edges:
+        - to: rr-real-kitchen-editor-agent
+    rr-real-kitchen-analytics-worker-agent:
+      edges:
+        - to: rr-real-kitchen-editor-agent
+    rr-real-kitchen-mcp-worker-agent:
+      edges:
+        - to: rr-real-kitchen-editor-agent
+    rr-real-kitchen-auth-worker-agent:
+      edges:
+        - to: rr-real-kitchen-editor-agent
+    rr-real-kitchen-retry-worker-agent:
+      edges:
+        - to: rr-real-kitchen-editor-agent
+    rr-real-kitchen-editor-agent:
+      join:
+        mode: wait_for_all

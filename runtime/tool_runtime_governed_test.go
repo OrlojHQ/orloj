@@ -278,7 +278,7 @@ func TestGovernedToolRuntimeWithGovernanceAllowsRolePermission(t *testing.T) {
 		},
 	}
 	base := &scriptedToolRuntime{result: "ok"}
-	runtime := BuildGovernedToolRuntimeForAgentWithGovernance(base, nil, toolLookup, roleLookup, nil, "default", agent)
+	runtime := BuildGovernedToolRuntimeForAgentWithGovernance(base, nil, toolLookup, roleLookup, nil, "default", agent, nil)
 
 	out, err := runtime.Call(context.Background(), "web_search", "q=orloj")
 	if err != nil {
@@ -316,7 +316,7 @@ func TestGovernedToolRuntimeWithGovernanceDeniesMissingRole(t *testing.T) {
 		},
 	}
 	base := &scriptedToolRuntime{result: "ok"}
-	runtime := BuildGovernedToolRuntimeForAgentWithGovernance(base, nil, toolLookup, staticRoleLookup{items: map[string]resources.AgentRole{}}, nil, "default", agent)
+	runtime := BuildGovernedToolRuntimeForAgentWithGovernance(base, nil, toolLookup, staticRoleLookup{items: map[string]resources.AgentRole{}}, nil, "default", agent, nil)
 
 	_, err := runtime.Call(context.Background(), "web_search", "q=orloj")
 	if err == nil {
@@ -377,7 +377,7 @@ func TestGovernedToolRuntimeWithGovernanceAppliesToolPermissionRule(t *testing.T
 		},
 	}
 	base := &scriptedToolRuntime{result: "ok"}
-	runtime := BuildGovernedToolRuntimeForAgentWithGovernance(base, nil, toolLookup, roleLookup, permissionLookup, "default", agent)
+	runtime := BuildGovernedToolRuntimeForAgentWithGovernance(base, nil, toolLookup, roleLookup, permissionLookup, "default", agent, nil)
 
 	_, err := runtime.Call(context.Background(), "db_write", "payload")
 	if err == nil {

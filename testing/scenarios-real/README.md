@@ -120,6 +120,19 @@ Critical readiness rule:
 - Agent calls both MCP-generated tools and returns labeled markers.
 - Gate checks tool auto-generation (type=mcp), tool_filter enforcement (exactly 2 tools), tool_call trace events, and deterministic output markers (echo returns `mcp-smoke-test-marker`, get-sum returns `42`).
 
+### Wave 5: integration kitchen sink + tool approval
+
+15. `16-kitchen-sink`
+- **Tier 1 + Tier 2** in one namespace (`rr-real-kitchen`): hierarchical graph with five branches (lookup + calculate + MCP echo/sum + authenticated HTTP tool + retry HTTP tool), `AgentPolicy`, `AgentRole`/`ToolPermission`, `Memory`, `TaskWebhook` + `TaskSchedule`, and MCP poll before tasks (same pattern as `real-apply-mcp`).
+- Memory reuse uses a two-step apply inside `make real-gate-kitchen` (seed task, then query task) like `07-memory-persistent-reuse`.
+- Gate runs primary task checks, then memory seed/query, **then** signs and `POST`s to the kitchen `TaskWebhook` (the primary graph never calls the webhook—delivery is explicit, like `real-gate-webhook`), then waits for the minute schedule; captures artifacts for the primary task.
+- Expect a **long soak**: use `REAL_KITCHEN_GATE_TIMEOUT_SECONDS` (default 480) if needed. Requires **tool-backed worker**, **`make real-tool-stub`**, and **`npx`** for MCP.
+
+16. `17-tool-approval-live`
+- Isolated namespace (`rr-real-tool-approval`): HTTP smoke tool with `operation_classes: [write]` and `ToolPermission.operation_rules` `approval_required` for that class.
+- **`make real-gate-tool-approval`** applies the scenario, waits for `WaitingApproval`, prints the pending approval name and a sample `curl`, then **waits for you to approve** in the UI (Approvals) or via `POST /v1/tool-approvals/{name}/approve` yourself. It finishes with the same trace/output checks after the task succeeds. You should only need **one** approval per pending row for that inbox message and tool: after you approve, the runtime may re-run the agent turn, but the stored **Approved** `ToolApproval` is treated as a grant so you are not asked again for the same tool on that message. If the model issues **another** tool call that is still under `approval_required` (e.g. a second step), that can create a new pending approval. For **CI / non-interactive** runs (including **`make real-gate-wave5`**), use **`make real-gate-tool-approval-ci`**, which posts `/approve` automatically (`decided_by: make-real-gate-tool-approval-ci`). **`make real-apply-tool-approval`** only reapplies resources and deletes prior `ToolApproval` rows in that namespace—it does not run the gate assertions.
+- See [Tool governance and isolation](../../docs/pages/concepts/tools-and-isolation.md) (approval workflow). Use `REAL_APPROVAL_GATE_TIMEOUT_SECONDS` if the model is slow to request the tool.
+
 ## Key Targets
 
 Apply a single scenario:
@@ -130,6 +143,8 @@ make real-apply-hier-tool
 make real-apply-memory-shared
 make real-apply-tool-auth
 make real-apply-mcp
+make real-apply-kitchen
+make real-apply-tool-approval
 ```
 
 Run a single gate:
@@ -141,6 +156,9 @@ make real-gate-memory-shared
 make real-gate-governance-deny
 make real-gate-webhook
 make real-gate-mcp
+make real-gate-kitchen
+make real-gate-tool-approval        # manual approve
+make real-gate-tool-approval-ci     # auto-approve (wave5)
 ```
 
 Run grouped gates:
@@ -151,6 +169,7 @@ make real-gate-wave1
 make real-gate-wave2
 make real-gate-wave3
 make real-gate-wave4
+make real-gate-wave5
 ```
 
 Repeat a gate for release-candidate confidence:
@@ -182,3 +201,5 @@ Captured files include:
 - `07-memory-persistent-reuse` is applied in two steps by the `Makefile`: base resources + seed task first, then the query task.
 - `11-webhook-live-flow` and `12-schedule-live-flow` create run tasks dynamically, so their `real-check-*` targets resolve the latest triggered task from resource status.
 - `14-mcp-tool-smoke` requires `npx` (Node.js) on the host since the MCP server runs as a stdio child process. The first run may take longer while `@modelcontextprotocol/server-everything` is downloaded.
+- `16-kitchen-sink` combines MCP with multiple HTTP tools; use the same **tool-backed worker** + stub + `npx` setup as wave 0 + wave 4 together.
+- `17-tool-approval-live` relies on the message-driven consumer pausing the task and creating a `ToolApproval`; approve calls go to the **same API / store** the worker uses (embedded worker on `orlojd`, or **shared Postgres** when `orlojd` and `orlojworker` run as separate processes).

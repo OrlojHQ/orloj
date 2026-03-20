@@ -2,6 +2,7 @@ package agentruntime
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"log"
@@ -61,6 +62,13 @@ type AgentMessageConsumerOptions struct {
 	Memories            MemoryResourceLookup
 	MemoryBackends      *PersistentMemoryBackendRegistry
 	ModelEndpoints      resources.ModelEndpointLookup
+	ToolApprovals       ToolApprovalUpserter
+}
+
+// ToolApprovalUpserter persists ToolApproval resources when a governed tool requires approval.
+type ToolApprovalUpserter interface {
+	Upsert(item resources.ToolApproval) (resources.ToolApproval, error)
+	Get(key string) (resources.ToolApproval, bool)
 }
 
 // AgentMessageConsumerManager watches agents and consumes runtime inbox messages per agent.
@@ -87,6 +95,7 @@ type AgentMessageConsumerManager struct {
 	memories       MemoryResourceLookup
 	memBackends    *PersistentMemoryBackendRegistry
 	modelEPs       resources.ModelEndpointLookup
+	toolApprovals  ToolApprovalUpserter
 	mu             sync.Mutex
 	consumers      map[string]context.CancelFunc
 	seenMessage    map[string]time.Time
@@ -144,6 +153,7 @@ func NewAgentMessageConsumerManager(
 		memories:       opts.Memories,
 		memBackends:    opts.MemoryBackends,
 		modelEPs:       opts.ModelEndpoints,
+		toolApprovals:  opts.ToolApprovals,
 		extensions:     NormalizeExtensions(opts.Extensions),
 		consumers:      make(map[string]context.CancelFunc),
 		seenMessage:    make(map[string]time.Time),
@@ -265,6 +275,9 @@ func (m *AgentMessageConsumerManager) handleDelivery(ctx context.Context, _ stri
 	if isTerminalTaskPhase(task.Status.Phase) {
 		return nil
 	}
+	if strings.EqualFold(strings.TrimSpace(task.Status.Phase), "waitingapproval") {
+		return RetryAfter(2*time.Second, nil)
+	}
 	if isMessageProcessed(task.Status.Trace, msg.MessageID) {
 		return nil
 	}
@@ -354,6 +367,17 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 		input["inbox.join.payloads"] = joinDecision.SourcePayloads()
 	}
 
+	var approvalCtx *GovernedToolApprovalContext
+	if m.toolApprovals != nil {
+		approvals := m.toolApprovals
+		approvalCtx = &GovernedToolApprovalContext{
+			Getter: func(key string) (resources.ToolApproval, bool) {
+				return approvals.Get(key)
+			},
+			TaskKey:   taskKey,
+			MessageID: strings.TrimSpace(msg.MessageID),
+		}
+	}
 	var toolRT ToolRuntime = BuildGovernedToolRuntimeForAgentWithGovernance(
 		nil,
 		m.isolated,
@@ -362,6 +386,7 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 		m.toolPerms,
 		ns,
 		agent,
+		approvalCtx,
 	)
 	if m.mcpSessionMgr != nil && m.mcpServerStore != nil {
 		ConfigureMcpRuntime(toolRT, m.mcpSessionMgr, m.mcpServerStore, ns)
@@ -385,6 +410,13 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 	result, err := m.executor.ExecuteAgentWithRuntime(agentCtx, agent, input, toolRT)
 	if err != nil {
 		telemetry.EndSpanError(agentSpan, err)
+		if IsApprovalRequiredError(err) && m.toolApprovals != nil {
+			if pauseErr := m.pauseTaskForToolApproval(taskKey, msg, record, agent, err); pauseErr == nil {
+				return RetryAfter(2*time.Second, nil)
+			} else if m.logger != nil {
+				m.logger.Printf("tool approval pause failed task=%s message_id=%s: %v", taskKey, msg.MessageID, pauseErr)
+			}
+		}
 		retryScheduled, delay, markErr := m.recordRetryOrDeadLetter(taskKey, msg, record, fmt.Errorf("agent %s execution failed: %w", agent.Metadata.Name, err))
 		if markErr != nil {
 			return markErr
@@ -2102,6 +2134,97 @@ func copyStringMap(in map[string]string) map[string]string {
 		out[k] = v
 	}
 	return out
+}
+
+func parseToolFromApprovalChain(err error) string {
+	for e := err; e != nil; e = errors.Unwrap(e) {
+		msg := e.Error()
+		if i := strings.Index(msg, "tool="); i >= 0 {
+			rest := strings.TrimSpace(msg[i+len("tool="):])
+			end := -1
+			if j := strings.Index(rest, " reason="); j >= 0 {
+				end = j
+			} else {
+				end = strings.IndexAny(rest, " \n\t")
+			}
+			if end < 0 {
+				return strings.TrimSpace(rest)
+			}
+			return strings.TrimSpace(rest[:end])
+		}
+	}
+	return ""
+}
+
+func (m *AgentMessageConsumerManager) pauseTaskForToolApproval(taskKey string, msg AgentMessage, _ resources.TaskMessage, agent resources.Agent, execErr error) error {
+	if m == nil || m.tasks == nil || m.toolApprovals == nil {
+		return fmt.Errorf("approval pause not configured")
+	}
+	toolName := parseToolFromApprovalChain(execErr)
+	if toolName == "" {
+		return fmt.Errorf("could not parse tool name from approval error")
+	}
+	ns, taskName := splitTaskKey(taskKey)
+	taskRef := scopedTaskName(ns, taskName)
+	approvalName := toolApprovalResourceName(taskKey, msg.MessageID)
+
+	reason := strings.TrimSpace(execErr.Error())
+	if len(reason) > 500 {
+		reason = reason[:500]
+	}
+
+	approval := resources.ToolApproval{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "ToolApproval",
+		Metadata: resources.ObjectMeta{
+			Namespace: ns,
+			Name:      approvalName,
+		},
+		Spec: resources.ToolApprovalSpec{
+			TaskRef:        taskRef,
+			Tool:           toolName,
+			Agent:          agent.Metadata.Name,
+			Reason:         reason,
+			OperationClass: "write",
+		},
+		Status: resources.ToolApprovalStatus{
+			Phase: "Pending",
+		},
+	}
+	if _, err := m.toolApprovals.Upsert(approval); err != nil {
+		return err
+	}
+	if task, ok := m.tasks.Get(taskKey); ok && strings.EqualFold(strings.TrimSpace(task.Status.Phase), "waitingapproval") {
+		return nil
+	}
+
+	var lastUpsert error
+	for attempt := 0; attempt < 5; attempt++ {
+		task, ok := m.tasks.Get(taskKey)
+		if !ok {
+			return fmt.Errorf("task not found")
+		}
+		idx := ensureTaskMessageRecord(&task, msg)
+		cur := task.Status.Messages[idx]
+		cur.Phase = "RetryPending"
+		cur.NextAttemptAt = time.Now().UTC().Add(2 * time.Second).Format(time.RFC3339Nano)
+		cur.LastError = ""
+		task.Status.Messages[idx] = cur
+		task.Status.Phase = "WaitingApproval"
+		task.Status.LastError = RedactSensitive(execErr.Error())
+		task.Status.ObservedGeneration = task.Metadata.Generation
+		appendMessageTrace(&task, msg, "tool_approval_pending", fmt.Sprintf("message_id=%s tool=%s", msg.MessageID, toolName))
+		updated, err := m.tasks.Upsert(task)
+		if err != nil {
+			lastUpsert = err
+			time.Sleep(time.Duration(attempt+1) * 20 * time.Millisecond)
+			continue
+		}
+		_ = updated
+		_ = m.tasks.AppendLog(taskKey, fmt.Sprintf("task paused for tool approval: tool=%s approval=%s", toolName, approvalName))
+		return nil
+	}
+	return fmt.Errorf("upsert task waiting approval: %w", lastUpsert)
 }
 
 func isTerminalTaskPhase(phase string) bool {

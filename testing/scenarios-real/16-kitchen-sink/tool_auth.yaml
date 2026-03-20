@@ -1,0 +1,15 @@
+apiVersion: orloj.dev/v1
+kind: Tool
+metadata:
+  name: rr-real-kitchen-auth-tool
+  namespace: rr-real-kitchen
+spec:
+  type: http
+  endpoint: http://host.docker.internal:18080/tool/auth
+  runtime:
+    isolation_mode: container
+    timeout: 30s
+  auth:
+    profile: api_key_header
+    secretRef: rr-real-kitchen-tool-auth-key
+    headerName: X-Stub-Key

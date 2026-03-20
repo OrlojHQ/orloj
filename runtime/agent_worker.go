@@ -299,6 +299,13 @@ func (w *AgentWorker) Run(ctx context.Context) {
 					}
 					return
 				}
+				if IsApprovalRequiredError(selectErr) {
+					if w.onEvent != nil {
+						w.onEvent(fmt.Sprintf("step=%d tool=%s approval required error=%v", step, failedTool, selectErr))
+						w.onEvent("worker stopped approval required")
+					}
+					return
+				}
 				continue
 			}
 			if len(requestedCalls) == 0 {
@@ -408,6 +415,13 @@ func (w *AgentWorker) Run(ctx context.Context) {
 						if w.onEvent != nil {
 							w.onEvent(fmt.Sprintf("step=%d tool=%s tool_contract=%s tool_request_id=%s tool_attempt=%d permission denied duration_ms=%d error=%v", step, tool, contractVersion, toolRequestID, toolAttempt, toolDurationMS, err))
 							w.onEvent("worker stopped permission denied")
+						}
+						return
+					}
+					if IsApprovalRequiredError(err) {
+						if w.onEvent != nil {
+							w.onEvent(fmt.Sprintf("step=%d tool=%s tool_contract=%s tool_request_id=%s tool_attempt=%d duration_ms=%d error=%v", step, tool, contractVersion, toolRequestID, toolAttempt, toolDurationMS, err))
+							w.onEvent("worker stopped approval required")
 						}
 						return
 					}

@@ -1,0 +1,14 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rr-real-kitchen-ops-lead-agent
+  namespace: rr-real-kitchen
+spec:
+  model_ref: rr-real-model-default
+  prompt: |
+    You lead retry validation. Brief the retry worker: call rr-real-kitchen-retry-tool twice in order (same as tool-retry scenario);
+    first call may fail, second must succeed.
+    Do not call tools.
+  limits:
+    max_steps: 4
+    timeout: 30s

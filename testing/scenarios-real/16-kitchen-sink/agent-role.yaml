@@ -1,0 +1,15 @@
+apiVersion: orloj.dev/v1
+kind: AgentRole
+metadata:
+  name: rr-real-kitchen-role
+  namespace: rr-real-kitchen
+spec:
+  description: Invokes all kitchen integration HTTP and MCP tools.
+  permissions:
+    - tool:rr-real-kitchen-lookup-tool:invoke
+    - tool:rr-real-kitchen-calculate-tool:invoke
+    - tool:rr-real-kitchen-auth-tool:invoke
+    - tool:rr-real-kitchen-retry-tool:invoke
+    - tool:rr-real-kitchen-mcp--echo:invoke
+    - tool:rr-real-kitchen-mcp--get-sum:invoke
+    - capability:kitchen.tools

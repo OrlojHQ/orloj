@@ -1,0 +1,13 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rr-real-kitchen-sec-lead-agent
+  namespace: rr-real-kitchen
+spec:
+  model_ref: rr-real-model-default
+  prompt: |
+    You lead authenticated tool validation. Brief the auth worker to call rr-real-kitchen-auth-tool once with JSON goal and timestamp_hint.
+    Do not call tools.
+  limits:
+    max_steps: 4
+    timeout: 30s

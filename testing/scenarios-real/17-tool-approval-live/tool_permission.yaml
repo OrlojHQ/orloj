@@ -1,0 +1,16 @@
+apiVersion: orloj.dev/v1
+kind: ToolPermission
+metadata:
+  name: rr-real-approval-perm
+  namespace: rr-real-tool-approval
+spec:
+  tool_ref: rr-real-approval-smoke-tool
+  action: invoke
+  match_mode: all
+  apply_mode: global
+  required_permissions:
+    - tool:rr-real-approval-smoke-tool:invoke
+    - capability:approval.live
+  operation_rules:
+    - operation_class: write
+      verdict: approval_required

@@ -126,6 +126,15 @@ func (e *ReActExecutionEngine) Execute(ctx context.Context, agent resources.Agen
 			strings.TrimSpace(denied.Message),
 		)
 	}
+	if approval, ok := firstToolApprovalPending(stepEvents); ok {
+		return result, fmt.Errorf(
+			"%w: agent=%s step=%d tool=%s",
+			ErrToolApprovalRequired,
+			agent.Metadata.Name,
+			approval.Step,
+			strings.TrimSpace(approval.Tool),
+		)
+	}
 	if violation, ok := firstContractViolation(stepEvents); ok {
 		if !strings.EqualFold(strings.TrimSpace(agent.Spec.Execution.OnContractViolation), resources.AgentContractViolationPolicyObserve) {
 			return result, NewToolError(
@@ -193,6 +202,15 @@ func countToolSuccesses(events []string) int {
 func firstToolPermissionDenied(events []AgentStepEvent) (AgentStepEvent, bool) {
 	for _, event := range events {
 		if strings.EqualFold(strings.TrimSpace(event.Type), "tool_permission_denied") {
+			return event, true
+		}
+	}
+	return AgentStepEvent{}, false
+}
+
+func firstToolApprovalPending(events []AgentStepEvent) (AgentStepEvent, bool) {
+	for _, event := range events {
+		if strings.EqualFold(strings.TrimSpace(event.Type), "tool_approval_pending") {
 			return event, true
 		}
 	}

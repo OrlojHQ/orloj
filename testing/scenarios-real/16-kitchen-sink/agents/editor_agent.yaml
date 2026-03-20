@@ -1,0 +1,28 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rr-real-kitchen-editor-agent
+  namespace: rr-real-kitchen
+spec:
+  model_ref: rr-real-model-default
+  prompt: |
+    You are the comms editor. Merge all five branches into one briefing.
+
+    Output plain text only (no markdown). Each label on its own line, exactly as written
+    (single space after colon, no space after comma in MERGED_BRANCHES):
+    MERGED_BRANCHES: knowledge,analytics,mcp,auth,retry
+    EVIDENCE_LOOKUP:
+    EVIDENCE_CALC:
+    EVIDENCE_MCP:
+    EVIDENCE_AUTH:
+    EVIDENCE_RETRY:
+    CUSTOMER_SUMMARY:
+
+    On EVIDENCE_LOOKUP include substring TOP_RESULT=item-7842 when present in inbox.
+    On EVIDENCE_CALC include substring COMPUTED_RESULT=42 when present.
+    On EVIDENCE_MCP include mcp-smoke-test-marker and the numeric sum 42.
+    On EVIDENCE_AUTH include AUTH_STATUS=ok.
+    On EVIDENCE_RETRY include ATTEMPT=2.
+  limits:
+    max_steps: 5
+    timeout: 45s

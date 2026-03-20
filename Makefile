@@ -24,6 +24,8 @@ WEBHOOK_SCENARIO := 11-webhook-live-flow
 SCHEDULE_SCENARIO := 12-schedule-live-flow
 MCP_SCENARIO := 14-mcp-tool-smoke
 HIER_TOOL_SCENARIO := 15-hierarchical-incident-tools
+KITCHEN_SCENARIO := 16-kitchen-sink
+APPROVAL_SCENARIO := 17-tool-approval-live
 
 PIPELINE_NS := rr-real-pipeline
 HIER_NS := rr-real-hier
@@ -39,6 +41,8 @@ WEBHOOK_NS := rr-real-webhook
 SCHEDULE_NS := rr-real-schedule
 MCP_NS := rr-real-mcp
 HIER_TOOL_NS := rr-real-hier-tool
+KITCHEN_NS := rr-real-kitchen
+APPROVAL_NS := rr-real-tool-approval
 
 PIPELINE_TASK := rr-real-pipeline-task
 HIER_TASK := rr-real-hier-task
@@ -60,34 +64,54 @@ SCHEDULE_MEMORY_NAME := rr-real-schedule-memory
 
 MCP_TASK := rr-real-mcp-task
 HIER_TOOL_TASK := rr-real-hier-tool-task
+KITCHEN_PRIMARY_TASK := rr-real-kitchen-primary-task
+KITCHEN_MEMORY_SEED_TASK := rr-real-kitchen-memory-seed-task
+KITCHEN_MEMORY_QUERY_TASK := rr-real-kitchen-memory-query-task
+KITCHEN_WEBHOOK_TEMPLATE_TASK := rr-real-kitchen-webhook-template-task
+KITCHEN_SCHEDULE_TEMPLATE_TASK := rr-real-kitchen-schedule-template-task
 MCP_SERVER_NAME := rr-real-mcp-everything
+KITCHEN_MCP_SERVER_NAME := rr-real-kitchen-mcp
 
 WEBHOOK_NAME := rr-real-webhook-ingest
 SCHEDULE_NAME := rr-real-minute-digest
+KITCHEN_WEBHOOK_NAME := rr-real-kitchen-webhook-ingest
+KITCHEN_SCHEDULE_NAME := rr-real-kitchen-minute-digest
+
+APPROVAL_TASK := rr-real-approval-task
+
+KITCHEN_WEBHOOK_MEMORY := rr-real-kitchen-webhook-memory
+KITCHEN_SCHEDULE_MEMORY := rr-real-kitchen-schedule-memory
+KITCHEN_REUSE_MEMORY := rr-real-kitchen-reuse-store
 
 REAL_GATE_TIMEOUT_SECONDS ?= 240
+REAL_KITCHEN_GATE_TIMEOUT_SECONDS ?= 480
+REAL_APPROVAL_GATE_TIMEOUT_SECONDS ?= 240
 REAL_GATE_POLL_INTERVAL_SECONDS ?= 2
 REAL_SCHEDULE_TIMEOUT_SECONDS ?= 120
 
 .PHONY: build help ui-install ui-dev ui-build \
 	real-help real-tool-stub real-repeat \
-	real-delete-task real-capture \
+	real-delete-task real-delete-tool-approvals-in-ns real-capture \
 	real-apply real-apply-all \
 	real-apply-pipeline real-apply-hier real-apply-loop real-apply-tool real-apply-tool-decision real-apply-anthropic-tool-decision \
 	real-apply-memory-shared real-apply-memory-reuse real-apply-memory-reuse-query \
 	real-apply-tool-auth real-apply-governance-deny real-apply-tool-retry \
 	real-apply-webhook real-apply-schedule real-apply-mcp real-apply-hier-tool \
+	real-apply-kitchen real-apply-kitchen-memory-seed real-apply-kitchen-memory-query \
+	real-apply-tool-approval \
 	real-get real-messages real-metrics real-check \
 	real-check-pipeline real-check-hier real-check-loop real-check-tool real-check-hier-tool \
 	real-check-tool-use real-check-tool-no-use real-check-anthropic-tool-use real-check-anthropic-tool-no-use \
 	real-check-memory-shared real-check-memory-reuse real-check-tool-auth \
 	real-check-governance-deny real-check-tool-retry real-check-webhook real-check-schedule \
-	real-wait-task-succeeded real-wait-task-terminal \
+	real-check-kitchen real-check-tool-approval \
+	real-wait-task-succeeded real-wait-task-terminal real-wait-task-phase \
 	real-gate-pipeline real-gate-hier real-gate-loop real-gate-tool \
 	real-gate-tool-decision real-gate-anthropic-tool-decision real-gate-memory-shared real-gate-memory-reuse \
 	real-gate-tool-auth real-gate-governance-deny real-gate-tool-retry \
 	real-gate-webhook real-gate-schedule real-gate-mcp real-gate-hier-tool \
-	real-gate-wave0 real-gate-wave1 real-gate-wave2 real-gate-wave3 real-gate-wave4 \
+	real-gate-kitchen real-gate-tool-approval real-gate-tool-approval-ci \
+	real-gate-wave0 real-gate-wave1 real-gate-wave2 real-gate-wave3 real-gate-wave4 real-gate-wave5 \
 	real-check-all
 
 build:
@@ -140,6 +164,8 @@ real-help:
 	@echo "  make real-apply-webhook"
 	@echo "  make real-apply-schedule"
 	@echo "  make real-apply-mcp"
+	@echo "  make real-apply-kitchen"
+	@echo "  make real-apply-tool-approval"
 	@echo ""
 	@echo "Scenario gates:"
 	@echo "  make real-gate-pipeline"
@@ -156,6 +182,9 @@ real-help:
 	@echo "  make real-gate-schedule"
 	@echo "  make real-gate-mcp"
 	@echo "  make real-gate-hier-tool"
+	@echo "  make real-gate-kitchen"
+	@echo "  make real-gate-tool-approval       # waits for you to approve in UI (or curl)"
+	@echo "  make real-gate-tool-approval-ci    # same but POSTs /approve (for CI / wave5)"
 	@echo ""
 	@echo "Grouped gates:"
 	@echo "  make real-gate-wave0"
@@ -163,6 +192,7 @@ real-help:
 	@echo "  make real-gate-wave2"
 	@echo "  make real-gate-wave3"
 	@echo "  make real-gate-wave4"
+	@echo "  make real-gate-wave5   # kitchen sink + tool approval (long soak)"
 	@echo ""
 	@echo "Repeated runs:"
 	@echo "  make real-repeat TARGET=real-gate-pipeline COUNT=3"
@@ -265,6 +295,76 @@ real-apply-tool:
 real-apply-hier-tool:
 	@$(MAKE) real-delete-task NS=$(HIER_TOOL_NS) TASK=$(HIER_TOOL_TASK)
 	@$(MAKE) real-apply SCENARIO=$(HIER_TOOL_SCENARIO)
+
+real-apply-kitchen:
+	@set -eu; \
+	if command -v rg >/dev/null 2>&1; then \
+		if rg -n 'value:[[:space:]]*replace-me' "$(SCENARIOS_REAL_DIR)/$(KITCHEN_SCENARIO)" >/dev/null; then \
+			echo "Secret placeholder detected in $(SCENARIOS_REAL_DIR)/$(KITCHEN_SCENARIO). Replace spec.stringData.value first."; \
+			exit 1; \
+		fi; \
+	else \
+		if grep -RIn 'value:[[:space:]]*replace-me' "$(SCENARIOS_REAL_DIR)/$(KITCHEN_SCENARIO)" >/dev/null; then \
+			echo "Secret placeholder detected in $(SCENARIOS_REAL_DIR)/$(KITCHEN_SCENARIO). Replace spec.stringData.value first."; \
+			exit 1; \
+		fi; \
+	fi
+	@set -eu; \
+	curl -s -o /dev/null -w "%{http_code}" -X DELETE "$(API_BASE)/v1/task-webhooks/$(KITCHEN_WEBHOOK_NAME)?namespace=$(KITCHEN_NS)" >/dev/null || true
+	@set -eu; \
+	curl -s -o /dev/null -w "%{http_code}" -X DELETE "$(API_BASE)/v1/task-schedules/$(KITCHEN_SCHEDULE_NAME)?namespace=$(KITCHEN_NS)" >/dev/null || true
+	@$(MAKE) real-delete-task NS=$(KITCHEN_NS) TASK=$(KITCHEN_PRIMARY_TASK)
+	@$(MAKE) real-delete-task NS=$(KITCHEN_NS) TASK=$(KITCHEN_MEMORY_SEED_TASK)
+	@$(MAKE) real-delete-task NS=$(KITCHEN_NS) TASK=$(KITCHEN_MEMORY_QUERY_TASK)
+	@$(MAKE) real-delete-task NS=$(KITCHEN_NS) TASK=$(KITCHEN_WEBHOOK_TEMPLATE_TASK)
+	@$(MAKE) real-delete-task NS=$(KITCHEN_NS) TASK=$(KITCHEN_SCHEDULE_TEMPLATE_TASK)
+	@set -eu; \
+	find "$(SCENARIOS_REAL_DIR)/$(KITCHEN_SCENARIO)" -name '*.yaml' ! -name 'task*.yaml' -print | sort | while IFS= read -r file; do \
+		[ -n "$$file" ] || continue; \
+		$(AGENTCTL) apply -f "$$file"; \
+	done; \
+	echo "waiting for kitchen MCP server to discover tools..."; \
+	deadline=$$(( $$(date +%s) + 90 )); \
+	while true; do \
+		mcp_phase=$$(curl -sf "$(API_BASE)/v1/mcp-servers/$(KITCHEN_MCP_SERVER_NAME)?namespace=$(KITCHEN_NS)" | jq -r '.status.phase // ""' 2>/dev/null || echo ""); \
+		if [ "$$mcp_phase" = "Ready" ]; then \
+			echo "kitchen MCP server ready"; \
+			break; \
+		fi; \
+		if [ $$(date +%s) -gt $$deadline ]; then \
+			echo "timeout waiting for kitchen MCP server Ready (phase=$$mcp_phase)"; \
+			exit 1; \
+		fi; \
+		sleep 2; \
+	done; \
+	find "$(SCENARIOS_REAL_DIR)/$(KITCHEN_SCENARIO)" -name 'task*.yaml' ! -name 'task_memory_seed.yaml' ! -name 'task_memory_query.yaml' -print | sort | while IFS= read -r file; do \
+		[ -n "$$file" ] || continue; \
+		$(AGENTCTL) apply -f "$$file"; \
+	done
+
+real-apply-kitchen-memory-seed:
+	@$(MAKE) real-delete-task NS=$(KITCHEN_NS) TASK=$(KITCHEN_MEMORY_SEED_TASK)
+	@$(AGENTCTL) apply -f "$(SCENARIOS_REAL_DIR)/$(KITCHEN_SCENARIO)/task_memory_seed.yaml"
+
+real-apply-kitchen-memory-query:
+	@$(MAKE) real-delete-task NS=$(KITCHEN_NS) TASK=$(KITCHEN_MEMORY_QUERY_TASK)
+	@$(AGENTCTL) apply -f "$(SCENARIOS_REAL_DIR)/$(KITCHEN_SCENARIO)/task_memory_query.yaml"
+
+# Remove all ToolApproval rows in a namespace so UI/lists are not confused by prior gate runs (gate POSTs /approve).
+real-delete-tool-approvals-in-ns:
+	@set -eu; \
+	ns="$(TOOL_APPROVAL_CLEANUP_NS)"; \
+	[ -n "$$ns" ] || { echo "TOOL_APPROVAL_CLEANUP_NS is required"; exit 1; }; \
+	json=$$(curl -sf "$(API_BASE)/v1/tool-approvals?namespace=$$ns" || echo '{"items":[]}'); \
+	printf '%s\n' "$$json" | jq -r '.items[]? | .metadata.name // empty' | while IFS= read -r n; do \
+		[ -n "$$n" ] || continue; \
+		curl -sf -X DELETE "$(API_BASE)/v1/tool-approvals/$$n?namespace=$$ns" >/dev/null || true; \
+	done
+
+real-apply-tool-approval:
+	@$(MAKE) real-delete-task NS=$(APPROVAL_NS) TASK=$(APPROVAL_TASK)
+	@$(MAKE) real-delete-tool-approvals-in-ns TOOL_APPROVAL_CLEANUP_NS=$(APPROVAL_NS)
+	@$(MAKE) real-apply SCENARIO=$(APPROVAL_SCENARIO)
 
 real-apply-tool-decision:
 	@$(MAKE) real-delete-task NS=$(DECISION_NS) TASK=$(DECISION_USE_TASK)
@@ -488,6 +588,49 @@ real-wait-task-terminal:
 		esac; \
 		sleep "$$interval"; \
 	done
+
+real-wait-task-phase:
+	@if [ -z "$(NS)" ] || [ -z "$(TASK)" ] || [ -z "$(PHASE)" ]; then \
+		echo "NS, TASK, and PHASE are required. Example: make real-wait-task-phase NS=$(APPROVAL_NS) TASK=$(APPROVAL_TASK) PHASE=WaitingApproval"; \
+		exit 1; \
+	fi
+	@set -eu; \
+	timeout="$(REAL_GATE_TIMEOUT_SECONDS)"; \
+	interval="$(REAL_GATE_POLL_INTERVAL_SECONDS)"; \
+	deadline=$$(( $$(date +%s) + timeout )); \
+	want="$(PHASE)"; \
+	while true; do \
+		now=$$(date +%s); \
+		if [ $$now -ge $$deadline ]; then \
+			echo "timeout waiting for task $(TASK) in namespace $(NS) to reach phase $$want"; \
+			exit 1; \
+		fi; \
+		set +e; \
+		task_json=$$(curl -sSf "$(API_BASE)/v1/tasks/$(TASK)?namespace=$(NS)"); \
+		curl_rc=$$?; \
+		set -e; \
+		if [ $$curl_rc -ne 0 ]; then \
+			sleep "$$interval"; \
+			continue; \
+		fi; \
+		phase=$$(printf '%s\n' "$$task_json" | jq -r '.status.phase // ""'); \
+		if [ "$$phase" = "$$want" ]; then \
+			echo "task $(TASK) phase=$$phase"; \
+			break; \
+		fi; \
+		if [ "$$phase" = "Failed" ] || [ "$$phase" = "DeadLetter" ] || [ "$$phase" = "Error" ]; then \
+			echo "task $(TASK) terminal phase=$$phase (waiting for $$want)"; \
+			printf '%s\n' "$$task_json" | jq '.'; \
+			exit 1; \
+		fi; \
+		sleep "$$interval"; \
+	done
+
+real-check-kitchen:
+	@$(MAKE) real-check NS=$(KITCHEN_NS) TASK=$(KITCHEN_PRIMARY_TASK)
+
+real-check-tool-approval:
+	@$(MAKE) real-check NS=$(APPROVAL_NS) TASK=$(APPROVAL_TASK)
 
 real-gate-pipeline:
 	@set -eu; \
@@ -844,6 +987,158 @@ real-gate-mcp:
 	verdict="passed"; \
 	echo "mcp gate passed"
 
+real-gate-kitchen:
+	@set -eu; \
+	verdict="failed"; \
+	kitchen_webhook_task=""; \
+	kitchen_schedule_task=""; \
+	fail() { verdict="failed: $$1"; echo "$$1"; exit 1; }; \
+	trap 'API_BASE="$(API_BASE)" ARTIFACT_ROOT="$(REAL_ARTIFACTS_DIR)" testing/scenarios-real/capture.sh "$(KITCHEN_NS)" "$(KITCHEN_PRIMARY_TASK)" "$$verdict" "$(KITCHEN_REUSE_MEMORY)" >/dev/null || true' EXIT; \
+	$(MAKE) real-apply-kitchen; \
+	REAL_GATE_TIMEOUT_SECONDS=$(REAL_KITCHEN_GATE_TIMEOUT_SECONDS) $(MAKE) real-wait-task-succeeded NS=$(KITCHEN_NS) TASK=$(KITCHEN_PRIMARY_TASK); \
+	task_json=$$(curl -sSf "$(API_BASE)/v1/tasks/$(KITCHEN_PRIMARY_TASK)?namespace=$(KITCHEN_NS)"); \
+	kw_to_ed=$$(printf '%s\n' "$$task_json" | jq -r '[.status.messages[]? | select((.from_agent // "") == "rr-real-kitchen-knowledge-worker-agent" and (.to_agent // "") == "rr-real-kitchen-editor-agent")] | length'); \
+	aw_to_ed=$$(printf '%s\n' "$$task_json" | jq -r '[.status.messages[]? | select((.from_agent // "") == "rr-real-kitchen-analytics-worker-agent" and (.to_agent // "") == "rr-real-kitchen-editor-agent")] | length'); \
+	mw_to_ed=$$(printf '%s\n' "$$task_json" | jq -r '[.status.messages[]? | select((.from_agent // "") == "rr-real-kitchen-mcp-worker-agent" and (.to_agent // "") == "rr-real-kitchen-editor-agent")] | length'); \
+	auth_to_ed=$$(printf '%s\n' "$$task_json" | jq -r '[.status.messages[]? | select((.from_agent // "") == "rr-real-kitchen-auth-worker-agent" and (.to_agent // "") == "rr-real-kitchen-editor-agent")] | length'); \
+	retry_to_ed=$$(printf '%s\n' "$$task_json" | jq -r '[.status.messages[]? | select((.from_agent // "") == "rr-real-kitchen-retry-worker-agent" and (.to_agent // "") == "rr-real-kitchen-editor-agent")] | length'); \
+	trace_tool_calls=$$(printf '%s\n' "$$task_json" | jq -r '[.status.trace[]? | select((.type // "") == "tool_call")] | length'); \
+	lookup_calls=$$(printf '%s\n' "$$task_json" | jq -r '[.status.trace[]? | select((.type // "") == "tool_call" and (.agent // "") == "rr-real-kitchen-knowledge-worker-agent" and (.tool // "") == "rr-real-kitchen-lookup-tool")] | length'); \
+	calc_calls=$$(printf '%s\n' "$$task_json" | jq -r '[.status.trace[]? | select((.type // "") == "tool_call" and (.agent // "") == "rr-real-kitchen-analytics-worker-agent" and (.tool // "") == "rr-real-kitchen-calculate-tool")] | length'); \
+	mcp_calls=$$(printf '%s\n' "$$task_json" | jq -r '[.status.trace[]? | select((.type // "") == "tool_call" and (.agent // "") == "rr-real-kitchen-mcp-worker-agent")] | length'); \
+	auth_calls=$$(printf '%s\n' "$$task_json" | jq -r '[.status.trace[]? | select((.type // "") == "tool_call" and (.agent // "") == "rr-real-kitchen-auth-worker-agent" and (.tool // "") == "rr-real-kitchen-auth-tool")] | length'); \
+	retry_tool_errors=$$(printf '%s\n' "$$task_json" | jq -r '[.status.trace[]? | select((.type // "") == "tool_error" and (.agent // "") == "rr-real-kitchen-retry-worker-agent" and (.tool // "") == "rr-real-kitchen-retry-tool")] | length'); \
+	retry_calls=$$(printf '%s\n' "$$task_json" | jq -r '[.status.trace[]? | select((.type // "") == "tool_call" and (.agent // "") == "rr-real-kitchen-retry-worker-agent" and (.tool // "") == "rr-real-kitchen-retry-tool")] | length'); \
+	last_output=$$(printf '%s\n' "$$task_json" | jq -r '.status.output["last_output"] // ""'); \
+	merged_lo=$$(printf '%s\n' "$$last_output" | tr '[:upper:]' '[:lower:]'); \
+	[ "$$kw_to_ed" -ge 1 ] || fail "missing knowledge worker handoff to editor"; \
+	[ "$$aw_to_ed" -ge 1 ] || fail "missing analytics worker handoff to editor"; \
+	[ "$$mw_to_ed" -ge 1 ] || fail "missing mcp worker handoff to editor"; \
+	[ "$$auth_to_ed" -ge 1 ] || fail "missing auth worker handoff to editor"; \
+	[ "$$retry_to_ed" -ge 1 ] || fail "missing retry worker handoff to editor"; \
+	[ "$$trace_tool_calls" -ge 6 ] || fail "expected at least 6 tool_call trace events (lookup+calc+2 mcp+auth+retry), got $$trace_tool_calls"; \
+	[ "$$lookup_calls" -ge 1 ] || fail "expected lookup tool_call"; \
+	[ "$$calc_calls" -ge 1 ] || fail "expected calculate tool_call"; \
+	[ "$$mcp_calls" -ge 2 ] || fail "expected at least 2 MCP tool_call events, got $$mcp_calls"; \
+	[ "$$auth_calls" -ge 1 ] || fail "expected auth tool_call"; \
+	[ "$$retry_calls" -ge 1 ] || fail "expected retry tool_call after recovery"; \
+	if [ "$$retry_tool_errors" -lt 1 ]; then \
+		printf '%s\n' "$$merged_lo" | grep -q 'attempt=2' || fail "expected retry tool_error trace or ATTEMPT=2 (HTTP runtime retry) in output"; \
+	fi; \
+	printf '%s\n' "$$merged_lo" | grep -Eq 'merged_branches:.*knowledge' || fail "missing knowledge in MERGED_BRANCHES"; \
+	printf '%s\n' "$$merged_lo" | grep -Eq 'merged_branches:.*analytics' || fail "missing analytics in MERGED_BRANCHES"; \
+	printf '%s\n' "$$merged_lo" | grep -Eq 'merged_branches:.*mcp' || fail "missing mcp in MERGED_BRANCHES"; \
+	printf '%s\n' "$$merged_lo" | grep -Eq 'merged_branches:.*auth' || fail "missing auth in MERGED_BRANCHES"; \
+	printf '%s\n' "$$merged_lo" | grep -Eq 'merged_branches:.*retry' || fail "missing retry in MERGED_BRANCHES"; \
+	printf '%s\n' "$$last_output" | grep -q 'TOP_RESULT=item-7842' || fail "missing lookup stub marker"; \
+	printf '%s\n' "$$last_output" | grep -q 'COMPUTED_RESULT=42' || fail "missing calculate stub marker"; \
+	printf '%s\n' "$$last_output" | grep -q 'mcp-smoke-test-marker' || fail "missing MCP echo marker"; \
+	printf '%s\n' "$$last_output" | grep -q 'AUTH_STATUS=ok' || fail "missing auth evidence marker"; \
+	printf '%s\n' "$$last_output" | grep -q 'ATTEMPT=2' || fail "missing retry attempt marker"; \
+	$(MAKE) real-apply-kitchen-memory-seed; \
+	REAL_GATE_TIMEOUT_SECONDS=$(REAL_KITCHEN_GATE_TIMEOUT_SECONDS) $(MAKE) real-wait-task-succeeded NS=$(KITCHEN_NS) TASK=$(KITCHEN_MEMORY_SEED_TASK); \
+	seed_json=$$(curl -sSf "$(API_BASE)/v1/tasks/$(KITCHEN_MEMORY_SEED_TASK)?namespace=$(KITCHEN_NS)"); \
+	seed_output=$$(printf '%s\n' "$$seed_json" | jq -r '.status.output["last_output"] // ""'); \
+	printf '%s\n' "$$seed_output" | grep -q 'MODE: seed' || fail "missing kitchen memory seed marker"; \
+	$(MAKE) real-apply-kitchen-memory-query; \
+	REAL_GATE_TIMEOUT_SECONDS=$(REAL_KITCHEN_GATE_TIMEOUT_SECONDS) $(MAKE) real-wait-task-succeeded NS=$(KITCHEN_NS) TASK=$(KITCHEN_MEMORY_QUERY_TASK); \
+	query_json=$$(curl -sSf "$(API_BASE)/v1/tasks/$(KITCHEN_MEMORY_QUERY_TASK)?namespace=$(KITCHEN_NS)"); \
+	mem_json=$$(curl -sSf "$(API_BASE)/v1/memories/$(KITCHEN_REUSE_MEMORY)/entries?namespace=$(KITCHEN_NS)&limit=100"); \
+	query_output=$$(printf '%s\n' "$$query_json" | jq -r '.status.output["last_output"] // ""'); \
+	printf '%s\n' "$$query_output" | grep -q 'MODE: query' || fail "missing kitchen memory query marker"; \
+	printf '%s\n' "$$query_output" | grep -q 'USED_MEMORY: yes' || fail "missing USED_MEMORY marker"; \
+	printf '%s\n' "$$query_output" | grep -q 'RUNBOOK_QUOTE: drain queue shard-7 then re-enable traffic' || fail "missing runbook quote marker"; \
+	printf '%s\n' "$$mem_json" | jq -e '.entries[]? | select((.key // "") == "runbook/kitchen_action")' >/dev/null || fail "missing runbook/kitchen_action memory entry"; \
+	hook_json=$$(curl -sSf "$(API_BASE)/v1/task-webhooks/$(KITCHEN_WEBHOOK_NAME)?namespace=$(KITCHEN_NS)"); \
+	endpoint_path=$$(printf '%s\n' "$$hook_json" | jq -r '.status.endpointPath // ""'); \
+	[ -n "$$endpoint_path" ] || fail "missing kitchen webhook endpoint path"; \
+	body='{"event":"kitchen.webhook","service":"integration","severity":"sev2"}'; \
+	ts=$$(date +%s); \
+	sig=$$(printf '%s' "$$ts.$$body" | openssl dgst -sha256 -hmac "$(REAL_WEBHOOK_SECRET)" -binary | xxd -p -c 256); \
+	resp_file=$$(mktemp); \
+	http_code=$$(curl -sS -o "$$resp_file" -w "%{http_code}" -X POST "$(API_BASE)$$endpoint_path" \
+		-H "Content-Type: application/json" \
+		-H "X-Timestamp: $$ts" \
+		-H "X-Event-Id: evt-kitchen-webhook-001" \
+		-H "X-Signature: sha256=$$sig" \
+		--data "$$body"); \
+	[ "$$http_code" = "202" ] || fail "expected kitchen webhook status 202, got $$http_code"; \
+	webhook_task_scoped=$$(cat "$$resp_file" | jq -r '.task // ""'); \
+	rm -f "$$resp_file"; \
+	[ -n "$$webhook_task_scoped" ] || fail "kitchen webhook response missing task"; \
+	kitchen_webhook_task=$${webhook_task_scoped##*/}; \
+	REAL_GATE_TIMEOUT_SECONDS=$(REAL_KITCHEN_GATE_TIMEOUT_SECONDS) $(MAKE) real-wait-task-succeeded NS=$(KITCHEN_NS) TASK=$$kitchen_webhook_task; \
+	wh_json=$$(curl -sSf "$(API_BASE)/v1/tasks/$$kitchen_webhook_task?namespace=$(KITCHEN_NS)"); \
+	wh_mem=$$(curl -sSf "$(API_BASE)/v1/memories/$(KITCHEN_WEBHOOK_MEMORY)/entries?namespace=$(KITCHEN_NS)&limit=100"); \
+	printf '%s\n' "$$wh_mem" | jq -e '.entries[]? | select((.key // "") | startswith("webhook/"))' >/dev/null || fail "missing kitchen webhook memory entry"; \
+	deadline=$$(( $$(date +%s) + $(REAL_SCHEDULE_TIMEOUT_SECONDS) )); \
+	while true; do \
+		now=$$(date +%s); \
+		[ $$now -lt $$deadline ] || fail "timeout waiting for kitchen schedule trigger"; \
+		schedule_json=$$(curl -sSf "$(API_BASE)/v1/task-schedules/$(KITCHEN_SCHEDULE_NAME)?namespace=$(KITCHEN_NS)"); \
+		task_scoped=$$(printf '%s\n' "$$schedule_json" | jq -r '.status.lastTriggeredTask // ""'); \
+		if [ -n "$$task_scoped" ]; then \
+			kitchen_schedule_task=$${task_scoped##*/}; \
+			break; \
+		fi; \
+		sleep "$(REAL_GATE_POLL_INTERVAL_SECONDS)"; \
+	done; \
+	REAL_GATE_TIMEOUT_SECONDS=$(REAL_KITCHEN_GATE_TIMEOUT_SECONDS) $(MAKE) real-wait-task-succeeded NS=$(KITCHEN_NS) TASK=$$kitchen_schedule_task; \
+	sch_json=$$(curl -sSf "$(API_BASE)/v1/tasks/$$kitchen_schedule_task?namespace=$(KITCHEN_NS)"); \
+	sch_mem=$$(curl -sSf "$(API_BASE)/v1/memories/$(KITCHEN_SCHEDULE_MEMORY)/entries?namespace=$(KITCHEN_NS)&limit=100"); \
+	printf '%s\n' "$$sch_mem" | jq -e '.entries[]? | select((.key // "") == "schedule/last-run")' >/dev/null || fail "missing kitchen schedule memory entry"; \
+	verdict="passed"; \
+	echo "kitchen sink gate passed (webhook_task=$$kitchen_webhook_task schedule_task=$$kitchen_schedule_task)"
+
+real-gate-tool-approval:
+	@set -eu; \
+	verdict="failed"; \
+	fail() { verdict="failed: $$1"; echo "$$1"; exit 1; }; \
+	trap 'API_BASE="$(API_BASE)" ARTIFACT_ROOT="$(REAL_ARTIFACTS_DIR)" testing/scenarios-real/capture.sh "$(APPROVAL_NS)" "$(APPROVAL_TASK)" "$$verdict" >/dev/null || true' EXIT; \
+	$(MAKE) real-apply-tool-approval; \
+	REAL_GATE_TIMEOUT_SECONDS=$(REAL_APPROVAL_GATE_TIMEOUT_SECONDS) $(MAKE) real-wait-task-phase NS=$(APPROVAL_NS) TASK=$(APPROVAL_TASK) PHASE=WaitingApproval; \
+	approval_name=$$(curl -sSf "$(API_BASE)/v1/tool-approvals?namespace=$(APPROVAL_NS)" | jq -r '(.items // [])[] | select((.status.phase // "") == "Pending") | .metadata.name' | head -n 1); \
+	[ -n "$$approval_name" ] || fail "no pending ToolApproval in namespace $(APPROVAL_NS)"; \
+	echo ""; \
+	echo "Task is WaitingApproval — approve manually (timeout $(REAL_APPROVAL_GATE_TIMEOUT_SECONDS)s for task to finish):"; \
+	echo "  • One approval covers this inbox message for the listed tool (the worker restarts execution after you approve)."; \
+	echo "  • UI: Approvals → approve \"$$approval_name\""; \
+	echo "  • curl: curl -sS -X POST \"$(API_BASE)/v1/tool-approvals/$$approval_name/approve?namespace=$(APPROVAL_NS)\" \\"; \
+	echo "      -H 'Content-Type: application/json' -d '{\"decided_by\":\"manual\"}'"; \
+	echo ""; \
+	REAL_GATE_TIMEOUT_SECONDS=$(REAL_APPROVAL_GATE_TIMEOUT_SECONDS) $(MAKE) real-wait-task-succeeded NS=$(APPROVAL_NS) TASK=$(APPROVAL_TASK); \
+	task_json=$$(curl -sSf "$(API_BASE)/v1/tasks/$(APPROVAL_TASK)?namespace=$(APPROVAL_NS)"); \
+	trace_tool_calls=$$(printf '%s\n' "$$task_json" | jq -r '[.status.trace[]? | select((.type // "") == "tool_call")] | length'); \
+	last_output=$$(printf '%s\n' "$$task_json" | jq -r '.status.output["last_output"] // ""'); \
+	[ "$$trace_tool_calls" -ge 1 ] || fail "expected at least one tool_call after approval"; \
+	printf '%s\n' "$$last_output" | grep -q 'APPROVAL_FLOW: completed' || fail "missing APPROVAL_FLOW marker"; \
+	printf '%s\n' "$$last_output" | grep -q 'STUB_ENDPOINT: smoke' || fail "missing smoke stub marker"; \
+	verdict="passed"; \
+	echo "tool approval gate passed"
+
+real-gate-tool-approval-ci:
+	@set -eu; \
+	verdict="failed"; \
+	fail() { verdict="failed: $$1"; echo "$$1"; exit 1; }; \
+	trap 'API_BASE="$(API_BASE)" ARTIFACT_ROOT="$(REAL_ARTIFACTS_DIR)" testing/scenarios-real/capture.sh "$(APPROVAL_NS)" "$(APPROVAL_TASK)" "$$verdict" >/dev/null || true' EXIT; \
+	$(MAKE) real-apply-tool-approval; \
+	REAL_GATE_TIMEOUT_SECONDS=$(REAL_APPROVAL_GATE_TIMEOUT_SECONDS) $(MAKE) real-wait-task-phase NS=$(APPROVAL_NS) TASK=$(APPROVAL_TASK) PHASE=WaitingApproval; \
+	approval_name=$$(curl -sSf "$(API_BASE)/v1/tool-approvals?namespace=$(APPROVAL_NS)" | jq -r '(.items // [])[] | select((.status.phase // "") == "Pending") | .metadata.name' | head -n 1); \
+	[ -n "$$approval_name" ] || fail "no pending ToolApproval in namespace $(APPROVAL_NS)"; \
+	http_code=$$(curl -sS -o /dev/null -w "%{http_code}" -X POST "$(API_BASE)/v1/tool-approvals/$$approval_name/approve?namespace=$(APPROVAL_NS)" \
+		-H "Content-Type: application/json" \
+		-d '{"decided_by":"make-real-gate-tool-approval-ci"}'); \
+	[ "$$http_code" = "200" ] || fail "approve returned HTTP $$http_code"; \
+	REAL_GATE_TIMEOUT_SECONDS=$(REAL_APPROVAL_GATE_TIMEOUT_SECONDS) $(MAKE) real-wait-task-succeeded NS=$(APPROVAL_NS) TASK=$(APPROVAL_TASK); \
+	task_json=$$(curl -sSf "$(API_BASE)/v1/tasks/$(APPROVAL_TASK)?namespace=$(APPROVAL_NS)"); \
+	trace_tool_calls=$$(printf '%s\n' "$$task_json" | jq -r '[.status.trace[]? | select((.type // "") == "tool_call")] | length'); \
+	last_output=$$(printf '%s\n' "$$task_json" | jq -r '.status.output["last_output"] // ""'); \
+	[ "$$trace_tool_calls" -ge 1 ] || fail "expected at least one tool_call after approval"; \
+	printf '%s\n' "$$last_output" | grep -q 'APPROVAL_FLOW: completed' || fail "missing APPROVAL_FLOW marker"; \
+	printf '%s\n' "$$last_output" | grep -q 'STUB_ENDPOINT: smoke' || fail "missing smoke stub marker"; \
+	verdict="passed"; \
+	echo "tool approval gate passed (ci auto-approve)"
+
 real-gate-wave0: real-gate-pipeline real-gate-hier real-gate-loop real-gate-tool real-gate-tool-decision real-gate-hier-tool
 	@echo "wave 0 gates passed"
 
@@ -858,5 +1153,8 @@ real-gate-wave3: real-gate-webhook real-gate-schedule
 
 real-gate-wave4: real-gate-mcp
 	@echo "wave 4 gates passed"
+
+real-gate-wave5: real-gate-kitchen real-gate-tool-approval-ci
+	@echo "wave 5 gates passed"
 
 real-check-all: real-check-pipeline real-check-hier real-check-loop real-check-tool real-check-hier-tool

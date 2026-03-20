@@ -11,6 +11,19 @@ import (
 	"github.com/OrlojHQ/orloj/cronexpr"
 )
 
+// normalizeGovernanceConfigPhase sets status for declarative governance resources (policy, role,
+// tool permission). They are enforced on read paths and have no controller to move Pending → Ready;
+// defaulting empty or legacy Pending to Ready avoids a permanently "stuck" UI phase.
+func normalizeGovernanceConfigPhase(phase *string) {
+	if phase == nil {
+		return
+	}
+	p := strings.TrimSpace(*phase)
+	if p == "" || strings.EqualFold(p, "Pending") {
+		*phase = "Ready"
+	}
+}
+
 // AgentSystem defines a multi-agent architecture and execution graph.
 type AgentSystem struct {
 	APIVersion string            `json:"apiVersion"`
@@ -500,9 +513,7 @@ func (p *AgentPolicy) Normalize() error {
 		return fmt.Errorf("unsupported spec.apply_mode %q: expected scoped or global", p.Spec.ApplyMode)
 	}
 	p.Spec.ApplyMode = mode
-	if p.Status.Phase == "" {
-		p.Status.Phase = "Pending"
-	}
+	normalizeGovernanceConfigPhase(&p.Status.Phase)
 	return nil
 }
 
@@ -559,9 +570,7 @@ func (r *AgentRole) Normalize() error {
 		normalized = append(normalized, permission)
 	}
 	r.Spec.Permissions = normalized
-	if r.Status.Phase == "" {
-		r.Status.Phase = "Pending"
-	}
+	normalizeGovernanceConfigPhase(&r.Status.Phase)
 	return nil
 }
 
@@ -707,9 +716,7 @@ func (p *ToolPermission) Normalize() error {
 		}
 	}
 
-	if p.Status.Phase == "" {
-		p.Status.Phase = "Pending"
-	}
+	normalizeGovernanceConfigPhase(&p.Status.Phase)
 	return nil
 }
 

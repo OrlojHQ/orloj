@@ -1,0 +1,8 @@
+apiVersion: orloj.dev/v1
+kind: AgentSystem
+metadata:
+  name: rr-real-kitchen-memory-reuse-system
+  namespace: rr-real-kitchen
+spec:
+  agents:
+    - rr-real-kitchen-memory-reuse-agent

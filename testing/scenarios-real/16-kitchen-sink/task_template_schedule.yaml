@@ -1,0 +1,19 @@
+apiVersion: orloj.dev/v1
+kind: Task
+metadata:
+  name: rr-real-kitchen-schedule-template-task
+  namespace: rr-real-kitchen
+spec:
+  mode: template
+  system: rr-real-kitchen-schedule-system
+  priority: normal
+  input:
+    topic: kitchen scheduled digest validation
+  retry:
+    max_attempts: 2
+    backoff: 2s
+  message_retry:
+    max_attempts: 2
+    backoff: 250ms
+    max_backoff: 2s
+    jitter: full

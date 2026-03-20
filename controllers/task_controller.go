@@ -168,6 +168,9 @@ func (c *TaskController) Start(ctx context.Context) {
 }
 
 func (c *TaskController) ReconcileOnce(ctx context.Context) error {
+	if err := c.reconcileWaitingApprovalSweep(ctx); err != nil {
+		return err
+	}
 	for {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -396,6 +399,38 @@ func (c *TaskController) reconcileRunning(ctx context.Context, task resources.Ta
 			"agents_executed":        output["agents_executed"],
 		},
 	})
+	return nil
+}
+
+// reconcileWaitingApprovalSweep resumes tasks stuck in WaitingApproval after POST /approve updates
+// the ToolApproval in the store. ClaimNextDue never selects WaitingApproval (isTaskClaimable is false),
+// so reconcileWaitingApproval would otherwise never run.
+func (c *TaskController) reconcileWaitingApprovalSweep(ctx context.Context) error {
+	if c == nil || c.taskStore == nil || c.toolApprovalStore == nil {
+		return nil
+	}
+	for _, task := range c.taskStore.List() {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if !strings.EqualFold(strings.TrimSpace(task.Status.Phase), "waitingapproval") {
+			continue
+		}
+		if !c.taskMatchesWorker(task) {
+			continue
+		}
+		key := taskScopedName(task)
+		fresh, ok := c.taskStore.Get(key)
+		if !ok {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(fresh.Status.Phase), "waitingapproval") {
+			continue
+		}
+		if err := c.reconcileWaitingApproval(fresh); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -1126,6 +1161,7 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 			c.toolPermStore,
 			task.Metadata.Namespace,
 			agent,
+			nil,
 		)
 		if c.mcpSessionMgr != nil && c.mcpServerStore != nil {
 			agentruntime.ConfigureMcpRuntime(toolRuntime, c.mcpSessionMgr, c.mcpServerStore, task.Metadata.Namespace)

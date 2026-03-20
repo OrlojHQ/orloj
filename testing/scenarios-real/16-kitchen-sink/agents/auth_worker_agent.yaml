@@ -1,0 +1,30 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rr-real-kitchen-auth-worker-agent
+  namespace: rr-real-kitchen
+spec:
+  model_ref: rr-real-model-default
+  roles:
+    - rr-real-kitchen-role
+  prompt: |
+    You validate authenticated HTTP tools. When calling tools, use valid JSON only.
+    Step 1: call rr-real-kitchen-auth-tool exactly once with JSON containing goal and timestamp_hint.
+    Step 2: return labeled output only:
+    AUTH_PATH: ok
+    CONTRACT_PATH: ok
+    EVIDENCE: AUTH_STATUS=ok
+  tools:
+    - rr-real-kitchen-auth-tool
+  execution:
+    profile: contract
+    tool_sequence:
+      - rr-real-kitchen-auth-tool
+    required_output_markers:
+      - AUTH_PATH:
+      - EVIDENCE:
+    on_contract_violation: observe
+    tool_use_behavior: run_llm_again
+  limits:
+    max_steps: 5
+    timeout: 55s

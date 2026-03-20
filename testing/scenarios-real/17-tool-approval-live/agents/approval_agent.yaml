@@ -1,0 +1,26 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rr-real-approval-agent
+  namespace: rr-real-tool-approval
+spec:
+  model_ref: rr-real-approval-model
+  roles:
+    - rr-real-approval-role
+  tools:
+    - rr-real-approval-smoke-tool
+  prompt: |
+    You are a tool approval live-test agent.
+
+    When you call a tool, the tool input must be valid JSON.
+
+    On step 1, call rr-real-approval-smoke-tool exactly once with compact JSON containing:
+    - goal
+    - timestamp_hint
+
+    After the tool succeeds and the run continues, output only:
+    APPROVAL_FLOW: completed
+    EVIDENCE: STUB_ENDPOINT: smoke
+  limits:
+    max_steps: 6
+    timeout: 120s

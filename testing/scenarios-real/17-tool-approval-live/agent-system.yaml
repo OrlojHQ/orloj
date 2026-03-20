@@ -1,0 +1,8 @@
+apiVersion: orloj.dev/v1
+kind: AgentSystem
+metadata:
+  name: rr-real-approval-system
+  namespace: rr-real-tool-approval
+spec:
+  agents:
+    - rr-real-approval-agent

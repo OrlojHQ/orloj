@@ -1,0 +1,13 @@
+apiVersion: orloj.dev/v1
+kind: ToolPermission
+metadata:
+  name: rr-real-kitchen-perm-mcp-sum
+  namespace: rr-real-kitchen
+spec:
+  tool_ref: rr-real-kitchen-mcp--get-sum
+  action: invoke
+  match_mode: all
+  apply_mode: global
+  required_permissions:
+    - tool:rr-real-kitchen-mcp--get-sum:invoke
+    - capability:kitchen.tools

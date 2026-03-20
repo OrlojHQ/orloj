@@ -147,14 +147,21 @@ func BuildGovernedToolRuntimeForAgentWithGovernance(
 	permissionLookup ToolPermissionLookup,
 	namespace string,
 	agent resources.Agent,
+	approvalCtx *GovernedToolApprovalContext,
 ) ToolRuntime {
+	inner := NewAgentToolAuthorizer(namespace, agent, roleLookup, permissionLookup)
+	auth := ToolCallAuthorizer(inner)
+	if approvalCtx != nil && approvalCtx.Getter != nil &&
+		strings.TrimSpace(approvalCtx.TaskKey) != "" && strings.TrimSpace(approvalCtx.MessageID) != "" {
+		auth = NewAuthorizerWithApprovedToolGrant(inner, approvalCtx.Getter, approvalCtx.TaskKey, approvalCtx.MessageID)
+	}
 	return buildGovernedToolRuntime(
 		baseRuntime,
 		isolatedRuntime,
 		toolLookup,
 		namespace,
 		agent.Spec.Tools,
-		NewAgentToolAuthorizer(namespace, agent, roleLookup, permissionLookup),
+		auth,
 	)
 }
 

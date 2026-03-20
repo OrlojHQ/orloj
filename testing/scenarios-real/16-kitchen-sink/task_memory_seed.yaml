@@ -1,0 +1,19 @@
+apiVersion: orloj.dev/v1
+kind: Task
+metadata:
+  name: rr-real-kitchen-memory-seed-task
+  namespace: rr-real-kitchen
+spec:
+  system: rr-real-kitchen-memory-reuse-system
+  input:
+    mode: seed
+    runbook_text: "If checkout latency spikes after a cache deploy, drain queue shard-7 then re-enable traffic."
+  priority: high
+  retry:
+    max_attempts: 2
+    backoff: 2s
+  message_retry:
+    max_attempts: 2
+    backoff: 250ms
+    max_backoff: 2s
+    jitter: full

@@ -1,0 +1,10 @@
+apiVersion: orloj.dev/v1
+kind: AgentRole
+metadata:
+  name: rr-real-approval-role
+  namespace: rr-real-tool-approval
+spec:
+  description: May invoke approval-gated smoke tool.
+  permissions:
+    - tool:rr-real-approval-smoke-tool:invoke
+    - capability:approval.live

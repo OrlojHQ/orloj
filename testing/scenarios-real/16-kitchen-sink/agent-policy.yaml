@@ -1,0 +1,10 @@
+apiVersion: orloj.dev/v1
+kind: AgentPolicy
+metadata:
+  name: rr-real-kitchen-policy
+  namespace: rr-real-kitchen
+spec:
+  apply_mode: scoped
+  target_systems:
+    - rr-real-kitchen-system
+  max_tokens_per_run: 200000

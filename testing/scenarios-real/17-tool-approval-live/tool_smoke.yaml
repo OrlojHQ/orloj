@@ -1,0 +1,13 @@
+apiVersion: orloj.dev/v1
+kind: Tool
+metadata:
+  name: rr-real-approval-smoke-tool
+  namespace: rr-real-tool-approval
+spec:
+  type: http
+  endpoint: http://host.docker.internal:18080/tool/smoke
+  operation_classes:
+    - write
+  runtime:
+    isolation_mode: container
+    timeout: 30s

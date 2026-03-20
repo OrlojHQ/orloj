@@ -16,6 +16,12 @@ func (s *staticToolRuntime) Call(_ context.Context, tool string, input string) (
 	return tool + ":" + input, nil
 }
 
+type approvalRequiredToolRuntime struct{}
+
+func (a *approvalRequiredToolRuntime) Call(_ context.Context, tool string, _ string) (string, error) {
+	return "", fmt.Errorf("%w: tool=%s reason=approval required for tool=%s", ErrToolApprovalRequired, tool, tool)
+}
+
 type denyingToolRuntime struct{}
 
 func (d *denyingToolRuntime) Call(_ context.Context, tool string, _ string) (string, error) {
@@ -794,6 +800,36 @@ func TestTaskExecutorContractModeObservePolicyDoesNotError(t *testing.T) {
 	}
 	if strings.TrimSpace(result.Output) != "DONE" {
 		t.Fatalf("expected output DONE, got %q", result.Output)
+	}
+}
+
+func TestTaskExecutorReturnsApprovalRequiredWhenToolNeedsApproval(t *testing.T) {
+	model := &scriptedModelGateway{
+		responses: map[int]ModelResponse{
+			1: {
+				Content: "calling tool",
+				ToolCalls: []ModelToolCall{
+					{ID: "call_1", Name: "smoke", Input: `{}`},
+				},
+			},
+		},
+	}
+	executor := NewTaskExecutorWithRuntime(nil, &approvalRequiredToolRuntime{}, model, nil)
+	agent := resources.Agent{
+		Metadata: resources.ObjectMeta{Name: "agent"},
+		Spec: resources.AgentSpec{
+			Model:  "gpt-4o",
+			Prompt: "use the smoke tool once",
+			Tools:  []string{"smoke"},
+			Limits: resources.AgentLimits{MaxSteps: 6},
+		},
+	}
+	_, err := executor.ExecuteAgent(context.Background(), agent, map[string]string{"topic": "t"})
+	if err == nil {
+		t.Fatal("expected approval required error")
+	}
+	if !IsApprovalRequiredError(err) {
+		t.Fatalf("expected ErrToolApprovalRequired chain, got %v", err)
 	}
 }
 

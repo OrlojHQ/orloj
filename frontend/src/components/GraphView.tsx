@@ -151,6 +151,12 @@ function effectivePhase(kind: string, rawPhase?: string): string | undefined {
   return rawPhase;
 }
 
+/** Schedule/webhook controllers stamp these labels on each spawned run; hide those from the graph so high-frequency triggers do not overwhelm the layout. */
+function isAutomationSpawnedRunTask(task: Task): boolean {
+  const labels = task.metadata.labels ?? {};
+  return Boolean(labels["orloj.dev/task-schedule"] || labels["orloj.dev/task-webhook"]);
+}
+
 // ---------------------------------------------------------------------------
 // Node kind config
 // ---------------------------------------------------------------------------
@@ -440,7 +446,9 @@ function buildTree(
 
   // -- Tasks and workers connected to system -----------------------------------
 
-  const systemTasks = (related.tasks ?? []).filter((t) => t.spec.system === system.metadata.name);
+  const systemTasks = (related.tasks ?? [])
+    .filter((t) => t.spec.system === system.metadata.name)
+    .filter((t) => !isAutomationSpawnedRunTask(t));
   for (const task of systemTasks) {
     const tid = nid("task", task.metadata.name);
     regNode(tid, "task", task.metadata.name, task.status?.phase, task.spec.priority ?? "normal");

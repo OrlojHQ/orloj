@@ -227,6 +227,7 @@ func main() {
 					Memories:            stores.Memories,
 					MemoryBackends:      memoryBackendRegistry,
 					ModelEndpoints:      stores.ModelEPs,
+					ToolApprovals:       stores.ToolApprovals,
 				},
 			)
 			go consumer.Start(ctx)

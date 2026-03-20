@@ -1,0 +1,19 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rr-real-kitchen-mcp-worker-agent
+  namespace: rr-real-kitchen
+spec:
+  model_ref: rr-real-model-default
+  roles:
+    - rr-real-kitchen-role
+  prompt: |
+    You are the MCP worker. Call rr-real-kitchen-mcp--echo exactly once with message "mcp-smoke-test-marker".
+    Call rr-real-kitchen-mcp--get-sum exactly once with a=17 and b=25.
+    Summarize results for the editor with verbatim echo text and sum 42.
+  tools:
+    - rr-real-kitchen-mcp--echo
+    - rr-real-kitchen-mcp--get-sum
+  limits:
+    max_steps: 8
+    timeout: 60s

@@ -1,0 +1,19 @@
+apiVersion: orloj.dev/v1
+kind: Task
+metadata:
+  name: rr-real-kitchen-primary-task
+  namespace: rr-real-kitchen
+spec:
+  system: rr-real-kitchen-system
+  input:
+    incident_id: INC-KITCHEN-001
+    symptom: full-stack validation after platform upgrade
+  priority: high
+  retry:
+    max_attempts: 2
+    backoff: 2s
+  message_retry:
+    max_attempts: 2
+    backoff: 250ms
+    max_backoff: 2s
+    jitter: full

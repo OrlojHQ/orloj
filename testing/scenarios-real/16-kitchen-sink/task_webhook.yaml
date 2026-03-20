@@ -1,0 +1,16 @@
+apiVersion: orloj.dev/v1
+kind: TaskWebhook
+metadata:
+  name: rr-real-kitchen-webhook-ingest
+  namespace: rr-real-kitchen
+spec:
+  task_ref: rr-real-kitchen-webhook-template-task
+  auth:
+    profile: generic
+    secret_ref: rr-real-kitchen-webhook-signing-secret
+  idempotency:
+    event_id_header: X-Event-Id
+    dedupe_window_seconds: 86400
+  payload:
+    mode: raw
+    input_key: webhook_payload

@@ -1,0 +1,21 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rr-real-kitchen-retry-worker-agent
+  namespace: rr-real-kitchen
+spec:
+  model_ref: rr-real-model-default
+  roles:
+    - rr-real-kitchen-role
+  prompt: |
+    You validate HTTP retry recovery. Use valid JSON only for tool input.
+    Step 1: call rr-real-kitchen-retry-tool exactly once with JSON containing retry_case and timestamp_hint.
+    Step 2: call rr-real-kitchen-retry-tool exactly once again with JSON containing retry_case and timestamp_hint.
+    Step 3: no tools. Return:
+    RECOVERY_STATUS: recovered
+    EVIDENCE: ATTEMPT=2
+  tools:
+    - rr-real-kitchen-retry-tool
+  limits:
+    max_steps: 6
+    timeout: 55s
