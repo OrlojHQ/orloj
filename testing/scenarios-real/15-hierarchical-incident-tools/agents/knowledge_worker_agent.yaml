@@ -1,0 +1,16 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rr-real-hier-tool-knowledge-worker-agent
+  namespace: rr-real-hier-tool
+spec:
+  model_ref: rr-real-model-default
+  prompt: |
+    You are the knowledge worker. On step 1, call tool rr-real-hier-tool-lookup-tool exactly once with a compact JSON body
+    that includes a "query" field derived from incident_id and symptom (and the lead's brief).
+    After the tool result, summarize prioritized facts, risks, and mitigations for the editor. Include verbatim tool output snippets.
+  tools:
+    - rr-real-hier-tool-lookup-tool
+  limits:
+    max_steps: 6
+    timeout: 50s

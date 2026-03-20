@@ -61,7 +61,10 @@ export function Dashboard() {
   const successColor = healthyPct >= 95 ? "green" : healthyPct >= 80 ? "yellow" : "red";
 
   const workerList = workers.data ?? [];
-  const workersOnline = workerList.filter((w) => (w.status?.phase ?? "").toLowerCase() === "healthy").length;
+  const workersOnline = workerList.filter((w) => {
+    const p = (w.status?.phase ?? "").toLowerCase();
+    return p === "healthy" || p === "ready";
+  }).length;
 
   const modelList = models.data ?? [];
   const modelsReady = modelList.filter((m) => (m.status?.phase ?? "").toLowerCase() === "ready").length;

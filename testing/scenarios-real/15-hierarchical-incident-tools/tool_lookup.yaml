@@ -1,0 +1,11 @@
+apiVersion: orloj.dev/v1
+kind: Tool
+metadata:
+  name: rr-real-hier-tool-lookup-tool
+  namespace: rr-real-hier-tool
+spec:
+  type: http
+  endpoint: http://host.docker.internal:18080/tool/lookup
+  runtime:
+    isolation_mode: container
+    timeout: 30s

@@ -23,6 +23,7 @@ TOOL_RETRY_SCENARIO := 10-tool-retry-recovery
 WEBHOOK_SCENARIO := 11-webhook-live-flow
 SCHEDULE_SCENARIO := 12-schedule-live-flow
 MCP_SCENARIO := 14-mcp-tool-smoke
+HIER_TOOL_SCENARIO := 15-hierarchical-incident-tools
 
 PIPELINE_NS := rr-real-pipeline
 HIER_NS := rr-real-hier
@@ -37,6 +38,7 @@ TOOL_RETRY_NS := rr-real-tool-retry
 WEBHOOK_NS := rr-real-webhook
 SCHEDULE_NS := rr-real-schedule
 MCP_NS := rr-real-mcp
+HIER_TOOL_NS := rr-real-hier-tool
 
 PIPELINE_TASK := rr-real-pipeline-task
 HIER_TASK := rr-real-hier-task
@@ -57,6 +59,7 @@ WEBHOOK_MEMORY_NAME := rr-real-webhook-memory
 SCHEDULE_MEMORY_NAME := rr-real-schedule-memory
 
 MCP_TASK := rr-real-mcp-task
+HIER_TOOL_TASK := rr-real-hier-tool-task
 MCP_SERVER_NAME := rr-real-mcp-everything
 
 WEBHOOK_NAME := rr-real-webhook-ingest
@@ -73,9 +76,9 @@ REAL_SCHEDULE_TIMEOUT_SECONDS ?= 120
 	real-apply-pipeline real-apply-hier real-apply-loop real-apply-tool real-apply-tool-decision real-apply-anthropic-tool-decision \
 	real-apply-memory-shared real-apply-memory-reuse real-apply-memory-reuse-query \
 	real-apply-tool-auth real-apply-governance-deny real-apply-tool-retry \
-	real-apply-webhook real-apply-schedule real-apply-mcp \
+	real-apply-webhook real-apply-schedule real-apply-mcp real-apply-hier-tool \
 	real-get real-messages real-metrics real-check \
-	real-check-pipeline real-check-hier real-check-loop real-check-tool \
+	real-check-pipeline real-check-hier real-check-loop real-check-tool real-check-hier-tool \
 	real-check-tool-use real-check-tool-no-use real-check-anthropic-tool-use real-check-anthropic-tool-no-use \
 	real-check-memory-shared real-check-memory-reuse real-check-tool-auth \
 	real-check-governance-deny real-check-tool-retry real-check-webhook real-check-schedule \
@@ -83,7 +86,7 @@ REAL_SCHEDULE_TIMEOUT_SECONDS ?= 120
 	real-gate-pipeline real-gate-hier real-gate-loop real-gate-tool \
 	real-gate-tool-decision real-gate-anthropic-tool-decision real-gate-memory-shared real-gate-memory-reuse \
 	real-gate-tool-auth real-gate-governance-deny real-gate-tool-retry \
-	real-gate-webhook real-gate-schedule real-gate-mcp \
+	real-gate-webhook real-gate-schedule real-gate-mcp real-gate-hier-tool \
 	real-gate-wave0 real-gate-wave1 real-gate-wave2 real-gate-wave3 real-gate-wave4 \
 	real-check-all
 
@@ -126,6 +129,7 @@ real-help:
 	@echo "  make real-apply-loop"
 	@echo "  make real-apply-tool"
 	@echo "  make real-apply-tool-decision"
+	@echo "  make real-apply-hier-tool"
 	@echo ""
 	@echo "Wave 1+ apply targets:"
 	@echo "  make real-apply-memory-shared"
@@ -151,6 +155,7 @@ real-help:
 	@echo "  make real-gate-webhook"
 	@echo "  make real-gate-schedule"
 	@echo "  make real-gate-mcp"
+	@echo "  make real-gate-hier-tool"
 	@echo ""
 	@echo "Grouped gates:"
 	@echo "  make real-gate-wave0"
@@ -257,6 +262,10 @@ real-apply-tool:
 	@$(MAKE) real-delete-task NS=$(TOOL_NS) TASK=$(TOOL_TASK)
 	@$(MAKE) real-apply SCENARIO=$(TOOL_SCENARIO)
 
+real-apply-hier-tool:
+	@$(MAKE) real-delete-task NS=$(HIER_TOOL_NS) TASK=$(HIER_TOOL_TASK)
+	@$(MAKE) real-apply SCENARIO=$(HIER_TOOL_SCENARIO)
+
 real-apply-tool-decision:
 	@$(MAKE) real-delete-task NS=$(DECISION_NS) TASK=$(DECISION_USE_TASK)
 	@$(MAKE) real-delete-task NS=$(DECISION_NS) TASK=$(DECISION_NO_USE_TASK)
@@ -339,6 +348,7 @@ real-apply-mcp:
 
 real-apply-all: \
 	real-apply-pipeline real-apply-hier real-apply-loop real-apply-tool real-apply-tool-decision \
+	real-apply-hier-tool \
 	real-apply-memory-shared real-apply-memory-reuse real-apply-tool-auth real-apply-governance-deny \
 	real-apply-tool-retry real-apply-webhook real-apply-schedule real-apply-mcp
 
@@ -376,6 +386,9 @@ real-check-loop:
 
 real-check-tool:
 	@$(MAKE) real-check NS=$(TOOL_NS) TASK=$(TOOL_TASK)
+
+real-check-hier-tool:
+	@$(MAKE) real-check NS=$(HIER_TOOL_NS) TASK=$(HIER_TOOL_TASK)
 
 real-check-memory-shared:
 	@$(MAKE) real-check NS=$(MEMORY_SHARED_NS) TASK=$(MEMORY_SHARED_TASK)
@@ -504,8 +517,8 @@ real-gate-hier:
 	$(MAKE) real-apply-hier; \
 	$(MAKE) real-wait-task-succeeded NS=$(HIER_NS) TASK=$(HIER_TASK); \
 	task_json=$$(curl -sSf "$(API_BASE)/v1/tasks/$(HIER_TASK)?namespace=$(HIER_NS)"); \
-	research_to_editor=$$(printf '%s\n' "$$task_json" | jq -r '[.status.messages[]? | select((.fromAgent // "") == "rr-real-hier-research-worker-agent" and (.toAgent // "") == "rr-real-hier-editor-agent")] | length'); \
-	social_to_editor=$$(printf '%s\n' "$$task_json" | jq -r '[.status.messages[]? | select((.fromAgent // "") == "rr-real-hier-social-worker-agent" and (.toAgent // "") == "rr-real-hier-editor-agent")] | length'); \
+	research_to_editor=$$(printf '%s\n' "$$task_json" | jq -r '[.status.messages[]? | select((.from_agent // "") == "rr-real-hier-research-worker-agent" and (.to_agent // "") == "rr-real-hier-editor-agent")] | length'); \
+	social_to_editor=$$(printf '%s\n' "$$task_json" | jq -r '[.status.messages[]? | select((.from_agent // "") == "rr-real-hier-social-worker-agent" and (.to_agent // "") == "rr-real-hier-editor-agent")] | length'); \
 	last_output=$$(printf '%s\n' "$$task_json" | jq -r '.status.output["last_output"] // ""'); \
 	[ "$$research_to_editor" -ge 1 ] || fail "missing research worker handoff to editor"; \
 	[ "$$social_to_editor" -ge 1 ] || fail "missing social worker handoff to editor"; \
@@ -545,6 +558,33 @@ real-gate-tool:
 	printf '%s\n' "$$last_output" | grep -q 'HEALTH: healthy' || fail "missing HEALTH marker"; \
 	verdict="passed"; \
 	echo "tool smoke gate passed"
+
+real-gate-hier-tool:
+	@set -eu; \
+	verdict="failed"; \
+	fail() { verdict="failed: $$1"; echo "$$1"; exit 1; }; \
+	trap 'API_BASE="$(API_BASE)" ARTIFACT_ROOT="$(REAL_ARTIFACTS_DIR)" testing/scenarios-real/capture.sh "$(HIER_TOOL_NS)" "$(HIER_TOOL_TASK)" "$$verdict" >/dev/null || true' EXIT; \
+	$(MAKE) real-apply-hier-tool; \
+	$(MAKE) real-wait-task-succeeded NS=$(HIER_TOOL_NS) TASK=$(HIER_TOOL_TASK); \
+	task_json=$$(curl -sSf "$(API_BASE)/v1/tasks/$(HIER_TOOL_TASK)?namespace=$(HIER_TOOL_NS)"); \
+	knowledge_to_editor=$$(printf '%s\n' "$$task_json" | jq -r '[.status.messages[]? | select((.from_agent // "") == "rr-real-hier-tool-knowledge-worker-agent" and (.to_agent // "") == "rr-real-hier-tool-editor-agent")] | length'); \
+	analytics_to_editor=$$(printf '%s\n' "$$task_json" | jq -r '[.status.messages[]? | select((.from_agent // "") == "rr-real-hier-tool-analytics-worker-agent" and (.to_agent // "") == "rr-real-hier-tool-editor-agent")] | length'); \
+	trace_tool_calls=$$(printf '%s\n' "$$task_json" | jq -r '[.status.trace[]? | select((.type // "") == "tool_call")] | length'); \
+	lookup_calls=$$(printf '%s\n' "$$task_json" | jq -r '[.status.trace[]? | select((.type // "") == "tool_call" and (.agent // "") == "rr-real-hier-tool-knowledge-worker-agent" and (.tool // "") == "rr-real-hier-tool-lookup-tool")] | length'); \
+	calc_calls=$$(printf '%s\n' "$$task_json" | jq -r '[.status.trace[]? | select((.type // "") == "tool_call" and (.agent // "") == "rr-real-hier-tool-analytics-worker-agent" and (.tool // "") == "rr-real-hier-tool-calculate-tool")] | length'); \
+	last_output=$$(printf '%s\n' "$$task_json" | jq -r '.status.output["last_output"] // ""'); \
+	merged_lo=$$(printf '%s\n' "$$last_output" | tr '[:upper:]' '[:lower:]'); \
+	[ "$$knowledge_to_editor" -ge 1 ] || fail "missing knowledge worker handoff to editor"; \
+	[ "$$analytics_to_editor" -ge 1 ] || fail "missing analytics worker handoff to editor"; \
+	[ "$$trace_tool_calls" -ge 2 ] || fail "expected at least 2 tool_call trace events, got $$trace_tool_calls"; \
+	[ "$$lookup_calls" -ge 1 ] || fail "expected knowledge worker lookup tool_call, got $$lookup_calls"; \
+	[ "$$calc_calls" -ge 1 ] || fail "expected analytics worker calculate tool_call, got $$calc_calls"; \
+	printf '%s\n' "$$merged_lo" | grep -Eq 'merged_branches:.*knowledge.*analytics|merged_branches:.*analytics.*knowledge' || fail "missing merged branches marker (expected MERGED_BRANCHES line with knowledge and analytics)"; \
+	printf '%s\n' "$$last_output" | grep -qi 'customer_summary:' || fail "missing CUSTOMER_SUMMARY label"; \
+	printf '%s\n' "$$last_output" | grep -q 'TOP_RESULT=item-7842' || fail "missing lookup stub marker"; \
+	printf '%s\n' "$$last_output" | grep -q 'COMPUTED_RESULT=42' || fail "missing calculate stub marker"; \
+	verdict="passed"; \
+	echo "hierarchical tool gate passed"
 
 real-check-tool-use:
 	@$(MAKE) real-wait-task-succeeded NS=$(DECISION_NS) TASK=$(DECISION_USE_TASK)
@@ -804,7 +844,7 @@ real-gate-mcp:
 	verdict="passed"; \
 	echo "mcp gate passed"
 
-real-gate-wave0: real-gate-pipeline real-gate-hier real-gate-loop real-gate-tool real-gate-tool-decision
+real-gate-wave0: real-gate-pipeline real-gate-hier real-gate-loop real-gate-tool real-gate-tool-decision real-gate-hier-tool
 	@echo "wave 0 gates passed"
 
 real-gate-wave1: real-gate-memory-shared real-gate-memory-reuse
@@ -819,4 +859,4 @@ real-gate-wave3: real-gate-webhook real-gate-schedule
 real-gate-wave4: real-gate-mcp
 	@echo "wave 4 gates passed"
 
-real-check-all: real-check-pipeline real-check-hier real-check-loop real-check-tool
+real-check-all: real-check-pipeline real-check-hier real-check-loop real-check-tool real-check-hier-tool

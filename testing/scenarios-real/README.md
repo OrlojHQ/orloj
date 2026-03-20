@@ -47,6 +47,7 @@ Critical readiness rule:
 
 - Keep both `orlojd` and the matching `orlojworker` running before `make real-apply-*` or `make real-gate-*`. Applying or running tasks before services are up can produce immediate task failures or false gate failures.
 - Quick check: `curl -sf http://localhost:8080/healthz >/dev/null` should exit 0 before you start.
+- `make real-gate-wave0` includes `15-hierarchical-incident-tools`, which needs the **tool-backed worker** (`--tool-isolation-backend=container`) and **`make real-tool-stub`** in addition to the baseline Anthropic worker.
 
 ## Scenario Matrix
 
@@ -72,37 +73,42 @@ Critical readiness rule:
 - Anthropic-backed A/B decision test: tool required vs self-contained.
 - Gate checks both the use-tool and no-tool branches.
 
+6. `15-hierarchical-incident-tools`
+- Incident-style hierarchy (commander → knowledge/analytics leads → workers → editor) with `wait_for_all` join.
+- Knowledge and analytics workers each call a different deterministic stub HTTP tool (`/tool/lookup`, `/tool/calculate`) under container isolation.
+- Gate checks both worker→editor handoffs, per-branch `tool_call` trace rows, and merged output containing stub markers (`TOP_RESULT=item-7842`, `COMPUTED_RESULT=42`) plus labeled sections.
+
 ### Wave 1: memory-first validation
 
-6. `06-memory-shared-handoff`
+7. `06-memory-shared-handoff`
 - SaaS incident escalation triage with shared memory across planner, researcher, and writer.
 - Gate checks memory entries plus output derived from retrieved facts.
 
-7. `07-memory-persistent-reuse`
+8. `07-memory-persistent-reuse`
 - Two-task runbook reuse flow in the same memory backend.
 - Gate checks seed + query behavior and verifies cross-task recall.
 
 ### Wave 2: controllable tools and governance
 
-8. `08-tool-auth-and-contract`
+9. `08-tool-auth-and-contract`
 - Authenticated HTTP tool with deterministic contract response.
 - Gate checks auth path, tool call trace, and exact evidence marker.
 
-9. `09-governance-real-deny`
+10. `09-governance-real-deny`
 - Real model with a real tool available, but intentionally missing permission grants.
 - Gate checks fail-closed deny semantics and zero successful tool calls.
 
-10. `10-tool-retry-recovery`
+11. `10-tool-retry-recovery`
 - Stub tool fails once, then succeeds on retry.
 - Gate checks retry/error trace plus recovered final output.
 
 ### Wave 3: trigger paths
 
-11. `11-webhook-live-flow`
+12. `11-webhook-live-flow`
 - Signed webhook delivery creates a run task and writes to memory.
 - Gate checks delivery acceptance, downstream task success, and memory entry creation.
 
-12. `12-schedule-live-flow`
+13. `12-schedule-live-flow`
 - Minute-level schedule creates a run task that writes to memory.
 - Gate checks schedule trigger status, downstream task success, and memory entry creation.
 
@@ -120,6 +126,7 @@ Apply a single scenario:
 
 ```bash
 make real-apply-pipeline
+make real-apply-hier-tool
 make real-apply-memory-shared
 make real-apply-tool-auth
 make real-apply-mcp
@@ -129,6 +136,7 @@ Run a single gate:
 
 ```bash
 make real-gate-pipeline
+make real-gate-hier-tool
 make real-gate-memory-shared
 make real-gate-governance-deny
 make real-gate-webhook

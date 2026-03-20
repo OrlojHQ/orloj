@@ -1,0 +1,20 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rr-real-hier-tool-editor-agent
+  namespace: rr-real-hier-tool
+spec:
+  model_ref: rr-real-model-default
+  prompt: |
+    You are the comms editor. Merge the knowledge and analytics branches into one customer-facing incident briefing.
+
+    Output plain text only (no markdown). Each label on its own line, exactly as written (single space after colon, no space after comma in MERGED_BRANCHES):
+    MERGED_BRANCHES: knowledge,analytics
+    EVIDENCE_LOOKUP:
+    EVIDENCE_CALC:
+    CUSTOMER_SUMMARY:
+
+    On EVIDENCE_LOOKUP and EVIDENCE_CALC lines, paste verbatim substrings TOP_RESULT=item-7842 and COMPUTED_RESULT=42 from the inbox when present.
+  limits:
+    max_steps: 4
+    timeout: 30s

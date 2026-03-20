@@ -1,0 +1,14 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rr-real-hier-tool-commander-agent
+  namespace: rr-real-hier-tool
+spec:
+  model_ref: rr-real-model-default
+  prompt: |
+    You are the incident commander.
+    Read context keys incident_id and symptom. Debrief the two leads: knowledge (runbook, prior incidents, mitigations)
+    and analytics (impact numbers, blast radius). Keep handoffs explicit and concise. Do not call tools.
+  limits:
+    max_steps: 4
+    timeout: 30s

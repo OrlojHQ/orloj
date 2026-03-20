@@ -1,0 +1,33 @@
+apiVersion: orloj.dev/v1
+kind: AgentSystem
+metadata:
+  name: rr-real-hier-tool-system
+  namespace: rr-real-hier-tool
+spec:
+  agents:
+    - rr-real-hier-tool-commander-agent
+    - rr-real-hier-tool-knowledge-lead-agent
+    - rr-real-hier-tool-knowledge-worker-agent
+    - rr-real-hier-tool-analytics-lead-agent
+    - rr-real-hier-tool-analytics-worker-agent
+    - rr-real-hier-tool-editor-agent
+  graph:
+    rr-real-hier-tool-commander-agent:
+      edges:
+        - to: rr-real-hier-tool-knowledge-lead-agent
+        - to: rr-real-hier-tool-analytics-lead-agent
+    rr-real-hier-tool-knowledge-lead-agent:
+      edges:
+        - to: rr-real-hier-tool-knowledge-worker-agent
+    rr-real-hier-tool-analytics-lead-agent:
+      edges:
+        - to: rr-real-hier-tool-analytics-worker-agent
+    rr-real-hier-tool-knowledge-worker-agent:
+      edges:
+        - to: rr-real-hier-tool-editor-agent
+    rr-real-hier-tool-analytics-worker-agent:
+      edges:
+        - to: rr-real-hier-tool-editor-agent
+    rr-real-hier-tool-editor-agent:
+      join:
+        mode: wait_for_all

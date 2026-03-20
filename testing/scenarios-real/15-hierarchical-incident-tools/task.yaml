@@ -1,0 +1,19 @@
+apiVersion: orloj.dev/v1
+kind: Task
+metadata:
+  name: rr-real-hier-tool-task
+  namespace: rr-real-hier-tool
+spec:
+  system: rr-real-hier-tool-system
+  input:
+    incident_id: INC-2025-0420
+    symptom: elevated error rate on checkout API after regional cache deploy
+  priority: high
+  retry:
+    max_attempts: 2
+    backoff: 2s
+  message_retry:
+    max_attempts: 2
+    backoff: 250ms
+    max_backoff: 2s
+    jitter: full

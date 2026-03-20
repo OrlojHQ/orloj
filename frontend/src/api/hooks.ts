@@ -213,10 +213,27 @@ export function useAgentLogs(name: string) {
 }
 
 export function useWorkers() {
-  return useResourceList<Worker>("Worker", RESOURCE_ENDPOINTS.Worker);
+  return useQuery<Worker[]>({
+    queryKey: ["Worker", "list"],
+    queryFn: () => client.list<Worker>(RESOURCE_ENDPOINTS.Worker, { allNamespaces: true }),
+    refetchInterval: REFETCH_INTERVAL,
+  });
 }
+
 export function useWorker(name: string) {
-  return useResourceGet<Worker>("Worker", RESOURCE_ENDPOINTS.Worker, name);
+  return useQuery<Worker>({
+    queryKey: ["Worker", "detail", name],
+    queryFn: async () => {
+      const items = await client.list<Worker>(RESOURCE_ENDPOINTS.Worker, { allNamespaces: true });
+      const hit = items.find((w) => w.metadata.name === name);
+      if (!hit) {
+        throw new Error(`Worker "${name}" not found`);
+      }
+      return hit;
+    },
+    enabled: !!name,
+    refetchInterval: REFETCH_INTERVAL,
+  });
 }
 
 export function useNamespaces() {
@@ -250,9 +267,24 @@ export function useUpdateResource(kind: string) {
   const ns = useNamespace();
   const path = RESOURCE_ENDPOINTS[kind as keyof typeof RESOURCE_ENDPOINTS];
   return useMutation({
-    mutationFn: ({ name, body, rv }: { name: string; body: unknown; rv?: string }) =>
-      client.update(path, name, body, rv),
-    onSuccess: () => qc.invalidateQueries({ queryKey: [kind, ns] }),
+    mutationFn: ({
+      name,
+      body,
+      rv,
+      namespace: resourceNs,
+    }: {
+      name: string;
+      body: unknown;
+      rv?: string;
+      namespace?: string;
+    }) => client.update(path, name, body, rv, resourceNs ? { namespace: resourceNs } : undefined),
+    onSuccess: () => {
+      if (kind === "Worker") {
+        qc.invalidateQueries({ queryKey: ["Worker"] });
+      } else {
+        qc.invalidateQueries({ queryKey: [kind, ns] });
+      }
+    },
   });
 }
 
@@ -261,7 +293,18 @@ export function useDeleteResource(kind: string) {
   const ns = useNamespace();
   const path = RESOURCE_ENDPOINTS[kind as keyof typeof RESOURCE_ENDPOINTS];
   return useMutation({
-    mutationFn: (name: string) => client.del(path, name),
-    onSuccess: () => qc.invalidateQueries({ queryKey: [kind, ns] }),
+    mutationFn: (target: string | { name: string; namespace?: string }) => {
+      if (typeof target === "string") {
+        return client.del(path, target);
+      }
+      return client.del(path, target.name, target.namespace ? { namespace: target.namespace } : undefined);
+    },
+    onSuccess: () => {
+      if (kind === "Worker") {
+        qc.invalidateQueries({ queryKey: ["Worker"] });
+      } else {
+        qc.invalidateQueries({ queryKey: [kind, ns] });
+      }
+    },
   });
 }

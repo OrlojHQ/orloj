@@ -33,7 +33,10 @@ export function WorkerDetail() {
   const handleDelete = async () => {
     if (!window.confirm(`Delete Worker ${worker.metadata.name}?`)) return;
     try {
-      await deleteMutation.mutateAsync(worker.metadata.name);
+      await deleteMutation.mutateAsync({
+        name: worker.metadata.name,
+        namespace: worker.metadata.namespace?.trim() || "default",
+      });
       toast("success", "Worker deleted successfully");
       navigate("/workers");
     } catch (err) {
@@ -124,7 +127,12 @@ export function WorkerDetail() {
             value={JSON.stringify(worker, null, 2)}
             editable
             onSave={async (body) => {
-              await updateMutation.mutateAsync({ name: worker.metadata.name, body, rv: worker.metadata.resourceVersion });
+              await updateMutation.mutateAsync({
+                name: worker.metadata.name,
+                body,
+                rv: worker.metadata.resourceVersion,
+                namespace: worker.metadata.namespace?.trim() || "default",
+              });
               toast("success", "Worker updated");
             }}
           />

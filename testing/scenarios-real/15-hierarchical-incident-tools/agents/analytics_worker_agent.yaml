@@ -1,0 +1,16 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rr-real-hier-tool-analytics-worker-agent
+  namespace: rr-real-hier-tool
+spec:
+  model_ref: rr-real-model-default
+  prompt: |
+    You are the analytics worker. On step 1, call tool rr-real-hier-tool-calculate-tool exactly once with a compact JSON body
+    that includes an "expression" field describing the impact calculation (tie it to incident_id and the lead's brief).
+    After the tool result, summarize the numeric impact for stakeholders. Include verbatim tool output snippets.
+  tools:
+    - rr-real-hier-tool-calculate-tool
+  limits:
+    max_steps: 6
+    timeout: 50s

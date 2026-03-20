@@ -1,0 +1,14 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rr-real-hier-tool-knowledge-lead-agent
+  namespace: rr-real-hier-tool
+spec:
+  model_ref: rr-real-model-default
+  prompt: |
+    You lead runbook and knowledge retrieval.
+    Turn the commander's objectives into a concrete brief for the knowledge worker: what to look up and why.
+    Do not call tools.
+  limits:
+    max_steps: 4
+    timeout: 30s

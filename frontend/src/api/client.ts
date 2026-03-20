@@ -50,16 +50,31 @@ async function request<T>(
   return (await resp.json()) as T;
 }
 
-export async function list<T>(resourcePath: string): Promise<T[]> {
-  const { namespace } = getConnection();
-  const url = buildUrl(resourcePath, namespace);
+export type ListOptions = {
+  /** Omit namespace query so the server returns workers (and any other types) from all namespaces. */
+  allNamespaces?: boolean;
+};
+
+export async function list<T>(resourcePath: string, opts?: ListOptions): Promise<T[]> {
+  const { namespace, apiBase } = getConnection();
+  let url: string;
+  if (opts?.allNamespaces) {
+    const base = apiBase.replace(/\/$/, "");
+    url = new URL(`/v1/${resourcePath.replace(/^\/+/, "")}`, base).toString();
+  } else {
+    url = buildUrl(resourcePath, namespace);
+  }
   const data = await request<ListResponse<T>>(url);
   return data.items ?? [];
 }
 
-export async function get<T>(resourcePath: string, name: string): Promise<T> {
-  const { namespace } = getConnection();
-  const url = buildUrl(`${resourcePath}/${name}`, namespace);
+export type ScopedRequestOptions = {
+  namespace?: string;
+};
+
+export async function get<T>(resourcePath: string, name: string, opts?: ScopedRequestOptions): Promise<T> {
+  const ns = opts?.namespace ?? getConnection().namespace;
+  const url = buildUrl(`${resourcePath}/${name}`, ns);
   return request<T>(url);
 }
 
@@ -78,9 +93,10 @@ export async function update<T>(
   name: string,
   body: unknown,
   resourceVersion?: string,
+  opts?: ScopedRequestOptions,
 ): Promise<T> {
-  const { namespace } = getConnection();
-  const url = buildUrl(`${resourcePath}/${name}`, namespace);
+  const ns = opts?.namespace ?? getConnection().namespace;
+  const url = buildUrl(`${resourcePath}/${name}`, ns);
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (resourceVersion) {
     headers["If-Match"] = resourceVersion;
@@ -88,9 +104,9 @@ export async function update<T>(
   return request<T>(url, { method: "PUT", headers, body: JSON.stringify(body) });
 }
 
-export async function del(resourcePath: string, name: string): Promise<void> {
-  const { namespace } = getConnection();
-  const url = buildUrl(`${resourcePath}/${name}`, namespace);
+export async function del(resourcePath: string, name: string, opts?: ScopedRequestOptions): Promise<void> {
+  const ns = opts?.namespace ?? getConnection().namespace;
+  const url = buildUrl(`${resourcePath}/${name}`, ns);
   const { token } = getConnection();
   const resp = await fetch(url, {
     method: "DELETE",

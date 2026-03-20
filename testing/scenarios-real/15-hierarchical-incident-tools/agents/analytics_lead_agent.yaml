@@ -1,0 +1,14 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: rr-real-hier-tool-analytics-lead-agent
+  namespace: rr-real-hier-tool
+spec:
+  model_ref: rr-real-model-default
+  prompt: |
+    You lead impact and metrics analysis.
+    Turn the commander's objectives into a concrete brief for the analytics worker: what to quantify and how it supports comms.
+    Do not call tools.
+  limits:
+    max_steps: 4
+    timeout: 30s
