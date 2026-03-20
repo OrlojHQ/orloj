@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useDetailReturnNav } from "../hooks/useDetailReturnNav";
 import { ArrowLeft, Clipboard } from "lucide-react";
 import clsx from "clsx";
 import { useDeleteResource, useTaskWebhook, useTasks, useUpdateResource } from "../api/hooks";
@@ -29,6 +30,7 @@ function taskNameFromRef(ref?: string): string | null {
 export function TaskWebhookDetail() {
   const { name } = useParams<{ name: string }>();
   const navigate = useNavigate();
+  const { goBack } = useDetailReturnNav("/task-webhooks");
   const { data: taskWebhook, isLoading } = useTaskWebhook(name ?? "");
   const tasks = useTasks();
   const deleteMutation = useDeleteResource("TaskWebhook");
@@ -72,12 +74,14 @@ export function TaskWebhookDetail() {
     return <div className="page"><div className="loading-placeholder">Loading task webhook...</div></div>;
   }
 
+  const webhookDetailPath = `/task-webhooks/${encodeURIComponent(name ?? "")}`;
+
   const handleDelete = async () => {
     if (!window.confirm(`Delete TaskWebhook ${taskWebhook.metadata.name}?`)) return;
     try {
       await deleteMutation.mutateAsync(taskWebhook.metadata.name);
       toast("success", "TaskWebhook deleted successfully");
-      navigate("/task-webhooks");
+      goBack();
     } catch (err) {
       toast("error", err instanceof Error ? err.message : "Failed to delete TaskWebhook");
     }
@@ -98,7 +102,7 @@ export function TaskWebhookDetail() {
     <div className="page">
       <div className="page__header">
         <div className="page__header-back">
-          <button className="btn-ghost" onClick={() => navigate("/task-webhooks")} aria-label="Back">
+          <button className="btn-ghost" onClick={goBack} aria-label="Back">
             <ArrowLeft size={16} />
           </button>
           <div>
@@ -218,7 +222,9 @@ export function TaskWebhookDetail() {
                 className={clsx("detail-field__value", lastTriggeredTaskName && "detail-field__link")}
                 onClick={() => {
                   if (lastTriggeredTaskName) {
-                    navigate(`/tasks/${lastTriggeredTaskName}`);
+                    navigate(`/tasks/${encodeURIComponent(lastTriggeredTaskName)}`, {
+                      state: { returnTo: webhookDetailPath },
+                    });
                   }
                 }}
               >
@@ -255,7 +261,9 @@ export function TaskWebhookDetail() {
             columns={runColumns}
             data={runs}
             rowKey={(r) => r.metadata.name}
-            onRowClick={(r) => navigate(`/tasks/${r.metadata.name}`)}
+            onRowClick={(r) =>
+              navigate(`/tasks/${encodeURIComponent(r.metadata.name)}`, { state: { returnTo: webhookDetailPath } })
+            }
             emptyMessage="No generated runs for this webhook"
             loading={tasks.isLoading}
           />

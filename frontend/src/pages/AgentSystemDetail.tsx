@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import {
   useAgentSystem,
   useAgents,
@@ -26,9 +26,18 @@ import type { Task } from "../api/types";
 
 type Tab = "graph" | "tasks" | "yaml" | "status";
 
+const TAB_PARAM = "tab";
+const VALID_TABS: readonly Tab[] = ["graph", "tasks", "yaml", "status"];
+
+function parseTab(raw: string | null): Tab | null {
+  if (!raw) return null;
+  return VALID_TABS.includes(raw as Tab) ? (raw as Tab) : null;
+}
+
 export function AgentSystemDetail() {
   const { name } = useParams<{ name: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { data: system, isLoading } = useAgentSystem(name ?? "");
   const agents = useAgents();
   const modelEndpoints = useModelEndpoints();
@@ -42,7 +51,36 @@ export function AgentSystemDetail() {
   const workers = useWorkers();
   const deleteMutation = useDeleteResource("AgentSystem");
   const updateMutation = useUpdateResource("AgentSystem");
-  const [tab, setTab] = useState<Tab>("graph");
+  const [tab, setTab] = useState<Tab>(() => parseTab(searchParams.get(TAB_PARAM)) ?? "graph");
+
+  useEffect(() => {
+    setTab(parseTab(searchParams.get(TAB_PARAM)) ?? "graph");
+  }, [name, searchParams]);
+
+  const setTabInUrl = useCallback(
+    (t: Tab) => {
+      setTab(t);
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (t === "graph") next.delete(TAB_PARAM);
+          else next.set(TAB_PARAM, t);
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  const returnToWithTab = useCallback(
+    (t: Tab) => {
+      const base = `/systems/${encodeURIComponent(name ?? "")}`;
+      if (t === "graph") return base;
+      return `${base}?${TAB_PARAM}=${t}`;
+    },
+    [name],
+  );
 
   const related = useMemo(() => ({
     agents: agents.data,
@@ -113,17 +151,38 @@ export function AgentSystemDetail() {
   ];
 
   const handleNodeClick = (kind: string, nodeName: string) => {
+    const fromGraph = { state: { returnTo: returnToWithTab("graph") } };
     switch (kind) {
-      case "agent": navigate(`/agents/${nodeName}`); break;
-      case "task": navigate(`/tasks/${nodeName}`); break;
-      case "schedule": navigate(`/task-schedules/${nodeName}`); break;
-      case "webhook": navigate(`/task-webhooks/${nodeName}`); break;
-      case "model": navigate(`/models`); break;
-      case "tool": navigate(`/tools`); break;
-      case "secret": navigate(`/secrets`); break;
-      case "memory": navigate(`/memories`); break;
-      case "role": navigate(`/roles`); break;
-      case "worker": navigate(`/workers`); break;
+      case "agent":
+        navigate(`/agents/${encodeURIComponent(nodeName)}`, fromGraph);
+        break;
+      case "task":
+        navigate(`/tasks/${encodeURIComponent(nodeName)}`, fromGraph);
+        break;
+      case "schedule":
+        navigate(`/task-schedules/${encodeURIComponent(nodeName)}`, fromGraph);
+        break;
+      case "webhook":
+        navigate(`/task-webhooks/${encodeURIComponent(nodeName)}`, fromGraph);
+        break;
+      case "model":
+        navigate("/models", fromGraph);
+        break;
+      case "tool":
+        navigate("/tools", fromGraph);
+        break;
+      case "secret":
+        navigate("/secrets", fromGraph);
+        break;
+      case "memory":
+        navigate("/memories", fromGraph);
+        break;
+      case "role":
+        navigate("/roles", fromGraph);
+        break;
+      case "worker":
+        navigate("/workers", fromGraph);
+        break;
     }
   };
 
@@ -165,7 +224,7 @@ export function AgentSystemDetail() {
           <button
             key={t.id}
             className={clsx("tab-bar__tab", tab === t.id && "tab-bar__tab--active")}
-            onClick={() => setTab(t.id)}
+            onClick={() => setTabInUrl(t.id)}
           >
             {t.label}
           </button>
@@ -181,7 +240,11 @@ export function AgentSystemDetail() {
             columns={taskColumns}
             data={systemTasks}
             rowKey={(r) => r.metadata.name}
-            onRowClick={(r) => navigate(`/tasks/${r.metadata.name}`)}
+            onRowClick={(r) =>
+              navigate(`/tasks/${encodeURIComponent(r.metadata.name)}`, {
+                state: { returnTo: returnToWithTab("tasks") },
+              })
+            }
             emptyMessage="No tasks for this system"
           />
         )}

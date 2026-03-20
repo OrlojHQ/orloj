@@ -1,4 +1,6 @@
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { ContextBackButton } from "../components/ContextBackButton";
+import { detailListNavState } from "../hooks/useDetailReturnNav";
 import { useWorkers } from "../api/hooks";
 import { ResourceTable, type Column } from "../components/ResourceTable";
 import { StatusBadge } from "../components/StatusBadge";
@@ -8,6 +10,7 @@ import type { Worker } from "../api/types";
 
 export function Workers() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { data, isLoading } = useWorkers();
   const workers = data ?? [];
 
@@ -37,15 +40,24 @@ export function Workers() {
   return (
     <div className="page">
       <div className="page__header">
-        <div>
-          <h1 className="page__title">Workers</h1>
-          <p className="page__subtitle">{workers.length} workers</p>
+        <div className="page__header-back">
+          <ContextBackButton />
+          <div>
+            <h1 className="page__title">Workers</h1>
+            <p className="page__subtitle">{workers.length} workers</p>
+          </div>
         </div>
       </div>
       {workers.length === 0 && !isLoading ? (
         <EmptyState icon={<Cpu size={40} />} title="No Workers" description="Workers claim and execute tasks from the queue." />
       ) : (
-        <ResourceTable columns={columns} data={workers} rowKey={(r) => r.metadata.name} onRowClick={(r) => navigate(`/workers/${r.metadata.name}`)} loading={isLoading} />
+        <ResourceTable
+          columns={columns}
+          data={workers}
+          rowKey={(r) => r.metadata.name}
+          onRowClick={(r) => navigate(`/workers/${encodeURIComponent(r.metadata.name)}`, detailListNavState(location))}
+          loading={isLoading}
+        />
       )}
     </div>
   );

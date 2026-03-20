@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
+import { useDetailReturnNav } from "../hooks/useDetailReturnNav";
 import { useDeleteResource, useWorker, useUpdateResource } from "../api/hooks";
 import { StatusBadge } from "../components/StatusBadge";
 import { YamlEditor } from "../components/YamlEditor";
@@ -15,7 +16,7 @@ function formatDateTime(value?: string): string {
 
 export function WorkerDetail() {
   const { name } = useParams<{ name: string }>();
-  const navigate = useNavigate();
+  const { goBack } = useDetailReturnNav("/workers");
   const { data: worker, isLoading } = useWorker(name ?? "");
   const deleteMutation = useDeleteResource("Worker");
   const updateMutation = useUpdateResource("Worker");
@@ -38,7 +39,7 @@ export function WorkerDetail() {
         namespace: worker.metadata.namespace?.trim() || "default",
       });
       toast("success", "Worker deleted successfully");
-      navigate("/workers");
+      goBack();
     } catch (err) {
       toast("error", err instanceof Error ? err.message : "Failed to delete Worker");
     }
@@ -48,7 +49,7 @@ export function WorkerDetail() {
     <div className="page">
       <div className="page__header">
         <div className="page__header-back">
-          <button className="btn-ghost" onClick={() => navigate("/workers")} aria-label="Back">
+          <button className="btn-ghost" onClick={goBack} aria-label="Back">
             <ArrowLeft size={16} />
           </button>
           <div>

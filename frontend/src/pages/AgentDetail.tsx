@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
+import { useDetailReturnNav } from "../hooks/useDetailReturnNav";
 import { useAgent, useAgentLogs, useDeleteResource, useUpdateResource } from "../api/hooks";
 import { toast } from "../components/Toast";
 import { StatusBadge } from "../components/StatusBadge";
@@ -12,7 +13,7 @@ type Tab = "overview" | "yaml" | "logs";
 
 export function AgentDetail() {
   const { name } = useParams<{ name: string }>();
-  const navigate = useNavigate();
+  const { goBack } = useDetailReturnNav("/agents");
   const { data: agent, isLoading } = useAgent(name ?? "");
   const logs = useAgentLogs(name ?? "");
   const deleteMutation = useDeleteResource("Agent");
@@ -24,7 +25,7 @@ export function AgentDetail() {
     try {
       await deleteMutation.mutateAsync(agent.metadata.name);
       toast("success", "Agent deleted successfully");
-      navigate("/agents");
+      goBack();
     } catch (err) {
       toast("error", err instanceof Error ? err.message : "Failed to delete Agent");
     }
@@ -44,7 +45,7 @@ export function AgentDetail() {
     <div className="page">
       <div className="page__header">
         <div className="page__header-back">
-          <button className="btn-ghost" onClick={() => navigate("/agents")} aria-label="Back">
+          <button className="btn-ghost" onClick={goBack} aria-label="Back">
             <ArrowLeft size={16} />
           </button>
           <div>

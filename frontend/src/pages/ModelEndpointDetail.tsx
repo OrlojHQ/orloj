@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
+import { useDetailReturnNav } from "../hooks/useDetailReturnNav";
 import { useDeleteResource, useModelEndpoint, useUpdateResource } from "../api/hooks";
 import { StatusBadge } from "../components/StatusBadge";
 import { YamlEditor } from "../components/YamlEditor";
@@ -11,7 +12,7 @@ type Tab = "overview" | "yaml";
 
 export function ModelEndpointDetail() {
   const { name } = useParams<{ name: string }>();
-  const navigate = useNavigate();
+  const { goBack } = useDetailReturnNav("/models");
   const { data: ep, isLoading } = useModelEndpoint(name ?? "");
   const deleteMutation = useDeleteResource("ModelEndpoint");
   const updateMutation = useUpdateResource("ModelEndpoint");
@@ -31,7 +32,7 @@ export function ModelEndpointDetail() {
     try {
       await deleteMutation.mutateAsync(ep.metadata.name);
       toast("success", "ModelEndpoint deleted successfully");
-      navigate("/models");
+      goBack();
     } catch (err) {
       toast("error", err instanceof Error ? err.message : "Failed to delete ModelEndpoint");
     }
@@ -41,7 +42,7 @@ export function ModelEndpointDetail() {
     <div className="page">
       <div className="page__header">
         <div className="page__header-back">
-          <button className="btn-ghost" onClick={() => navigate("/models")} aria-label="Back">
+          <button className="btn-ghost" onClick={goBack} aria-label="Back">
             <ArrowLeft size={16} />
           </button>
           <div>

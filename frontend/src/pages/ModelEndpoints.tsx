@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { ContextBackButton } from "../components/ContextBackButton";
+import { detailListNavState } from "../hooks/useDetailReturnNav";
 import { useModelEndpoints } from "../api/hooks";
 import { ResourceTable, type Column } from "../components/ResourceTable";
 import { StatusBadge } from "../components/StatusBadge";
@@ -10,6 +12,7 @@ import { CreateResourceDialog } from "../components/CreateResourceDialog";
 
 export function ModelEndpoints() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { data, isLoading } = useModelEndpoints();
   const [showCreate, setShowCreate] = useState(false);
   const endpoints = data ?? [];
@@ -26,9 +29,12 @@ export function ModelEndpoints() {
   return (
     <div className="page">
       <div className="page__header">
-        <div>
-          <h1 className="page__title">Model Endpoints</h1>
-          <p className="page__subtitle">{endpoints.length} endpoints</p>
+        <div className="page__header-back">
+          <ContextBackButton />
+          <div>
+            <h1 className="page__title">Model Endpoints</h1>
+            <p className="page__subtitle">{endpoints.length} endpoints</p>
+          </div>
         </div>
         <div className="page__header-actions">
           <button className="btn-primary" onClick={() => setShowCreate(true)}>
@@ -39,7 +45,13 @@ export function ModelEndpoints() {
       {endpoints.length === 0 && !isLoading ? (
         <EmptyState icon={<Database size={40} />} title="No Model Endpoints" description="Configure LLM provider connections." />
       ) : (
-        <ResourceTable columns={columns} data={endpoints} rowKey={(r) => r.metadata.name} onRowClick={(r) => navigate(`/models/${r.metadata.name}`)} loading={isLoading} />
+        <ResourceTable
+          columns={columns}
+          data={endpoints}
+          rowKey={(r) => r.metadata.name}
+          onRowClick={(r) => navigate(`/models/${encodeURIComponent(r.metadata.name)}`, detailListNavState(location))}
+          loading={isLoading}
+        />
       )}
       <CreateResourceDialog kind="ModelEndpoint" open={showCreate} onClose={() => setShowCreate(false)} />
     </div>

@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { ContextBackButton } from "../components/ContextBackButton";
+import { detailListNavState } from "../hooks/useDetailReturnNav";
 import { useMemories } from "../api/hooks";
 import { ResourceTable, type Column } from "../components/ResourceTable";
 import { StatusBadge } from "../components/StatusBadge";
@@ -10,6 +12,7 @@ import { CreateResourceDialog } from "../components/CreateResourceDialog";
 
 export function Memories() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { data, isLoading } = useMemories();
   const [showCreate, setShowCreate] = useState(false);
   const memories = data ?? [];
@@ -25,9 +28,12 @@ export function Memories() {
   return (
     <div className="page">
       <div className="page__header">
-        <div>
-          <h1 className="page__title">Memories</h1>
-          <p className="page__subtitle">{memories.length} memories</p>
+        <div className="page__header-back">
+          <ContextBackButton />
+          <div>
+            <h1 className="page__title">Memories</h1>
+            <p className="page__subtitle">{memories.length} memories</p>
+          </div>
         </div>
         <div className="page__header-actions">
           <button className="btn-primary" onClick={() => setShowCreate(true)}>
@@ -38,7 +44,13 @@ export function Memories() {
       {memories.length === 0 && !isLoading ? (
         <EmptyState icon={<Brain size={40} />} title="No Memories" description="Persistent memory configurations for agents." />
       ) : (
-        <ResourceTable columns={columns} data={memories} rowKey={(r) => r.metadata.name} onRowClick={(r) => navigate(`/memories/${r.metadata.name}`)} loading={isLoading} />
+        <ResourceTable
+          columns={columns}
+          data={memories}
+          rowKey={(r) => r.metadata.name}
+          onRowClick={(r) => navigate(`/memories/${encodeURIComponent(r.metadata.name)}`, detailListNavState(location))}
+          loading={isLoading}
+        />
       )}
       <CreateResourceDialog kind="Memory" open={showCreate} onClose={() => setShowCreate(false)} />
     </div>

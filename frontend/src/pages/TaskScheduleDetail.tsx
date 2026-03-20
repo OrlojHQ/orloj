@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useDetailReturnNav } from "../hooks/useDetailReturnNav";
 import { useDeleteResource, useTaskSchedule, useTasks, useUpdateResource } from "../api/hooks";
 import { StatusBadge } from "../components/StatusBadge";
 import { YamlEditor } from "../components/YamlEditor";
@@ -18,6 +19,7 @@ function formatDateTime(value?: string): string {
 export function TaskScheduleDetail() {
   const { name } = useParams<{ name: string }>();
   const navigate = useNavigate();
+  const { goBack } = useDetailReturnNav("/task-schedules");
   const { data: taskSchedule, isLoading } = useTaskSchedule(name ?? "");
   const tasks = useTasks();
   const deleteMutation = useDeleteResource("TaskSchedule");
@@ -62,12 +64,14 @@ export function TaskScheduleDetail() {
     return <div className="page"><div className="loading-placeholder">Loading task schedule...</div></div>;
   }
 
+  const scheduleDetailPath = `/task-schedules/${encodeURIComponent(name ?? "")}`;
+
   const handleDelete = async () => {
     if (!window.confirm(`Delete TaskSchedule ${taskSchedule.metadata.name}?`)) return;
     try {
       await deleteMutation.mutateAsync(taskSchedule.metadata.name);
       toast("success", "TaskSchedule deleted successfully");
-      navigate("/task-schedules");
+      goBack();
     } catch (err) {
       toast("error", err instanceof Error ? err.message : "Failed to delete TaskSchedule");
     }
@@ -77,7 +81,7 @@ export function TaskScheduleDetail() {
     <div className="page">
       <div className="page__header">
         <div className="page__header-back">
-          <button className="btn-ghost" onClick={() => navigate("/task-schedules")} aria-label="Back">
+          <button className="btn-ghost" onClick={goBack} aria-label="Back">
             <ArrowLeft size={16} />
           </button>
           <div>
@@ -149,7 +153,9 @@ export function TaskScheduleDetail() {
                 )}
                 onClick={() => {
                   if (taskSchedule.status?.lastTriggeredTask) {
-                    navigate(`/tasks/${taskSchedule.status.lastTriggeredTask}`);
+                    navigate(`/tasks/${encodeURIComponent(taskSchedule.status.lastTriggeredTask)}`, {
+                      state: { returnTo: scheduleDetailPath },
+                    });
                   }
                 }}
               >
@@ -198,7 +204,9 @@ export function TaskScheduleDetail() {
             columns={runColumns}
             data={runs}
             rowKey={(r) => r.metadata.name}
-            onRowClick={(r) => navigate(`/tasks/${r.metadata.name}`)}
+            onRowClick={(r) =>
+              navigate(`/tasks/${encodeURIComponent(r.metadata.name)}`, { state: { returnTo: scheduleDetailPath } })
+            }
             emptyMessage="No generated runs for this schedule"
             loading={tasks.isLoading}
           />

@@ -150,6 +150,7 @@ Critical flags:
 - `--postgres-dsn`
 - `--task-execution-mode` (`sequential|message-driven`)
 - `--embedded-worker` (run a built-in worker in the server process)
+- `--embedded-worker-max-concurrent-tasks` (capacity registered for the embedded worker; env `ORLOJ_EMBEDDED_WORKER_MAX_CONCURRENT_TASKS`; default `1`, same idea as `orlojworker --max-concurrent-tasks`)
 - `--event-bus-backend` (`memory|nats`)
 - `--agent-message-bus-backend` (`none|memory|nats-jetstream`)
 - `--model-gateway-provider` (`mock|openai|anthropic|azure-openai|ollama`)

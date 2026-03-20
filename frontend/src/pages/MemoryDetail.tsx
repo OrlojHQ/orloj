@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
+import { useDetailReturnNav } from "../hooks/useDetailReturnNav";
 import { useDeleteResource, useMemory, useMemoryEntries, useUpdateResource } from "../api/hooks";
 import { StatusBadge } from "../components/StatusBadge";
 import { YamlEditor } from "../components/YamlEditor";
@@ -11,7 +12,7 @@ type Tab = "overview" | "entries" | "yaml";
 
 export function MemoryDetail() {
   const { name } = useParams<{ name: string }>();
-  const navigate = useNavigate();
+  const { goBack } = useDetailReturnNav("/memories");
   const { data: memory, isLoading } = useMemory(name ?? "");
   const deleteMutation = useDeleteResource("Memory");
   const updateMutation = useUpdateResource("Memory");
@@ -32,7 +33,7 @@ export function MemoryDetail() {
     try {
       await deleteMutation.mutateAsync(memory.metadata.name);
       toast("success", "Memory deleted successfully");
-      navigate("/memories");
+      goBack();
     } catch (err) {
       toast("error", err instanceof Error ? err.message : "Failed to delete Memory");
     }
@@ -42,7 +43,7 @@ export function MemoryDetail() {
     <div className="page">
       <div className="page__header">
         <div className="page__header-back">
-          <button className="btn-ghost" onClick={() => navigate("/memories")} aria-label="Back">
+          <button className="btn-ghost" onClick={goBack} aria-label="Back">
             <ArrowLeft size={16} />
           </button>
           <div>

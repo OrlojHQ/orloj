@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { ContextBackButton } from "../components/ContextBackButton";
+import { detailListNavState } from "../hooks/useDetailReturnNav";
 import { useAgentRoles } from "../api/hooks";
 import { ResourceTable, type Column } from "../components/ResourceTable";
 import { StatusBadge } from "../components/StatusBadge";
@@ -10,6 +12,7 @@ import { CreateResourceDialog } from "../components/CreateResourceDialog";
 
 export function Roles() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { data, isLoading } = useAgentRoles();
   const [showCreate, setShowCreate] = useState(false);
   const roles = data ?? [];
@@ -25,9 +28,12 @@ export function Roles() {
   return (
     <div className="page">
       <div className="page__header">
-        <div>
-          <h1 className="page__title">Agent Roles</h1>
-          <p className="page__subtitle">{roles.length} roles</p>
+        <div className="page__header-back">
+          <ContextBackButton />
+          <div>
+            <h1 className="page__title">Agent Roles</h1>
+            <p className="page__subtitle">{roles.length} roles</p>
+          </div>
         </div>
         <div className="page__header-actions">
           <button className="btn-primary" onClick={() => setShowCreate(true)}>
@@ -38,7 +44,13 @@ export function Roles() {
       {roles.length === 0 && !isLoading ? (
         <EmptyState icon={<KeyRound size={40} />} title="No Roles" description="Permission grants bound to agents." />
       ) : (
-        <ResourceTable columns={columns} data={roles} rowKey={(r) => r.metadata.name} onRowClick={(r) => navigate(`/roles/${r.metadata.name}`)} loading={isLoading} />
+        <ResourceTable
+          columns={columns}
+          data={roles}
+          rowKey={(r) => r.metadata.name}
+          onRowClick={(r) => navigate(`/roles/${encodeURIComponent(r.metadata.name)}`, detailListNavState(location))}
+          loading={isLoading}
+        />
       )}
       <CreateResourceDialog kind="AgentRole" open={showCreate} onClose={() => setShowCreate(false)} />
     </div>

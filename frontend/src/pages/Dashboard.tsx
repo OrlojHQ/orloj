@@ -27,6 +27,8 @@ import {
   Webhook,
   ShieldCheck,
   Activity,
+  PauseCircle,
+  ChevronRight,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { StatusBadge } from "../components/StatusBadge";
@@ -34,6 +36,42 @@ import type { Task } from "../api/types";
 
 function countByPhase(tasks: Task[], phase: string): number {
   return tasks.filter((t) => (t.status?.phase ?? "").toLowerCase() === phase.toLowerCase()).length;
+}
+
+function formatShortTime(iso?: string): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatRelativeUpdated(ts: number): string {
+  if (!ts) return "";
+  const sec = Math.round((Date.now() - ts) / 1000);
+  if (sec < 10) return "Updated just now";
+  if (sec < 60) return `Updated ${sec}s ago`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `Updated ${min}m ago`;
+  const hr = Math.floor(min / 60);
+  return `Updated ${hr}h ago`;
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="dashboard-skeleton" aria-hidden>
+      <div className="dashboard-skeleton__hero" />
+      <div className="dashboard-skeleton__grid">
+        {Array.from({ length: 9 }).map((_, i) => (
+          <div key={i} className="dashboard-skeleton__metric" />
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export function Dashboard() {
@@ -69,109 +107,209 @@ export function Dashboard() {
   const modelList = models.data ?? [];
   const modelsReady = modelList.filter((m) => (m.status?.phase ?? "").toLowerCase() === "ready").length;
 
-  const pendingApprovals = useMemo(() =>
-    (approvals.data ?? []).filter((a) => (a.status?.phase ?? "Pending").toLowerCase() === "pending").length,
+  const pendingApprovals = useMemo(
+    () =>
+      (approvals.data ?? []).filter((a) => (a.status?.phase ?? "Pending").toLowerCase() === "pending").length,
     [approvals.data],
   );
 
+  const taskIssues = failed + deadletter;
+  const apiOk = health.data === true;
+  const workersOk = workerList.length === 0 || workersOnline === workerList.length;
+  const modelsOk = modelList.length === 0 || modelsReady === modelList.length;
+  const platformTone =
+    !apiOk ? "bad" : taskIssues > 0 || pendingApprovals > 0 || !workersOk || !modelsOk ? "warn" : "ok";
+
+  const lastUpdated = useMemo(() => {
+    const stamps = [
+      systems.dataUpdatedAt,
+      tasks.dataUpdatedAt,
+      workers.dataUpdatedAt,
+      models.dataUpdatedAt,
+      health.dataUpdatedAt,
+    ].filter(Boolean) as number[];
+    return stamps.length ? Math.max(...stamps) : 0;
+  }, [
+    systems.dataUpdatedAt,
+    tasks.dataUpdatedAt,
+    workers.dataUpdatedAt,
+    models.dataUpdatedAt,
+    health.dataUpdatedAt,
+  ]);
+
+  const showSkeleton = tasks.isPending || systems.isPending || workers.isPending;
+
+  if (showSkeleton) {
+    return (
+      <div className="page page--dashboard">
+        <div className="page__header">
+          <h1 className="page__title">Dashboard</h1>
+          <p className="page__subtitle">Orloj control plane overview</p>
+        </div>
+        <DashboardSkeleton />
+      </div>
+    );
+  }
+
   return (
-    <div className="page">
+    <div className="page page--dashboard">
       <div className="page__header">
-        <h1 className="page__title">Dashboard</h1>
-        <p className="page__subtitle">Orloj control plane overview</p>
+        <div>
+          <h1 className="page__title">Dashboard</h1>
+          <p className="page__subtitle">Orloj control plane overview</p>
+          {lastUpdated > 0 && (
+            <p className="dashboard-meta text-muted">{formatRelativeUpdated(lastUpdated)} · auto-refreshed</p>
+          )}
+        </div>
       </div>
 
-      <div className="metrics-grid">
-        <MetricCard
-          label="Agent Systems"
-          value={systems.data?.length ?? 0}
-          icon={<Network size={16} />}
-          variant="blue"
-        />
-        <MetricCard
-          label="Agents"
-          value={agents.data?.length ?? 0}
-          icon={<Bot size={16} />}
-          variant="default"
-        />
-        <MetricCard
-          label="Tasks"
-          value={totalTasks}
-          icon={<ListTodo size={16} />}
-          variant="default"
-        />
-        <MetricCard
-          label="Task Schedules"
-          value={taskSchedules.data?.length ?? 0}
-          icon={<CalendarClock size={16} />}
-          variant="default"
-        />
-        <MetricCard
-          label="Task Webhooks"
-          value={taskWebhooks.data?.length ?? 0}
-          icon={<Webhook size={16} />}
-          variant="default"
-        />
-        <MetricCard
-          label="Workers"
-          value={workers.data?.length ?? 0}
-          icon={<Cpu size={16} />}
-          variant="default"
-        />
-        <MetricCard
-          label="Model Endpoints"
-          value={models.data?.length ?? 0}
-          icon={<Database size={16} />}
-          variant="default"
-        />
-        <MetricCard
-          label="Tools"
-          value={tools.data?.length ?? 0}
-          icon={<Wrench size={16} />}
-          variant="default"
-        />
-      </div>
+      <section
+        className={`platform-status platform-status--${platformTone}`}
+        aria-label="Platform status"
+      >
+        <div className="platform-status__main">
+          <div className="platform-status__badge">
+            <Activity size={18} className="platform-status__badge-icon" />
+            <span className="platform-status__badge-label">
+              {platformTone === "ok" && "All systems operational"}
+              {platformTone === "warn" && "Attention needed"}
+              {platformTone === "bad" && "API unavailable"}
+            </span>
+          </div>
+          <ul className="platform-status__list">
+            <li>
+              <span className={apiOk ? "text-green" : "text-red"}>{apiOk ? "API reachable" : "API unreachable"}</span>
+            </li>
+            <li>
+              <span className={workersOk ? "text-muted" : "text-orange"}>
+                {workerList.length === 0
+                  ? "Workers: none registered"
+                  : `Workers ${workersOnline}/${workerList.length} online`}
+              </span>
+            </li>
+            <li>
+              <span className={modelsOk ? "text-muted" : "text-orange"}>
+                {modelList.length === 0
+                  ? "Models: none configured"
+                  : `Models ${modelsReady}/${modelList.length} ready`}
+              </span>
+            </li>
+          </ul>
+        </div>
+        <div className="platform-status__actions">
+          {taskIssues > 0 && (
+            <button
+              type="button"
+              className="platform-status__chip platform-status__chip--danger"
+              onClick={() => navigate("/tasks")}
+            >
+              <XCircle size={14} />
+              {taskIssues} task{taskIssues === 1 ? "" : "s"} need review
+              <ChevronRight size={14} />
+            </button>
+          )}
+          {pendingApprovals > 0 && (
+            <button
+              type="button"
+              className="platform-status__chip platform-status__chip--warning"
+              onClick={() => navigate("/approvals")}
+            >
+              <ShieldCheck size={14} />
+              {pendingApprovals} approval{pendingApprovals === 1 ? "" : "s"} pending
+              <ChevronRight size={14} />
+            </button>
+          )}
+          <button type="button" className="platform-status__chip platform-status__chip--ghost" onClick={() => navigate("/workers")}>
+            Workers
+            <ChevronRight size={14} />
+          </button>
+          <button type="button" className="platform-status__chip platform-status__chip--ghost" onClick={() => navigate("/models")}>
+            Model endpoints
+            <ChevronRight size={14} />
+          </button>
+        </div>
+      </section>
 
-      <div className="attention-cards">
-        <div className="attention-card" onClick={() => navigate("/workers")}>
-          <Activity size={20} className={`attention-card__icon ${health.data ? "text-green" : "text-red"}`} />
-          <div className="attention-card__body">
-            <div className="attention-card__title">{health.data ? "API Healthy" : "API Unreachable"}</div>
-            <div className="attention-card__desc">{workersOnline}/{workerList.length} workers online</div>
+      <div className="dashboard-metrics">
+        <section className="dashboard-section" aria-labelledby="dash-runtime">
+          <h2 id="dash-runtime" className="dashboard-section__title">
+            Runtime
+          </h2>
+          <p className="dashboard-section__hint">Live workload and execution surface</p>
+          <div className="metrics-grid metrics-grid--dashboard">
+            <MetricCard
+              label="Tasks"
+              value={totalTasks}
+              subtitle={`${running} running · ${pending} pending`}
+              icon={<ListTodo size={16} />}
+              variant={taskIssues > 0 ? "red" : "default"}
+            />
+            <MetricCard
+              label="Workers"
+              value={workerList.length}
+              subtitle={`${workersOnline} online`}
+              icon={<Cpu size={16} />}
+              variant={!workersOk && workerList.length > 0 ? "orange" : "default"}
+            />
+            <MetricCard
+              label="Pending approvals"
+              value={pendingApprovals}
+              subtitle={pendingApprovals > 0 ? "Requires review" : "Queue clear"}
+              icon={<ShieldCheck size={16} />}
+              variant={pendingApprovals > 0 ? "orange" : "default"}
+            />
           </div>
-        </div>
-        <div className="attention-card" onClick={() => navigate("/models")}>
-          <Database size={20} className="attention-card__icon text-blue" />
-          <div className="attention-card__body">
-            <div className="attention-card__title">Model Endpoints</div>
-            <div className="attention-card__desc">{modelsReady}/{modelList.length} ready</div>
+        </section>
+
+        <section className="dashboard-section" aria-labelledby="dash-definitions">
+          <h2 id="dash-definitions" className="dashboard-section__title">
+            Definitions
+          </h2>
+          <p className="dashboard-section__hint">Agents, systems, models, and tools in this namespace</p>
+          <div className="metrics-grid metrics-grid--dashboard">
+            <MetricCard
+              label="Agent systems"
+              value={systems.data?.length ?? 0}
+              icon={<Network size={16} />}
+              variant="default"
+            />
+            <MetricCard label="Agents" value={agents.data?.length ?? 0} icon={<Bot size={16} />} variant="default" />
+            <MetricCard
+              label="Model endpoints"
+              value={modelList.length}
+              subtitle={`${modelsReady} ready`}
+              icon={<Database size={16} />}
+              variant={!modelsOk && modelList.length > 0 ? "orange" : "default"}
+            />
+            <MetricCard label="Tools" value={tools.data?.length ?? 0} icon={<Wrench size={16} />} variant="default" />
           </div>
-        </div>
-        {(failed + deadletter) > 0 && (
-          <div className="attention-card attention-card--error" onClick={() => navigate("/tasks")}>
-            <XCircle size={20} className="attention-card__icon text-red" />
-            <div className="attention-card__body">
-              <div className="attention-card__title">Task Failures</div>
-              <div className="attention-card__desc">{failed} failed, {deadletter} dead-letter</div>
-            </div>
-            <div className="attention-card__count text-red">{failed + deadletter}</div>
+        </section>
+
+        <section className="dashboard-section" aria-labelledby="dash-automation">
+          <h2 id="dash-automation" className="dashboard-section__title">
+            Automation
+          </h2>
+          <p className="dashboard-section__hint">Schedules and webhooks</p>
+          <div className="metrics-grid metrics-grid--dashboard">
+            <MetricCard
+              label="Task schedules"
+              value={taskSchedules.data?.length ?? 0}
+              icon={<CalendarClock size={16} />}
+              variant="default"
+            />
+            <MetricCard
+              label="Task webhooks"
+              value={taskWebhooks.data?.length ?? 0}
+              icon={<Webhook size={16} />}
+              variant="default"
+            />
           </div>
-        )}
-        {pendingApprovals > 0 && (
-          <div className="attention-card attention-card--warning" onClick={() => navigate("/approvals")}>
-            <ShieldCheck size={20} className="attention-card__icon text-orange" />
-            <div className="attention-card__body">
-              <div className="attention-card__title">Pending Approvals</div>
-              <div className="attention-card__desc">{pendingApprovals} awaiting review</div>
-            </div>
-            <div className="attention-card__count text-orange">{pendingApprovals}</div>
-          </div>
-        )}
+        </section>
       </div>
 
       <div className="dashboard-row">
-        <div className="card">
-          <h2 className="card__title">Task Health</h2>
+        <div className="card card--dashboard">
+          <h2 className="card__title card__title--sentence">Task health</h2>
           <div className="task-health">
             <div className="task-health__bar">
               {succeeded > 0 && (
@@ -218,34 +356,60 @@ export function Dashboard() {
                 <Clock size={12} className="text-blue" /> Running: {running}
               </span>
               <span className="task-health__legend-item">
-                <Clock size={12} className="text-yellow" /> Pending: {pending}
+                <PauseCircle size={12} className="text-yellow" /> Pending: {pending}
               </span>
               <span className="task-health__legend-item">
                 <XCircle size={12} className="text-red" /> Failed: {failed}
               </span>
               <span className="task-health__legend-item">
-                <AlertTriangle size={12} className="text-orange" /> DeadLetter: {deadletter}
+                <AlertTriangle size={12} className="text-orange" /> Dead letter: {deadletter}
               </span>
             </div>
-            <p className={`task-health__pct text-${successColor}`}>{healthyPct}% success rate</p>
+            <p className={`task-health__pct text-${successColor}`}>
+              {healthyPct}% success rate
+              <span className="task-health__pct-meta text-muted"> · {totalTasks} total tasks</span>
+            </p>
           </div>
         </div>
 
-        <div className="card">
-          <h2 className="card__title">Recent Tasks</h2>
-          <div className="recent-list">
-            {taskList.length === 0 && (
-              <p className="text-muted">No tasks yet</p>
-            )}
+        <div className="card card--dashboard">
+          <div className="card__header-row">
+            <h2 className="card__title card__title--sentence">Recent tasks</h2>
+            <button type="button" className="card__link-all" onClick={() => navigate("/tasks")}>
+              View all
+              <ChevronRight size={14} />
+            </button>
+          </div>
+          <div className="recent-list recent-list--grid recent-list--tasks">
+            <div className="recent-list__header">
+              <span>Task</span>
+              <span>System</span>
+              <span>Updated</span>
+              <span className="recent-list__header-phase">Phase</span>
+            </div>
+            {taskList.length === 0 && <p className="text-muted recent-list__empty">No tasks yet</p>}
             {taskList.slice(0, 8).map((task) => (
               <div
                 key={task.metadata.name}
                 className="recent-list__item"
                 onClick={() => navigate(`/tasks/${task.metadata.name}`)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    navigate(`/tasks/${task.metadata.name}`);
+                  }
+                }}
               >
                 <span className="recent-list__name mono">{task.metadata.name}</span>
-                <span className="recent-list__system text-muted">{task.spec.system}</span>
-                <StatusBadge phase={task.status?.phase} />
+                <span className="recent-list__system text-muted">{task.spec.system ?? "—"}</span>
+                <span className="recent-list__time text-muted">
+                  {formatShortTime(task.status?.completedAt ?? task.status?.startedAt)}
+                </span>
+                <span className="recent-list__badge">
+                  <StatusBadge phase={task.status?.phase} />
+                </span>
               </div>
             ))}
           </div>
@@ -253,43 +417,85 @@ export function Dashboard() {
       </div>
 
       <div className="dashboard-row">
-        <div className="card">
-          <h2 className="card__title">Agent Systems</h2>
-          <div className="recent-list">
+        <div className="card card--dashboard">
+          <div className="card__header-row">
+            <h2 className="card__title card__title--sentence">Agent systems</h2>
+            <button type="button" className="card__link-all" onClick={() => navigate("/systems")}>
+              View all
+              <ChevronRight size={14} />
+            </button>
+          </div>
+          <div className="recent-list recent-list--grid recent-list--systems">
+            <div className="recent-list__header">
+              <span>System</span>
+              <span>Agents</span>
+              <span className="recent-list__header-phase">Status</span>
+            </div>
             {(systems.data ?? []).length === 0 && (
-              <p className="text-muted">No systems defined</p>
+              <p className="text-muted recent-list__empty">No systems defined</p>
             )}
             {(systems.data ?? []).slice(0, 6).map((sys) => (
               <div
                 key={sys.metadata.name}
                 className="recent-list__item"
                 onClick={() => navigate(`/systems/${sys.metadata.name}`)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    navigate(`/systems/${sys.metadata.name}`);
+                  }
+                }}
               >
                 <span className="recent-list__name mono">{sys.metadata.name}</span>
-                <span className="text-muted">{sys.spec.agents?.length ?? 0} agents</span>
-                <StatusBadge phase={sys.status?.phase} />
+                <span className="text-muted">{sys.spec.agents?.length ?? 0}</span>
+                <span className="recent-list__badge">
+                  <StatusBadge phase={sys.status?.phase} />
+                </span>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="card">
-          <h2 className="card__title">Workers</h2>
-          <div className="recent-list">
+        <div className="card card--dashboard">
+          <div className="card__header-row">
+            <h2 className="card__title card__title--sentence">Workers</h2>
+            <button type="button" className="card__link-all" onClick={() => navigate("/workers")}>
+              View all
+              <ChevronRight size={14} />
+            </button>
+          </div>
+          <div className="recent-list recent-list--grid recent-list--workers">
+            <div className="recent-list__header">
+              <span>Worker</span>
+              <span>Load</span>
+              <span className="recent-list__header-phase">Status</span>
+            </div>
             {(workers.data ?? []).length === 0 && (
-              <p className="text-muted">No workers registered</p>
+              <p className="text-muted recent-list__empty">No workers registered</p>
             )}
             {(workers.data ?? []).slice(0, 6).map((w) => (
               <div
-                key={w.metadata.name}
+                key={`${w.metadata.namespace ?? "default"}/${w.metadata.name}`}
                 className="recent-list__item"
                 onClick={() => navigate(`/workers/${w.metadata.name}`)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    navigate(`/workers/${w.metadata.name}`);
+                  }
+                }}
               >
                 <span className="recent-list__name mono">{w.metadata.name}</span>
                 <span className="text-muted">
-                  {w.status?.currentTasks ?? 0}/{w.spec.max_concurrent_tasks ?? 1} tasks
+                  {w.status?.currentTasks ?? 0}/{w.spec.max_concurrent_tasks ?? 1}
                 </span>
-                <StatusBadge phase={w.status?.phase} />
+                <span className="recent-list__badge">
+                  <StatusBadge phase={w.status?.phase} />
+                </span>
               </div>
             ))}
           </div>

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
+import { useDetailReturnNav } from "../hooks/useDetailReturnNav";
 import { useDeleteResource, useTool, useUpdateResource } from "../api/hooks";
 import { StatusBadge } from "../components/StatusBadge";
 import { YamlEditor } from "../components/YamlEditor";
@@ -11,7 +12,7 @@ type Tab = "overview" | "yaml";
 
 export function ToolDetail() {
   const { name } = useParams<{ name: string }>();
-  const navigate = useNavigate();
+  const { goBack } = useDetailReturnNav("/tools");
   const { data: tool, isLoading } = useTool(name ?? "");
   const deleteMutation = useDeleteResource("Tool");
   const updateMutation = useUpdateResource("Tool");
@@ -31,7 +32,7 @@ export function ToolDetail() {
     try {
       await deleteMutation.mutateAsync(tool.metadata.name);
       toast("success", "Tool deleted successfully");
-      navigate("/tools");
+      goBack();
     } catch (err) {
       toast("error", err instanceof Error ? err.message : "Failed to delete Tool");
     }
@@ -41,7 +42,7 @@ export function ToolDetail() {
     <div className="page">
       <div className="page__header">
         <div className="page__header-back">
-          <button className="btn-ghost" onClick={() => navigate("/tools")} aria-label="Back">
+          <button className="btn-ghost" onClick={goBack} aria-label="Back">
             <ArrowLeft size={16} />
           </button>
           <div>

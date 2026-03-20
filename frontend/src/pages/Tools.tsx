@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { ContextBackButton } from "../components/ContextBackButton";
+import { detailListNavState } from "../hooks/useDetailReturnNav";
 import { useTools } from "../api/hooks";
 import { ResourceTable, type Column } from "../components/ResourceTable";
 import { StatusBadge } from "../components/StatusBadge";
@@ -18,6 +20,7 @@ const RISK_COLORS: Record<string, string> = {
 
 export function Tools() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { data, isLoading } = useTools();
   const [showCreate, setShowCreate] = useState(false);
   const tools = data ?? [];
@@ -40,9 +43,12 @@ export function Tools() {
   return (
     <div className="page">
       <div className="page__header">
-        <div>
-          <h1 className="page__title">Tools</h1>
-          <p className="page__subtitle">{tools.length} tools</p>
+        <div className="page__header-back">
+          <ContextBackButton />
+          <div>
+            <h1 className="page__title">Tools</h1>
+            <p className="page__subtitle">{tools.length} tools</p>
+          </div>
         </div>
         <div className="page__header-actions">
           <button className="btn-primary" onClick={() => setShowCreate(true)}>
@@ -53,7 +59,13 @@ export function Tools() {
       {tools.length === 0 && !isLoading ? (
         <EmptyState icon={<Wrench size={40} />} title="No Tools" description="Define external capabilities for agents to invoke." />
       ) : (
-        <ResourceTable columns={columns} data={tools} rowKey={(r) => r.metadata.name} onRowClick={(r) => navigate(`/tools/${r.metadata.name}`)} loading={isLoading} />
+        <ResourceTable
+          columns={columns}
+          data={tools}
+          rowKey={(r) => r.metadata.name}
+          onRowClick={(r) => navigate(`/tools/${encodeURIComponent(r.metadata.name)}`, detailListNavState(location))}
+          loading={isLoading}
+        />
       )}
       <CreateResourceDialog kind="Tool" open={showCreate} onClose={() => setShowCreate(false)} />
     </div>

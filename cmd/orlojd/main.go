@@ -28,6 +28,7 @@ func main() {
 	env := startup.EnvOrDefault
 	envDuration := startup.EnvDurationOrDefault
 	envBool := startup.EnvBoolOrDefault
+	envInt := startup.EnvIntOrDefault
 	envInt64 := startup.EnvInt64OrDefault
 	envUint64 := startup.EnvUint64OrDefault
 
@@ -44,6 +45,7 @@ func main() {
 	taskWorkerID := flag.String("task-worker-id", "embedded-worker", "worker id for embedded task worker")
 	taskLeaseDuration := flag.Duration("task-lease-duration", 30*time.Second, "task lease duration for embedded worker")
 	taskHeartbeatInterval := flag.Duration("task-heartbeat-interval", 10*time.Second, "task lease heartbeat interval for embedded worker")
+	embeddedWorkerMaxConcurrentTasks := flag.Int("embedded-worker-max-concurrent-tasks", envInt("ORLOJ_EMBEDDED_WORKER_MAX_CONCURRENT_TASKS", 1), "max concurrent tasks for embedded worker (same semantics as orlojworker --max-concurrent-tasks; env: ORLOJ_EMBEDDED_WORKER_MAX_CONCURRENT_TASKS)")
 	taskWorkerRegion := flag.String("task-worker-region", env("ORLOJ_TASK_WORKER_REGION", "default"), "region for embedded task worker")
 	taskExecutionMode := flag.String("task-execution-mode", env("ORLOJ_TASK_EXECUTION_MODE", "sequential"), "task execution mode: sequential|message-driven")
 	modelGatewayProvider := flag.String("model-gateway-provider", env("ORLOJ_MODEL_GATEWAY_PROVIDER", "mock"), "task model gateway provider: mock|openai|anthropic|azure-openai|ollama")
@@ -291,7 +293,7 @@ func main() {
 	if *runTaskWorker || *embeddedWorker {
 		go heartbeatWorkerRegistration(ctx, stores.Workers, logger, *taskWorkerID, resources.WorkerSpec{
 			Region:             *taskWorkerRegion,
-			MaxConcurrentTasks: 5,
+			MaxConcurrentTasks: *embeddedWorkerMaxConcurrentTasks,
 		}, *taskHeartbeatInterval)
 		go taskController.Start(ctx)
 		if strings.EqualFold(strings.TrimSpace(*taskExecutionMode), "message-driven") {
@@ -322,7 +324,7 @@ func main() {
 				logger.Printf("embedded runtime inbox consumers enabled refresh=%s dedupe=%s", (10 * time.Second).String(), (10 * time.Minute).String())
 			}
 		}
-		logger.Printf("embedded task worker enabled id=%s lease=%s", *taskWorkerID, taskLeaseDuration.String())
+		logger.Printf("embedded task worker enabled id=%s lease=%s max_concurrent_tasks=%d", *taskWorkerID, taskLeaseDuration.String(), *embeddedWorkerMaxConcurrentTasks)
 	}
 
 	httpServer := &http.Server{

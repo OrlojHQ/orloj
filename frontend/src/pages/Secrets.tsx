@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { ContextBackButton } from "../components/ContextBackButton";
+import { detailListNavState } from "../hooks/useDetailReturnNav";
 import { useSecrets } from "../api/hooks";
 import { ResourceTable, type Column } from "../components/ResourceTable";
 import { StatusBadge } from "../components/StatusBadge";
@@ -10,6 +12,7 @@ import { CreateResourceDialog } from "../components/CreateResourceDialog";
 
 export function Secrets() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { data, isLoading } = useSecrets();
   const [showCreate, setShowCreate] = useState(false);
   const secrets = data ?? [];
@@ -29,9 +32,12 @@ export function Secrets() {
   return (
     <div className="page">
       <div className="page__header">
-        <div>
-          <h1 className="page__title">Secrets</h1>
-          <p className="page__subtitle">{secrets.length} secrets</p>
+        <div className="page__header-back">
+          <ContextBackButton />
+          <div>
+            <h1 className="page__title">Secrets</h1>
+            <p className="page__subtitle">{secrets.length} secrets</p>
+          </div>
         </div>
         <div className="page__header-actions">
           <button className="btn-primary" onClick={() => setShowCreate(true)}>
@@ -42,7 +48,13 @@ export function Secrets() {
       {secrets.length === 0 && !isLoading ? (
         <EmptyState icon={<Lock size={40} />} title="No Secrets" description="Secrets store sensitive values for tool authentication." />
       ) : (
-        <ResourceTable columns={columns} data={secrets} rowKey={(r) => r.metadata.name} onRowClick={(r) => navigate(`/secrets/${r.metadata.name}`)} loading={isLoading} />
+        <ResourceTable
+          columns={columns}
+          data={secrets}
+          rowKey={(r) => r.metadata.name}
+          onRowClick={(r) => navigate(`/secrets/${encodeURIComponent(r.metadata.name)}`, detailListNavState(location))}
+          loading={isLoading}
+        />
       )}
       <CreateResourceDialog kind="Secret" open={showCreate} onClose={() => setShowCreate(false)} />
     </div>

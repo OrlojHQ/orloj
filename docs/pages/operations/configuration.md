@@ -19,6 +19,7 @@ Example:
 |---|---|---|
 | `ORLOJ_POSTGRES_DSN` | `orlojd`, `orlojworker` | Postgres DSN when `--storage-backend=postgres`. |
 | `ORLOJ_TASK_EXECUTION_MODE` | `orlojd`, `orlojworker` | `sequential` or `message-driven`. |
+| `ORLOJ_EMBEDDED_WORKER_MAX_CONCURRENT_TASKS` | `orlojd` | Default for `--embedded-worker-max-concurrent-tasks` when the embedded worker is enabled (`<= 0` normalized to `1` on upsert). |
 | `ORLOJ_MODEL_GATEWAY_PROVIDER` | `orlojd`, `orlojworker` | `mock`, `openai`, `anthropic`, `azure-openai`, `ollama`. |
 | `ORLOJ_MODEL_GATEWAY_API_KEY` | `orlojd`, `orlojworker` | Explicit model API key. |
 | `OPENAI_API_KEY` | `orlojd`, `orlojworker` | Fallback key for OpenAI. |
@@ -50,7 +51,7 @@ High-impact groups:
 
 - API/server: `--addr`
 - storage: `--storage-backend`, `--postgres-dsn`, pool sizing flags
-- execution: `--task-execution-mode`, embedded worker/lease controls
+- execution: `--task-execution-mode`, embedded worker/lease controls, `--embedded-worker-max-concurrent-tasks`
 - model gateway: provider, API key, timeout, base URL, default model
 - tool runtime: isolation mode, container and wasm controls
 - buses: server event bus and runtime message bus flags

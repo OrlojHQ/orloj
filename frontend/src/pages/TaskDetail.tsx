@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useDetailReturnNav } from "../hooks/useDetailReturnNav";
 import { useTask, useTaskMessages, useTaskMetrics, useTaskLogs, useAgentSystem, useDeleteResource, useUpdateResource } from "../api/hooks";
 import { toast } from "../components/Toast";
 import { StatusBadge } from "../components/StatusBadge";
@@ -16,6 +17,7 @@ type Tab = "overview" | "messages" | "metrics" | "trace" | "logs" | "graph" | "y
 export function TaskDetail() {
   const { name } = useParams<{ name: string }>();
   const navigate = useNavigate();
+  const { goBack } = useDetailReturnNav("/tasks");
   const { data: task, isLoading } = useTask(name ?? "");
   const messages = useTaskMessages(name ?? "");
   const metrics = useTaskMetrics(name ?? "");
@@ -30,7 +32,7 @@ export function TaskDetail() {
     try {
       await deleteMutation.mutateAsync(task.metadata.name);
       toast("success", "Task deleted successfully");
-      navigate("/tasks");
+      goBack();
     } catch (err) {
       toast("error", err instanceof Error ? err.message : "Failed to delete Task");
     }
@@ -58,7 +60,7 @@ export function TaskDetail() {
     <div className="page">
       <div className="page__header">
         <div className="page__header-back">
-          <button className="btn-ghost" onClick={() => navigate("/tasks")} aria-label="Back">
+          <button className="btn-ghost" onClick={goBack} aria-label="Back">
             <ArrowLeft size={16} />
           </button>
           <div>
