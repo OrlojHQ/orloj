@@ -1,0 +1,174 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+  attestations: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.0
+
+      - name: Install frontend dependencies
+        run: cd frontend && bun install --frozen-lockfile
+
+      - name: Build frontend (for Go embed)
+        run: cd frontend && bun run build
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test
+        run: go test ./... -count=1 -timeout 120s
+
+      - name: Vet
+        run: go vet ./...
+
+  goreleaser:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.0
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate SBOM and attach to release
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          artifact-name: orloj-${{ github.ref_name }}-sbom.spdx.json
+          upload-release-assets: "true"
+          upload-artifact: "true"
+
+  images:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set image names and build date
+        id: reg
+        run: |
+          o=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "image_orlojd=ghcr.io/${o}/orloj-orlojd" >> "$GITHUB_OUTPUT"
+          echo "image_worker=ghcr.io/${o}/orloj-orlojworker" >> "$GITHUB_OUTPUT"
+          echo "date=$(date -u +"%Y-%m-%dT%H:%M:%SZ")" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker meta (orlojd)
+        id: meta-orlojd
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.reg.outputs.image_orlojd }}
+          tags: |
+            type=raw,value=${{ github.ref_name }}
+            type=raw,value=latest
+
+      - name: Build and push orlojd
+        id: push-orlojd
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          target: orlojd
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta-orlojd.outputs.tags }}
+          labels: ${{ steps.meta-orlojd.outputs.labels }}
+          build-args: |
+            VERSION=${{ github.ref_name }}
+            COMMIT=${{ github.sha }}
+            DATE=${{ steps.reg.outputs.date }}
+          provenance: mode=max
+          sbom: true
+
+      - name: Docker meta (orlojworker)
+        id: meta-worker
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.reg.outputs.image_worker }}
+          tags: |
+            type=raw,value=${{ github.ref_name }}
+            type=raw,value=latest
+
+      - name: Build and push orlojworker
+        id: push-worker
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          target: orlojworker
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta-worker.outputs.tags }}
+          labels: ${{ steps.meta-worker.outputs.labels }}
+          build-args: |
+            VERSION=${{ github.ref_name }}
+            COMMIT=${{ github.sha }}
+            DATE=${{ steps.reg.outputs.date }}
+          provenance: mode=max
+          sbom: true
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign orlojd image
+        env:
+          COSIGN_YES: "true"
+        run: cosign sign "${{ steps.reg.outputs.image_orlojd }}@${{ steps.push-orlojd.outputs.digest }}"
+
+      - name: Sign orlojworker image
+        env:
+          COSIGN_YES: "true"
+        run: cosign sign "${{ steps.reg.outputs.image_worker }}@${{ steps.push-worker.outputs.digest }}"

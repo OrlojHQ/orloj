@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -399,6 +400,328 @@ func TestWebhookDeliveryRequiresTemplateTask(t *testing.T) {
 	}
 	if !strings.Contains(raw, "spec.mode=template") {
 		t.Fatalf("expected template mode error, got body=%s", raw)
+	}
+}
+
+func TestWebhookDeliverySecretResolutionFailures(t *testing.T) {
+	t.Run("secret ref not found", func(t *testing.T) {
+		server := newTestServer(t)
+		defer server.Close()
+
+		postJSON(t, server.URL+"/v1/tasks", resources.Task{
+			APIVersion: "orloj.dev/v1",
+			Kind:       "Task",
+			Metadata:   resources.ObjectMeta{Name: "template-missing-secret"},
+			Spec: resources.TaskSpec{
+				Mode:   "template",
+				System: "report-system",
+				Input:  map[string]string{"topic": "x"},
+			},
+		})
+		postJSON(t, server.URL+"/v1/task-webhooks", resources.TaskWebhook{
+			APIVersion: "orloj.dev/v1",
+			Kind:       "TaskWebhook",
+			Metadata:   resources.ObjectMeta{Name: "missing-secret-webhook"},
+			Spec: resources.TaskWebhookSpec{
+				TaskRef: "template-missing-secret",
+				Auth: resources.TaskWebhookAuthSpec{
+					SecretRef: "does-not-exist",
+				},
+			},
+		})
+
+		hook := getTaskWebhook(t, server.URL, "missing-secret-webhook", "default")
+		body := []byte(`{"event":"missing-secret"}`)
+		timestamp := strconv.FormatInt(time.Now().UTC().Unix(), 10)
+		signature := signGeneric("unused", timestamp, body)
+
+		status, _, raw := deliverWebhook(t, server.URL, hook.Status.EndpointPath, body, map[string]string{
+			"X-Signature": signature,
+			"X-Timestamp": timestamp,
+			"X-Event-Id":  "evt-missing-secret",
+		})
+		if status != http.StatusBadRequest {
+			t.Fatalf("expected 400 for missing secret, got %d body=%s", status, raw)
+		}
+
+		hook = getTaskWebhook(t, server.URL, "missing-secret-webhook", "default")
+		if hook.Status.RejectedCount != 1 {
+			t.Fatalf("expected rejectedCount=1, got %d", hook.Status.RejectedCount)
+		}
+		if !strings.Contains(strings.ToLower(hook.Status.LastError), "not found") {
+			t.Fatalf("expected lastError to mention not found, got %q", hook.Status.LastError)
+		}
+	})
+
+	t.Run("secret has no data", func(t *testing.T) {
+		server := newTestServer(t)
+		defer server.Close()
+
+		postJSON(t, server.URL+"/v1/secrets", resources.Secret{
+			APIVersion: "orloj.dev/v1",
+			Kind:       "Secret",
+			Metadata:   resources.ObjectMeta{Name: "empty-secret"},
+			Spec:       resources.SecretSpec{},
+		})
+		postJSON(t, server.URL+"/v1/tasks", resources.Task{
+			APIVersion: "orloj.dev/v1",
+			Kind:       "Task",
+			Metadata:   resources.ObjectMeta{Name: "template-empty-secret"},
+			Spec: resources.TaskSpec{
+				Mode:   "template",
+				System: "report-system",
+				Input:  map[string]string{"topic": "x"},
+			},
+		})
+		postJSON(t, server.URL+"/v1/task-webhooks", resources.TaskWebhook{
+			APIVersion: "orloj.dev/v1",
+			Kind:       "TaskWebhook",
+			Metadata:   resources.ObjectMeta{Name: "empty-secret-webhook"},
+			Spec: resources.TaskWebhookSpec{
+				TaskRef: "template-empty-secret",
+				Auth: resources.TaskWebhookAuthSpec{
+					SecretRef: "empty-secret",
+				},
+			},
+		})
+
+		hook := getTaskWebhook(t, server.URL, "empty-secret-webhook", "default")
+		body := []byte(`{"event":"empty-secret"}`)
+		timestamp := strconv.FormatInt(time.Now().UTC().Unix(), 10)
+		signature := signGeneric("unused", timestamp, body)
+
+		status, _, raw := deliverWebhook(t, server.URL, hook.Status.EndpointPath, body, map[string]string{
+			"X-Signature": signature,
+			"X-Timestamp": timestamp,
+			"X-Event-Id":  "evt-empty-secret",
+		})
+		if status != http.StatusBadRequest {
+			t.Fatalf("expected 400 for secret with no data, got %d body=%s", status, raw)
+		}
+
+		hook = getTaskWebhook(t, server.URL, "empty-secret-webhook", "default")
+		if hook.Status.RejectedCount != 1 {
+			t.Fatalf("expected rejectedCount=1, got %d", hook.Status.RejectedCount)
+		}
+		if !strings.Contains(strings.ToLower(hook.Status.LastError), "no data") {
+			t.Fatalf("expected lastError to mention no data, got %q", hook.Status.LastError)
+		}
+	})
+}
+
+func TestWebhookDeliveryGenericSignatureEdgeCases(t *testing.T) {
+	cases := []struct {
+		name            string
+		mutateHeaders   func(map[string]string)
+		wantErrorSubstr string
+	}{
+		{
+			name: "missing signature header",
+			mutateHeaders: func(headers map[string]string) {
+				delete(headers, "X-Signature")
+			},
+			wantErrorSubstr: "missing signature header",
+		},
+		{
+			name: "missing timestamp header",
+			mutateHeaders: func(headers map[string]string) {
+				delete(headers, "X-Timestamp")
+			},
+			wantErrorSubstr: "missing timestamp header",
+		},
+		{
+			name: "wrong signature prefix",
+			mutateHeaders: func(headers map[string]string) {
+				headers["X-Signature"] = "sha1=abcdef"
+			},
+			wantErrorSubstr: "invalid signature prefix",
+		},
+		{
+			name: "non-hex signature payload",
+			mutateHeaders: func(headers map[string]string) {
+				headers["X-Signature"] = "sha256=not-hex"
+			},
+			wantErrorSubstr: "signature must be hex",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := newTestServer(t)
+			defer server.Close()
+
+			secret := "generic-edge-secret"
+			createWebhookFixtures(t, server.URL, "template-generic-edge", "generic-edge-events", "generic", false, secret)
+
+			hook := getTaskWebhook(t, server.URL, "generic-edge-events", "default")
+			body := []byte(`{"event":"signature-edge"}`)
+			timestamp := strconv.FormatInt(time.Now().UTC().Unix(), 10)
+
+			headers := map[string]string{
+				"X-Signature": signGeneric(secret, timestamp, body),
+				"X-Timestamp": timestamp,
+				"X-Event-Id":  "evt-generic-edge-1",
+			}
+			tc.mutateHeaders(headers)
+
+			status, _, raw := deliverWebhook(t, server.URL, hook.Status.EndpointPath, body, headers)
+			if status != http.StatusUnauthorized {
+				t.Fatalf("expected 401 for %s, got %d body=%s", tc.name, status, raw)
+			}
+
+			hook = getTaskWebhook(t, server.URL, "generic-edge-events", "default")
+			if hook.Status.RejectedCount != 1 {
+				t.Fatalf("expected rejectedCount=1, got %d", hook.Status.RejectedCount)
+			}
+			if !strings.Contains(strings.ToLower(hook.Status.LastError), strings.ToLower(tc.wantErrorSubstr)) {
+				t.Fatalf("expected lastError to mention %q, got %q", tc.wantErrorSubstr, hook.Status.LastError)
+			}
+		})
+	}
+}
+
+func TestWebhookDeliveryGithubSignatureEdgeCases(t *testing.T) {
+	cases := []struct {
+		name            string
+		mutateHeaders   func(map[string]string)
+		wantStatus      int
+		wantAccepted    int64
+		wantRejected    int64
+		wantErrorSubstr string
+	}{
+		{
+			name: "missing signature header",
+			mutateHeaders: func(headers map[string]string) {
+				delete(headers, "X-Hub-Signature-256")
+			},
+			wantStatus:      http.StatusUnauthorized,
+			wantAccepted:    0,
+			wantRejected:    1,
+			wantErrorSubstr: "missing signature header",
+		},
+		{
+			name: "valid signature without timestamp accepted",
+			mutateHeaders: func(headers map[string]string) {
+				delete(headers, "X-Timestamp")
+			},
+			wantStatus:   http.StatusAccepted,
+			wantAccepted: 1,
+			wantRejected: 0,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server := newTestServer(t)
+			defer server.Close()
+
+			secret := "github-edge-secret"
+			createWebhookFixtures(t, server.URL, "template-gh-edge", "github-edge-events", "github", false, secret)
+
+			hook := getTaskWebhook(t, server.URL, "github-edge-events", "default")
+			body := []byte(`{"action":"synchronize","pull_request":{"number":99}}`)
+			headers := map[string]string{
+				"X-Hub-Signature-256": signGitHub(secret, body),
+				"X-GitHub-Delivery":   "gh-edge-evt-1",
+			}
+			tc.mutateHeaders(headers)
+
+			status, payload, raw := deliverWebhook(t, server.URL, hook.Status.EndpointPath, body, headers)
+			if status != tc.wantStatus {
+				t.Fatalf("expected status %d for %s, got %d body=%s", tc.wantStatus, tc.name, status, raw)
+			}
+			if status == http.StatusAccepted && !payload.Accepted {
+				t.Fatalf("expected accepted response for %s, got accepted=%t duplicate=%t", tc.name, payload.Accepted, payload.Duplicate)
+			}
+
+			hook = getTaskWebhook(t, server.URL, "github-edge-events", "default")
+			if hook.Status.AcceptedCount != tc.wantAccepted {
+				t.Fatalf("expected acceptedCount=%d, got %d", tc.wantAccepted, hook.Status.AcceptedCount)
+			}
+			if hook.Status.RejectedCount != tc.wantRejected {
+				t.Fatalf("expected rejectedCount=%d, got %d", tc.wantRejected, hook.Status.RejectedCount)
+			}
+			if tc.wantErrorSubstr != "" && !strings.Contains(strings.ToLower(hook.Status.LastError), strings.ToLower(tc.wantErrorSubstr)) {
+				t.Fatalf("expected lastError to mention %q, got %q", tc.wantErrorSubstr, hook.Status.LastError)
+			}
+		})
+	}
+}
+
+func TestWebhookDeliverySecretKeySelectionIsDeterministic(t *testing.T) {
+	server := newTestServer(t)
+	defer server.Close()
+
+	firstSecret := "alpha-secret"
+	secondSecret := "zeta-secret"
+	postJSON(t, server.URL+"/v1/secrets", resources.Secret{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Secret",
+		Metadata:   resources.ObjectMeta{Name: "multi-key-secret"},
+		Spec: resources.SecretSpec{
+			Data: map[string]string{
+				"zeta":  base64.StdEncoding.EncodeToString([]byte(secondSecret)),
+				"alpha": base64.StdEncoding.EncodeToString([]byte(firstSecret)),
+			},
+		},
+	})
+	postJSON(t, server.URL+"/v1/tasks", resources.Task{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Task",
+		Metadata:   resources.ObjectMeta{Name: "template-multi-key"},
+		Spec: resources.TaskSpec{
+			Mode:   "template",
+			System: "report-system",
+			Input:  map[string]string{"topic": "x"},
+		},
+	})
+	postJSON(t, server.URL+"/v1/task-webhooks", resources.TaskWebhook{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "TaskWebhook",
+		Metadata:   resources.ObjectMeta{Name: "multi-key-webhook"},
+		Spec: resources.TaskWebhookSpec{
+			TaskRef: "template-multi-key",
+			Auth: resources.TaskWebhookAuthSpec{
+				Profile:   "generic",
+				SecretRef: "multi-key-secret",
+			},
+		},
+	})
+
+	hook := getTaskWebhook(t, server.URL, "multi-key-webhook", "default")
+	body := []byte(`{"event":"multi-key"}`)
+	timestamp := strconv.FormatInt(time.Now().UTC().Unix(), 10)
+
+	status, payload, raw := deliverWebhook(t, server.URL, hook.Status.EndpointPath, body, map[string]string{
+		"X-Signature": signGeneric(firstSecret, timestamp, body),
+		"X-Timestamp": timestamp,
+		"X-Event-Id":  "evt-multi-key-1",
+	})
+	if status != http.StatusAccepted {
+		t.Fatalf("expected 202 using first sorted key secret, got %d body=%s", status, raw)
+	}
+	if !payload.Accepted || payload.Duplicate {
+		t.Fatalf("expected accepted=true duplicate=false, got accepted=%t duplicate=%t", payload.Accepted, payload.Duplicate)
+	}
+
+	status, _, raw = deliverWebhook(t, server.URL, hook.Status.EndpointPath, body, map[string]string{
+		"X-Signature": signGeneric(secondSecret, timestamp, body),
+		"X-Timestamp": timestamp,
+		"X-Event-Id":  "evt-multi-key-2",
+	})
+	if status != http.StatusUnauthorized {
+		t.Fatalf("expected 401 using non-selected secret key, got %d body=%s", status, raw)
+	}
+
+	hook = getTaskWebhook(t, server.URL, "multi-key-webhook", "default")
+	if hook.Status.AcceptedCount != 1 {
+		t.Fatalf("expected acceptedCount=1, got %d", hook.Status.AcceptedCount)
+	}
+	if hook.Status.RejectedCount != 1 {
+		t.Fatalf("expected rejectedCount=1, got %d", hook.Status.RejectedCount)
+	}
+	if !strings.Contains(strings.ToLower(hook.Status.LastError), "signature mismatch") {
+		t.Fatalf("expected lastError to mention signature mismatch, got %q", hook.Status.LastError)
 	}
 }
 

@@ -4,6 +4,7 @@
 
 [![Release](https://img.shields.io/github/v/release/OrlojHQ/orloj?display_name=tag&sort=semver)](https://github.com/OrlojHQ/orloj/releases)
 [![CI](https://img.shields.io/github/actions/workflow/status/OrlojHQ/orloj/ci.yml?branch=main&label=ci)](https://github.com/OrlojHQ/orloj/actions/workflows/ci.yml)
+[![Release workflow](https://img.shields.io/github/actions/workflow/status/OrlojHQ/orloj/release.yml?label=release+workflow)](https://github.com/OrlojHQ/orloj/actions/workflows/release.yml)
 [![Docs](https://img.shields.io/github/actions/workflow/status/OrlojHQ/orloj/docs.yml?branch=main&label=docs)](https://github.com/OrlojHQ/orloj/actions/workflows/docs.yml)
 [![License](https://img.shields.io/github/license/OrlojHQ/orloj)](LICENSE)
 

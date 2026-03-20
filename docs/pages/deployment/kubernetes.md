@@ -20,8 +20,10 @@ Deploy Orloj on Kubernetes with a Helm chart (recommended) or with raw manifests
 export REGISTRY=ghcr.io/<your-org-or-user>
 export TAG=v0.1.0
 
-docker build -t "${REGISTRY}/orloj-orlojd:${TAG}" --build-arg BINARY=orlojd .
-docker build -t "${REGISTRY}/orloj-orlojworker:${TAG}" --build-arg BINARY=orlojworker .
+docker build -t "${REGISTRY}/orloj-orlojd:${TAG}" --target orlojd \
+  --build-arg "VERSION=${TAG}" --build-arg "COMMIT=$(git rev-parse HEAD)" --build-arg "DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)" .
+docker build -t "${REGISTRY}/orloj-orlojworker:${TAG}" --target orlojworker \
+  --build-arg "VERSION=${TAG}" --build-arg "COMMIT=$(git rev-parse HEAD)" --build-arg "DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)" .
 docker push "${REGISTRY}/orloj-orlojd:${TAG}"
 docker push "${REGISTRY}/orloj-orlojworker:${TAG}"
 ```

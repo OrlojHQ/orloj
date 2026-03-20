@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/OrlojHQ/orloj/eventbus"
+	"github.com/OrlojHQ/orloj/internal/version"
 	"github.com/OrlojHQ/orloj/resources"
 )
 
@@ -44,6 +45,14 @@ func Run(args []string) error {
 	}
 	configureDefaultHTTPClient(token)
 	args = cleanArgs
+
+	if len(args) == 1 {
+		switch args[0] {
+		case "version", "-version", "--version":
+			fmt.Println(version.String())
+			return nil
+		}
+	}
 
 	if len(args) == 0 {
 		printUsage()
@@ -1467,6 +1476,8 @@ Usage:
 
 Global options:
   --api-token <token>   Bearer token applied to all HTTP requests
+
+  orlojctl version      Print CLI version (also: -version, --version)
 
 Token resolution (first match wins): --api-token, ORLOJCTL_API_TOKEN, ORLOJ_API_TOKEN, active profile token or token_env.
 

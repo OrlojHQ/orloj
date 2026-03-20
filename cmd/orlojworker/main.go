@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/OrlojHQ/orloj/controllers"
+	"github.com/OrlojHQ/orloj/internal/version"
 	"github.com/OrlojHQ/orloj/resources"
 	agentruntime "github.com/OrlojHQ/orloj/runtime"
 	"github.com/OrlojHQ/orloj/startup"
@@ -27,6 +29,7 @@ func main() {
 	envInt64 := startup.EnvInt64OrDefault
 	envUint64 := startup.EnvUint64OrDefault
 
+	showVersion := flag.Bool("version", false, "print version and exit")
 	workerID := flag.String("worker-id", "worker-1", "task worker identity")
 	reconcile := flag.Duration("reconcile-interval", 1*time.Second, "claim/reconcile interval")
 	leaseDuration := flag.Duration("lease-duration", 30*time.Second, "task lease duration")
@@ -76,6 +79,11 @@ func main() {
 	postgresMaxIdleConns := flag.Int("postgres-max-idle-conns", 5, "max idle postgres connections")
 	postgresConnMaxLifetime := flag.Duration("postgres-conn-max-lifetime", 30*time.Minute, "max lifetime of postgres connections")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(version.String())
+		os.Exit(0)
+	}
 
 	slogger := telemetry.NewLogger("orlojworker")
 	logger := telemetry.NewBridgeLogger(slogger)

@@ -9,6 +9,9 @@ api.test
 tmp
 *.log
 
+# Frontend (built in ui stage; ignore host node_modules)
+frontend/node_modules
+
 # Editors/OS
 .DS_Store
 .vscode

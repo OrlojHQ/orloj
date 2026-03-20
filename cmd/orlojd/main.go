@@ -15,6 +15,7 @@ import (
 	"github.com/OrlojHQ/orloj/api"
 	"github.com/OrlojHQ/orloj/controllers"
 	"github.com/OrlojHQ/orloj/eventbus"
+	"github.com/OrlojHQ/orloj/internal/version"
 	"github.com/OrlojHQ/orloj/resources"
 	agentruntime "github.com/OrlojHQ/orloj/runtime"
 	"github.com/OrlojHQ/orloj/startup"
@@ -30,6 +31,7 @@ func main() {
 	envInt64 := startup.EnvInt64OrDefault
 	envUint64 := startup.EnvUint64OrDefault
 
+	showVersion := flag.Bool("version", false, "print version and exit")
 	addr := flag.String("addr", ":8080", "server listen address")
 	apiKey := flag.String("api-key", env("ORLOJ_API_TOKEN", ""), "API key for bearer token auth (empty disables auth; env fallback: ORLOJ_API_TOKEN or ORLOJ_API_TOKENS)")
 	authModeRaw := flag.String("auth-mode", env("ORLOJ_AUTH_MODE", "off"), "API auth mode: off|local|sso (sso requires enterprise build)")
@@ -83,6 +85,11 @@ func main() {
 	postgresMaxIdleConns := flag.Int("postgres-max-idle-conns", 5, "max idle postgres connections")
 	postgresConnMaxLifetime := flag.Duration("postgres-conn-max-lifetime", 30*time.Minute, "max lifetime of postgres connections")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(version.String())
+		os.Exit(0)
+	}
 
 	authMode, authModeErr := parseAuthMode(*authModeRaw)
 	if authModeErr != nil {

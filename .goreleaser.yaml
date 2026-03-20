@@ -1,0 +1,103 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+
+before:
+  hooks:
+    - sh -c "cd frontend && bun install --frozen-lockfile && bun run build"
+
+builds:
+  - id: orlojd
+    main: ./cmd/orlojd
+    binary: orlojd
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s
+      - -w
+      - -X=github.com/OrlojHQ/orloj/internal/version.Version={{.Version}}
+      - -X=github.com/OrlojHQ/orloj/internal/version.Commit={{.Commit}}
+      - -X=github.com/OrlojHQ/orloj/internal/version.Date={{.Date}}
+
+  - id: orlojworker
+    main: ./cmd/orlojworker
+    binary: orlojworker
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s
+      - -w
+      - -X=github.com/OrlojHQ/orloj/internal/version.Version={{.Version}}
+      - -X=github.com/OrlojHQ/orloj/internal/version.Commit={{.Commit}}
+      - -X=github.com/OrlojHQ/orloj/internal/version.Date={{.Date}}
+
+  - id: orlojctl
+    main: ./cmd/orlojctl
+    binary: orlojctl
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s
+      - -w
+      - -X=github.com/OrlojHQ/orloj/internal/version.Version={{.Version}}
+      - -X=github.com/OrlojHQ/orloj/internal/version.Commit={{.Commit}}
+      - -X=github.com/OrlojHQ/orloj/internal/version.Date={{.Date}}
+
+archives:
+  - formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: "{{ .Binary }}_{{ .Tag }}_{{ .Os }}_{{ .Arch }}"
+    builds:
+      - orlojd
+      - orlojworker
+      - orlojctl
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs(\\(.+\\))?:"
+      - "^chore(\\(.+\\))?:"
+      - "^ci(\\(.+\\))?:"
+      - Merge pull request
+      - Merge branch
+
+release:
+  make_latest: true

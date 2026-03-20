@@ -48,7 +48,7 @@ Run the server:
 
 ## From release binaries (GitHub Releases)
 
-Download the server, worker, and CLI for your platform from [GitHub Releases](https://github.com/OrlojHQ/orloj/releases). Artifacts are named by version and OS/arch (e.g. `orlojd_v0.1.0_linux_amd64.tar.gz`). Extract and run:
+Download the server, worker, and CLI for your platform from [GitHub Releases](https://github.com/OrlojHQ/orloj/releases). Artifacts are named by binary, git tag, OS, and arch (e.g. `orlojd_v0.1.0_linux_amd64.tar.gz`, `orlojctl_v0.1.0_darwin_arm64.tar.gz`). Verify with `checksums.txt` on the same release. Extract and run:
 
 ```bash
 # Example: after downloading and extracting orlojd, orlojworker, orlojctl for your OS/arch

@@ -1,6 +1,9 @@
 # Go test binaries
 *.test
 
+# GoReleaser output
+/dist/
+
 # Local build outputs
 /orlojd
 /orlojworker

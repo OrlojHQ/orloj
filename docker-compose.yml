@@ -27,8 +27,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        BINARY: orlojd
+      target: orlojd
     environment:
       ORLOJ_POSTGRES_DSN: ${ORLOJ_POSTGRES_DSN:-postgres://orloj:orloj@postgres:5432/orloj?sslmode=disable}
     command:
@@ -54,8 +53,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        BINARY: orlojworker
+      target: orlojworker
     environment:
       ORLOJ_POSTGRES_DSN: ${ORLOJ_POSTGRES_DSN:-postgres://orloj:orloj@postgres:5432/orloj?sslmode=disable}
     command:
@@ -79,8 +77,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      args:
-        BINARY: orlojworker
+      target: orlojworker
     environment:
       ORLOJ_POSTGRES_DSN: ${ORLOJ_POSTGRES_DSN:-postgres://orloj:orloj@postgres:5432/orloj?sslmode=disable}
     command:

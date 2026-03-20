@@ -17,6 +17,10 @@ Please note that this project is governed by a
 - Keep docs and examples aligned with code changes.
 - Avoid unrelated refactors in feature/fix PRs.
 
+## Releasing (maintainers)
+
+Tag-driven releases are documented in [Release Process](docs/pages/project/release-process.md) (versioning, CI, GHCR, GoReleaser archives, SBOM, Cosign). Push a `v*` tag to trigger [`.github/workflows/release.yml`](.github/workflows/release.yml).
+
 ## Commit Sign-off (DCO)
 
 By contributing, you certify the Developer Certificate of Origin (DCO).
