@@ -1,0 +1,35 @@
+apiVersion: orloj.dev/v1
+kind: AgentSystem
+metadata:
+  name: uc-pmo-system
+  labels:
+    orloj.dev/use-case: cross-functional-pmo
+    orloj.dev/pattern: hierarchical
+spec:
+  agents:
+    - uc-pmo-manager-agent
+    - uc-pmo-research-lead-agent
+    - uc-pmo-research-worker-agent
+    - uc-pmo-social-lead-agent
+    - uc-pmo-social-worker-agent
+    - uc-pmo-editor-agent
+  graph:
+    uc-pmo-manager-agent:
+      edges:
+        - to: uc-pmo-research-lead-agent
+        - to: uc-pmo-social-lead-agent
+    uc-pmo-research-lead-agent:
+      edges:
+        - to: uc-pmo-research-worker-agent
+    uc-pmo-social-lead-agent:
+      edges:
+        - to: uc-pmo-social-worker-agent
+    uc-pmo-research-worker-agent:
+      edges:
+        - to: uc-pmo-editor-agent
+    uc-pmo-social-worker-agent:
+      edges:
+        - to: uc-pmo-editor-agent
+    uc-pmo-editor-agent:
+      join:
+        mode: wait_for_all

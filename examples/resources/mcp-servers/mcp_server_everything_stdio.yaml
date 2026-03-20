@@ -1,0 +1,19 @@
+# Reference MCP server (stdio): requires Node/npx where orlojd runs.
+# After apply, the controller discovers tools and creates Tool resources for agents to reference.
+apiVersion: orloj.dev/v1
+kind: McpServer
+metadata:
+  name: example-mcp-everything
+spec:
+  transport: stdio
+  command: npx
+  args:
+    - "-y"
+    - "@modelcontextprotocol/server-everything"
+  tool_filter:
+    include:
+      - echo
+      - get-sum
+  reconnect:
+    max_attempts: 3
+    backoff: 2s

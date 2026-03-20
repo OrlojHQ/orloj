@@ -10,7 +10,7 @@ This directory provides a minimal runnable WASI guest and matching `Tool` manife
 ## Quick Check (module only)
 
 ```bash
-wasmtime run --invoke run examples/tools/wasm-reference/echo_guest.wat
+wasmtime run --invoke run examples/resources/tools/wasm-reference/echo_guest.wat
 ```
 
 Expected stdout:
@@ -26,6 +26,6 @@ Use the wasm backend and point module path at this guest:
 ```bash
 go run ./cmd/orlojworker \
   --tool-isolation-backend=wasm \
-  --tool-wasm-module="$(pwd)/examples/tools/wasm-reference/echo_guest.wat" \
+  --tool-wasm-module="$(pwd)/examples/resources/tools/wasm-reference/echo_guest.wat" \
   --tool-wasm-entrypoint=run
 ```

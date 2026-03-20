@@ -16,14 +16,14 @@ func (noAuthAuthorizer) Authorize(_ *http.Request, _ string) (bool, int, string)
 	return true, 0, ""
 }
 
-type localModeAuthorizer struct {
+type nativeModeAuthorizer struct {
 	tokenAuthorizer RequestAuthorizer
 	admins          *store.LocalAdminStore
 	sessions        *store.AuthSessionStore
 	sessionTTL      time.Duration
 }
 
-func newLocalModeAuthorizer(tokenAuthorizer RequestAuthorizer, admins *store.LocalAdminStore, sessions *store.AuthSessionStore, sessionTTL time.Duration) RequestAuthorizer {
+func newNativeModeAuthorizer(tokenAuthorizer RequestAuthorizer, admins *store.LocalAdminStore, sessions *store.AuthSessionStore, sessionTTL time.Duration) RequestAuthorizer {
 	if tokenAuthorizer == nil {
 		tokenAuthorizer = newTokenAuthorizerFromEnv()
 	}
@@ -36,7 +36,7 @@ func newLocalModeAuthorizer(tokenAuthorizer RequestAuthorizer, admins *store.Loc
 	if sessionTTL <= 0 {
 		sessionTTL = 24 * time.Hour
 	}
-	return localModeAuthorizer{
+	return nativeModeAuthorizer{
 		tokenAuthorizer: tokenAuthorizer,
 		admins:          admins,
 		sessions:        sessions,
@@ -44,7 +44,7 @@ func newLocalModeAuthorizer(tokenAuthorizer RequestAuthorizer, admins *store.Loc
 	}
 }
 
-func (a localModeAuthorizer) Authorize(r *http.Request, requiredRole string) (bool, int, string) {
+func (a nativeModeAuthorizer) Authorize(r *http.Request, requiredRole string) (bool, int, string) {
 	if strings.TrimSpace(requiredRole) == "" {
 		return true, 0, ""
 	}

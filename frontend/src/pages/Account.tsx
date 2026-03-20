@@ -80,7 +80,7 @@ export function AccountPage({ authMode, authMethod, username, onAuthStateChanged
             </div>
             <div className="detail-field">
               <span className="detail-field__label">Auth Mode</span>
-              <span className="detail-field__value">{authMode || "local"}</span>
+              <span className="detail-field__value">{authMode || "native"}</span>
             </div>
             <div className="detail-field">
               <span className="detail-field__label">Session Method</span>

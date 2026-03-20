@@ -16,12 +16,12 @@ func TestParseAuthModeAcceptsOSSModes(t *testing.T) {
 		t.Fatalf("expected mode off, got %q", mode)
 	}
 
-	mode, err = parseAuthMode("LOCAL")
+	mode, err = parseAuthMode("NATIVE")
 	if err != nil {
-		t.Fatalf("expected local mode to be accepted: %v", err)
+		t.Fatalf("expected native mode to be accepted: %v", err)
 	}
-	if mode != api.AuthModeLocal {
-		t.Fatalf("expected mode local, got %q", mode)
+	if mode != api.AuthModeNative {
+		t.Fatalf("expected mode native, got %q", mode)
 	}
 }
 
@@ -42,6 +42,13 @@ func TestParseAuthModeRejectsInvalidMode(t *testing.T) {
 	_, err := parseAuthMode("bad-mode")
 	if err == nil {
 		t.Fatalf("expected invalid mode to fail")
+	}
+	if !strings.Contains(err.Error(), "invalid auth mode") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	_, err = parseAuthMode("local")
+	if err == nil {
+		t.Fatalf("expected legacy auth mode name local to be rejected")
 	}
 	if !strings.Contains(err.Error(), "invalid auth mode") {
 		t.Fatalf("unexpected error: %v", err)

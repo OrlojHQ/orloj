@@ -1,0 +1,30 @@
+apiVersion: orloj.dev/v1
+kind: AgentSystem
+metadata:
+  name: uc-roadmap-swarm-system
+  labels:
+    orloj.dev/use-case: roadmap-synthesis-swarm
+    orloj.dev/pattern: swarm-loop
+spec:
+  agents:
+    - uc-roadmap-coordinator-agent
+    - uc-roadmap-scout-alpha-agent
+    - uc-roadmap-scout-beta-agent
+    - uc-roadmap-scout-gamma-agent
+    - uc-roadmap-synthesizer-agent
+  graph:
+    uc-roadmap-coordinator-agent:
+      edges:
+        - to: uc-roadmap-scout-alpha-agent
+        - to: uc-roadmap-scout-beta-agent
+        - to: uc-roadmap-scout-gamma-agent
+        - to: uc-roadmap-synthesizer-agent
+    uc-roadmap-scout-alpha-agent:
+      edges:
+        - to: uc-roadmap-coordinator-agent
+    uc-roadmap-scout-beta-agent:
+      edges:
+        - to: uc-roadmap-coordinator-agent
+    uc-roadmap-scout-gamma-agent:
+      edges:
+        - to: uc-roadmap-coordinator-agent

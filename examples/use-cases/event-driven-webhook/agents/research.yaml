@@ -1,0 +1,14 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: uc-webhook-research-agent
+  labels:
+    orloj.dev/use-case: event-driven-webhook
+spec:
+  model_ref: openai-default
+  prompt: |
+    You are the research stage.
+    Ground the plan in concise findings; flag uncertainty explicitly.
+  limits:
+    max_steps: 6
+    timeout: 30s

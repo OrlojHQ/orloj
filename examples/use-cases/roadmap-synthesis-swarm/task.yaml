@@ -1,0 +1,20 @@
+apiVersion: orloj.dev/v1
+kind: Task
+metadata:
+  name: uc-roadmap-swarm-task
+  labels:
+    orloj.dev/use-case: roadmap-synthesis-swarm
+spec:
+  system: uc-roadmap-swarm-system
+  input:
+    topic: prioritize roadmap bets for next quarter
+  max_turns: 4
+  priority: high
+  retry:
+    max_attempts: 2
+    backoff: 2s
+  message_retry:
+    max_attempts: 2
+    backoff: 250ms
+    max_backoff: 2s
+    jitter: full

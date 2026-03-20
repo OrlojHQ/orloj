@@ -1,0 +1,14 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: uc-roadmap-scout-gamma-agent
+  labels:
+    orloj.dev/use-case: roadmap-synthesis-swarm
+spec:
+  model_ref: openai-default
+  prompt: |
+    You are scout gamma.
+    Explore customer impact, adoption, and operational load; report briefly to the coordinator.
+  limits:
+    max_steps: 4
+    timeout: 20s

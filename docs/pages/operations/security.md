@@ -16,7 +16,7 @@ The HTTP API (including `orlojctl`) authenticates automation with **`Authorizati
 
 **See also:** [Remote CLI and API access](../deployment/remote-cli-access.md) — end-to-end flow for self-hosters (env vars, `orlojctl config`, `config.json` lifecycle).
 
-This is separate from **local UI sign-in** (`--auth-mode=local`), which uses an admin username/password and **session cookies** in the browser. The CLI does not use that password for API calls; use a bearer token as below (or run with auth disabled in trusted dev environments only).
+This is separate from **native UI sign-in** (`--auth-mode=native`), which uses an admin username/password and **session cookies** in the browser. The CLI does not use that password for API calls; use a bearer token as below (or run with auth disabled in trusted dev environments only).
 
 ### 1. Generate a token
 
@@ -57,9 +57,9 @@ Use the **same** token the server expects:
 
 See [Remote CLI and API access](../deployment/remote-cli-access.md) for client precedence, default `--server` resolution, and profiles.
 
-### 4. Local auth mode and APIs
+### 4. Native auth mode and APIs
 
-If you use `--auth-mode=local`, the UI still requires a bearer token (or session cookie) for protected API routes. Configure `ORLOJ_API_TOKEN` / `--api-key` on the server so `orlojctl` and other API clients can authenticate with `Authorization: Bearer`—the admin password alone is not used for programmatic access.
+If you use `--auth-mode=native`, the UI still requires a bearer token (or session cookie) for protected API routes. Configure `ORLOJ_API_TOKEN` / `--api-key` on the server so `orlojctl` and other API clients can authenticate with `Authorization: Bearer`—the admin password alone is not used for programmatic access.
 
 ## Tool Types
 

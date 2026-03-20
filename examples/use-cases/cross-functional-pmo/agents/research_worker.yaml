@@ -1,0 +1,14 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: uc-pmo-research-worker-agent
+  labels:
+    orloj.dev/use-case: cross-functional-pmo
+spec:
+  model_ref: openai-default
+  prompt: |
+    You are the research worker.
+    Execute focused research requests and return concise, attributable findings.
+  limits:
+    max_steps: 6
+    timeout: 30s

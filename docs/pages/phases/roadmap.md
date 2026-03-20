@@ -67,7 +67,7 @@ These milestones are planned for after OSS launch.
 
 ### Tool Platform 5: Tool SDK and Developer Experience
 
-Current state: tool contract is defined in `runtime/tool_contract.go` (`ToolExecutionRequest`/`ToolExecutionResponse`). Conformance harness exists in `runtime/conformance/harness.go`. WASM reference module exists in `examples/tools/wasm-reference/`. A guide exists at `docs/pages/guides/build-custom-tool.md`. But there is no standalone SDK package or developer-facing test tooling.
+Current state: tool contract is defined in `runtime/tool_contract.go` (`ToolExecutionRequest`/`ToolExecutionResponse`). Conformance harness exists in `runtime/conformance/harness.go`. WASM reference module exists in `examples/resources/tools/wasm-reference/`. A guide exists at `docs/pages/guides/build-custom-tool.md`. But there is no standalone SDK package or developer-facing test tooling.
 
 Deliverables:
 

@@ -34,7 +34,7 @@ func main() {
 	showVersion := flag.Bool("version", false, "print version and exit")
 	addr := flag.String("addr", ":8080", "server listen address")
 	apiKey := flag.String("api-key", env("ORLOJ_API_TOKEN", ""), "API key for bearer token auth (empty disables auth; env fallback: ORLOJ_API_TOKEN or ORLOJ_API_TOKENS)")
-	authModeRaw := flag.String("auth-mode", env("ORLOJ_AUTH_MODE", "off"), "API auth mode: off|local|sso (sso requires enterprise build)")
+	authModeRaw := flag.String("auth-mode", env("ORLOJ_AUTH_MODE", "off"), "API auth mode: off|native|sso (sso requires enterprise build)")
 	authSessionTTL := flag.Duration("auth-session-ttl", envDuration("ORLOJ_AUTH_SESSION_TTL", 24*time.Hour), "session TTL for local auth mode")
 	authResetAdminUsername := flag.String("auth-reset-admin-username", env("ORLOJ_AUTH_RESET_ADMIN_USERNAME", ""), "optional username for one-shot local admin password reset")
 	authResetAdminPassword := flag.String("auth-reset-admin-password", env("ORLOJ_AUTH_RESET_ADMIN_PASSWORD", ""), "one-shot local admin password reset value; when set, reset password and exit")
@@ -448,14 +448,16 @@ func runLocalAdminPasswordReset(stores *startup.StoreSet, username, password str
 }
 
 func parseAuthMode(raw string) (api.AuthMode, error) {
-	mode := api.AuthMode(strings.ToLower(strings.TrimSpace(raw)))
-	switch mode {
-	case api.AuthModeOff, api.AuthModeLocal:
-		return mode, nil
-	case api.AuthModeSSO:
-		return mode, fmt.Errorf("auth mode %q requires enterprise build/adapter", mode)
+	key := strings.ToLower(strings.TrimSpace(raw))
+	switch key {
+	case "off":
+		return api.AuthModeOff, nil
+	case "native":
+		return api.AuthModeNative, nil
+	case "sso":
+		return api.AuthModeSSO, fmt.Errorf("auth mode %q requires enterprise build/adapter", key)
 	default:
-		return mode, fmt.Errorf("invalid auth mode %q (expected off, local, sso)", strings.TrimSpace(raw))
+		return "", fmt.Errorf("invalid auth mode %q (expected off, native, sso)", strings.TrimSpace(raw))
 	}
 }
 

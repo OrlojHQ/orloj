@@ -57,6 +57,12 @@ Download the server, worker, and CLI for your platform from [GitHub Releases](ht
 
 Use a specific version tag (e.g. `v0.1.0`) for production; see [Release Process](../project/release-process.md) for versioning and artifact details.
 
+### CLI only for hosted deployments
+
+If `orlojd` and workers run elsewhere—Docker Compose on a VPS, Kubernetes, GHCR images, or a managed host—you **do not** need the full repo on your laptop. Download only the **`orlojctl_*_<os>_<arch>`** archive for your platform from the same [GitHub Releases](https://github.com/OrlojHQ/orloj/releases) page, verify it with `checksums.txt`, extract the binary, and put it on your `PATH` (or run it by full path). Container images ship the server and worker binaries only, not the CLI.
+
+Point `orlojctl` at your API with `--server` and authenticate with a bearer token; see [Remote CLI and API access](../deployment/remote-cli-access.md). Prefer a **CLI version that matches your server’s release tag** when possible.
+
 ---
 
 ## From container images (GHCR)

@@ -121,6 +121,7 @@ Key pages:
 - [Reference](docs/pages/reference/index.md) -- CLI, API, resource schemas, contracts
 - [Deployment](docs/pages/deployment/index.md) -- local, VPS, Kubernetes, [remote CLI access](docs/pages/deployment/remote-cli-access.md)
 - [Security and Isolation](docs/pages/operations/security.md) -- control plane API tokens (`openssl rand`), secrets, tool isolation
+- [Examples](examples/README.md) -- per-kind YAML under `examples/resources/`, starter `blueprints/`, and `use-cases/`
 
 ## Docker Compose
 
@@ -130,6 +131,8 @@ Run the full stack (Postgres + server + 2 workers) with Docker Compose:
 docker compose up --build -d
 docker compose ps
 ```
+
+The Compose images include the server and workers only. To drive the API from your machine, install **`orlojctl`** from [GitHub Releases](https://github.com/OrlojHQ/orloj/releases) (CLI-only tarball) or build from this repo; see [docs: hosted stack, local CLI](docs/pages/deployment/index.md#hosted-stack-local-cli).
 
 ## Kubernetes (Helm)
 

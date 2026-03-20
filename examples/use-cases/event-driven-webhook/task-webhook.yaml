@@ -1,0 +1,17 @@
+apiVersion: orloj.dev/v1
+kind: TaskWebhook
+metadata:
+  name: uc-webhook-generic
+  labels:
+    orloj.dev/use-case: event-driven-webhook
+spec:
+  task_ref: uc-webhook-template-task
+  auth:
+    profile: generic
+    secret_ref: uc-webhook-hmac-secret
+  idempotency:
+    event_id_header: X-Event-Id
+    dedupe_window_seconds: 86400
+  payload:
+    mode: raw
+    input_key: webhook_payload

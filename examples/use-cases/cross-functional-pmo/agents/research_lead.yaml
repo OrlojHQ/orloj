@@ -1,0 +1,14 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: uc-pmo-research-lead-agent
+  labels:
+    orloj.dev/use-case: cross-functional-pmo
+spec:
+  model_ref: openai-default
+  prompt: |
+    You are the research lead.
+    Turn program goals into concrete tasks for the research worker and track clarity of outputs.
+  limits:
+    max_steps: 4
+    timeout: 20s

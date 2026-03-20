@@ -2,6 +2,8 @@
 
 Blueprints are ready-to-run templates that combine agents, an agent system (the graph), and a task into a single directory. They are the fastest way to see Orloj in action and to understand each orchestration pattern.
 
+For copy-paste **use case** bundles (YAML + README per scenario) that map these patterns to novice and enterprise-style problems, see [examples/use-cases/](../../../examples/use-cases/README.md).
+
 ## Available Patterns
 
 ### Pipeline

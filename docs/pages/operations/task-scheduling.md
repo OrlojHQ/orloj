@@ -15,7 +15,7 @@ Use `TaskSchedule` to create recurring run tasks from a task template.
 ## 1. Apply a Task Template
 
 ```bash
-go run ./cmd/orlojctl apply -f examples/tasks/weekly_report_template_task.yaml
+go run ./cmd/orlojctl apply -f examples/resources/tasks/weekly_report_template_task.yaml
 ```
 
 Template reference used by schedules:
@@ -27,12 +27,12 @@ Template reference used by schedules:
 
 Example schedule resource:
 
-- [`examples/task-schedules/weekly_report_schedule.yaml`](../../../examples/task-schedules/weekly_report_schedule.yaml)
+- [`examples/resources/task-schedules/weekly_report_schedule.yaml`](../../../examples/resources/task-schedules/weekly_report_schedule.yaml)
 
 Apply it:
 
 ```bash
-go run ./cmd/orlojctl apply -f examples/task-schedules/weekly_report_schedule.yaml
+go run ./cmd/orlojctl apply -f examples/resources/task-schedules/weekly_report_schedule.yaml
 ```
 
 Key fields:

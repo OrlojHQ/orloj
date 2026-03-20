@@ -70,7 +70,7 @@
 - added enterprise/provider plugins: `azure-openai` and `ollama`
 - added runtime gateways/tests for Azure OpenAI and Ollama chat APIs
 - worker/server provider flags and env key fallback updated for Azure OpenAI
-- added examples/secrets for `azure-openai` and `ollama` model endpoints
+- added `examples/resources/secrets` for `azure-openai` and `ollama` model endpoints
 
 ## Forward Roadmap
 
@@ -101,8 +101,8 @@
 - added profile-backed quality gate support (`--quality-profile`) plus default profile artifact:
   - `monitoring/loadtest/quality-default.json`
 - added timeout scenario examples:
-  - `examples/agents/loadtest_timeout_agent.yaml`
-  - `examples/agent-systems/loadtest_timeout_system.yaml`
+  - `examples/resources/agents/loadtest_timeout_agent.yaml`
+  - `examples/resources/agent-systems/loadtest_timeout_system.yaml`
 - updated load-testing operations docs with new scenarios and commands
 
 ## Tool Platform 1.1
@@ -205,9 +205,9 @@
   - `runtime/tool_runtime_wasm_contract_test.go`
   - expanded `runtime/tool_runtime_wasm_command_executor_test.go`
 - added runnable reference wasm module artifacts:
-  - `examples/tools/wasm-reference/echo_guest.wat`
-  - `examples/tools/wasm-reference/wasm_echo_tool.yaml`
-  - `examples/tools/wasm-reference/README.md`
+  - `examples/resources/tools/wasm-reference/echo_guest.wat`
+  - `examples/resources/tools/wasm-reference/wasm_echo_tool.yaml`
+  - `examples/resources/tools/wasm-reference/README.md`
 - added wasm contract reference doc:
   - `docs/pages/reference/wasm-tool-module-contract-v1.md`
 

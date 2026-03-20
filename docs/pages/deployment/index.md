@@ -21,6 +21,10 @@ Choose a deployment path based on your environment and required operational beha
 3. [Kubernetes Deployment (Helm + Manifest Fallback)](./kubernetes.md)
 4. [Remote CLI and API access](./remote-cli-access.md) — tokens, `orlojctl` profiles, and `config.json` after you expose the control plane
 
+## Hosted stack, local CLI
+
+When the control plane runs in Compose, Kubernetes, or GHCR images, install **`orlojctl` alone** on the machine you use to operate the cluster (laptop, bastion, or CI): download the `orlojctl_*` archive for your OS and arch from [GitHub Releases](https://github.com/OrlojHQ/orloj/releases) (see [Install: CLI only for hosted deployments](../getting-started/install.md#cli-only-for-hosted-deployments)). Then follow [Remote CLI and API access](./remote-cli-access.md) for `--server`, tokens, and optional profiles.
+
 ## Publishing the documentation site
 
 - **[GitHub Pages](./github-pages.md)** — manual workflow for maintainers (custom domain or `github.io`)

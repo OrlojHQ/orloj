@@ -219,7 +219,7 @@ spec:
     - vector-reader-role
 ```
 
-The pre-built example for this is `examples/agents/research_agent_governed_allow.yaml` with `examples/agent-systems/report_system_governed_allow.yaml`.
+The pre-built example for this is `examples/resources/agents/research_agent_governed_allow.yaml` with `examples/resources/agent-systems/report_system_governed_allow.yaml`.
 
 ## Next Steps
 

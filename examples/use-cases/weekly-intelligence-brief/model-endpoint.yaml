@@ -1,0 +1,10 @@
+apiVersion: orloj.dev/v1
+kind: ModelEndpoint
+metadata:
+  name: openai-default
+spec:
+  provider: openai
+  base_url: https://api.openai.com/v1
+  default_model: gpt-4o-mini
+  auth:
+    secretRef: openai-api-key

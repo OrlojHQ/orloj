@@ -1,0 +1,14 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: uc-roadmap-coordinator-agent
+  labels:
+    orloj.dev/use-case: roadmap-synthesis-swarm
+spec:
+  model_ref: openai-default
+  prompt: |
+    You coordinate roadmap exploration.
+    Send focused questions to scouts; integrate iterative feedback until ready to hand off to the synthesizer.
+  limits:
+    max_steps: 4
+    timeout: 20s

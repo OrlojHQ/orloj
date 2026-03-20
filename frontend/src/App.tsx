@@ -3,7 +3,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState, useEffect, useCallback } from "react";
 import { useAppStore } from "./store";
 import { useWatchInvalidation } from "./api/watch";
-import { getAuthConfig, getAuthMe, type AuthConfigResponse, type AuthMeResponse } from "./api/client";
+import {
+  getAuthConfig,
+  getAuthMe,
+  isNativeAuthMode,
+  type AuthConfigResponse,
+  type AuthMeResponse,
+} from "./api/client";
 import { Sidebar } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import { ToastContainer } from "./components/Toast";
@@ -75,7 +81,7 @@ interface AuthBootstrapState {
 
 interface AppLayoutProps {
   onAuthStateChanged: () => void;
-  localAuthEnabled: boolean;
+  nativeAuthEnabled: boolean;
   username?: string;
   authMode: string;
   authMethod?: string;
@@ -83,7 +89,7 @@ interface AppLayoutProps {
 
 function AppLayout({
   onAuthStateChanged,
-  localAuthEnabled,
+  nativeAuthEnabled,
   username,
   authMode,
   authMethod,
@@ -106,11 +112,11 @@ function AppLayout({
   return (
     <div className={clsx("app-layout", collapsed && "app-layout--collapsed")}>
       <a href="#main-content" className="skip-link">Skip to main content</a>
-      <Sidebar localAuthEnabled={localAuthEnabled} username={username} />
+      <Sidebar nativeAuthEnabled={nativeAuthEnabled} username={username} />
       <div className="app-layout__main">
         <TopBar
           onAuthStateChanged={onAuthStateChanged}
-          localAuthEnabled={localAuthEnabled}
+          nativeAuthEnabled={nativeAuthEnabled}
           username={username}
         />
         <main id="main-content" className="app-layout__content" role="main">
@@ -122,7 +128,7 @@ function AppLayout({
               <Route
                 path="/account"
                 element={
-                  localAuthEnabled ? (
+                  nativeAuthEnabled ? (
                     <AccountPage
                       authMode={authMode}
                       authMethod={authMethod}
@@ -193,7 +199,7 @@ export function App() {
         const config = await getAuthConfig();
         let authenticated = true;
         let me: AuthMeResponse | null = null;
-        if (config.mode === "local" && !config.setup_required) {
+        if (isNativeAuthMode(config.mode) && !config.setup_required) {
           me = await getAuthMe();
           authenticated = me.authenticated === true;
         }
@@ -226,12 +232,12 @@ export function App() {
                 <h1 className="page__title">Loading</h1>
               </div>
             </div>
-          ) : auth.config?.mode === "local" && auth.config.setup_required ? (
+          ) : isNativeAuthMode(auth.config?.mode) && auth.config.setup_required ? (
             <Routes>
               <Route path="/setup" element={<Setup onSuccess={refreshAuth} />} />
               <Route path="*" element={<Navigate to="/setup" replace />} />
             </Routes>
-          ) : auth.config?.mode === "local" && !auth.authenticated ? (
+          ) : isNativeAuthMode(auth.config?.mode) && !auth.authenticated ? (
             <Routes>
               <Route path="/login" element={<Login onSuccess={refreshAuth} />} />
               <Route path="*" element={<Navigate to="/login" replace />} />
@@ -240,7 +246,7 @@ export function App() {
             <WatchProvider>
               <AppLayout
                 onAuthStateChanged={refreshAuth}
-                localAuthEnabled={auth.config?.mode === "local"}
+                nativeAuthEnabled={isNativeAuthMode(auth.config?.mode)}
                 username={auth.me?.username}
                 authMode={auth.config?.mode ?? "off"}
                 authMethod={auth.me?.method}

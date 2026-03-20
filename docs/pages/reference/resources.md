@@ -138,7 +138,7 @@ Step 1: model calls `external-api-tool` → done (1 model call). The next agent 
 
 - `phase`, `lastError`, `observedGeneration`
 
-Example: `examples/agents/*.yaml`
+Example: `examples/resources/agents/*.yaml`
 
 ## AgentSystem
 
@@ -178,7 +178,7 @@ Example: `examples/agents/*.yaml`
 
 - `phase`, `lastError`, `observedGeneration`
 
-Example: `examples/agent-systems/*.yaml`
+Example: `examples/resources/agent-systems/*.yaml`
 
 ## ModelEndpoint
 
@@ -203,7 +203,7 @@ Example: `examples/agent-systems/*.yaml`
 
 - `phase`, `lastError`, `observedGeneration`
 
-Example: `examples/model-endpoints/*.yaml`
+Example: `examples/resources/model-endpoints/*.yaml`
 
 ## Tool
 
@@ -257,8 +257,8 @@ Example: `examples/model-endpoints/*.yaml`
 
 Examples:
 
-- `examples/tools/*.yaml`
-- `examples/tools/wasm-reference/wasm_echo_tool.yaml`
+- `examples/resources/tools/*.yaml`
+- `examples/resources/tools/wasm-reference/wasm_echo_tool.yaml`
 
 ## Secret
 
@@ -277,7 +277,7 @@ Examples:
 
 - `phase`, `lastError`, `observedGeneration`
 
-Examples: `examples/secrets/*.yaml`
+Examples: `examples/resources/secrets/*.yaml`
 
 ## Memory
 
@@ -324,7 +324,7 @@ These tools do not need to be listed in the agent's `spec.tools` -- they are inj
 - `lastError`: description of the most recent error (e.g. unsupported provider, connectivity failure).
 - `observedGeneration`
 
-Example: `examples/memories/research_memory.yaml`
+Example: `examples/resources/memories/research_memory.yaml`
 
 ## AgentPolicy
 
@@ -346,7 +346,7 @@ Example: `examples/memories/research_memory.yaml`
 
 - `phase`, `lastError`, `observedGeneration`
 
-Example: `examples/agent-policies/cost_policy.yaml`
+Example: `examples/resources/agent-policies/cost_policy.yaml`
 
 ## AgentRole
 
@@ -363,7 +363,7 @@ Example: `examples/agent-policies/cost_policy.yaml`
 
 - `phase`, `lastError`, `observedGeneration`
 
-Examples: `examples/agent-roles/*.yaml`
+Examples: `examples/resources/agent-roles/*.yaml`
 
 ## ToolPermission
 
@@ -395,7 +395,7 @@ Examples: `examples/agent-roles/*.yaml`
 
 - `phase`, `lastError`, `observedGeneration`
 
-Examples: `examples/tool-permissions/*.yaml`
+Examples: `examples/resources/tool-permissions/*.yaml`
 
 ## ToolApproval
 
@@ -487,7 +487,7 @@ Observability arrays:
 - `message_idempotency[]`: message idempotency state.
 - `join_states[]`: fan-in join activation state.
 
-Example: `examples/tasks/*.yaml`
+Example: `examples/resources/tasks/*.yaml`
 
 ## TaskSchedule
 
@@ -518,7 +518,7 @@ Example: `examples/tasks/*.yaml`
 - `lastScheduleTime`, `lastSuccessfulTime`, `nextScheduleTime`
 - `lastTriggeredTask`, `activeRuns`
 
-Example: `examples/task-schedules/*.yaml`
+Example: `examples/resources/task-schedules/*.yaml`
 
 ## TaskWebhook
 
@@ -567,7 +567,7 @@ Example: `examples/task-schedules/*.yaml`
 - `lastDeliveryTime`, `lastEventID`, `lastTriggeredTask`
 - `acceptedCount`, `duplicateCount`, `rejectedCount`
 
-Examples: `examples/task-webhooks/*.yaml`
+Examples: `examples/resources/task-webhooks/*.yaml`
 
 ## McpServer
 
@@ -611,6 +611,8 @@ Represents a connection to an external MCP (Model Context Protocol) server. The 
 
 Guide: [Connect an MCP Server](../guides/connect-mcp-server.md)
 
+Examples: [`examples/resources/mcp-servers/mcp_server_everything_stdio.yaml`](../../../examples/resources/mcp-servers/mcp_server_everything_stdio.yaml), [`examples/resources/mcp-servers/README.md`](../../../examples/resources/mcp-servers/README.md)
+
 ## Worker
 
 ### `spec`
@@ -628,7 +630,7 @@ Guide: [Connect an MCP Server](../guides/connect-mcp-server.md)
 
 - `phase`, `lastError`, `lastHeartbeat`, `observedGeneration`, `currentTasks`
 
-Example: `examples/workers/worker_a.yaml`
+Example: `examples/resources/workers/worker_a.yaml`
 
 ## Related References
 

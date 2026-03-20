@@ -4,6 +4,10 @@ This guide is for **operators and users** who already have `orlojd` reachable on
 
 For deeper security context (generation, rotation, threat model), see [Control plane API tokens](../operations/security.md#control-plane-api-tokens).
 
+## Install `orlojctl` locally
+
+You need the CLI on **your** machine (or in CI), not inside the server container. The easiest path is the standalone binary from [GitHub Releases](https://github.com/OrlojHQ/orloj/releases): download **`orlojctl_<tag>_<os>_<arch>`**, verify with `checksums.txt` on that release, extract, and add the binary to your `PATH`. Details and naming conventions are in [Install: CLI only for hosted deployments](../getting-started/install.md#cli-only-for-hosted-deployments). If you already cloned the repo with Go installed, `go run ./cmd/orlojctl` works the same way against a remote `--server`.
+
 ## API tokens (shared secret)
 
 Orloj **does not** issue API tokens from the web console. The **operator** generates a random string, configures **the same value** on the server and on every client that uses `Authorization: Bearer <token>`.
@@ -97,7 +101,7 @@ You can hand-edit this file if you prefer; invalid JSON will cause `orlojctl` to
 
 ## Local UI auth vs API tokens
 
-If you use **`--auth-mode=local`**, the web UI uses an **admin username/password** and **session cookies**. That is separate from API access: **`orlojctl` and automation should use the bearer token** configured with `ORLOJ_API_TOKEN` / `--api-key` on the server, not the UI password. See [Control plane API tokens](../operations/security.md#control-plane-api-tokens) and [CLI reference: orlojctl](../reference/cli.md#orlojctl).
+If you use **`--auth-mode=native`**, the web UI uses an **admin username/password** and **session cookies**. That is separate from API access: **`orlojctl` and automation should use the bearer token** configured with `ORLOJ_API_TOKEN` / `--api-key` on the server, not the UI password. See [Control plane API tokens](../operations/security.md#control-plane-api-tokens) and [CLI reference: orlojctl](../reference/cli.md#orlojctl).
 
 ## Related docs
 

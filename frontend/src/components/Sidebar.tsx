@@ -50,11 +50,11 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 interface SidebarProps {
-  localAuthEnabled?: boolean;
+  nativeAuthEnabled?: boolean;
   username?: string;
 }
 
-export function Sidebar({ localAuthEnabled = false, username }: SidebarProps) {
+export function Sidebar({ nativeAuthEnabled = false, username }: SidebarProps) {
   const collapsed = useAppStore((s) => s.sidebarCollapsed);
   const toggle = useAppStore((s) => s.toggleSidebar);
   const approvals = useToolApprovals();
@@ -99,7 +99,7 @@ export function Sidebar({ localAuthEnabled = false, username }: SidebarProps) {
         })}
       </nav>
 
-      {localAuthEnabled && (
+      {nativeAuthEnabled && (
         <div className="sidebar__account">
           <NavLink
             to="/account"

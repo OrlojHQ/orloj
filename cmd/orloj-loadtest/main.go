@@ -214,16 +214,16 @@ type apiClient struct {
 }
 
 var baselineManifestFiles = []string{
-	"examples/memories/research_memory.yaml",
-	"examples/tools/web_search_tool.yaml",
-	"examples/tools/vector_db_tool.yaml",
-	"examples/secrets/search_api_key.yaml",
-	"examples/agents/planner_agent.yaml",
-	"examples/agents/research_agent.yaml",
-	"examples/agents/writer_agent.yaml",
-	"examples/agents/loadtest_timeout_agent.yaml",
-	"examples/agent-systems/report_system.yaml",
-	"examples/agent-systems/loadtest_timeout_system.yaml",
+	"examples/resources/memories/research_memory.yaml",
+	"examples/resources/tools/web_search_tool.yaml",
+	"examples/resources/tools/vector_db_tool.yaml",
+	"examples/resources/secrets/search_api_key.yaml",
+	"examples/resources/agents/planner_agent.yaml",
+	"examples/resources/agents/research_agent.yaml",
+	"examples/resources/agents/writer_agent.yaml",
+	"examples/resources/agents/loadtest_timeout_agent.yaml",
+	"examples/resources/agent-systems/report_system.yaml",
+	"examples/resources/agent-systems/loadtest_timeout_system.yaml",
 }
 
 func main() {

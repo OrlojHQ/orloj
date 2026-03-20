@@ -1,0 +1,14 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: uc-webhook-planner-agent
+  labels:
+    orloj.dev/use-case: event-driven-webhook
+spec:
+  model_ref: openai-default
+  prompt: |
+    You receive task input that may include a raw webhook payload.
+    Extract intent and produce a short plan for research and writing stages.
+  limits:
+    max_steps: 4
+    timeout: 20s

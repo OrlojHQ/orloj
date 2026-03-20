@@ -1,0 +1,14 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: uc-weekly-brief-writer-agent
+  labels:
+    orloj.dev/use-case: weekly-intelligence-brief
+spec:
+  model_ref: openai-default
+  prompt: |
+    You are the writing stage.
+    Turn the plan and research handoffs into a polished brief: summary, bullets, and optional next actions.
+  limits:
+    max_steps: 4
+    timeout: 20s

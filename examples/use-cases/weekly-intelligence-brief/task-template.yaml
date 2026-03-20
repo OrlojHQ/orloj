@@ -1,0 +1,16 @@
+# Template task: TaskSchedule and TaskWebhook (elsewhere) can materialize runs from this definition.
+apiVersion: orloj.dev/v1
+kind: Task
+metadata:
+  name: uc-weekly-brief-template
+  labels:
+    orloj.dev/use-case: weekly-intelligence-brief
+spec:
+  mode: template
+  system: uc-weekly-brief-system
+  priority: normal
+  input:
+    topic: weekly briefing topic placeholder
+  retry:
+    max_attempts: 2
+    backoff: 2s

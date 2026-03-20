@@ -16,18 +16,18 @@ import (
 	"github.com/OrlojHQ/orloj/store"
 )
 
-func newLocalAuthServer(t *testing.T) *httptest.Server {
-	return newLocalAuthServerWithOptions(t, api.ServerOptions{AuthMode: api.AuthModeLocal}, true)
+func newNativeAuthServer(t *testing.T) *httptest.Server {
+	return newNativeAuthServerWithOptions(t, api.ServerOptions{AuthMode: api.AuthModeNative}, true)
 }
 
-func newLocalAuthServerWithOptions(t *testing.T, opts api.ServerOptions, clearTokenEnv bool) *httptest.Server {
+func newNativeAuthServerWithOptions(t *testing.T, opts api.ServerOptions, clearTokenEnv bool) *httptest.Server {
 	t.Helper()
 	if clearTokenEnv {
 		t.Setenv("ORLOJ_API_TOKENS", "")
 		t.Setenv("ORLOJ_API_TOKEN", "")
 	}
 	if opts.AuthMode == "" {
-		opts.AuthMode = api.AuthModeLocal
+		opts.AuthMode = api.AuthModeNative
 	}
 	logger := log.New(io.Discard, "", 0)
 	runtimeMgr := agentruntime.NewManager(logger)
@@ -45,8 +45,8 @@ func newLocalAuthServerWithOptions(t *testing.T, opts api.ServerOptions, clearTo
 	return httptest.NewServer(srv.Handler())
 }
 
-func TestLocalAuthSetupLoginAndProtectedRoutes(t *testing.T) {
-	server := newLocalAuthServer(t)
+func TestNativeAuthSetupLoginAndProtectedRoutes(t *testing.T) {
+	server := newNativeAuthServer(t)
 	defer server.Close()
 
 	jar, _ := cookiejar.New(nil)
@@ -61,8 +61,8 @@ func TestLocalAuthSetupLoginAndProtectedRoutes(t *testing.T) {
 		t.Fatalf("decode config failed: %v", err)
 	}
 	resp.Body.Close()
-	if cfg["mode"] != "local" {
-		t.Fatalf("expected mode=local, got %v", cfg["mode"])
+	if cfg["mode"] != "native" {
+		t.Fatalf("expected mode=native, got %v", cfg["mode"])
 	}
 	if cfg["setup_required"] != true {
 		t.Fatalf("expected setup_required=true, got %v", cfg["setup_required"])
@@ -151,8 +151,8 @@ func TestLocalAuthSetupLoginAndProtectedRoutes(t *testing.T) {
 	resp.Body.Close()
 }
 
-func TestLocalAuthUIRouteRemainsAccessible(t *testing.T) {
-	server := newLocalAuthServer(t)
+func TestNativeAuthUIRouteRemainsAccessible(t *testing.T) {
+	server := newNativeAuthServer(t)
 	defer server.Close()
 
 	noRedirectClient := &http.Client{CheckRedirect: func(req *http.Request, via []*http.Request) error {
@@ -170,8 +170,8 @@ func TestLocalAuthUIRouteRemainsAccessible(t *testing.T) {
 	}
 }
 
-func TestLocalAuthAdminResetPassword(t *testing.T) {
-	server := newLocalAuthServer(t)
+func TestNativeAuthAdminResetPassword(t *testing.T) {
+	server := newNativeAuthServer(t)
 	defer server.Close()
 
 	jar, _ := cookiejar.New(nil)
@@ -211,8 +211,8 @@ func TestLocalAuthAdminResetPassword(t *testing.T) {
 	resp.Body.Close()
 }
 
-func TestLocalAuthChangePassword(t *testing.T) {
-	server := newLocalAuthServer(t)
+func TestNativeAuthChangePassword(t *testing.T) {
+	server := newNativeAuthServer(t)
 	defer server.Close()
 
 	jar, _ := cookiejar.New(nil)
@@ -293,8 +293,8 @@ func TestLocalAuthChangePassword(t *testing.T) {
 	resp.Body.Close()
 }
 
-func TestLocalAuthChangePasswordRejectsNonLocalMode(t *testing.T) {
-	server := newLocalAuthServerWithOptions(t, api.ServerOptions{AuthMode: api.AuthModeOff}, true)
+func TestNativeAuthChangePasswordRejectsNonNativeMode(t *testing.T) {
+	server := newNativeAuthServerWithOptions(t, api.ServerOptions{AuthMode: api.AuthModeOff}, true)
 	defer server.Close()
 
 	resp, err := http.Post(server.URL+"/v1/auth/change-password", "application/json", bytes.NewReader([]byte(`{"current_password":"x","new_password":"another-very-strong-pass"}`)))
@@ -303,15 +303,15 @@ func TestLocalAuthChangePasswordRejectsNonLocalMode(t *testing.T) {
 	}
 	if resp.StatusCode != http.StatusBadRequest {
 		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected 400 for non-local auth mode, got %d body=%s", resp.StatusCode, string(body))
+		t.Fatalf("expected 400 for non-native auth mode, got %d body=%s", resp.StatusCode, string(body))
 	}
 	resp.Body.Close()
 }
 
-func TestLocalAuthBearerFallbackWhenConfigured(t *testing.T) {
+func TestNativeAuthBearerFallbackWhenConfigured(t *testing.T) {
 	t.Setenv("ORLOJ_API_TOKENS", "automation-token:reader")
 	t.Setenv("ORLOJ_API_TOKEN", "")
-	server := newLocalAuthServerWithOptions(t, api.ServerOptions{AuthMode: api.AuthModeLocal}, false)
+	server := newNativeAuthServerWithOptions(t, api.ServerOptions{AuthMode: api.AuthModeNative}, false)
 	defer server.Close()
 
 	jar, _ := cookiejar.New(nil)
@@ -354,9 +354,9 @@ func TestLocalAuthBearerFallbackWhenConfigured(t *testing.T) {
 	resp.Body.Close()
 }
 
-func TestLocalAuthSessionExpiryEnforced(t *testing.T) {
-	server := newLocalAuthServerWithOptions(t, api.ServerOptions{
-		AuthMode:   api.AuthModeLocal,
+func TestNativeAuthSessionExpiryEnforced(t *testing.T) {
+	server := newNativeAuthServerWithOptions(t, api.ServerOptions{
+		AuthMode:   api.AuthModeNative,
 		SessionTTL: 20 * time.Millisecond,
 	}, true)
 	defer server.Close()

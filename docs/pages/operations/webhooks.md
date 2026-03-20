@@ -17,29 +17,29 @@ Use `TaskWebhook` to trigger task runs from signed external HTTP events.
 Apply template task:
 
 ```bash
-go run ./cmd/orlojctl apply -f examples/tasks/weekly_report_template_task.yaml
+go run ./cmd/orlojctl apply -f examples/resources/tasks/weekly_report_template_task.yaml
 ```
 
 Apply webhook signing secret:
 
 ```bash
-go run ./cmd/orlojctl apply -f examples/secrets/webhook_shared_secret.yaml
+go run ./cmd/orlojctl apply -f examples/resources/secrets/webhook_shared_secret.yaml
 ```
 
 ## 2. Apply a Webhook Resource
 
 Generic profile example:
 
-- [`examples/task-webhooks/generic_webhook.yaml`](../../../examples/task-webhooks/generic_webhook.yaml)
+- [`examples/resources/task-webhooks/generic_webhook.yaml`](../../../examples/resources/task-webhooks/generic_webhook.yaml)
 
 GitHub profile example:
 
-- [`examples/task-webhooks/github_push_webhook.yaml`](../../../examples/task-webhooks/github_push_webhook.yaml)
+- [`examples/resources/task-webhooks/github_push_webhook.yaml`](../../../examples/resources/task-webhooks/github_push_webhook.yaml)
 
 Apply one:
 
 ```bash
-go run ./cmd/orlojctl apply -f examples/task-webhooks/generic_webhook.yaml
+go run ./cmd/orlojctl apply -f examples/resources/task-webhooks/generic_webhook.yaml
 ```
 
 ## 3. Get the Delivery Endpoint
@@ -120,6 +120,6 @@ Webhook-triggered run tasks include:
 
 ## Related Docs
 
-- [Task Webhook Examples](../../../examples/task-webhooks/README.md)
+- [Task Webhook Examples](../../../examples/resources/task-webhooks/README.md)
 - [Resource Reference (`TaskWebhook`)](../reference/resources.md)
 - [API Reference (Webhook Delivery)](../reference/api.md)

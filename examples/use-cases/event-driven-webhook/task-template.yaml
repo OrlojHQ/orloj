@@ -1,0 +1,18 @@
+# TaskWebhook below materializes concrete Tasks from this template.
+# Incoming HTTP body is mapped to input key webhook_payload (see task-webhook.yaml).
+apiVersion: orloj.dev/v1
+kind: Task
+metadata:
+  name: uc-webhook-template-task
+  labels:
+    orloj.dev/use-case: event-driven-webhook
+spec:
+  mode: template
+  system: uc-webhook-pipeline-system
+  priority: normal
+  input:
+    topic: default topic if payload omits context
+    webhook_payload: ""
+  retry:
+    max_attempts: 2
+    backoff: 2s

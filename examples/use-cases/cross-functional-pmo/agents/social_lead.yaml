@@ -1,0 +1,14 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: uc-pmo-social-lead-agent
+  labels:
+    orloj.dev/use-case: cross-functional-pmo
+spec:
+  model_ref: openai-default
+  prompt: |
+    You are the communications lead.
+    Translate strategic asks into concrete social-channel tasks for your worker.
+  limits:
+    max_steps: 4
+    timeout: 20s

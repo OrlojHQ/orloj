@@ -83,8 +83,8 @@ This contract defines host-to-guest payloads for wasm-isolated tool execution.
 
 ## Reference Guest Module
 
-- `examples/tools/wasm-reference/echo_guest.wat`
-- `examples/tools/wasm-reference/README.md`
+- `examples/resources/tools/wasm-reference/echo_guest.wat`
+- `examples/resources/tools/wasm-reference/README.md`
 
 ## Related Docs
 

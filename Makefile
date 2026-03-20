@@ -246,7 +246,7 @@ real-apply-pipeline:
 	@$(MAKE) real-apply SCENARIO=$(PIPELINE_SCENARIO)
 
 real-apply-hier:
-	@$(MAKE) real-delete-task NS=$(HIER_NS) TASK=$(HIER_TASK)
+
 	@$(MAKE) real-apply SCENARIO=$(HIER_SCENARIO)
 
 real-apply-loop:

@@ -1,0 +1,14 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: uc-webhook-writer-agent
+  labels:
+    orloj.dev/use-case: event-driven-webhook
+spec:
+  model_ref: openai-default
+  prompt: |
+    You are the writing stage.
+    Produce a short artifact suitable for posting or ticketing from prior handoffs.
+  limits:
+    max_steps: 4
+    timeout: 20s

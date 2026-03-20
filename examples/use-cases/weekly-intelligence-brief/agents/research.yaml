@@ -1,0 +1,14 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: uc-weekly-brief-research-agent
+  labels:
+    orloj.dev/use-case: weekly-intelligence-brief
+spec:
+  model_ref: openai-default
+  prompt: |
+    You are the research stage.
+    Produce concise, verifiable findings the writer can cite without inventing sources.
+  limits:
+    max_steps: 6
+    timeout: 30s

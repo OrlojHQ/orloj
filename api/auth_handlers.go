@@ -43,7 +43,7 @@ func (s *Server) handleAuthConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	resp := authConfigResponse{Mode: string(s.authMode)}
 	switch s.authMode {
-	case AuthModeLocal:
+	case AuthModeNative:
 		resp.LoginMethods = []string{"password"}
 		hasAdmin, err := s.stores.LocalAdmins.HasAdmin()
 		if err != nil {
@@ -65,8 +65,8 @@ func (s *Server) handleAuthSetup(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if s.authMode != AuthModeLocal {
-		http.Error(w, "auth setup is only available in local mode", http.StatusBadRequest)
+	if s.authMode != AuthModeNative {
+		http.Error(w, "auth setup is only available in native mode", http.StatusBadRequest)
 		return
 	}
 	var req authRequest
@@ -115,8 +115,8 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if s.authMode != AuthModeLocal {
-		http.Error(w, "auth login is only available in local mode", http.StatusBadRequest)
+	if s.authMode != AuthModeNative {
+		http.Error(w, "auth login is only available in native mode", http.StatusBadRequest)
 		return
 	}
 	var req authRequest
@@ -162,7 +162,7 @@ func (s *Server) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if s.authMode != AuthModeLocal {
+	if s.authMode != AuthModeNative {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 		return
 	}
@@ -179,7 +179,7 @@ func (s *Server) handleAuthMe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if s.authMode != AuthModeLocal {
+	if s.authMode != AuthModeNative {
 		writeJSON(w, http.StatusOK, authMeResponse{Authenticated: true, Method: "none"})
 		return
 	}
@@ -211,8 +211,8 @@ func (s *Server) handleAuthChangePassword(w http.ResponseWriter, r *http.Request
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if s.authMode != AuthModeLocal {
-		http.Error(w, "password change is only available in local mode", http.StatusBadRequest)
+	if s.authMode != AuthModeNative {
+		http.Error(w, "password change is only available in native mode", http.StatusBadRequest)
 		return
 	}
 
@@ -290,8 +290,8 @@ func (s *Server) handleAuthAdminResetPassword(w http.ResponseWriter, r *http.Req
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if s.authMode != AuthModeLocal {
-		http.Error(w, "password reset is only available in local mode", http.StatusBadRequest)
+	if s.authMode != AuthModeNative {
+		http.Error(w, "password reset is only available in native mode", http.StatusBadRequest)
 		return
 	}
 	if s.authorizer != nil {

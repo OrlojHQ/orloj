@@ -1,0 +1,14 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: uc-weekly-brief-planner-agent
+  labels:
+    orloj.dev/use-case: weekly-intelligence-brief
+spec:
+  model_ref: openai-default
+  prompt: |
+    You are the planning stage for a weekly intelligence brief.
+    Break the topic into concrete research questions and writing goals the team can execute.
+  limits:
+    max_steps: 4
+    timeout: 20s

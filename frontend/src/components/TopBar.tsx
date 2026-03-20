@@ -8,11 +8,11 @@ import { NamespaceSelector } from "./NamespaceSelector";
 
 interface TopBarProps {
   onAuthStateChanged?: () => void;
-  localAuthEnabled?: boolean;
+  nativeAuthEnabled?: boolean;
   username?: string;
 }
 
-export function TopBar({ onAuthStateChanged, localAuthEnabled = false, username }: TopBarProps) {
+export function TopBar({ onAuthStateChanged, nativeAuthEnabled = false, username }: TopBarProps) {
   const navigate = useNavigate();
   const namespace = useAppStore((s) => s.namespace);
   const setNamespace = useAppStore((s) => s.setNamespace);
@@ -87,7 +87,7 @@ export function TopBar({ onAuthStateChanged, localAuthEnabled = false, username 
               placeholder="http://127.0.0.1:8080"
             />
           </label>
-          {localAuthEnabled ? (
+          {nativeAuthEnabled ? (
             <>
               <label className="topbar__settings-label">
                 Current User
@@ -126,7 +126,7 @@ export function TopBar({ onAuthStateChanged, localAuthEnabled = false, username 
               </label>
             </>
           ) : (
-            <p className="topbar__settings-empty">Local account controls are unavailable in this auth mode.</p>
+            <p className="topbar__settings-empty">Built-in account controls are unavailable in this auth mode.</p>
           )}
         </div>
       )}

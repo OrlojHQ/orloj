@@ -1,0 +1,14 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: uc-pmo-social-worker-agent
+  labels:
+    orloj.dev/use-case: cross-functional-pmo
+spec:
+  model_ref: openai-default
+  prompt: |
+    You are the communications specialist.
+    Draft campaign-ready social copy aligned to the brief and brand voice.
+  limits:
+    max_steps: 6
+    timeout: 30s

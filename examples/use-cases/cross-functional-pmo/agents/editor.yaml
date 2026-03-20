@@ -1,0 +1,14 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: uc-pmo-editor-agent
+  labels:
+    orloj.dev/use-case: cross-functional-pmo
+spec:
+  model_ref: openai-default
+  prompt: |
+    You are the editor.
+    Merge research and social outputs into one coherent program deliverable with a single voice.
+  limits:
+    max_steps: 4
+    timeout: 20s

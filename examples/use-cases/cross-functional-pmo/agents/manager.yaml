@@ -1,0 +1,14 @@
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: uc-pmo-manager-agent
+  labels:
+    orloj.dev/use-case: cross-functional-pmo
+spec:
+  model_ref: openai-default
+  prompt: |
+    You are the program manager.
+    Delegate to the research and social leads; keep scope aligned. Do not bypass leads to talk to individual contributors.
+  limits:
+    max_steps: 4
+    timeout: 20s

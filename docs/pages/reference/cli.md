@@ -141,7 +141,7 @@ go run ./cmd/orlojd -h
 Critical flags:
 
 - `--addr`
-- `--auth-mode` (`off|local|sso`; OSS supports `off` and `local`)
+- `--auth-mode` (`off|native|sso`; OSS supports `off` and `native`)
 - `--auth-session-ttl`
 - `--api-key` (enable bearer token auth; env fallback: `ORLOJ_API_TOKEN`)
 - `--auth-reset-admin-username`, `--auth-reset-admin-password` (one-shot local admin password reset and exit)

@@ -201,9 +201,14 @@ export async function healthCheck(): Promise<boolean> {
 }
 
 export interface AuthConfigResponse {
-  mode: "off" | "local" | "sso" | string;
+  mode: "off" | "native" | "sso" | string;
   setup_required: boolean;
   login_methods: string[];
+}
+
+/** True when the server uses built-in username/password + session auth (`native`). */
+export function isNativeAuthMode(mode: string | undefined): boolean {
+  return mode === "native";
 }
 
 export interface AuthMeResponse {

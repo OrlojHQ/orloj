@@ -10,9 +10,9 @@ These manifests trigger `Task` templates (`spec.mode: template`) from webhook de
 ## Apply
 
 ```bash
-go run ./cmd/orlojctl apply -f examples/tasks/weekly_report_template_task.yaml
-go run ./cmd/orlojctl apply -f examples/secrets/webhook_shared_secret.yaml
-go run ./cmd/orlojctl apply -f examples/task-webhooks/generic_webhook.yaml
+go run ./cmd/orlojctl apply -f examples/resources/tasks/weekly_report_template_task.yaml
+go run ./cmd/orlojctl apply -f examples/resources/secrets/webhook_shared_secret.yaml
+go run ./cmd/orlojctl apply -f examples/resources/task-webhooks/generic_webhook.yaml
 ```
 
 Fetch endpoint details:

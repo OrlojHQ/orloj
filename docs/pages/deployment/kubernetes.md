@@ -144,7 +144,7 @@ helm upgrade orloj ./charts/orloj --namespace orloj
 
 - This baseline is not HA.
 - Rotate secrets before non-test use.
-- `ORLOJ_AUTH_MODE` defaults to `local` in chart runtime config.
+- `ORLOJ_AUTH_MODE` defaults to `native` in chart runtime config.
 - Set and rotate `runtimeSecret.apiToken` for CLI/automation bearer auth.
 - Restrict namespace and service exposure based on cluster policy.
 

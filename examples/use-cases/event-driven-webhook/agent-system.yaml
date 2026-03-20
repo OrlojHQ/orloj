@@ -1,0 +1,19 @@
+apiVersion: orloj.dev/v1
+kind: AgentSystem
+metadata:
+  name: uc-webhook-pipeline-system
+  labels:
+    orloj.dev/use-case: event-driven-webhook
+    orloj.dev/pattern: pipeline
+spec:
+  agents:
+    - uc-webhook-planner-agent
+    - uc-webhook-research-agent
+    - uc-webhook-writer-agent
+  graph:
+    uc-webhook-planner-agent:
+      edges:
+        - to: uc-webhook-research-agent
+    uc-webhook-research-agent:
+      edges:
+        - to: uc-webhook-writer-agent

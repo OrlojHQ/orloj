@@ -1,0 +1,19 @@
+apiVersion: orloj.dev/v1
+kind: AgentSystem
+metadata:
+  name: uc-weekly-brief-system
+  labels:
+    orloj.dev/use-case: weekly-intelligence-brief
+    orloj.dev/pattern: pipeline
+spec:
+  agents:
+    - uc-weekly-brief-planner-agent
+    - uc-weekly-brief-research-agent
+    - uc-weekly-brief-writer-agent
+  graph:
+    uc-weekly-brief-planner-agent:
+      edges:
+        - to: uc-weekly-brief-research-agent
+    uc-weekly-brief-research-agent:
+      edges:
+        - to: uc-weekly-brief-writer-agent

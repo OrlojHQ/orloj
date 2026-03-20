@@ -111,8 +111,8 @@ func NewServerWithOptions(stores Stores, runtime *agentruntime.Manager, logger *
 	} else if authorizer == nil {
 		authorizer = newTokenAuthorizerFromEnv()
 	}
-	if authMode == AuthModeLocal {
-		authorizer = newLocalModeAuthorizer(authorizer, stores.LocalAdmins, stores.AuthSessions, sessionTTL)
+	if authMode == AuthModeNative {
+		authorizer = newNativeModeAuthorizer(authorizer, stores.LocalAdmins, stores.AuthSessions, sessionTTL)
 	}
 	s := &Server{
 		stores:     stores,

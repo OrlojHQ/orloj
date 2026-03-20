@@ -35,7 +35,7 @@ Namespace defaults to `default` and can be overridden with `?namespace=<ns>`.
 - `GET /v1/auth/config`
   - returns auth mode and login/setup requirements
 - `POST /v1/auth/setup`
-  - one-time local admin bootstrap when auth mode is `local`
+  - one-time native admin bootstrap when auth mode is `native`
 - `POST /v1/auth/login`
   - local username/password login; sets session cookie
 - `POST /v1/auth/logout`

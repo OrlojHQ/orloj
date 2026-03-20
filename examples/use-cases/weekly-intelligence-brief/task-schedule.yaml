@@ -1,0 +1,15 @@
+apiVersion: orloj.dev/v1
+kind: TaskSchedule
+metadata:
+  name: uc-weekly-brief-cron
+  labels:
+    orloj.dev/use-case: weekly-intelligence-brief
+spec:
+  task_ref: uc-weekly-brief-template
+  schedule: "0 9 * * 1"
+  time_zone: UTC
+  suspend: false
+  starting_deadline_seconds: 300
+  concurrency_policy: forbid
+  successful_history_limit: 10
+  failed_history_limit: 3
