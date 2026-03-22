@@ -26,6 +26,7 @@ type HTTPToolClient struct {
 	secrets      SecretResolver
 	authInjector *AuthInjector
 	client       HTTPDoer
+	allowPrivate bool // allow requests to private/internal IPs (for dev)
 }
 
 // HTTPDoer abstracts HTTP request execution for testing.
@@ -43,6 +44,12 @@ func NewHTTPToolClient(registry ToolCapabilityRegistry, secrets SecretResolver, 
 		authInjector: NewAuthInjector(secrets, nil),
 		client:       client,
 	}
+}
+
+// SetAllowPrivateEndpoints permits HTTP tool calls to private/internal IP
+// ranges (RFC 1918). Loopback and cloud metadata addresses are always blocked.
+func (r *HTTPToolClient) SetAllowPrivateEndpoints(allow bool) {
+	r.allowPrivate = allow
 }
 
 func NewHTTPToolClientWithAuth(registry ToolCapabilityRegistry, injector *AuthInjector, client HTTPDoer) *HTTPToolClient {
@@ -119,6 +126,18 @@ func (r *HTTPToolClient) Call(ctx context.Context, tool string, input string) (s
 			false,
 			fmt.Sprintf("tool=%s missing endpoint", tool),
 			ErrInvalidToolRuntimePolicy,
+			map[string]string{"tool": tool},
+		)
+	}
+
+	if err := ValidateEndpointURL(endpoint, r.allowPrivate); err != nil {
+		return "", NewToolError(
+			ToolStatusError,
+			ToolCodeRuntimePolicyInvalid,
+			ToolReasonRuntimePolicyInvalid,
+			false,
+			fmt.Sprintf("tool=%s endpoint blocked: %s", tool, err),
+			err,
 			map[string]string{"tool": tool},
 		)
 	}

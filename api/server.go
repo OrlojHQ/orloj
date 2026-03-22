@@ -45,24 +45,27 @@ type Stores struct {
 
 // ServerOptions configures optional extension points.
 type ServerOptions struct {
-	Authorizer RequestAuthorizer
-	Extensions agentruntime.Extensions
-	AuthMode   AuthMode
-	SessionTTL time.Duration
+	Authorizer         RequestAuthorizer
+	ResourceAuthorizer ResourceAuthorizer // optional; enterprise RBAC hook
+	Extensions         agentruntime.Extensions
+	AuthMode           AuthMode
+	SessionTTL         time.Duration
 }
 
 // Server exposes CRUD endpoints for control plane resources.
 type Server struct {
-	stores         Stores
-	runtime        *agentruntime.Manager
-	logger         *log.Logger
-	mux            *http.ServeMux
-	authorizer     RequestAuthorizer
-	authMode       AuthMode
-	sessionTTL     time.Duration
-	bus            eventbus.Bus
-	extensions     agentruntime.Extensions
-	memoryBackends *agentruntime.PersistentMemoryBackendRegistry
+	stores             Stores
+	runtime            *agentruntime.Manager
+	logger             *log.Logger
+	mux                *http.ServeMux
+	authorizer         RequestAuthorizer
+	resourceAuthorizer ResourceAuthorizer // nil in OSS; enterprise RBAC hook
+	authMode           AuthMode
+	sessionTTL         time.Duration
+	bus                eventbus.Bus
+	extensions         agentruntime.Extensions
+	memoryBackends     *agentruntime.PersistentMemoryBackendRegistry
+	authRateLimiter    *authRateLimiter
 }
 
 func NewServer(stores Stores, runtime *agentruntime.Manager, logger *log.Logger) *Server {
@@ -118,15 +121,17 @@ func NewServerWithOptions(stores Stores, runtime *agentruntime.Manager, logger *
 		authorizer = newNativeModeAuthorizer(authorizer, stores.LocalAdmins, stores.AuthSessions, sessionTTL)
 	}
 	s := &Server{
-		stores:     stores,
-		runtime:    runtime,
-		logger:     logger,
-		mux:        http.NewServeMux(),
-		authorizer: authorizer,
-		authMode:   authMode,
-		sessionTTL: sessionTTL,
-		bus:        eventbus.NewMemoryBus(4096),
-		extensions: extensions,
+		stores:             stores,
+		runtime:            runtime,
+		logger:             logger,
+		mux:                http.NewServeMux(),
+		authorizer:         authorizer,
+		resourceAuthorizer: opts.ResourceAuthorizer,
+		authMode:           authMode,
+		sessionTTL:         sessionTTL,
+		bus:                eventbus.NewMemoryBus(4096),
+		extensions:         extensions,
+		authRateLimiter:    newAuthRateLimiter(),
 	}
 	s.routes()
 	return s
@@ -926,6 +931,9 @@ func (s *Server) handleSecrets(w http.ResponseWriter, r *http.Request) {
 			}
 			items = filtered
 		}
+		for i := range items {
+			redactSecretData(&items[i])
+		}
 		writeJSON(w, http.StatusOK, resources.SecretList{Items: items})
 	case http.MethodPost:
 		body, err := io.ReadAll(r.Body)
@@ -953,8 +961,10 @@ func (s *Server) handleSecrets(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.logApply("Secret", obj.Metadata.Name)
-		s.publishResourceEvent("Secret", obj.Metadata.Name, "created", obj)
-		writeJSON(w, http.StatusCreated, obj)
+		redacted := obj
+		redactSecretData(&redacted)
+		s.publishResourceEvent("Secret", obj.Metadata.Name, "created", redacted)
+		writeJSON(w, http.StatusCreated, redacted)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -975,6 +985,7 @@ func (s *Server) handleSecretByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("secret %q not found", name), http.StatusNotFound)
 			return
 		}
+		redactSecretData(&obj)
 		writeJSON(w, http.StatusOK, obj)
 	case http.MethodDelete:
 		if err := s.stores.Secrets.Delete(key); err != nil {
@@ -1015,11 +1026,29 @@ func (s *Server) handleSecretByName(w http.ResponseWriter, r *http.Request) {
 			writeStoreError(w, err)
 			return
 		}
-		s.publishResourceEvent("Secret", obj.Metadata.Name, "updated", obj)
-		writeJSON(w, http.StatusOK, obj)
+		redacted := obj
+		redactSecretData(&redacted)
+		s.publishResourceEvent("Secret", obj.Metadata.Name, "updated", redacted)
+		writeJSON(w, http.StatusOK, redacted)
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+// redactSecretData replaces all data values with "***" so that secret
+// contents are never returned over the API or published to the event bus.
+func redactSecretData(secret *resources.Secret) {
+	if secret == nil {
+		return
+	}
+	if len(secret.Spec.Data) > 0 {
+		redacted := make(map[string]string, len(secret.Spec.Data))
+		for k := range secret.Spec.Data {
+			redacted[k] = "***"
+		}
+		secret.Spec.Data = redacted
+	}
+	secret.Spec.StringData = nil
 }
 
 func (s *Server) handleMemories(w http.ResponseWriter, r *http.Request) {

@@ -8,7 +8,10 @@ import (
 	"github.com/OrlojHQ/orloj/store"
 )
 
-const sessionCookieName = "orloj_session"
+const (
+	sessionCookieName     = "orloj_session"
+	sessionCookieNameHost = "__Host-orloj_session"
+)
 
 type noAuthAuthorizer struct{}
 
@@ -87,9 +90,13 @@ func readSessionID(r *http.Request) string {
 	if r == nil {
 		return ""
 	}
-	cookie, err := r.Cookie(sessionCookieName)
-	if err != nil {
-		return ""
+	// Check the __Host- prefixed cookie first (HTTPS), then fall back to the
+	// unprefixed variant (HTTP / development).
+	for _, name := range []string{sessionCookieNameHost, sessionCookieName} {
+		cookie, err := r.Cookie(name)
+		if err == nil && strings.TrimSpace(cookie.Value) != "" {
+			return strings.TrimSpace(cookie.Value)
+		}
 	}
-	return strings.TrimSpace(cookie.Value)
+	return ""
 }

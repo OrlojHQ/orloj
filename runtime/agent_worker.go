@@ -439,11 +439,11 @@ func (w *AgentWorker) Run(ctx context.Context) {
 				if w.onEvent != nil {
 					w.onEvent(fmt.Sprintf("step=%d tool=%s tool_contract=%s tool_request_id=%s tool_attempt=%d duration_ms=%d success", step, tool, contractVersion, toolRequestID, toolAttempt, toolDurationMS))
 				}
-				w.history = append(w.history, ChatMessage{
-					Role:       "tool",
-					Content:    result,
-					ToolCallID: requested.ID,
-				})
+			w.history = append(w.history, ChatMessage{
+				Role:       "tool",
+				Content:    sanitizeToolOutput(result),
+				ToolCallID: requested.ID,
+			})
 				if strings.EqualFold(toolUseBehavior, resources.AgentToolUseBehaviorStopOnFirstTool) {
 					if w.onEvent != nil {
 						w.onEvent(fmt.Sprintf("step=%d tool=%s stop_on_first_tool", step, tool))

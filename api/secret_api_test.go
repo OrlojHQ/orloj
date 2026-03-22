@@ -1,7 +1,6 @@
 package api_test
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -57,12 +56,11 @@ func TestSecretCRUDAndNamespaceScoping(t *testing.T) {
 	if secret.Metadata.Namespace != "team-a" {
 		t.Fatalf("expected team-a namespace, got %q", secret.Metadata.Namespace)
 	}
-	decoded, err := base64.StdEncoding.DecodeString(secret.Spec.Data["value"])
-	if err != nil {
-		t.Fatalf("expected base64-encoded secret data, got %v", err)
-	}
-	if string(decoded) != "sk-a" {
-		t.Fatalf("expected decoded secret sk-a, got %q", string(decoded))
+	// Secret values must be redacted in API responses.
+	if val, ok := secret.Spec.Data["value"]; !ok {
+		t.Fatalf("expected 'value' key in redacted secret data")
+	} else if val != "***" {
+		t.Fatalf("expected redacted secret value '***', got %q", val)
 	}
 
 	respDefault, err := http.Get(server.URL + "/v1/secrets/openai-key")

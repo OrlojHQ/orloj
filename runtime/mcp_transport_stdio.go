@@ -22,6 +22,7 @@ type StdioMcpTransport struct {
 	cmd     *exec.Cmd
 	stdin   io.WriteCloser
 	scanner *bufio.Scanner
+	ctx     context.Context
 
 	pending   map[int64]chan jsonrpcResponse
 	pendingMu sync.Mutex
@@ -46,7 +47,7 @@ func NewStdioMcpTransport(cfg StdioMcpTransportConfig) *StdioMcpTransport {
 }
 
 func (t *StdioMcpTransport) Initialize(ctx context.Context) (*McpInitResult, error) {
-	if err := t.startProcess(); err != nil {
+	if err := t.startProcess(ctx); err != nil {
 		return nil, fmt.Errorf("mcp stdio: failed to start process: %w", err)
 	}
 
@@ -74,7 +75,7 @@ func (t *StdioMcpTransport) Initialize(ctx context.Context) (*McpInitResult, err
 func (t *StdioMcpTransport) ListTools(ctx context.Context) ([]McpToolDefinition, error) {
 	var all []McpToolDefinition
 	var cursor string
-	for {
+	for page := 0; page < maxToolsListPages; page++ {
 		var params any
 		if cursor != "" {
 			params = mcpToolsListParams{Cursor: cursor}
@@ -129,7 +130,7 @@ func (t *StdioMcpTransport) Close() error {
 	return nil
 }
 
-func (t *StdioMcpTransport) startProcess() error {
+func (t *StdioMcpTransport) startProcess(ctx context.Context) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -140,7 +141,8 @@ func (t *StdioMcpTransport) startProcess() error {
 	cmdName := parts[0]
 	cmdArgs := append(parts[1:], t.args...)
 
-	cmd := exec.Command(cmdName, cmdArgs...)
+	t.ctx = ctx
+	cmd := exec.CommandContext(ctx, cmdName, cmdArgs...)
 	if len(t.env) > 0 {
 		cmd.Env = append(cmd.Environ(), t.env...)
 	}

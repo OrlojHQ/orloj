@@ -2,6 +2,7 @@ package agentruntime
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"github.com/OrlojHQ/orloj/resources"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/encoding"
 	"google.golang.org/grpc/status"
@@ -36,11 +38,12 @@ func (jsonCodec) Name() string                     { return grpcCodecName }
 // The service must implement orloj.tool.v1.ToolService/Execute accepting
 // ToolExecutionRequest and returning ToolExecutionResponse as JSON payloads.
 type GRPCToolRuntime struct {
-	registry     ToolCapabilityRegistry
-	secrets      SecretResolver
-	authInjector *AuthInjector
-	dialer       GRPCDialer
-	namespace    string
+	registry      ToolCapabilityRegistry
+	secrets       SecretResolver
+	authInjector  *AuthInjector
+	dialer        GRPCDialer
+	namespace     string
+	allowInsecure bool // opt-in to plaintext gRPC; defaults to TLS
 }
 
 // GRPCDialer abstracts gRPC connection establishment for testing.
@@ -66,16 +69,24 @@ func NewGRPCToolRuntime(registry ToolCapabilityRegistry, secrets SecretResolver,
 	}
 }
 
+// SetAllowInsecure enables plaintext gRPC connections. This should only be
+// used in development or when the transport is otherwise secured (e.g.
+// service mesh with mTLS). Callers must explicitly opt in.
+func (r *GRPCToolRuntime) SetAllowInsecure(allow bool) {
+	r.allowInsecure = allow
+}
+
 func (r *GRPCToolRuntime) WithRegistry(registry ToolCapabilityRegistry) ToolRuntime {
 	if r == nil {
 		return NewGRPCToolRuntime(registry, nil, nil)
 	}
 	return &GRPCToolRuntime{
-		registry:     registry,
-		secrets:      r.secrets,
-		authInjector: r.authInjector,
-		dialer:       r.dialer,
-		namespace:    r.namespace,
+		registry:      registry,
+		secrets:       r.secrets,
+		authInjector:  r.authInjector,
+		dialer:        r.dialer,
+		namespace:     r.namespace,
+		allowInsecure: r.allowInsecure,
 	}
 }
 
@@ -83,16 +94,16 @@ func (r *GRPCToolRuntime) WithNamespace(namespace string) ToolRuntime {
 	if r == nil {
 		return NewGRPCToolRuntime(nil, nil, nil)
 	}
-	copy := *r
-	copy.namespace = resources.NormalizeNamespace(strings.TrimSpace(namespace))
-	if aware, ok := copy.secrets.(namespaceAwareSecretResolver); ok {
-		copy.secrets = aware.WithNamespace(copy.namespace)
+	cp := *r
+	cp.namespace = resources.NormalizeNamespace(strings.TrimSpace(namespace))
+	if aware, ok := cp.secrets.(namespaceAwareSecretResolver); ok {
+		cp.secrets = aware.WithNamespace(cp.namespace)
 	}
-	copy.authInjector = NewAuthInjector(copy.secrets, nil)
+	cp.authInjector = NewAuthInjector(cp.secrets, nil)
 	if r.authInjector != nil {
-		copy.authInjector.tokenCache = r.authInjector.tokenCache
+		cp.authInjector.tokenCache = r.authInjector.tokenCache
 	}
-	return &copy
+	return &cp
 }
 
 func (r *GRPCToolRuntime) Call(ctx context.Context, tool string, input string) (string, error) {
@@ -172,8 +183,26 @@ func (r *GRPCToolRuntime) Call(ctx context.Context, tool string, input string) (
 		}
 	}
 
+	if err := ValidateEndpointURL("grpc://"+endpoint, false); err != nil {
+		return "", NewToolError(
+			ToolStatusError,
+			ToolCodeRuntimePolicyInvalid,
+			ToolReasonRuntimePolicyInvalid,
+			false,
+			fmt.Sprintf("tool=%s gRPC endpoint blocked: %s", tool, err),
+			err,
+			map[string]string{"tool": tool},
+		)
+	}
+
+	var transportCreds grpc.DialOption
+	if r.allowInsecure {
+		transportCreds = grpc.WithTransportCredentials(insecure.NewCredentials())
+	} else {
+		transportCreds = grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12}))
+	}
 	dialOpts := []grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		transportCreds,
 		grpc.WithDefaultCallOptions(grpc.ForceCodec(jsonCodec{})),
 	}
 

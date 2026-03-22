@@ -80,6 +80,37 @@ func (s *WebhookDedupeStore) Get(endpointID, eventID string, now time.Time) (str
 	return item.TaskName, true, nil
 }
 
+// TryInsert atomically checks for a live duplicate and inserts a new entry
+// if none exists. Returns (existingTask, true) if a live duplicate was found.
+// For in-memory mode, Get+Put is combined under the write lock.
+func (s *WebhookDedupeStore) TryInsert(endpointID, eventID, taskName string, expiresAt, now time.Time) (string, bool, error) {
+	endpointID = strings.TrimSpace(endpointID)
+	eventID = strings.TrimSpace(eventID)
+	taskName = strings.TrimSpace(taskName)
+	if endpointID == "" || eventID == "" || taskName == "" {
+		return "", false, nil
+	}
+	if s.db != nil {
+		_ = pruneWebhookDedupeSQL(s.db, now.UTC())
+		return tryInsertWebhookDedupeSQL(s.db, endpointID, eventID, taskName, expiresAt, now)
+	}
+
+	nowUTC := now.UTC()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for key, item := range s.items {
+		if !item.ExpiresAt.After(nowUTC) {
+			delete(s.items, key)
+		}
+	}
+	dk := dedupeKey(endpointID, eventID)
+	if existing, ok := s.items[dk]; ok {
+		return existing.TaskName, true, nil
+	}
+	s.items[dk] = webhookDedupeItem{TaskName: taskName, ExpiresAt: expiresAt.UTC()}
+	return "", false, nil
+}
+
 func (s *WebhookDedupeStore) PruneExpired(now time.Time) error {
 	if s.db != nil {
 		return pruneWebhookDedupeSQL(s.db, now.UTC())

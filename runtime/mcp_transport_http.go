@@ -14,17 +14,19 @@ import (
 // StreamableHTTPMcpTransport communicates with an MCP server over HTTP
 // using the Streamable HTTP transport (JSON-RPC 2.0 over POST).
 type StreamableHTTPMcpTransport struct {
-	endpoint  string
-	headers   map[string]string
-	client    HTTPDoer
-	sessionID string
+	endpoint     string
+	headers      map[string]string
+	client       HTTPDoer
+	sessionID    string
+	allowPrivate bool
 }
 
 // StreamableHTTPMcpTransportConfig configures the HTTP transport.
 type StreamableHTTPMcpTransportConfig struct {
-	Endpoint string
-	Headers  map[string]string
-	Client   HTTPDoer
+	Endpoint     string
+	Headers      map[string]string
+	Client       HTTPDoer
+	AllowPrivate bool // permit connections to private/internal IPs
 }
 
 func NewStreamableHTTPMcpTransport(cfg StreamableHTTPMcpTransportConfig) *StreamableHTTPMcpTransport {
@@ -33,13 +35,17 @@ func NewStreamableHTTPMcpTransport(cfg StreamableHTTPMcpTransportConfig) *Stream
 		client = &http.Client{Timeout: 60 * time.Second}
 	}
 	return &StreamableHTTPMcpTransport{
-		endpoint: strings.TrimRight(cfg.Endpoint, "/"),
-		headers:  cfg.Headers,
-		client:   client,
+		endpoint:     strings.TrimRight(cfg.Endpoint, "/"),
+		headers:      cfg.Headers,
+		client:       client,
+		allowPrivate: cfg.AllowPrivate,
 	}
 }
 
 func (t *StreamableHTTPMcpTransport) Initialize(ctx context.Context) (*McpInitResult, error) {
+	if err := ValidateEndpointURL(t.endpoint, t.allowPrivate); err != nil {
+		return nil, fmt.Errorf("mcp http: endpoint blocked: %w", err)
+	}
 	resp, err := t.postRequest(ctx, "initialize", mcpInitializeParams{
 		ProtocolVersion: "2025-03-26",
 		ClientInfo:      McpServerInfo{Name: "orloj", Version: "1.0.0"},
@@ -64,7 +70,7 @@ func (t *StreamableHTTPMcpTransport) Initialize(ctx context.Context) (*McpInitRe
 func (t *StreamableHTTPMcpTransport) ListTools(ctx context.Context) ([]McpToolDefinition, error) {
 	var all []McpToolDefinition
 	var cursor string
-	for {
+	for page := 0; page < maxToolsListPages; page++ {
 		var params any
 		if cursor != "" {
 			params = mcpToolsListParams{Cursor: cursor}

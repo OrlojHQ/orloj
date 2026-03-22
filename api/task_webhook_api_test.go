@@ -398,8 +398,8 @@ func TestWebhookDeliveryRequiresTemplateTask(t *testing.T) {
 	if status != http.StatusBadRequest {
 		t.Fatalf("expected 400 for non-template ref, got %d body=%s", status, raw)
 	}
-	if !strings.Contains(raw, "spec.mode=template") {
-		t.Fatalf("expected template mode error, got body=%s", raw)
+	if !strings.Contains(raw, "webhook task creation failed") {
+		t.Fatalf("expected generic webhook error, got body=%s", raw)
 	}
 }
 

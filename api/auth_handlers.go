@@ -1,8 +1,10 @@
 package api
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -16,8 +18,9 @@ type authConfigResponse struct {
 }
 
 type authRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Username   string `json:"username"`
+	Password   string `json:"password"`
+	SetupToken string `json:"setup_token,omitempty"`
 }
 
 type authMeResponse struct {
@@ -65,6 +68,10 @@ func (s *Server) handleAuthSetup(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	if !s.authRateLimiter.allow(r) {
+		http.Error(w, "too many authentication attempts", http.StatusTooManyRequests)
+		return
+	}
 	if s.authMode != AuthModeNative {
 		http.Error(w, "auth setup is only available in native mode", http.StatusBadRequest)
 		return
@@ -73,6 +80,13 @@ func (s *Server) handleAuthSetup(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
+	}
+	if requiredToken := strings.TrimSpace(os.Getenv("ORLOJ_SETUP_TOKEN")); requiredToken != "" {
+		provided := strings.TrimSpace(req.SetupToken)
+		if subtle.ConstantTimeCompare([]byte(provided), []byte(requiredToken)) != 1 {
+			http.Error(w, "invalid or missing setup_token", http.StatusForbidden)
+			return
+		}
 	}
 	req.Username = strings.TrimSpace(req.Username)
 	if req.Username == "" {
@@ -113,6 +127,10 @@ func (s *Server) handleAuthSetup(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.authRateLimiter.allow(r) {
+		http.Error(w, "too many authentication attempts", http.StatusTooManyRequests)
 		return
 	}
 	if s.authMode != AuthModeNative {
@@ -211,6 +229,10 @@ func (s *Server) handleAuthChangePassword(w http.ResponseWriter, r *http.Request
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	if !s.authRateLimiter.allow(r) {
+		http.Error(w, "too many authentication attempts", http.StatusTooManyRequests)
+		return
+	}
 	if s.authMode != AuthModeNative {
 		http.Error(w, "password change is only available in native mode", http.StatusBadRequest)
 		return
@@ -290,6 +312,10 @@ func (s *Server) handleAuthAdminResetPassword(w http.ResponseWriter, r *http.Req
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	if !s.authRateLimiter.allow(r) {
+		http.Error(w, "too many authentication attempts", http.StatusTooManyRequests)
+		return
+	}
 	if s.authMode != AuthModeNative {
 		http.Error(w, "password reset is only available in native mode", http.StatusBadRequest)
 		return
@@ -347,13 +373,18 @@ func (s *Server) setSessionCookie(w http.ResponseWriter, r *http.Request, sessio
 	if ttl <= 0 {
 		ttl = 24 * time.Hour
 	}
+	secure := isSecureRequest(r)
+	name := sessionCookieName
+	if secure {
+		name = sessionCookieNameHost
+	}
 	cookie := &http.Cookie{
-		Name:     sessionCookieName,
+		Name:     name,
 		Value:    strings.TrimSpace(sessionID),
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		Secure:   isSecureRequest(r),
+		Secure:   secure,
 		Expires:  time.Now().UTC().Add(ttl),
 		MaxAge:   int(ttl.Seconds()),
 	}
@@ -361,16 +392,20 @@ func (s *Server) setSessionCookie(w http.ResponseWriter, r *http.Request, sessio
 }
 
 func (s *Server) clearSessionCookie(w http.ResponseWriter, r *http.Request) {
-	http.SetCookie(w, &http.Cookie{
-		Name:     sessionCookieName,
-		Value:    "",
-		Path:     "/",
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
-		Secure:   isSecureRequest(r),
-		Expires:  time.Unix(0, 0).UTC(),
-		MaxAge:   -1,
-	})
+	secure := isSecureRequest(r)
+	// Clear both cookie names in case the client has either variant.
+	for _, name := range []string{sessionCookieName, sessionCookieNameHost} {
+		http.SetCookie(w, &http.Cookie{
+			Name:     name,
+			Value:    "",
+			Path:     "/",
+			HttpOnly: true,
+			SameSite: http.SameSiteLaxMode,
+			Secure:   secure,
+			Expires:  time.Unix(0, 0).UTC(),
+			MaxAge:   -1,
+		})
+	}
 }
 
 func isSecureRequest(r *http.Request) bool {

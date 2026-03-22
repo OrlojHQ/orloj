@@ -30,6 +30,7 @@ Example:
 | `ORLOJ_AGENT_MESSAGE_BUS_BACKEND` | `orlojd`, `orlojworker` | Runtime message bus (`none|memory|nats-jetstream`). |
 | `ORLOJ_AUTH_MODE` | `orlojd` | API auth mode (`off|native|sso`). OSS supports `off` and `native`; `sso` requires enterprise adapter. |
 | `ORLOJ_AUTH_SESSION_TTL` | `orlojd` | Session TTL for native auth mode (example: `24h`). |
+| `ORLOJ_SETUP_TOKEN` | `orlojd` | When set, `/v1/auth/setup` requires a matching `setup_token` in the request body. Prevents unauthorized admin account creation on exposed instances. |
 | `ORLOJ_SECRET_ENCRYPTION_KEY` | `orlojd`, `orlojworker` | 256-bit AES key (hex or base64) for encrypting Secret resource data at rest. |
 | `ORLOJ_TOOL_ISOLATION_BACKEND` | `orlojd`, `orlojworker` | Tool isolation (`none|container|wasm`). |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `orlojd`, `orlojworker` | OTLP gRPC endpoint for OpenTelemetry trace export. Empty disables export. |

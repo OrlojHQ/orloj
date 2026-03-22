@@ -10,6 +10,12 @@ This page describes current runtime security controls and expected operator prac
 - Unsupported tools and disallowed runtime requests fail closed.
 - Permission denials are terminal for the current execution path.
 
+## Namespace Isolation
+
+Namespaces are an **organizational boundary**, not a security boundary. Any authenticated user with the correct role (e.g., `reader`, `writer`, `admin`) can access resources in any namespace. There is no per-namespace access control in the OSS build.
+
+For deployments that require per-namespace or per-resource authorization, the server exposes a `ResourceAuthorizer` extension point (see `ServerOptions.ResourceAuthorizer` in `api/auth_context.go`). An enterprise RBAC layer can implement this interface to enforce fine-grained policies based on the caller's identity, the target namespace, resource type, and HTTP method. In the OSS build this hook is nil and all requests that pass the role check are permitted.
+
 ## Control plane API tokens
 
 The HTTP API (including `orlojctl`) authenticates automation with **`Authorization: Bearer <token>`** when you enable token validation on the server. Orloj **does not** mint or email API keys: the **operator** chooses a secret string, configures it on `orlojd`, and distributes the **same** value to people and CI that need API access.
@@ -61,9 +67,41 @@ See [Remote CLI and API access](../deployment/remote-cli-access.md) for client p
 
 If you use `--auth-mode=native`, the UI still requires a bearer token (or session cookie) for protected API routes. Configure `ORLOJ_API_TOKEN` / `--api-key` on the server so `orlojctl` and other API clients can authenticate with `Authorization: Bearer`—the admin password alone is not used for programmatic access.
 
+### 5. Initial setup protection
+
+When deploying with `--auth-mode=native` on a network-exposed instance, set `ORLOJ_SETUP_TOKEN` to prevent unauthorized admin account creation. When this variable is set, the `/v1/auth/setup` endpoint requires a matching `setup_token` field in the JSON request body:
+
+```json
+{
+  "username": "admin",
+  "password": "...",
+  "setup_token": "your-setup-token-here"
+}
+```
+
+The comparison uses constant-time comparison to prevent timing side-channels. Without `ORLOJ_SETUP_TOKEN`, the setup endpoint is open to the first caller (protected only by rate limiting).
+
+### 6. Authentication rate limiting
+
+Authentication endpoints (`/v1/auth/login`, `/v1/auth/setup`, `/v1/auth/change-password`, `/v1/auth/admin-reset-password`) are rate-limited per client IP address. The default policy allows 10 requests per minute sustained with a burst of 20 to accommodate legitimate multi-step flows. Requests that exceed the limit receive HTTP 429.
+
 ## Tool Types
 
 All tool types (`http`, `external`, `grpc`, `webhook-callback`) flow through the governed runtime pipeline, so policy enforcement, retry, auth injection, and error handling behave identically regardless of transport. See [Tools and Isolation](../concepts/tools-and-isolation.md) for type details.
+
+### gRPC TLS
+
+gRPC tool connections require TLS (minimum TLS 1.2) by default. Plaintext gRPC is available as an opt-in for development environments only. Production deployments should always use the default TLS transport.
+
+### SSRF Protection
+
+Outbound HTTP, gRPC, and MCP connections validate the target endpoint before connecting. Requests to the following IP ranges are blocked by default:
+
+- Loopback addresses (`127.0.0.0/8`, `::1`)
+- Link-local addresses (`169.254.0.0/16`, `fe80::/10`)
+- Cloud metadata endpoints (`169.254.169.254`)
+
+Private network addresses (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `fc00::/7`) are also blocked unless explicitly allowed. These checks apply when the host is a literal IP address; hostname-based endpoints are validated at the network dialer level.
 
 ## Isolation Modes
 
@@ -165,6 +203,12 @@ The resolver normalizes the secret name: a `secretRef: openai-api-key` looks up 
 - **Cloud providers**: Use AWS Secrets Manager, GCP Secret Manager, or Azure Key Vault with their respective injection mechanisms.
 
 Approaches 2 and 3 do not require `Secret` resources -- the env-var resolver handles resolution directly.
+
+### API Redaction
+
+The REST API never returns plaintext secret data. All `GET` responses for `Secret` resources replace every value in `spec.data` with `"***"`. This applies to both individual resource fetches and list responses. Secret data is write-only through the API; to verify a secret value, use the resource it references (e.g., test a model endpoint or tool that depends on it).
+
+Event bus messages for secret create/update operations are also redacted before publication.
 
 ### Security Requirements
 

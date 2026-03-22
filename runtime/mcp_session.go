@@ -20,9 +20,10 @@ type McpSession struct {
 // McpSessionManager maintains one session per McpServer, handling connection
 // pooling, initialization, and graceful shutdown.
 type McpSessionManager struct {
-	mu             sync.Mutex
-	sessions       map[string]*McpSession
-	secretResolver SecretResolver
+	mu              sync.Mutex
+	sessions        map[string]*McpSession
+	secretResolver  SecretResolver
+	allowedCommands []string // if non-empty, only these binaries may be launched for stdio
 }
 
 func NewMcpSessionManager(secretResolver SecretResolver) *McpSessionManager {
@@ -30,6 +31,16 @@ func NewMcpSessionManager(secretResolver SecretResolver) *McpSessionManager {
 		sessions:       make(map[string]*McpSession),
 		secretResolver: secretResolver,
 	}
+}
+
+// SetAllowedCommands restricts the binaries that stdio MCP transports may
+// execute. An empty list means "no restriction" (backwards-compatible). When
+// set, only the basename (or full path) of spec.command must appear in the
+// list for the transport to start.
+func (m *McpSessionManager) SetAllowedCommands(cmds []string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.allowedCommands = cmds
 }
 
 // GetOrCreate returns an existing session or creates a new one for the given
@@ -120,6 +131,9 @@ func (m *McpSessionManager) buildTransport(ctx context.Context, server resources
 }
 
 func (m *McpSessionManager) buildStdioTransport(ctx context.Context, server resources.McpServer) (McpTransport, error) {
+	if err := m.validateStdioCommand(server.Spec.Command); err != nil {
+		return nil, err
+	}
 	env, err := m.resolveEnv(ctx, server)
 	if err != nil {
 		return nil, err
@@ -129,6 +143,33 @@ func (m *McpSessionManager) buildStdioTransport(ctx context.Context, server reso
 		Args:    server.Spec.Args,
 		Env:     env,
 	}), nil
+}
+
+// validateStdioCommand checks the command against the allowed commands list.
+// If no allowlist is configured, all commands are permitted (for backward
+// compatibility). When an allowlist is set, only the first token of the
+// command (the binary) is checked against the list.
+func (m *McpSessionManager) validateStdioCommand(command string) error {
+	m.mu.Lock()
+	allowed := m.allowedCommands
+	m.mu.Unlock()
+
+	if len(allowed) == 0 {
+		return nil
+	}
+
+	parts := strings.Fields(command)
+	if len(parts) == 0 {
+		return fmt.Errorf("empty command")
+	}
+	binary := parts[0]
+
+	for _, cmd := range allowed {
+		if cmd == binary {
+			return nil
+		}
+	}
+	return fmt.Errorf("mcp stdio command %q is not in the allowed commands list", binary)
 }
 
 func (m *McpSessionManager) buildHTTPTransport(ctx context.Context, server resources.McpServer) (McpTransport, error) {

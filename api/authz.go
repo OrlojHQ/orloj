@@ -1,6 +1,8 @@
 package api
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"log"
 	"net/http"
 	"os"
@@ -14,7 +16,15 @@ type RequestAuthorizer interface {
 
 type authConfig struct {
 	enabled bool
-	tokens  map[string]string
+	tokens  map[string]string // SHA-256(token) -> role
+}
+
+// hashToken produces a hex-encoded SHA-256 digest of a raw token. Storing
+// and comparing hashes instead of raw tokens eliminates timing side-channels
+// inherent in Go map lookups.
+func hashToken(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
 }
 
 type tokenAuthorizer struct {
@@ -46,7 +56,7 @@ func loadAuthConfig() authConfig {
 			if role == "" {
 				role = "reader"
 			}
-			cfg.tokens[token] = role
+			cfg.tokens[hashToken(token)] = role
 		}
 		if skipped > 0 {
 			log.Printf("WARNING: ORLOJ_API_TOKENS: %d malformed token entries skipped (expected token:role pairs)", skipped)
@@ -58,7 +68,7 @@ func loadAuthConfig() authConfig {
 
 	if len(cfg.tokens) == 0 {
 		if single := strings.TrimSpace(os.Getenv("ORLOJ_API_TOKEN")); single != "" {
-			cfg.tokens[single] = "admin"
+			cfg.tokens[hashToken(single)] = "admin"
 		}
 	}
 
@@ -80,7 +90,7 @@ func NewAPIKeyAuthorizer(key string) RequestAuthorizer {
 	}
 	return tokenAuthorizer{cfg: authConfig{
 		enabled: true,
-		tokens:  map[string]string{key: "admin"},
+		tokens:  map[string]string{hashToken(key): "admin"},
 	}}
 }
 
@@ -95,7 +105,7 @@ func (a tokenAuthorizer) Authorize(r *http.Request, requiredRole string) (bool, 
 	if token == "" {
 		return false, http.StatusUnauthorized, "missing bearer token"
 	}
-	role, ok := a.cfg.tokens[token]
+	role, ok := a.cfg.tokens[hashToken(token)]
 	if !ok {
 		return false, http.StatusUnauthorized, "invalid token"
 	}
@@ -124,8 +134,42 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 			http.Error(w, strings.TrimSpace(message), statusCode)
 			return
 		}
-		next.ServeHTTP(w, r)
+		// Extension point: enterprise RBAC can enforce per-namespace,
+		// per-resource, or per-user policies here. In OSS this is nil.
+		if s.resourceAuthorizer != nil {
+			ns := requestNamespace(r)
+			resType, resName := resourceInfoFromPath(r.URL.Path)
+			raAllowed, raStatus, raMsg := s.resourceAuthorizer.AuthorizeResource(r, r.Method, resType, ns, resName)
+			if !raAllowed {
+				if raStatus <= 0 {
+					raStatus = http.StatusForbidden
+				}
+				http.Error(w, strings.TrimSpace(raMsg), raStatus)
+				return
+			}
+		}
+		ctx := withAuthIdentity(r.Context(), AuthIdentity{
+			Role:   required,
+			Method: "bearer",
+		})
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// resourceInfoFromPath extracts the resource type and optional resource name
+// from an API path. Used by the ResourceAuthorizer extension point.
+func resourceInfoFromPath(path string) (resourceType, name string) {
+	path = strings.TrimPrefix(path, "/v1/")
+	path = strings.TrimRight(path, "/")
+	parts := strings.SplitN(path, "/", 2)
+	if len(parts) == 0 {
+		return "", ""
+	}
+	resourceType = parts[0]
+	if len(parts) > 1 {
+		name = parts[1]
+	}
+	return resourceType, name
 }
 
 func requiredRoleForRequest(r *http.Request) string {
@@ -145,6 +189,12 @@ func requiredRoleForRequest(r *http.Request) string {
 	}
 	if strings.HasPrefix(path, "/v1/webhook-deliveries/") {
 		return "writer"
+	}
+	// MCP server manifests control host command execution; restrict mutations
+	// to admin to prevent writer-role tokens from achieving code execution.
+	if (path == "/v1/mcp-servers" || strings.HasPrefix(path, "/v1/mcp-servers/")) &&
+		method != http.MethodGet && method != http.MethodHead && method != http.MethodOptions {
+		return "admin"
 	}
 	if method == http.MethodGet || method == http.MethodHead || method == http.MethodOptions {
 		return "reader"

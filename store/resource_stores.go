@@ -341,10 +341,11 @@ func (s *ToolStore) Delete(name string) error {
 }
 
 type SecretStore struct {
-	mu            sync.RWMutex
-	items         map[string]resources.Secret
-	db            *sql.DB
-	encryptionKey []byte
+	mu                sync.RWMutex
+	items             map[string]resources.Secret
+	db                *sql.DB
+	encryptionKey     []byte
+	requireEncryption bool // if true, refuse to store secrets without a key
 }
 
 func NewSecretStore() *SecretStore {
@@ -359,11 +360,15 @@ func NewSecretStoreWithEncryption(db *sql.DB, key []byte) *SecretStore {
 	return &SecretStore{items: make(map[string]resources.Secret), db: db, encryptionKey: key}
 }
 
-func (s *SecretStore) SetEncryptionKey(key []byte) { s.encryptionKey = key }
+func (s *SecretStore) SetEncryptionKey(key []byte)       { s.encryptionKey = key }
+func (s *SecretStore) SetRequireEncryption(require bool) { s.requireEncryption = require }
 
 func (s *SecretStore) Upsert(item resources.Secret) (resources.Secret, error) {
 	if err := item.Normalize(); err != nil {
 		return resources.Secret{}, err
+	}
+	if s.requireEncryption && len(s.encryptionKey) == 0 && len(item.Spec.Data) > 0 {
+		return resources.Secret{}, fmt.Errorf("secret encryption is required but no encryption key is configured; set ORLOJ_SECRET_ENCRYPTION_KEY")
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
@@ -470,6 +475,46 @@ func (s *SecretStore) List() ([]resources.Secret, error) {
 		return out[i].Metadata.Name < out[j].Metadata.Name
 	})
 	return out, nil
+}
+
+// ReEncryptAll re-encrypts all secrets with the current encryption key.
+// This is used during key rotation: set the old key to decrypt, call
+// SetEncryptionKey with the new key, then call ReEncryptAll.
+func (s *SecretStore) ReEncryptAll(oldKey, newKey []byte) (int, error) {
+	if s.db == nil {
+		return 0, fmt.Errorf("re-encryption requires a database backend")
+	}
+	if len(newKey) == 0 {
+		return 0, fmt.Errorf("new encryption key is required")
+	}
+	items, err := listFromTable[resources.Secret](s.db, tableSecrets)
+	if err != nil {
+		return 0, fmt.Errorf("list secrets: %w", err)
+	}
+	count := 0
+	for _, item := range items {
+		if len(item.Spec.Data) == 0 {
+			continue
+		}
+		if len(oldKey) > 0 {
+			dec, err := decryptSecretData(oldKey, item.Spec.Data)
+			if err != nil {
+				return count, fmt.Errorf("decrypt secret %q: %w", item.Metadata.Name, err)
+			}
+			item.Spec.Data = dec
+		}
+		enc, err := encryptSecretData(newKey, item.Spec.Data)
+		if err != nil {
+			return count, fmt.Errorf("re-encrypt secret %q: %w", item.Metadata.Name, err)
+		}
+		item.Spec.Data = enc
+		key := scopedNameFromMeta(item.Metadata)
+		if err := upsertSecretSQL(s.db, key, item); err != nil {
+			return count, fmt.Errorf("store re-encrypted secret %q: %w", item.Metadata.Name, err)
+		}
+		count++
+	}
+	return count, nil
 }
 
 func (s *SecretStore) Delete(name string) error {

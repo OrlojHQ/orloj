@@ -156,8 +156,8 @@ func TestTaskWebhookNormalizeDefaultsAndValidation(t *testing.T) {
 	if hook.Spec.Payload.InputKey != "webhook_payload" {
 		t.Fatalf("expected payload input key webhook_payload, got %q", hook.Spec.Payload.InputKey)
 	}
-	if hook.Spec.Idempotency.DedupeWindowSeconds != 86400 {
-		t.Fatalf("expected default dedupe window 86400, got %d", hook.Spec.Idempotency.DedupeWindowSeconds)
+	if hook.Spec.Idempotency.DedupeWindowSeconds != 259200 {
+		t.Fatalf("expected default github dedupe window 259200 (72h), got %d", hook.Spec.Idempotency.DedupeWindowSeconds)
 	}
 	if hook.Status.EndpointID == "" {
 		t.Fatal("expected endpointID to be populated")

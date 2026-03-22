@@ -34,3 +34,17 @@ func RedactSensitive(s string) string {
 	}
 	return strings.TrimSpace(s)
 }
+
+// maxToolOutputBytes is the maximum size of tool output included in the
+// model conversation history. Outputs exceeding this are truncated.
+const maxToolOutputBytes = 64 * 1024 // 64 KB
+
+// sanitizeToolOutput truncates oversized tool results and wraps them in
+// structural delimiters so the model can distinguish tool data from
+// instructions, reducing the surface for prompt injection attacks.
+func sanitizeToolOutput(result string) string {
+	if len(result) > maxToolOutputBytes {
+		result = result[:maxToolOutputBytes] + "\n[output truncated]"
+	}
+	return "<tool_result>\n" + result + "\n</tool_result>"
+}

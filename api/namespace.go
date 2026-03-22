@@ -10,8 +10,11 @@ import (
 	"github.com/OrlojHQ/orloj/store"
 )
 
+const maxPaginationLimit = 1000
+
 // paginationParams parses optional ?limit and ?offset query parameters.
 // limit defaults to 0 (meaning "use the store default"); offset defaults to 0.
+// Both are capped to prevent resource-exhaustion attacks.
 func paginationParams(r *http.Request) (limit, offset int) {
 	if r == nil {
 		return 0, 0
@@ -20,6 +23,9 @@ func paginationParams(r *http.Request) (limit, offset int) {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			limit = n
 		}
+	}
+	if limit > maxPaginationLimit {
+		limit = maxPaginationLimit
 	}
 	if v := strings.TrimSpace(r.URL.Query().Get("offset")); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n >= 0 {

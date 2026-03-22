@@ -174,7 +174,11 @@ func LogModelGatewayConfig(logger *log.Logger, provider string, timeout time.Dur
 }
 
 func LogSecretEncryption(logger *log.Logger, key []byte) {
-	if logger == nil || len(key) == 0 {
+	if logger == nil {
+		return
+	}
+	if len(key) == 0 {
+		logger.Printf("WARNING: secret encryption at rest is DISABLED — secrets will be stored as base64 plaintext; set ORLOJ_SECRET_ENCRYPTION_KEY to enable encryption")
 		return
 	}
 	logger.Printf("secret encryption at rest enabled (AES-256-GCM)")

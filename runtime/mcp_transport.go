@@ -2,6 +2,10 @@ package agentruntime
 
 import "context"
 
+// maxToolsListPages caps the number of tools/list pagination rounds to
+// prevent a malicious or misconfigured MCP server from causing infinite loops.
+const maxToolsListPages = 100
+
 // McpTransport abstracts the MCP JSON-RPC 2.0 communication layer.
 // Implementations handle stdio (child process) and Streamable HTTP transports.
 type McpTransport interface {

@@ -103,8 +103,8 @@ Webhook-triggered run tasks include:
 
 ## Profile Notes
 
-- `generic`: signs `timestamp + "." + rawBody` and checks timestamp skew.
-- `github`: signs raw body and uses GitHub delivery id header defaults.
+- `generic`: signs `timestamp + "." + rawBody` and checks timestamp skew. Default dedup window is 24 hours.
+- `github`: signs raw body and uses GitHub delivery id header defaults. Default dedup window is **72 hours** (vs 24h for generic) because GitHub webhooks do not include a timestamp in the HMAC payload, so replay protection relies entirely on event ID deduplication. The 72-hour window matches GitHub's maximum retry window.
 
 ## Rotation and Operations
 
@@ -116,6 +116,7 @@ Webhook-triggered run tasks include:
 
 - `401 signature verification failed`: verify signature algorithm, prefix (`sha256=`), and secret.
 - `400 missing event id`: include configured event id header (`X-Event-Id` or `X-GitHub-Delivery`).
+- `400 webhook task creation failed`: the webhook was authenticated and deduplicated successfully, but task creation failed (e.g., the referenced task is not a template, or validation failed). The HTTP response returns a generic message; the detailed error is recorded in `status.lastError` on the `TaskWebhook` resource. Inspect it with `orlojctl get task-webhook <name>`.
 - `404 webhook endpoint not found`: verify current `.status.endpointPath`.
 
 ## Related Docs

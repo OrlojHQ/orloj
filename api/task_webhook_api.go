@@ -222,6 +222,7 @@ func (s *Server) handleWebhookDelivery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Pre-check: fast path for duplicates without creating a task.
 	if taskName, duplicate, err := s.stores.WebhookDedupe.Get(endpointID, eventID, now); err != nil {
 		s.recordTaskWebhookDeliveryResult(hook, eventID, "", "dedupe_error", true, false, err.Error())
 		http.Error(w, "failed to process webhook", http.StatusInternalServerError)
@@ -241,13 +242,26 @@ func (s *Server) handleWebhookDelivery(w http.ResponseWriter, r *http.Request) {
 	runTask, runErr := s.createTaskFromWebhook(hook, eventID, body, now)
 	if runErr != nil {
 		s.recordTaskWebhookDeliveryResult(hook, eventID, "", "task_create_error", true, false, runErr.Error())
-		http.Error(w, runErr.Error(), http.StatusBadRequest)
+		http.Error(w, "webhook task creation failed", http.StatusBadRequest)
 		return
 	}
+	// Atomic dedup insert: protects against concurrent requests that both
+	// pass the pre-check above. If another request inserted first, this
+	// returns the existing task name and we treat it as a duplicate.
 	window := time.Duration(hook.Spec.Idempotency.DedupeWindowSeconds) * time.Second
-	if err := s.stores.WebhookDedupe.Put(endpointID, eventID, runTask, now.Add(window)); err != nil {
+	if existingTask, isDup, err := s.stores.WebhookDedupe.TryInsert(endpointID, eventID, runTask, now.Add(window), now); err != nil {
 		s.recordTaskWebhookDeliveryResult(hook, eventID, runTask, "dedupe_store_error", true, false, err.Error())
 		http.Error(w, "failed to process webhook", http.StatusInternalServerError)
+		return
+	} else if isDup {
+		s.recordTaskWebhookDeliveryResult(hook, eventID, existingTask, "duplicate", false, true, "")
+		writeJSON(w, http.StatusAccepted, webhookDeliveryResponse{
+			Accepted:  true,
+			Duplicate: true,
+			EventID:   eventID,
+			Task:      existingTask,
+			Message:   "duplicate delivery",
+		})
 		return
 	}
 

@@ -1251,7 +1251,8 @@ func (t *TaskWebhook) Normalize() error {
 		return fmt.Errorf("spec.auth.secret_ref is required")
 	}
 
-	if t.Spec.Auth.Profile == "github" {
+	isGitHub := t.Spec.Auth.Profile == "github"
+	if isGitHub {
 		if strings.TrimSpace(t.Spec.Auth.SignatureHeader) == "" {
 			t.Spec.Auth.SignatureHeader = "X-Hub-Signature-256"
 		}
@@ -1298,7 +1299,14 @@ func (t *TaskWebhook) Normalize() error {
 		return fmt.Errorf("invalid spec.idempotency.dedupe_window_seconds %d: expected >= 0", t.Spec.Idempotency.DedupeWindowSeconds)
 	}
 	if t.Spec.Idempotency.DedupeWindowSeconds == 0 {
-		t.Spec.Idempotency.DedupeWindowSeconds = 86400
+		if isGitHub {
+			// GitHub webhooks have no timestamp in the HMAC payload, so replay
+			// protection relies entirely on dedup. 72h matches GitHub's max
+			// retry window and provides adequate replay protection.
+			t.Spec.Idempotency.DedupeWindowSeconds = 259200
+		} else {
+			t.Spec.Idempotency.DedupeWindowSeconds = 86400
+		}
 	}
 
 	t.Spec.Payload.Mode = strings.ToLower(strings.TrimSpace(t.Spec.Payload.Mode))

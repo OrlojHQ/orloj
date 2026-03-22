@@ -556,7 +556,7 @@ Example: `examples/resources/task-schedules/*.yaml`
     - `signature_prefix` -> `sha256=`
     - `idempotency.event_id_header` -> `X-GitHub-Delivery`
 - `auth.max_skew_seconds` defaults to `300` and must be `>= 0`.
-- `idempotency.dedupe_window_seconds` defaults to `86400` and must be `>= 0`.
+- `idempotency.dedupe_window_seconds` must be `>= 0`. Defaults to `259200` (72 hours) for `github` profile or `86400` (24 hours) for `generic` profile.
 - `payload.mode` defaults to `raw` and only `raw` is allowed in v1.
 - `payload.input_key` defaults to `webhook_payload`.
 

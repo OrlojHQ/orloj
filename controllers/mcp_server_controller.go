@@ -185,6 +185,11 @@ func (c *McpServerController) syncTools(server resources.McpServer, tools []agen
 		toolName := generatedToolName(serverName, mcpTool.Name)
 		generated = append(generated, toolName)
 
+		desc := mcpTool.Description
+		if len(desc) > 4096 {
+			desc = desc[:4096]
+		}
+
 		tool := resources.Tool{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Tool",
@@ -200,7 +205,7 @@ func (c *McpServerController) syncTools(server resources.McpServer, tools []agen
 				Type:         "mcp",
 				McpServerRef: serverName,
 				McpToolName:  mcpTool.Name,
-				Description:  mcpTool.Description,
+				Description:  desc,
 				InputSchema:  mcpTool.InputSchema,
 			},
 		}

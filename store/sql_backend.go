@@ -865,6 +865,38 @@ func upsertWebhookDedupeSQL(db *sql.DB, endpointID, eventID, taskName string, ex
 	return err
 }
 
+// tryInsertWebhookDedupeSQL atomically inserts a dedup entry only if one
+// does not already exist (or has expired). Returns (taskName, true) if a
+// live duplicate was found, or ("", false) if the insert succeeded.
+func tryInsertWebhookDedupeSQL(db *sql.DB, endpointID, eventID, taskName string, expiresAt, now time.Time) (string, bool, error) {
+	var existingTask string
+	err := db.QueryRow(
+		`WITH pruned AS (
+			DELETE FROM webhook_dedupe WHERE endpoint_id = $1 AND event_id = $2 AND expires_at <= $5
+		), ins AS (
+			INSERT INTO webhook_dedupe(endpoint_id, event_id, task_name, expires_at, created_at)
+			VALUES($1, $2, $3, $4, NOW())
+			ON CONFLICT(endpoint_id, event_id) DO NOTHING
+			RETURNING task_name
+		)
+		SELECT COALESCE(
+			(SELECT task_name FROM ins),
+			(SELECT task_name FROM webhook_dedupe WHERE endpoint_id = $1 AND event_id = $2 AND expires_at > $5)
+		)`,
+		endpointID, eventID, taskName, expiresAt.UTC(), now.UTC(),
+	).Scan(&existingTask)
+	if err == sql.ErrNoRows {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	if existingTask == taskName {
+		return "", false, nil
+	}
+	return existingTask, true, nil
+}
+
 func getWebhookDedupeSQL(db *sql.DB, endpointID, eventID string, now time.Time) (string, bool, error) {
 	var taskName string
 	err := db.QueryRow(
