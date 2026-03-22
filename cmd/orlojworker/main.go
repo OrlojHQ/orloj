@@ -4,7 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -16,7 +16,6 @@ import (
 	"github.com/OrlojHQ/orloj/resources"
 	agentruntime "github.com/OrlojHQ/orloj/runtime"
 	"github.com/OrlojHQ/orloj/startup"
-	"github.com/OrlojHQ/orloj/store"
 	"github.com/OrlojHQ/orloj/telemetry"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
@@ -31,6 +30,7 @@ func main() {
 
 	showVersion := flag.Bool("version", false, "print version and exit")
 	workerID := flag.String("worker-id", "worker-1", "task worker identity")
+	healthzAddr := flag.String("healthz-addr", env("ORLOJ_WORKER_HEALTHZ_ADDR", ""), "optional address for the /healthz liveness probe endpoint (e.g. :8081); empty disables it")
 	reconcile := flag.Duration("reconcile-interval", 1*time.Second, "claim/reconcile interval")
 	leaseDuration := flag.Duration("lease-duration", 30*time.Second, "task lease duration")
 	heartbeatInterval := flag.Duration("heartbeat-interval", 10*time.Second, "task lease heartbeat interval")
@@ -192,7 +192,7 @@ func main() {
 	defer cancel()
 
 	specModels := startup.ParseCSV(*supportedModels)
-	go heartbeatWorkerRegistration(ctx, stores.Workers, logger, *workerID, resources.WorkerSpec{
+	go startup.HeartbeatWorkerRegistration(ctx, stores.Workers, logger, *workerID, resources.WorkerSpec{
 		Region: *region,
 		Capabilities: resources.WorkerCapabilities{
 			GPU:             *gpu,
@@ -239,75 +239,29 @@ func main() {
 		}
 	}
 
+	if addr := strings.TrimSpace(*healthzAddr); addr != "" {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/plain")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		})
+		go func() {
+			srv := &http.Server{Addr: addr, Handler: mux}
+			go func() {
+				<-ctx.Done()
+				shutCtx, c := context.WithTimeout(context.Background(), 2*time.Second)
+				defer c()
+				_ = srv.Shutdown(shutCtx)
+			}()
+			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				logger.Printf("healthz server error: %v", err)
+			}
+		}()
+		logger.Printf("healthz endpoint listening on %s", addr)
+	}
+
 	logger.Printf("task worker starting id=%s lease=%s heartbeat=%s", *workerID, leaseDuration.String(), heartbeatInterval.String())
 	taskController.Start(ctx)
 }
 
-func heartbeatWorkerRegistration(
-	ctx context.Context,
-	workerStore *store.WorkerStore,
-	logger *log.Logger,
-	workerID string,
-	spec resources.WorkerSpec,
-	interval time.Duration,
-) {
-	if interval <= 0 {
-		interval = 10 * time.Second
-	}
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	for {
-		now := time.Now().UTC().Format(time.RFC3339Nano)
-		worker := resources.Worker{
-			APIVersion: "orloj.dev/v1",
-			Kind:       "Worker",
-			Metadata:   resources.ObjectMeta{Name: workerID},
-			Spec:       spec,
-			Status: resources.WorkerStatus{
-				Phase:         "Ready",
-				LastHeartbeat: now,
-				CurrentTasks:  0,
-			},
-		}
-		for attempt := 0; attempt < 3; attempt++ {
-			if existing, ok := workerStore.Get(workerID); ok {
-				worker.Metadata.ResourceVersion = existing.Metadata.ResourceVersion
-				worker.Metadata.Generation = existing.Metadata.Generation
-				worker.Metadata.CreatedAt = existing.Metadata.CreatedAt
-				worker.Status.ObservedGeneration = existing.Metadata.Generation
-				if strings.EqualFold(strings.TrimSpace(existing.Status.Phase), "ready") ||
-					strings.EqualFold(strings.TrimSpace(existing.Status.Phase), "pending") {
-					worker.Status.CurrentTasks = existing.Status.CurrentTasks
-				} else {
-					worker.Status.CurrentTasks = 0
-				}
-			}
-			_, err := workerStore.Upsert(worker)
-			if err == nil {
-				break
-			}
-			if !store.IsConflict(err) {
-				if logger != nil {
-					logger.Printf("worker heartbeat upsert failed: %v", err)
-				}
-				break
-			}
-		}
-
-		select {
-		case <-ctx.Done():
-			final := worker
-			final.Status.Phase = "NotReady"
-			final.Status.LastError = "worker stopped"
-			if existing, ok := workerStore.Get(workerID); ok {
-				final.Metadata.ResourceVersion = existing.Metadata.ResourceVersion
-				final.Metadata.Generation = existing.Metadata.Generation
-				final.Metadata.CreatedAt = existing.Metadata.CreatedAt
-			}
-			_, _ = workerStore.Upsert(final)
-			return
-		case <-ticker.C:
-		}
-	}
-}

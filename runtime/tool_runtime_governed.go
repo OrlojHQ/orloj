@@ -26,7 +26,7 @@ type ToolCapabilityRegistry interface {
 
 // ToolResourceLookup resolves Tool CRDs by name (optionally namespace scoped).
 type ToolResourceLookup interface {
-	Get(name string) (resources.Tool, bool)
+	Get(name string) (resources.Tool, bool, error)
 }
 
 type registryAwareToolRuntime interface {
@@ -191,11 +191,11 @@ func buildGovernedToolRuntime(
 		if lookup == nil {
 			continue
 		}
-		item, ok := lookup.Get(scopedRuntimeName(namespace, trimmed))
-		if !ok && strings.Contains(trimmed, "/") {
-			item, ok = lookup.Get(trimmed)
+		item, ok, lookupErr := lookup.Get(scopedRuntimeName(namespace, trimmed))
+		if lookupErr == nil && !ok && strings.Contains(trimmed, "/") {
+			item, ok, lookupErr = lookup.Get(trimmed)
 		}
-		if ok {
+		if lookupErr == nil && ok {
 			specs[key] = item.Spec
 		}
 	}

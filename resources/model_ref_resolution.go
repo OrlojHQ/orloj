@@ -7,7 +7,7 @@ import (
 
 // ModelEndpointLookup resolves model endpoints by scoped name (namespace/name).
 type ModelEndpointLookup interface {
-	Get(name string) (ModelEndpoint, bool)
+	Get(name string) (ModelEndpoint, bool, error)
 }
 
 // ParseModelEndpointRef resolves model endpoint references in name or namespace/name form.
@@ -32,7 +32,10 @@ func ResolveAgentModelRef(defaultNamespace string, modelRef string, endpoints Mo
 	}
 	refNamespace, refName := ParseModelEndpointRef(defaultNamespace, modelRef)
 	key := NormalizeNamespace(refNamespace) + "/" + strings.TrimSpace(refName)
-	endpoint, ok := endpoints.Get(key)
+	endpoint, ok, err := endpoints.Get(key)
+	if err != nil {
+		return ModelEndpoint{}, "", fmt.Errorf("model endpoint %q lookup failed: %w", modelRef, err)
+	}
 	if !ok {
 		return ModelEndpoint{}, "", fmt.Errorf("model endpoint %q not found", modelRef)
 	}

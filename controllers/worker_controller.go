@@ -95,7 +95,11 @@ func (c *WorkerController) runWorker(ctx context.Context, queue *keyQueue) {
 }
 
 func (c *WorkerController) enqueueAll(queue *keyQueue) {
-	for _, item := range c.store.List() {
+	_itemList, err := c.store.List()
+	if err != nil {
+		return
+	}
+	for _, item := range _itemList {
 		queue.Enqueue(store.ScopedName(item.Metadata.Namespace, item.Metadata.Name))
 	}
 }
@@ -111,7 +115,10 @@ func (c *WorkerController) reconcileByName(name string) error {
 }
 
 func (c *WorkerController) tryReconcile(name string) error {
-	item, ok := c.store.Get(name)
+	item, ok, err := c.store.Get(name)
+	if err != nil {
+		return err
+	}
 	if !ok {
 		return nil
 	}

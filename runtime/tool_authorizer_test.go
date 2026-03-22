@@ -11,17 +11,17 @@ type authTestRoleLookup struct {
 	roles map[string]resources.AgentRole
 }
 
-func (s *authTestRoleLookup) Get(name string) (resources.AgentRole, bool) {
+func (s *authTestRoleLookup) Get(name string) (resources.AgentRole, bool, error) {
 	r, ok := s.roles[name]
-	return r, ok
+	return r, ok, nil
 }
 
 type authTestPermLookup struct {
 	items []resources.ToolPermission
 }
 
-func (s *authTestPermLookup) List() []resources.ToolPermission {
-	return s.items
+func (s *authTestPermLookup) List() ([]resources.ToolPermission, error) {
+	return s.items, nil
 }
 
 func TestAuthorizerAllowWhenNoRolesNoRules(t *testing.T) {

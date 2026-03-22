@@ -38,7 +38,10 @@ func TestTaskSchedulerSkipsTemplateTasks(t *testing.T) {
 		t.Fatalf("reconcile failed: %v", err)
 	}
 
-	task, ok := taskStore.Get("template-task")
+	task, ok, err := taskStore.Get("template-task")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !ok {
 		t.Fatal("task not found")
 	}

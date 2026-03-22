@@ -27,7 +27,11 @@ type watchRecord struct {
 
 func (s *Server) watchAgents(w http.ResponseWriter, r *http.Request) {
 	s.watchResourceStream(w, r, func() []watchRecord {
-		items := s.stores.Agents.List()
+		items, err := s.stores.Agents.List()
+		if err != nil {
+			writeStoreFetchError(w, err)
+			return nil
+		}
 		records := make([]watchRecord, 0, len(items))
 		for _, item := range items {
 			item = s.withRuntimeStatus(item)
@@ -44,7 +48,11 @@ func (s *Server) watchAgents(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) watchTasks(w http.ResponseWriter, r *http.Request) {
 	s.watchResourceStream(w, r, func() []watchRecord {
-		items := s.stores.Tasks.List()
+		items, err := s.stores.Tasks.List()
+		if err != nil {
+			writeStoreFetchError(w, err)
+			return nil
+		}
 		records := make([]watchRecord, 0, len(items))
 		for _, item := range items {
 			records = append(records, watchRecord{
@@ -60,7 +68,11 @@ func (s *Server) watchTasks(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) watchTaskSchedules(w http.ResponseWriter, r *http.Request) {
 	s.watchResourceStream(w, r, func() []watchRecord {
-		items := s.stores.TaskSchedules.List()
+		items, err := s.stores.TaskSchedules.List()
+		if err != nil {
+			writeStoreFetchError(w, err)
+			return nil
+		}
 		records := make([]watchRecord, 0, len(items))
 		for _, item := range items {
 			records = append(records, watchRecord{
@@ -76,7 +88,11 @@ func (s *Server) watchTaskSchedules(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) watchTaskWebhooks(w http.ResponseWriter, r *http.Request) {
 	s.watchResourceStream(w, r, func() []watchRecord {
-		items := s.stores.TaskWebhooks.List()
+		items, err := s.stores.TaskWebhooks.List()
+		if err != nil {
+			writeStoreFetchError(w, err)
+			return nil
+		}
 		records := make([]watchRecord, 0, len(items))
 		for _, item := range items {
 			records = append(records, watchRecord{

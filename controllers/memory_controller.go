@@ -76,13 +76,21 @@ func (c *MemoryController) runWorker(ctx context.Context, queue *keyQueue) {
 }
 
 func (c *MemoryController) enqueueAll(queue *keyQueue) {
-	for _, item := range c.store.List() {
+	_itemList, err := c.store.List()
+	if err != nil {
+		return
+	}
+	for _, item := range _itemList {
 		queue.Enqueue(store.ScopedName(item.Metadata.Namespace, item.Metadata.Name))
 	}
 }
 
 func (c *MemoryController) ReconcileOnce(_ context.Context) error {
-	for _, item := range c.store.List() {
+	_itemList, err := c.store.List()
+	if err != nil {
+		return err
+	}
+	for _, item := range _itemList {
 		if err := c.reconcileByName(store.ScopedName(item.Metadata.Namespace, item.Metadata.Name)); err != nil {
 			return err
 		}
@@ -91,7 +99,10 @@ func (c *MemoryController) ReconcileOnce(_ context.Context) error {
 }
 
 func (c *MemoryController) reconcileByName(name string) error {
-	item, ok := c.store.Get(name)
+	item, ok, err := c.store.Get(name)
+	if err != nil {
+		return err
+	}
 	if !ok {
 		return nil
 	}
@@ -158,7 +169,7 @@ func (c *MemoryController) reconcileByName(name string) error {
 	item.Status.Phase = "Ready"
 	item.Status.LastError = ""
 	item.Status.ObservedGeneration = item.Metadata.Generation
-	_, err := c.store.Upsert(item)
+	_, err = c.store.Upsert(item)
 	return err
 }
 
@@ -172,7 +183,10 @@ func (c *MemoryController) resolveEmbeddingProvider(namespace, embeddingModelRef
 	if !strings.Contains(key, "/") {
 		key = store.ScopedName(namespace, embeddingModelRef)
 	}
-	ep, ok := c.modelEndpoints.Get(key)
+	ep, ok, err := c.modelEndpoints.Get(key)
+	if err != nil {
+		return nil, fmt.Errorf("model endpoint %q lookup failed: %w", embeddingModelRef, err)
+	}
 	if !ok {
 		return nil, fmt.Errorf("model endpoint %q not found", embeddingModelRef)
 	}
@@ -201,7 +215,10 @@ func (c *MemoryController) resolveAuthToken(namespace, secretRef string) (string
 	if !strings.Contains(key, "/") {
 		key = store.ScopedName(namespace, secretRef)
 	}
-	secret, ok := c.secrets.Get(key)
+	secret, ok, err := c.secrets.Get(key)
+	if err != nil {
+		return "", fmt.Errorf("secret %q lookup failed: %w", secretRef, err)
+	}
 	if !ok {
 		return "", fmt.Errorf("secret %q not found", secretRef)
 	}

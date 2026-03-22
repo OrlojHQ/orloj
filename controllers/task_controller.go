@@ -177,7 +177,7 @@ func (c *TaskController) ReconcileOnce(ctx context.Context) error {
 		}
 		slotAcquired := false
 		if c.workerStore != nil {
-			acquired, err := c.tryAcquireWorkerSlot()
+			acquired, err := c.tryAcquireWorkerSlot(ctx)
 			if err != nil {
 				return err
 			}
@@ -186,21 +186,21 @@ func (c *TaskController) ReconcileOnce(ctx context.Context) error {
 			}
 			slotAcquired = true
 		}
-		task, claimed, err := c.taskStore.ClaimNextDue(c.workerID, c.leaseDuration, c.taskMatchesWorker)
+		task, claimed, err := c.taskStore.ClaimNextDue(ctx, c.workerID, c.leaseDuration, c.workerClaimHints(), c.taskMatchesWorker)
 		if err != nil {
-			if slotAcquired {
-				_ = c.workerStore.ReleaseSlot(c.workerID)
-			}
-			return err
+		if slotAcquired {
+			_ = c.workerStore.ReleaseSlot(ctx, c.workerID)
 		}
-		if !claimed {
-			if slotAcquired {
-				_ = c.workerStore.ReleaseSlot(c.workerID)
-			}
-			return nil
+		return err
+	}
+	if !claimed {
+		if slotAcquired {
+			_ = c.workerStore.ReleaseSlot(ctx, c.workerID)
 		}
+		return nil
+	}
 
-		taskKey := taskScopedName(task)
+	taskKey := taskScopedName(task)
 		stopHeartbeat := c.startHeartbeat(ctx, taskKey)
 		c.appendTaskLog(taskKey, fmt.Sprintf("task claimed by worker=%s lease=%s", c.workerID, c.leaseDuration))
 		c.appendTaskHistory(&task, "claim", fmt.Sprintf("task claimed by worker=%s lease=%s", c.workerID, c.leaseDuration))
@@ -230,7 +230,7 @@ func (c *TaskController) ReconcileOnce(ctx context.Context) error {
 		reconcileErr := c.reconcileTask(ctx, task)
 		stopHeartbeat()
 		if slotAcquired {
-			if err := c.workerStore.ReleaseSlot(c.workerID); err != nil && c.logger != nil {
+			if err := c.workerStore.ReleaseSlot(ctx, c.workerID); err != nil && c.logger != nil {
 				c.logger.Printf("worker=%s release slot failed: %v", c.workerID, err)
 			}
 		}
@@ -256,7 +256,10 @@ func (c *TaskController) reconcileTask(ctx context.Context, task resources.Task)
 		if err := c.reconcilePending(task); err != nil {
 			return err
 		}
-		updated, ok := c.taskStore.Get(taskScopedName(task))
+		updated, ok, err := c.taskStore.Get(taskScopedName(task))
+		if err != nil {
+			return err
+		}
 		if !ok {
 			return nil
 		}
@@ -409,7 +412,11 @@ func (c *TaskController) reconcileWaitingApprovalSweep(ctx context.Context) erro
 	if c == nil || c.taskStore == nil || c.toolApprovalStore == nil {
 		return nil
 	}
-	for _, task := range c.taskStore.List() {
+	_taskList, err := c.taskStore.List()
+	if err != nil {
+		return err
+	}
+	for _, task := range _taskList {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -420,7 +427,10 @@ func (c *TaskController) reconcileWaitingApprovalSweep(ctx context.Context) erro
 			continue
 		}
 		key := taskScopedName(task)
-		fresh, ok := c.taskStore.Get(key)
+		fresh, ok, err := c.taskStore.Get(key)
+		if err != nil {
+			return err
+		}
 		if !ok {
 			continue
 		}
@@ -458,7 +468,11 @@ func (c *TaskController) reconcileWaitingApproval(task resources.Task) error {
 	taskKey := taskScopedName(task)
 	var approval resources.ToolApproval
 	found := false
-	for _, a := range c.toolApprovalStore.List() {
+	_aList, err := c.toolApprovalStore.List()
+	if err != nil {
+		return err
+	}
+	for _, a := range _aList {
 		if strings.TrimSpace(a.Spec.TaskRef) == taskKey || strings.TrimSpace(a.Spec.TaskRef) == task.Metadata.Name {
 			approval = a
 			found = true
@@ -520,7 +534,9 @@ func (c *TaskController) reconcileRunningMessageDriven(ctx context.Context, task
 	}
 	allPolicies := []resources.AgentPolicy{}
 	if c.policyStore != nil {
-		allPolicies = c.policyStore.List()
+		if listed, err := c.policyStore.List(); err == nil {
+			allPolicies = listed
+		}
 	}
 	policies := matchedPolicies(task, system, allPolicies)
 	tokenBudget := minimumTokenBudget(policies)
@@ -762,7 +778,10 @@ func (c *TaskController) validateTask(task resources.Task) (resources.AgentSyste
 		return resources.AgentSystem{}, errs
 	}
 
-	system, ok := c.agentSystemStore.Get(store.ScopedName(task.Metadata.Namespace, task.Spec.System))
+	system, ok, err := c.agentSystemStore.Get(store.ScopedName(task.Metadata.Namespace, task.Spec.System))
+	if err != nil {
+		return resources.AgentSystem{}, append(errs, fmt.Sprintf("agentsystem lookup failed: %v", err))
+	}
 	if !ok {
 		errs = append(errs, fmt.Sprintf("agentsystem %q not found", task.Spec.System))
 		return resources.AgentSystem{}, errs
@@ -783,14 +802,18 @@ func (c *TaskController) validateTask(task resources.Task) (resources.AgentSyste
 	}
 
 	for _, name := range system.Spec.Agents {
-		agent, ok := c.agentStore.Get(store.ScopedName(task.Metadata.Namespace, name))
+		agent, ok, err := c.agentStore.Get(store.ScopedName(task.Metadata.Namespace, name))
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("agent %q lookup failed: %v", name, err))
+			continue
+		}
 		if !ok {
 			errs = append(errs, fmt.Sprintf("agent %q not found", name))
 			continue
 		}
 
 		for _, toolName := range agent.Spec.Tools {
-			if _, ok := c.toolStore.Get(store.ScopedName(task.Metadata.Namespace, toolName)); !ok {
+			if _, ok, _ := c.toolStore.Get(store.ScopedName(task.Metadata.Namespace, toolName)); !ok {
 				errs = append(errs, fmt.Sprintf("agent %q references missing tool %q", name, toolName))
 			}
 		}
@@ -800,9 +823,9 @@ func (c *TaskController) validateTask(task resources.Task) (resources.AgentSyste
 					continue
 				}
 				roleKey := store.ScopedName(task.Metadata.Namespace, roleName)
-				if _, ok := c.roleStore.Get(roleKey); !ok {
+				if _, ok, _ := c.roleStore.Get(roleKey); !ok {
 					if strings.Contains(roleName, "/") {
-						if _, ok := c.roleStore.Get(roleName); !ok {
+						if _, ok, _ := c.roleStore.Get(roleName); !ok {
 							errs = append(errs, fmt.Sprintf("agent %q references missing role %q", name, roleName))
 						}
 					} else {
@@ -818,7 +841,7 @@ func (c *TaskController) validateTask(task resources.Task) (resources.AgentSyste
 		}
 
 		if strings.TrimSpace(agent.Spec.Memory.Ref) != "" {
-			if _, ok := c.memoryStore.Get(store.ScopedName(task.Metadata.Namespace, agent.Spec.Memory.Ref)); !ok {
+			if _, ok, _ := c.memoryStore.Get(store.ScopedName(task.Metadata.Namespace, agent.Spec.Memory.Ref)); !ok {
 				errs = append(errs, fmt.Sprintf("agent %q references missing memory %q", name, agent.Spec.Memory.Ref))
 			}
 		}
@@ -1062,6 +1085,9 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 		return nil, fmt.Errorf("cannot derive execution order from agentsystem %q", system.Metadata.Name)
 	}
 
+	// Restore the W3C trace context from the task annotations so this span is
+	// linked as a continuation of the HTTP request that created the task.
+	ctx = telemetry.ExtractTraceContext(ctx, task.Metadata.Annotations)
 	ctx, taskSpan := telemetry.StartTaskSpan(ctx, task.Metadata.Name, system.Metadata.Name,
 		resources.NormalizeNamespace(task.Metadata.Namespace), task.Status.Attempts)
 	defer taskSpan.End()
@@ -1072,7 +1098,13 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 		Message:   fmt.Sprintf("system=%s agents=%d", system.Metadata.Name, len(order)),
 	})
 
-	policies := matchedPolicies(*task, system, c.policyStore.List())
+	var _allPolicies []resources.AgentPolicy
+	if c.policyStore != nil {
+		if listed, err := c.policyStore.List(); err == nil {
+			_allPolicies = listed
+		}
+	}
+	policies := matchedPolicies(*task, system, _allPolicies)
 	tokenBudget := minimumTokenBudget(policies)
 	totalEstimatedTokens := 0
 	totalUsedTokens := 0
@@ -1107,7 +1139,10 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 
 	runtimeInput := copyStringMap(task.Spec.Input)
 	for idx, agentName := range order {
-		agent, ok := c.agentStore.Get(store.ScopedName(task.Metadata.Namespace, agentName))
+		agent, ok, err := c.agentStore.Get(store.ScopedName(task.Metadata.Namespace, agentName))
+		if err != nil {
+			return nil, err
+		}
 		if !ok {
 			c.appendTaskLog(taskScopedName(*task), fmt.Sprintf("agent missing before execution: %s", agentName))
 			c.appendTaskTrace(task, resources.TaskTraceEvent{
@@ -1526,7 +1561,10 @@ func (c *TaskController) taskMatchesWorker(task resources.Task) bool {
 	if c.workerStore == nil {
 		return true
 	}
-	worker, ok := c.workerStore.Get(c.workerID)
+	worker, ok, err := c.workerStore.Get(c.workerID)
+	if err != nil {
+		return false
+	}
 	if !ok {
 		// Allow scheduling when worker registration is not present (for embedded/single-process use).
 		return true
@@ -1550,8 +1588,26 @@ func (c *TaskController) taskMatchesWorker(task resources.Task) bool {
 	return true
 }
 
-func (c *TaskController) tryAcquireWorkerSlot() (bool, error) {
-	worker, acquired, err := c.workerStore.TryAcquireSlot(c.workerID)
+func (c *TaskController) workerClaimHints() store.WorkerClaimHints {
+	if c.workerStore == nil {
+		return store.WorkerClaimHints{}
+	}
+	worker, ok, err := c.workerStore.Get(c.workerID)
+	if err != nil {
+		return store.WorkerClaimHints{}
+	}
+	if !ok {
+		return store.WorkerClaimHints{}
+	}
+	return store.WorkerClaimHints{
+		AssignedWorker:  c.workerID,
+		Region:          strings.TrimSpace(worker.Spec.Region),
+		SupportedModels: worker.Spec.Capabilities.SupportedModels,
+	}
+}
+
+func (c *TaskController) tryAcquireWorkerSlot(ctx context.Context) (bool, error) {
+	worker, acquired, err := c.workerStore.TryAcquireSlot(ctx, c.workerID)
 	if err != nil {
 		return false, err
 	}
@@ -1864,9 +1920,12 @@ func (c *TaskController) upsertTask(task resources.Task) (resources.Task, error)
 			return resources.Task{}, err
 		}
 		lastErr = err
-		current, ok := c.taskStore.Get(taskScopedName(task))
-		if !ok {
+		current, ok, err := c.taskStore.Get(taskScopedName(task))
+		if err != nil {
 			return resources.Task{}, err
+		}
+		if !ok {
+			return resources.Task{}, lastErr
 		}
 		task.Metadata.ResourceVersion = current.Metadata.ResourceVersion
 		task.Metadata.Generation = current.Metadata.Generation
@@ -1915,7 +1974,7 @@ func (c *TaskController) startHeartbeat(ctx context.Context, taskName string) fu
 			case <-hbCtx.Done():
 				return
 			case <-ticker.C:
-				if err := c.taskStore.RenewLease(taskName, c.workerID, c.leaseDuration); err != nil {
+				if err := c.taskStore.RenewLease(hbCtx, taskName, c.workerID, c.leaseDuration); err != nil {
 					if c.logger != nil {
 						c.logger.Printf("task=%s lease heartbeat failed: %v", taskName, err)
 					}

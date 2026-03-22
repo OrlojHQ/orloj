@@ -128,11 +128,11 @@ func TestAgentMessageConsumerExecutesGraphAndCompletesTask(t *testing.T) {
 	}
 
 	waitForConsumer(t, 2*time.Second, func() bool {
-		task, ok := taskStore.Get("task-1")
+		task, ok, _ := taskStore.Get("task-1")
 		return ok && strings.EqualFold(task.Status.Phase, "succeeded")
 	})
 
-	task, _ := taskStore.Get("task-1")
+	task, _, _ := taskStore.Get("task-1")
 	if task.Status.Phase != "Succeeded" {
 		t.Fatalf("expected task succeeded, got %q", task.Status.Phase)
 	}
@@ -228,7 +228,7 @@ func TestAgentMessageConsumerWaitsForLeaseThenTakesOver(t *testing.T) {
 	}
 	time.Sleep(90 * time.Millisecond)
 
-	task, _ := taskStore.Get("task-2")
+	task, _, _ := taskStore.Get("task-2")
 	if countMessages(task.Status.Messages, "msg-skip") != 0 {
 		t.Fatalf("expected no message persisted for non-owner worker, got %d", countMessages(task.Status.Messages, "msg-skip"))
 	}
@@ -237,14 +237,17 @@ func TestAgentMessageConsumerWaitsForLeaseThenTakesOver(t *testing.T) {
 	}
 
 	waitForConsumer(t, 2*time.Second, func() bool {
-		current, ok := taskStore.Get("task-2")
+		current, ok, err := taskStore.Get("task-2")
+		if err != nil {
+			t.Fatal(err)
+		}
 		if !ok {
 			return false
 		}
 		return strings.EqualFold(current.Status.Phase, "succeeded") && countTraceByTypeAndMessage(current.Status.Trace, "agent_message_processed", "msg-skip") == 1
 	})
 
-	task, _ = taskStore.Get("task-2")
+	task, _, _ = taskStore.Get("task-2")
 	seenTakeover := false
 	for _, entry := range task.Status.History {
 		if strings.EqualFold(strings.TrimSpace(entry.Type), "takeover") && strings.EqualFold(strings.TrimSpace(entry.Worker), "worker-other") {
@@ -346,14 +349,14 @@ func TestAgentMessageConsumerRetriesThenDeadLettersMessage(t *testing.T) {
 	start := time.Now()
 	deadline := time.Now().Add(4 * time.Second)
 	for time.Now().Before(deadline) {
-		task, ok := taskStore.Get("retry-task")
+		task, ok, _ := taskStore.Get("retry-task")
 		if ok && strings.EqualFold(task.Status.Phase, "deadletter") {
 			break
 		}
 		time.Sleep(25 * time.Millisecond)
 	}
 
-	task, _ := taskStore.Get("retry-task")
+	task, _, _ := taskStore.Get("retry-task")
 	if task.Status.Phase != "DeadLetter" {
 		payload, _ := json.Marshal(task.Status)
 		t.Fatalf("expected task DeadLetter, got %q status=%s", task.Status.Phase, string(payload))
@@ -456,11 +459,11 @@ func TestAgentMessageConsumerNonRetryableInvalidSystemDeadLettersImmediately(t *
 	}
 
 	waitForConsumer(t, 2*time.Second, func() bool {
-		task, ok := taskStore.Get("invalid-ref-task")
+		task, ok, _ := taskStore.Get("invalid-ref-task")
 		return ok && strings.EqualFold(task.Status.Phase, "deadletter")
 	})
 
-	task, _ := taskStore.Get("invalid-ref-task")
+	task, _, _ := taskStore.Get("invalid-ref-task")
 	if countTraceByTypeAndMessage(task.Status.Trace, "agent_message_retry_scheduled", "msg-invalid-agent") != 0 {
 		t.Fatalf("expected no retry for non-retryable invalid system ref, trace=%+v", task.Status.Trace)
 	}
@@ -579,11 +582,11 @@ func TestAgentMessageConsumerContractViolationDeadLettersWithoutRetry(t *testing
 	}
 
 	waitForConsumer(t, 2*time.Second, func() bool {
-		task, ok := taskStore.Get("contract-task")
+		task, ok, _ := taskStore.Get("contract-task")
 		return ok && strings.EqualFold(task.Status.Phase, "deadletter")
 	})
 
-	task, _ := taskStore.Get("contract-task")
+	task, _, _ := taskStore.Get("contract-task")
 	if countTraceByTypeAndMessage(task.Status.Trace, "agent_message_retry_scheduled", "msg-contract-violation") != 0 {
 		t.Fatalf("expected no retry for contract violation, trace=%+v", task.Status.Trace)
 	}
@@ -757,11 +760,11 @@ func TestAgentMessageConsumerFanOutJoinWaitForAll(t *testing.T) {
 	}
 
 	waitForConsumer(t, 4*time.Second, func() bool {
-		task, ok := taskStore.Get("fanout-task")
+		task, ok, _ := taskStore.Get("fanout-task")
 		return ok && strings.EqualFold(task.Status.Phase, "succeeded")
 	})
 
-	task, _ := taskStore.Get("fanout-task")
+	task, _, _ := taskStore.Get("fanout-task")
 	if task.Status.Phase != "Succeeded" {
 		t.Fatalf("expected fanout task succeeded, got %q", task.Status.Phase)
 	}
@@ -872,7 +875,10 @@ func TestAgentMessageConsumerJoinWaitPersistsIdempotencyAndSkipsDuplicate(t *tes
 		t.Fatalf("publish first join msg failed: %v", err)
 	}
 	waitForConsumer(t, 2*time.Second, func() bool {
-		task, ok := taskStore.Get("join-task")
+		task, ok, err := taskStore.Get("join-task")
+		if err != nil {
+			t.Fatal(err)
+		}
 		if !ok {
 			return false
 		}
@@ -886,7 +892,7 @@ func TestAgentMessageConsumerJoinWaitPersistsIdempotencyAndSkipsDuplicate(t *tes
 	}
 	time.Sleep(150 * time.Millisecond)
 
-	task, _ := taskStore.Get("join-task")
+	task, _, _ := taskStore.Get("join-task")
 	msg, ok := taskMessageByID(task.Status.Messages, "msg-join-1")
 	if !ok {
 		t.Fatal("expected join message record")
@@ -1003,11 +1009,11 @@ func TestAgentMessageConsumerStopsCyclicBranchAtTaskMaxTurns(t *testing.T) {
 	}
 
 	waitForConsumer(t, 3*time.Second, func() bool {
-		task, ok := taskStore.Get("cycle-task")
+		task, ok, _ := taskStore.Get("cycle-task")
 		return ok && strings.EqualFold(task.Status.Phase, "succeeded")
 	})
 
-	task, _ := taskStore.Get("cycle-task")
+	task, _, _ := taskStore.Get("cycle-task")
 	if task.Status.Phase != "Succeeded" {
 		t.Fatalf("expected task succeeded, got %q", task.Status.Phase)
 	}

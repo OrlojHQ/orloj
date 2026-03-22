@@ -111,19 +111,19 @@ func TestTaskSchedulerAssignsTasksByRequirementsAndCapacity(t *testing.T) {
 		t.Fatalf("reconcile: %v", err)
 	}
 
-	tWest1, _ := taskStore.Get("task-west-gpu-1")
+	tWest1, _, _ := taskStore.Get("task-west-gpu-1")
 	if tWest1.Status.AssignedWorker != "worker-c" {
 		t.Fatalf("expected task-west-gpu-1 assigned to worker-c, got %q", tWest1.Status.AssignedWorker)
 	}
-	tEast, _ := taskStore.Get("task-east")
+	tEast, _, _ := taskStore.Get("task-east")
 	if tEast.Status.AssignedWorker != "worker-a" {
 		t.Fatalf("expected task-east assigned to worker-a, got %q", tEast.Status.AssignedWorker)
 	}
-	tWest2, _ := taskStore.Get("task-west-gpu-2")
+	tWest2, _, _ := taskStore.Get("task-west-gpu-2")
 	if tWest2.Status.AssignedWorker != "worker-c" {
 		t.Fatalf("expected task-west-gpu-2 assigned to worker-c, got %q", tWest2.Status.AssignedWorker)
 	}
-	tNoMatch, _ := taskStore.Get("task-no-match")
+	tNoMatch, _, _ := taskStore.Get("task-no-match")
 	if tNoMatch.Status.AssignedWorker != "" {
 		t.Fatalf("expected task-no-match to remain unassigned, got %q", tNoMatch.Status.AssignedWorker)
 	}
@@ -183,7 +183,7 @@ func TestTaskSchedulerClearsAndReassignsInvalidAssignment(t *testing.T) {
 		t.Fatalf("reconcile: %v", err)
 	}
 
-	task, _ := taskStore.Get("task-1")
+	task, _, _ := taskStore.Get("task-1")
 	if task.Status.AssignedWorker != "worker-ready" {
 		t.Fatalf("expected reassignment to worker-ready, got %q", task.Status.AssignedWorker)
 	}

@@ -89,8 +89,20 @@ func writeStoreError(w http.ResponseWriter, err error) {
 	http.Error(w, err.Error(), http.StatusBadRequest)
 }
 
+// writeStoreFetchError writes a 503 Service Unavailable if err is non-nil and
+// returns true, signalling the caller to abort the handler. Returns false when
+// err is nil so callers can inline it: if writeStoreFetchError(w, err) { return }.
+func writeStoreFetchError(w http.ResponseWriter, err error) bool {
+	if err == nil {
+		return false
+	}
+	http.Error(w, "store unavailable: "+err.Error(), http.StatusServiceUnavailable)
+	return true
+}
+
 func (s *Server) handleAgentStatusByName(w http.ResponseWriter, r *http.Request, name string) {
-	obj, ok := s.stores.Agents.Get(scopedNameForRequest(r, name))
+	obj, ok, err := s.stores.Agents.Get(scopedNameForRequest(r, name))
+	if writeStoreFetchError(w, err) { return }
 	if !ok {
 		http.Error(w, fmt.Sprintf("agent %q not found", name), http.StatusNotFound)
 		return
@@ -126,7 +138,8 @@ func (s *Server) handleAgentStatusByName(w http.ResponseWriter, r *http.Request,
 }
 
 func (s *Server) handleAgentSystemStatusByName(w http.ResponseWriter, r *http.Request, name string) {
-	obj, ok := s.stores.AgentSystems.Get(scopedNameForRequest(r, name))
+	obj, ok, err := s.stores.AgentSystems.Get(scopedNameForRequest(r, name))
+	if writeStoreFetchError(w, err) { return }
 	if !ok {
 		http.Error(w, fmt.Sprintf("agentsystem %q not found", name), http.StatusNotFound)
 		return
@@ -162,7 +175,8 @@ func (s *Server) handleAgentSystemStatusByName(w http.ResponseWriter, r *http.Re
 }
 
 func (s *Server) handleToolStatusByName(w http.ResponseWriter, r *http.Request, name string) {
-	obj, ok := s.stores.Tools.Get(scopedNameForRequest(r, name))
+	obj, ok, err := s.stores.Tools.Get(scopedNameForRequest(r, name))
+	if writeStoreFetchError(w, err) { return }
 	if !ok {
 		http.Error(w, fmt.Sprintf("tool %q not found", name), http.StatusNotFound)
 		return
@@ -198,7 +212,8 @@ func (s *Server) handleToolStatusByName(w http.ResponseWriter, r *http.Request, 
 }
 
 func (s *Server) handleModelEndpointStatusByName(w http.ResponseWriter, r *http.Request, name string) {
-	obj, ok := s.stores.ModelEPs.Get(scopedNameForRequest(r, name))
+	obj, ok, err := s.stores.ModelEPs.Get(scopedNameForRequest(r, name))
+	if writeStoreFetchError(w, err) { return }
 	if !ok {
 		http.Error(w, fmt.Sprintf("modelendpoint %q not found", name), http.StatusNotFound)
 		return
@@ -234,7 +249,8 @@ func (s *Server) handleModelEndpointStatusByName(w http.ResponseWriter, r *http.
 }
 
 func (s *Server) handleMemoryStatusByName(w http.ResponseWriter, r *http.Request, name string) {
-	obj, ok := s.stores.Memories.Get(scopedNameForRequest(r, name))
+	obj, ok, err := s.stores.Memories.Get(scopedNameForRequest(r, name))
+	if writeStoreFetchError(w, err) { return }
 	if !ok {
 		http.Error(w, fmt.Sprintf("memory %q not found", name), http.StatusNotFound)
 		return
@@ -270,7 +286,8 @@ func (s *Server) handleMemoryStatusByName(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) handlePolicyStatusByName(w http.ResponseWriter, r *http.Request, name string) {
-	obj, ok := s.stores.Policies.Get(scopedNameForRequest(r, name))
+	obj, ok, err := s.stores.Policies.Get(scopedNameForRequest(r, name))
+	if writeStoreFetchError(w, err) { return }
 	if !ok {
 		http.Error(w, fmt.Sprintf("agentpolicy %q not found", name), http.StatusNotFound)
 		return
@@ -306,7 +323,8 @@ func (s *Server) handlePolicyStatusByName(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) handleTaskStatusByName(w http.ResponseWriter, r *http.Request, name string) {
-	obj, ok := s.stores.Tasks.Get(scopedNameForRequest(r, name))
+	obj, ok, err := s.stores.Tasks.Get(scopedNameForRequest(r, name))
+	if writeStoreFetchError(w, err) { return }
 	if !ok {
 		http.Error(w, fmt.Sprintf("task %q not found", name), http.StatusNotFound)
 		return
@@ -342,7 +360,8 @@ func (s *Server) handleTaskStatusByName(w http.ResponseWriter, r *http.Request, 
 }
 
 func (s *Server) handleTaskScheduleStatusByName(w http.ResponseWriter, r *http.Request, name string) {
-	obj, ok := s.stores.TaskSchedules.Get(scopedNameForRequest(r, name))
+	obj, ok, err := s.stores.TaskSchedules.Get(scopedNameForRequest(r, name))
+	if writeStoreFetchError(w, err) { return }
 	if !ok {
 		http.Error(w, fmt.Sprintf("taskschedule %q not found", name), http.StatusNotFound)
 		return
@@ -378,7 +397,8 @@ func (s *Server) handleTaskScheduleStatusByName(w http.ResponseWriter, r *http.R
 }
 
 func (s *Server) handleTaskWebhookStatusByName(w http.ResponseWriter, r *http.Request, name string) {
-	obj, ok := s.stores.TaskWebhooks.Get(scopedNameForRequest(r, name))
+	obj, ok, err := s.stores.TaskWebhooks.Get(scopedNameForRequest(r, name))
+	if writeStoreFetchError(w, err) { return }
 	if !ok {
 		http.Error(w, fmt.Sprintf("taskwebhook %q not found", name), http.StatusNotFound)
 		return
@@ -414,7 +434,8 @@ func (s *Server) handleTaskWebhookStatusByName(w http.ResponseWriter, r *http.Re
 }
 
 func (s *Server) handleWorkerStatusByName(w http.ResponseWriter, r *http.Request, name string) {
-	obj, ok := s.stores.Workers.Get(scopedNameForRequest(r, name))
+	obj, ok, err := s.stores.Workers.Get(scopedNameForRequest(r, name))
+	if writeStoreFetchError(w, err) { return }
 	if !ok {
 		http.Error(w, fmt.Sprintf("worker %q not found", name), http.StatusNotFound)
 		return

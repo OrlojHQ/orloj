@@ -13,7 +13,7 @@ import (
 var ErrToolSecretNotFound = errors.New("tool secret not found")
 
 type SecretResourceLookup interface {
-	Get(name string) (resources.Secret, bool)
+	Get(name string) (resources.Secret, bool, error)
 }
 
 type namespaceAwareSecretResolver interface {
@@ -54,7 +54,10 @@ func (r *StoreSecretResolver) Resolve(_ context.Context, secretRef string) (stri
 		return "", err
 	}
 	lookupKey := resources.NormalizeNamespace(ns) + "/" + name
-	secret, ok := r.lookup.Get(lookupKey)
+	secret, ok, err := r.lookup.Get(lookupKey)
+	if err != nil {
+		return "", fmt.Errorf("%w: secret %q lookup failed: %v", ErrToolSecretNotFound, name, err)
+	}
 	if !ok {
 		return "", fmt.Errorf("%w: secret %q not found in namespace %q", ErrToolSecretNotFound, name, resources.NormalizeNamespace(ns))
 	}

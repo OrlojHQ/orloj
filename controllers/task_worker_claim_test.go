@@ -118,7 +118,10 @@ func TestTaskClaimSingleExecutionAcrossWorkers(t *testing.T) {
 	}()
 	wg.Wait()
 
-	task, ok := taskStore.Get("weekly-report")
+	task, ok, err := taskStore.Get("weekly-report")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !ok {
 		t.Fatal("task not found")
 	}
@@ -240,7 +243,10 @@ func TestTaskClaimHonorsAssignedWorker(t *testing.T) {
 	}()
 	wg.Wait()
 
-	task, ok := taskStore.Get("weekly-report")
+	task, ok, err := taskStore.Get("weekly-report")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !ok {
 		t.Fatal("task not found")
 	}
@@ -302,7 +308,10 @@ func TestTaskWorkerCapacitySkipsClaimWhenFull(t *testing.T) {
 		t.Fatalf("reconcile failed: %v", err)
 	}
 
-	task, ok := taskStore.Get("capacity-task")
+	task, ok, err := taskStore.Get("capacity-task")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !ok {
 		t.Fatal("task not found")
 	}

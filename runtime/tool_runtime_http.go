@@ -9,9 +9,15 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/OrlojHQ/orloj/resources"
 )
+
+// defaultToolHTTPClient is a shared client with a safe default timeout.
+// Individual tools may override this via Tool.spec.timeout when that field
+// is added; for now this prevents a hung tool endpoint from blocking forever.
+var defaultToolHTTPClient = &http.Client{Timeout: 30 * time.Second}
 
 // HTTPToolClient executes tools via HTTP POST against Tool.spec.endpoint.
 // It replaces MockToolClient as the base runtime for isolation_mode=none.
@@ -29,7 +35,7 @@ type HTTPDoer interface {
 
 func NewHTTPToolClient(registry ToolCapabilityRegistry, secrets SecretResolver, client HTTPDoer) *HTTPToolClient {
 	if client == nil {
-		client = http.DefaultClient
+		client = defaultToolHTTPClient
 	}
 	return &HTTPToolClient{
 		registry:     registry,
@@ -41,7 +47,7 @@ func NewHTTPToolClient(registry ToolCapabilityRegistry, secrets SecretResolver, 
 
 func NewHTTPToolClientWithAuth(registry ToolCapabilityRegistry, injector *AuthInjector, client HTTPDoer) *HTTPToolClient {
 	if client == nil {
-		client = http.DefaultClient
+		client = defaultToolHTTPClient
 	}
 	return &HTTPToolClient{
 		registry:     registry,

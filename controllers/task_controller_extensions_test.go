@@ -91,7 +91,10 @@ func TestTaskControllerEmitsExtensionEventsSequential(t *testing.T) {
 		t.Fatalf("reconcile failed: %v", err)
 	}
 
-	task, ok := stores.taskStore.Get("report-task")
+	task, ok, err := stores.taskStore.Get("report-task")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !ok {
 		t.Fatal("task not found")
 	}

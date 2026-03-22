@@ -29,9 +29,9 @@ func TestAuthorizerApprovedToolGrantAllowsWhenStoreApproved(t *testing.T) {
 			},
 		},
 	}
-	getter := func(k string) (resources.ToolApproval, bool) {
+	getter := func(k string) (resources.ToolApproval, bool, error) {
 		a, ok := store[k]
-		return a, ok
+		return a, ok, nil
 	}
 	auth := NewAuthorizerWithApprovedToolGrant(inner, getter, taskKey, msgID)
 	res, err := auth.Authorize("deploy", resources.ToolSpec{})
@@ -54,9 +54,9 @@ func TestAuthorizerApprovedToolGrantRespectsPending(t *testing.T) {
 			Status: resources.ToolApprovalStatus{Phase: "Pending"},
 		},
 	}
-	getter := func(k string) (resources.ToolApproval, bool) {
+	getter := func(k string) (resources.ToolApproval, bool, error) {
 		a, ok := store[k]
-		return a, ok
+		return a, ok, nil
 	}
 	auth := NewAuthorizerWithApprovedToolGrant(inner, getter, taskKey, msgID)
 	res, err := auth.Authorize("deploy", resources.ToolSpec{})

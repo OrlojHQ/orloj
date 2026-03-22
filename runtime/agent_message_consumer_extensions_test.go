@@ -132,7 +132,7 @@ func TestAgentMessageConsumerEmitsExtensionEvents(t *testing.T) {
 	}
 
 	waitForConsumer(t, 2*time.Second, func() bool {
-		task, ok := taskStore.Get("task-extensions")
+		task, ok, _ := taskStore.Get("task-extensions")
 		return ok && task.Status.Phase == "Succeeded"
 	})
 

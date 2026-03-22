@@ -56,7 +56,10 @@ func TestFailureInjectionStaleHeartbeatReassignsPendingTask(t *testing.T) {
 		t.Fatalf("worker controller reconcile failed: %v", err)
 	}
 
-	workerA, ok := workerStore.Get("worker-a")
+	workerA, ok, err := workerStore.Get("worker-a")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !ok {
 		t.Fatal("worker-a missing after reconcile")
 	}
@@ -69,7 +72,10 @@ func TestFailureInjectionStaleHeartbeatReassignsPendingTask(t *testing.T) {
 		t.Fatalf("scheduler reconcile failed: %v", err)
 	}
 
-	task, ok := taskStore.Get("stale-task")
+	task, ok, err := taskStore.Get("stale-task")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !ok {
 		t.Fatal("task not found")
 	}
@@ -168,13 +174,16 @@ func TestFailureInjectionWorkerCrashLeaseTakeover(t *testing.T) {
 		t.Fatalf("upsert worker-b failed: %v", err)
 	}
 
-	if _, ok, err := taskStore.ClaimIfDue("lease-takeover-task", "worker-a", 20*time.Millisecond); err != nil {
+	if _, ok, err := taskStore.ClaimIfDue(context.Background(), "lease-takeover-task", "worker-a", 20*time.Millisecond); err != nil {
 		t.Fatalf("initial claim by worker-a failed: %v", err)
 	} else if !ok {
 		t.Fatal("expected initial claim by worker-a")
 	}
 
-	workerA, ok := workerStore.Get("worker-a")
+	workerA, ok, err := workerStore.Get("worker-a")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !ok {
 		t.Fatal("worker-a not found")
 	}
@@ -203,7 +212,10 @@ func TestFailureInjectionWorkerCrashLeaseTakeover(t *testing.T) {
 		t.Fatalf("worker-b reconcile failed: %v", err)
 	}
 
-	finalTask, ok := taskStore.Get("lease-takeover-task")
+	finalTask, ok, err := taskStore.Get("lease-takeover-task")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !ok {
 		t.Fatal("task not found")
 	}

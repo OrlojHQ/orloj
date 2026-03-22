@@ -80,7 +80,10 @@ func (c *TaskScheduleController) ReconcileOnce() error {
 	if c.taskScheduleStore == nil || c.taskStore == nil {
 		return nil
 	}
-	items := c.taskScheduleStore.List()
+	items, err := c.taskScheduleStore.List()
+	if err != nil {
+		return err
+	}
 	sort.Slice(items, func(i, j int) bool {
 		left := store.ScopedName(items[i].Metadata.Namespace, items[i].Metadata.Name)
 		right := store.ScopedName(items[j].Metadata.Namespace, items[j].Metadata.Name)
@@ -220,7 +223,10 @@ func (c *TaskScheduleController) ensureRunTask(item resources.TaskSchedule, slot
 		return "", err
 	}
 	templateKey := store.ScopedName(templateNS, templateName)
-	template, ok := c.taskStore.Get(templateKey)
+	template, ok, err := c.taskStore.Get(templateKey)
+	if err != nil {
+		return "", fmt.Errorf("task template %q lookup failed: %w", item.Spec.TaskRef, err)
+	}
 	if !ok {
 		return "", fmt.Errorf("task template %q not found", item.Spec.TaskRef)
 	}
@@ -232,7 +238,7 @@ func (c *TaskScheduleController) ensureRunTask(item resources.TaskSchedule, slot
 	runNamespace := template.Metadata.Namespace
 	runKey := store.ScopedName(runNamespace, runName)
 
-	if existing, ok := c.taskStore.Get(runKey); ok {
+	if existing, ok, _ := c.taskStore.Get(runKey); ok {
 		labels := existing.Metadata.Labels
 		if labels != nil &&
 			strings.EqualFold(strings.TrimSpace(labels[taskScheduleNameLabel]), strings.TrimSpace(item.Metadata.Name)) &&
@@ -305,7 +311,10 @@ func (c *TaskScheduleController) cleanupHistory(item resources.TaskSchedule) (in
 }
 
 func (c *TaskScheduleController) generatedTasks(item resources.TaskSchedule) []resources.Task {
-	all := c.taskStore.List()
+	all, err := c.taskStore.List()
+	if err != nil {
+		return nil
+	}
 	out := make([]resources.Task, 0, len(all))
 	for _, task := range all {
 		labels := task.Metadata.Labels
@@ -390,7 +399,10 @@ func (c *TaskScheduleController) upsertTaskSchedule(item resources.TaskSchedule)
 			lastErr = err
 		}
 
-		current, ok := c.taskScheduleStore.Get(store.ScopedName(item.Metadata.Namespace, item.Metadata.Name))
+		current, ok, err := c.taskScheduleStore.Get(store.ScopedName(item.Metadata.Namespace, item.Metadata.Name))
+		if err != nil {
+			return err
+		}
 		if !ok {
 			return lastErr
 		}

@@ -11,14 +11,14 @@ import (
 // grant to invoke the tool, so resuming a message after approval does not loop
 // on approval_required for every fresh agent worker run.
 type GovernedToolApprovalContext struct {
-	Getter    func(key string) (resources.ToolApproval, bool)
+	Getter    func(key string) (resources.ToolApproval, bool, error)
 	TaskKey   string
 	MessageID string
 }
 
 type approvedToolGrantAuthorizer struct {
 	inner     ToolCallAuthorizer
-	getter    func(key string) (resources.ToolApproval, bool)
+	getter    func(key string) (resources.ToolApproval, bool, error)
 	taskKey   string
 	messageID string
 }
@@ -26,7 +26,7 @@ type approvedToolGrantAuthorizer struct {
 // NewAuthorizerWithApprovedToolGrant wraps inner (typically AgentToolAuthorizer).
 // When inner requires approval, it allows the call if the ToolApproval row for
 // (taskKey, messageID) is Approved and its spec.tool matches the requested tool.
-func NewAuthorizerWithApprovedToolGrant(inner ToolCallAuthorizer, getter func(key string) (resources.ToolApproval, bool), taskKey, messageID string) ToolCallAuthorizer {
+func NewAuthorizerWithApprovedToolGrant(inner ToolCallAuthorizer, getter func(key string) (resources.ToolApproval, bool, error), taskKey, messageID string) ToolCallAuthorizer {
 	if inner == nil || getter == nil {
 		return inner
 	}
@@ -49,7 +49,10 @@ func (a *approvedToolGrantAuthorizer) Authorize(tool string, spec resources.Tool
 		return out, err
 	}
 	key := ToolApprovalScopedStoreKey(a.taskKey, a.messageID)
-	row, ok := a.getter(key)
+	row, ok, getErr := a.getter(key)
+	if getErr != nil {
+		return out, getErr
+	}
 	if !ok {
 		return out, err
 	}

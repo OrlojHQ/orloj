@@ -78,13 +78,21 @@ func (c *McpServerController) runWorker(ctx context.Context, queue *keyQueue) {
 }
 
 func (c *McpServerController) enqueueAll(queue *keyQueue) {
-	for _, item := range c.store.List() {
+	_itemList, err := c.store.List()
+	if err != nil {
+		return
+	}
+	for _, item := range _itemList {
 		queue.Enqueue(store.ScopedName(item.Metadata.Namespace, item.Metadata.Name))
 	}
 }
 
 func (c *McpServerController) ReconcileOnce(ctx context.Context) error {
-	for _, item := range c.store.List() {
+	_itemList, err := c.store.List()
+	if err != nil {
+		return err
+	}
+	for _, item := range _itemList {
 		if err := c.reconcileByName(ctx, store.ScopedName(item.Metadata.Namespace, item.Metadata.Name)); err != nil {
 			return err
 		}
@@ -93,7 +101,10 @@ func (c *McpServerController) ReconcileOnce(ctx context.Context) error {
 }
 
 func (c *McpServerController) reconcileByName(ctx context.Context, name string) error {
-	server, ok := c.store.Get(name)
+	server, ok, err := c.store.Get(name)
+	if err != nil {
+		return err
+	}
 	if !ok {
 		c.garbageCollectTools(name)
 		return nil
@@ -107,7 +118,7 @@ func (c *McpServerController) reconcileByName(ctx context.Context, name string) 
 		server.Status.Phase = "Ready"
 		server.Status.LastError = ""
 		server.Status.ObservedGeneration = server.Metadata.Generation
-		_, err := c.store.Upsert(server)
+		_, err = c.store.Upsert(server)
 		return err
 	}
 
@@ -207,7 +218,11 @@ func (c *McpServerController) deleteOrphanedTools(server resources.McpServer, cu
 	for _, name := range currentNames {
 		current[name] = struct{}{}
 	}
-	for _, tool := range c.toolStore.List() {
+	_toolList, err := c.toolStore.List()
+	if err != nil {
+		return
+	}
+	for _, tool := range _toolList {
 		if tool.Metadata.Labels[mcpOwnerLabel] != serverName {
 			continue
 		}
@@ -227,7 +242,11 @@ func (c *McpServerController) garbageCollectTools(serverKey string) {
 	if len(parts) == 2 {
 		serverName = parts[1]
 	}
-	for _, tool := range c.toolStore.List() {
+	_toolList, err := c.toolStore.List()
+	if err != nil {
+		return
+	}
+	for _, tool := range _toolList {
 		if tool.Metadata.Labels[mcpOwnerLabel] != serverName {
 			continue
 		}

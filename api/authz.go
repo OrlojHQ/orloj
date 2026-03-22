@@ -1,6 +1,7 @@
 package api
 
 import (
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -29,20 +30,29 @@ func loadAuthConfig() authConfig {
 	rawList := strings.TrimSpace(os.Getenv("ORLOJ_API_TOKENS"))
 	if rawList != "" {
 		pairs := strings.Split(rawList, ",")
+		skipped := 0
 		for _, pair := range pairs {
 			parts := strings.SplitN(strings.TrimSpace(pair), ":", 2)
 			if len(parts) != 2 {
+				skipped++
 				continue
 			}
 			token := strings.TrimSpace(parts[0])
 			role := strings.ToLower(strings.TrimSpace(parts[1]))
 			if token == "" {
+				skipped++
 				continue
 			}
 			if role == "" {
 				role = "reader"
 			}
 			cfg.tokens[token] = role
+		}
+		if skipped > 0 {
+			log.Printf("WARNING: ORLOJ_API_TOKENS: %d malformed token entries skipped (expected token:role pairs)", skipped)
+		}
+		if len(cfg.tokens) == 0 && len(pairs) > 0 {
+			log.Fatalf("ORLOJ_API_TOKENS is set but all %d entries are malformed — refusing to start with auth disabled", len(pairs))
 		}
 	}
 
@@ -121,8 +131,11 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 func requiredRoleForRequest(r *http.Request) string {
 	path := strings.TrimSpace(r.URL.Path)
 	method := strings.ToUpper(strings.TrimSpace(r.Method))
-	if path == "/healthz" || path == "/metrics" {
+	if path == "/healthz" {
 		return ""
+	}
+	if path == "/metrics" {
+		return "reader"
 	}
 	if path == "/ui" || strings.HasPrefix(path, "/ui/") {
 		return ""
@@ -131,7 +144,7 @@ func requiredRoleForRequest(r *http.Request) string {
 		return ""
 	}
 	if strings.HasPrefix(path, "/v1/webhook-deliveries/") {
-		return ""
+		return "writer"
 	}
 	if method == http.MethodGet || method == http.MethodHead || method == http.MethodOptions {
 		return "reader"

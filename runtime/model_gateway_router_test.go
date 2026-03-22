@@ -26,18 +26,18 @@ type stubModelEndpointLookup struct {
 	items map[string]resources.ModelEndpoint
 }
 
-func (s *stubModelEndpointLookup) Get(name string) (resources.ModelEndpoint, bool) {
+func (s *stubModelEndpointLookup) Get(name string) (resources.ModelEndpoint, bool, error) {
 	item, ok := s.items[name]
-	return item, ok
+	return item, ok, nil
 }
 
 type stubSecretLookup struct {
 	items map[string]resources.Secret
 }
 
-func (s *stubSecretLookup) Get(name string) (resources.Secret, bool) {
+func (s *stubSecretLookup) Get(name string) (resources.Secret, bool, error) {
 	item, ok := s.items[name]
-	return item, ok
+	return item, ok, nil
 }
 
 func TestModelRouterUsesFallbackWithoutModelRef(t *testing.T) {

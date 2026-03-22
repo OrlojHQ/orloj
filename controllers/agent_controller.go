@@ -56,7 +56,11 @@ func (c *AgentController) runWorker(ctx context.Context, queue *keyQueue) {
 }
 
 func (c *AgentController) enqueueAll(queue *keyQueue) {
-	for _, agent := range c.store.List() {
+	_agentList, err := c.store.List()
+	if err != nil {
+		return
+	}
+	for _, agent := range _agentList {
 		queue.Enqueue(store.ScopedName(agent.Metadata.Namespace, agent.Metadata.Name))
 	}
 	for _, running := range c.runtime.RunningAgents() {
@@ -66,7 +70,11 @@ func (c *AgentController) enqueueAll(queue *keyQueue) {
 
 func (c *AgentController) ReconcileOnce(_ context.Context) error {
 	desired := make(map[string]struct{})
-	for _, agent := range c.store.List() {
+	_agentList, err := c.store.List()
+	if err != nil {
+		return err
+	}
+	for _, agent := range _agentList {
 		desired[store.ScopedName(agent.Metadata.Namespace, agent.Metadata.Name)] = struct{}{}
 		c.runtime.EnsureRunning(agent)
 	}
@@ -80,7 +88,10 @@ func (c *AgentController) ReconcileOnce(_ context.Context) error {
 }
 
 func (c *AgentController) reconcileByName(name string) error {
-	agent, ok := c.store.Get(name)
+	agent, ok, err := c.store.Get(name)
+	if err != nil {
+		return err
+	}
 	if !ok {
 		c.runtime.Stop(name)
 		return nil

@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -23,7 +24,8 @@ func TestTaskStoreClaimAndRenewLease(t *testing.T) {
 		t.Fatalf("upsert failed: %v", err)
 	}
 
-	claimed, ok, err := s.ClaimIfDue("t1", "worker-a", 50*time.Millisecond)
+	bg := context.Background()
+	claimed, ok, err := s.ClaimIfDue(bg, "t1", "worker-a", 50*time.Millisecond)
 	if err != nil {
 		t.Fatalf("claim failed: %v", err)
 	}
@@ -37,11 +39,11 @@ func TestTaskStoreClaimAndRenewLease(t *testing.T) {
 		t.Fatalf("expected claimedBy=worker-a, got %q", claimed.Status.ClaimedBy)
 	}
 
-	if err := s.RenewLease("t1", "worker-a", 50*time.Millisecond); err != nil {
+	if err := s.RenewLease(bg, "t1", "worker-a", 50*time.Millisecond); err != nil {
 		t.Fatalf("renew lease failed: %v", err)
 	}
 
-	if err := s.RenewLease("t1", "worker-b", 50*time.Millisecond); err == nil {
+	if err := s.RenewLease(bg, "t1", "worker-b", 50*time.Millisecond); err == nil {
 		t.Fatal("expected renew lease to fail for non-owner worker")
 	}
 }
@@ -61,20 +63,21 @@ func TestTaskStoreClaimFailoverOnLeaseExpiry(t *testing.T) {
 		t.Fatalf("upsert failed: %v", err)
 	}
 
-	if _, ok, err := s.ClaimIfDue("t2", "worker-a", 20*time.Millisecond); err != nil {
+	bg := context.Background()
+	if _, ok, err := s.ClaimIfDue(bg, "t2", "worker-a", 20*time.Millisecond); err != nil {
 		t.Fatalf("first claim failed: %v", err)
 	} else if !ok {
 		t.Fatal("expected first claim success")
 	}
 
-	if _, ok, err := s.ClaimIfDue("t2", "worker-b", 20*time.Millisecond); err != nil {
+	if _, ok, err := s.ClaimIfDue(bg, "t2", "worker-b", 20*time.Millisecond); err != nil {
 		t.Fatalf("second claim before expiry failed: %v", err)
 	} else if ok {
 		t.Fatal("expected second claim to fail before lease expiry")
 	}
 
 	time.Sleep(30 * time.Millisecond)
-	claimed, ok, err := s.ClaimIfDue("t2", "worker-b", 20*time.Millisecond)
+	claimed, ok, err := s.ClaimIfDue(bg, "t2", "worker-b", 20*time.Millisecond)
 	if err != nil {
 		t.Fatalf("claim after expiry failed: %v", err)
 	}

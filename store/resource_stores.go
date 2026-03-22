@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"reflect"
@@ -70,29 +71,21 @@ func (s *AgentSystemStore) Upsert(item resources.AgentSystem) (resources.AgentSy
 	return item, nil
 }
 
-func (s *AgentSystemStore) Get(name string) (resources.AgentSystem, bool) {
+func (s *AgentSystemStore) Get(name string) (resources.AgentSystem, bool, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		item, ok, err := getFromTable[resources.AgentSystem](s.db, tableAgentSystems, key)
-		if err != nil {
-			return resources.AgentSystem{}, false
-		}
-		return item, ok
+		return getFromTable[resources.AgentSystem](s.db, tableAgentSystems, key)
 	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	item, ok := s.items[key]
-	return item, ok
+	return item, ok, nil
 }
 
-func (s *AgentSystemStore) List() []resources.AgentSystem {
+func (s *AgentSystemStore) List() ([]resources.AgentSystem, error) {
 	if s.db != nil {
-		items, err := listFromTable[resources.AgentSystem](s.db, tableAgentSystems)
-		if err != nil {
-			return []resources.AgentSystem{}
-		}
-		return items
+		return listFromTable[resources.AgentSystem](s.db, tableAgentSystems)
 	}
 
 	s.mu.RLock()
@@ -104,7 +97,7 @@ func (s *AgentSystemStore) List() []resources.AgentSystem {
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].Metadata.Name < out[j].Metadata.Name
 	})
-	return out
+	return out, nil
 }
 
 func (s *AgentSystemStore) Delete(name string) error {
@@ -187,29 +180,21 @@ func (s *ModelEndpointStore) Upsert(item resources.ModelEndpoint) (resources.Mod
 	return item, nil
 }
 
-func (s *ModelEndpointStore) Get(name string) (resources.ModelEndpoint, bool) {
+func (s *ModelEndpointStore) Get(name string) (resources.ModelEndpoint, bool, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		item, ok, err := getFromTable[resources.ModelEndpoint](s.db, tableModelEndpoints, key)
-		if err != nil {
-			return resources.ModelEndpoint{}, false
-		}
-		return item, ok
+		return getFromTable[resources.ModelEndpoint](s.db, tableModelEndpoints, key)
 	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	item, ok := s.items[key]
-	return item, ok
+	return item, ok, nil
 }
 
-func (s *ModelEndpointStore) List() []resources.ModelEndpoint {
+func (s *ModelEndpointStore) List() ([]resources.ModelEndpoint, error) {
 	if s.db != nil {
-		items, err := listFromTable[resources.ModelEndpoint](s.db, tableModelEndpoints)
-		if err != nil {
-			return []resources.ModelEndpoint{}
-		}
-		return items
+		return listFromTable[resources.ModelEndpoint](s.db, tableModelEndpoints)
 	}
 
 	s.mu.RLock()
@@ -221,7 +206,7 @@ func (s *ModelEndpointStore) List() []resources.ModelEndpoint {
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].Metadata.Name < out[j].Metadata.Name
 	})
-	return out
+	return out, nil
 }
 
 func (s *ModelEndpointStore) Delete(name string) error {
@@ -304,29 +289,21 @@ func (s *ToolStore) Upsert(item resources.Tool) (resources.Tool, error) {
 	return item, nil
 }
 
-func (s *ToolStore) Get(name string) (resources.Tool, bool) {
+func (s *ToolStore) Get(name string) (resources.Tool, bool, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		item, ok, err := getFromTable[resources.Tool](s.db, tableTools, key)
-		if err != nil {
-			return resources.Tool{}, false
-		}
-		return item, ok
+		return getFromTable[resources.Tool](s.db, tableTools, key)
 	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	item, ok := s.items[key]
-	return item, ok
+	return item, ok, nil
 }
 
-func (s *ToolStore) List() []resources.Tool {
+func (s *ToolStore) List() ([]resources.Tool, error) {
 	if s.db != nil {
-		items, err := listFromTable[resources.Tool](s.db, tableTools)
-		if err != nil {
-			return []resources.Tool{}
-		}
-		return items
+		return listFromTable[resources.Tool](s.db, tableTools)
 	}
 
 	s.mu.RLock()
@@ -338,7 +315,7 @@ func (s *ToolStore) List() []resources.Tool {
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].Metadata.Name < out[j].Metadata.Name
 	})
-	return out
+	return out, nil
 }
 
 func (s *ToolStore) Delete(name string) error {
@@ -451,40 +428,36 @@ func (s *SecretStore) getDecrypted(key string) (resources.Secret, bool, error) {
 	return item, true, nil
 }
 
-func (s *SecretStore) Get(name string) (resources.Secret, bool) {
+func (s *SecretStore) Get(name string) (resources.Secret, bool, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		item, ok, err := s.getDecrypted(key)
-		if err != nil {
-			return resources.Secret{}, false
-		}
-		return item, ok
+		return s.getDecrypted(key)
 	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	item, ok := s.items[key]
-	return item, ok
+	return item, ok, nil
 }
 
-func (s *SecretStore) List() []resources.Secret {
+func (s *SecretStore) List() ([]resources.Secret, error) {
 	if s.db != nil {
 		items, err := listFromTable[resources.Secret](s.db, tableSecrets)
 		if err != nil {
-			return []resources.Secret{}
+			return nil, err
 		}
 		if len(s.encryptionKey) > 0 {
 			for i := range items {
 				if len(items[i].Spec.Data) > 0 {
 					dec, err := decryptSecretData(s.encryptionKey, items[i].Spec.Data)
 					if err != nil {
-						return []resources.Secret{}
+						return nil, err
 					}
 					items[i].Spec.Data = dec
 				}
 			}
 		}
-		return items
+		return items, nil
 	}
 
 	s.mu.RLock()
@@ -496,7 +469,7 @@ func (s *SecretStore) List() []resources.Secret {
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].Metadata.Name < out[j].Metadata.Name
 	})
-	return out
+	return out, nil
 }
 
 func (s *SecretStore) Delete(name string) error {
@@ -579,29 +552,21 @@ func (s *MemoryStore) Upsert(item resources.Memory) (resources.Memory, error) {
 	return item, nil
 }
 
-func (s *MemoryStore) Get(name string) (resources.Memory, bool) {
+func (s *MemoryStore) Get(name string) (resources.Memory, bool, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		item, ok, err := getFromTable[resources.Memory](s.db, tableMemories, key)
-		if err != nil {
-			return resources.Memory{}, false
-		}
-		return item, ok
+		return getFromTable[resources.Memory](s.db, tableMemories, key)
 	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	item, ok := s.items[key]
-	return item, ok
+	return item, ok, nil
 }
 
-func (s *MemoryStore) List() []resources.Memory {
+func (s *MemoryStore) List() ([]resources.Memory, error) {
 	if s.db != nil {
-		items, err := listFromTable[resources.Memory](s.db, tableMemories)
-		if err != nil {
-			return []resources.Memory{}
-		}
-		return items
+		return listFromTable[resources.Memory](s.db, tableMemories)
 	}
 
 	s.mu.RLock()
@@ -613,7 +578,7 @@ func (s *MemoryStore) List() []resources.Memory {
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].Metadata.Name < out[j].Metadata.Name
 	})
-	return out
+	return out, nil
 }
 
 func (s *MemoryStore) Delete(name string) error {
@@ -696,29 +661,21 @@ func (s *AgentPolicyStore) Upsert(item resources.AgentPolicy) (resources.AgentPo
 	return item, nil
 }
 
-func (s *AgentPolicyStore) Get(name string) (resources.AgentPolicy, bool) {
+func (s *AgentPolicyStore) Get(name string) (resources.AgentPolicy, bool, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		item, ok, err := getFromTable[resources.AgentPolicy](s.db, tableAgentPolicies, key)
-		if err != nil {
-			return resources.AgentPolicy{}, false
-		}
-		return item, ok
+		return getFromTable[resources.AgentPolicy](s.db, tableAgentPolicies, key)
 	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	item, ok := s.items[key]
-	return item, ok
+	return item, ok, nil
 }
 
-func (s *AgentPolicyStore) List() []resources.AgentPolicy {
+func (s *AgentPolicyStore) List() ([]resources.AgentPolicy, error) {
 	if s.db != nil {
-		items, err := listFromTable[resources.AgentPolicy](s.db, tableAgentPolicies)
-		if err != nil {
-			return []resources.AgentPolicy{}
-		}
-		return items
+		return listFromTable[resources.AgentPolicy](s.db, tableAgentPolicies)
 	}
 
 	s.mu.RLock()
@@ -730,7 +687,7 @@ func (s *AgentPolicyStore) List() []resources.AgentPolicy {
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].Metadata.Name < out[j].Metadata.Name
 	})
-	return out
+	return out, nil
 }
 
 func (s *AgentPolicyStore) Delete(name string) error {
@@ -813,29 +770,21 @@ func (s *AgentRoleStore) Upsert(item resources.AgentRole) (resources.AgentRole, 
 	return item, nil
 }
 
-func (s *AgentRoleStore) Get(name string) (resources.AgentRole, bool) {
+func (s *AgentRoleStore) Get(name string) (resources.AgentRole, bool, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		item, ok, err := getFromTable[resources.AgentRole](s.db, tableAgentRoles, key)
-		if err != nil {
-			return resources.AgentRole{}, false
-		}
-		return item, ok
+		return getFromTable[resources.AgentRole](s.db, tableAgentRoles, key)
 	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	item, ok := s.items[key]
-	return item, ok
+	return item, ok, nil
 }
 
-func (s *AgentRoleStore) List() []resources.AgentRole {
+func (s *AgentRoleStore) List() ([]resources.AgentRole, error) {
 	if s.db != nil {
-		items, err := listFromTable[resources.AgentRole](s.db, tableAgentRoles)
-		if err != nil {
-			return []resources.AgentRole{}
-		}
-		return items
+		return listFromTable[resources.AgentRole](s.db, tableAgentRoles)
 	}
 
 	s.mu.RLock()
@@ -847,7 +796,7 @@ func (s *AgentRoleStore) List() []resources.AgentRole {
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].Metadata.Name < out[j].Metadata.Name
 	})
-	return out
+	return out, nil
 }
 
 func (s *AgentRoleStore) Delete(name string) error {
@@ -930,29 +879,21 @@ func (s *ToolPermissionStore) Upsert(item resources.ToolPermission) (resources.T
 	return item, nil
 }
 
-func (s *ToolPermissionStore) Get(name string) (resources.ToolPermission, bool) {
+func (s *ToolPermissionStore) Get(name string) (resources.ToolPermission, bool, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		item, ok, err := getFromTable[resources.ToolPermission](s.db, tableToolPermissions, key)
-		if err != nil {
-			return resources.ToolPermission{}, false
-		}
-		return item, ok
+		return getFromTable[resources.ToolPermission](s.db, tableToolPermissions, key)
 	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	item, ok := s.items[key]
-	return item, ok
+	return item, ok, nil
 }
 
-func (s *ToolPermissionStore) List() []resources.ToolPermission {
+func (s *ToolPermissionStore) List() ([]resources.ToolPermission, error) {
 	if s.db != nil {
-		items, err := listFromTable[resources.ToolPermission](s.db, tableToolPermissions)
-		if err != nil {
-			return []resources.ToolPermission{}
-		}
-		return items
+		return listFromTable[resources.ToolPermission](s.db, tableToolPermissions)
 	}
 
 	s.mu.RLock()
@@ -964,7 +905,7 @@ func (s *ToolPermissionStore) List() []resources.ToolPermission {
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].Metadata.Name < out[j].Metadata.Name
 	})
-	return out
+	return out, nil
 }
 
 func (s *ToolPermissionStore) Delete(name string) error {
@@ -1047,29 +988,21 @@ func (s *ToolApprovalStore) Upsert(item resources.ToolApproval) (resources.ToolA
 	return item, nil
 }
 
-func (s *ToolApprovalStore) Get(name string) (resources.ToolApproval, bool) {
+func (s *ToolApprovalStore) Get(name string) (resources.ToolApproval, bool, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		item, ok, err := getFromTable[resources.ToolApproval](s.db, tableToolApprovals, key)
-		if err != nil {
-			return resources.ToolApproval{}, false
-		}
-		return item, ok
+		return getFromTable[resources.ToolApproval](s.db, tableToolApprovals, key)
 	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	item, ok := s.items[key]
-	return item, ok
+	return item, ok, nil
 }
 
-func (s *ToolApprovalStore) List() []resources.ToolApproval {
+func (s *ToolApprovalStore) List() ([]resources.ToolApproval, error) {
 	if s.db != nil {
-		items, err := listFromTable[resources.ToolApproval](s.db, tableToolApprovals)
-		if err != nil {
-			return []resources.ToolApproval{}
-		}
-		return items
+		return listFromTable[resources.ToolApproval](s.db, tableToolApprovals)
 	}
 
 	s.mu.RLock()
@@ -1081,7 +1014,7 @@ func (s *ToolApprovalStore) List() []resources.ToolApproval {
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].Metadata.Name < out[j].Metadata.Name
 	})
-	return out
+	return out, nil
 }
 
 func (s *ToolApprovalStore) Delete(name string) error {
@@ -1192,29 +1125,21 @@ func (s *TaskScheduleStore) Upsert(item resources.TaskSchedule) (resources.TaskS
 	return item, nil
 }
 
-func (s *TaskScheduleStore) Get(name string) (resources.TaskSchedule, bool) {
+func (s *TaskScheduleStore) Get(name string) (resources.TaskSchedule, bool, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		item, ok, err := getFromTable[resources.TaskSchedule](s.db, tableTaskSchedules, key)
-		if err != nil {
-			return resources.TaskSchedule{}, false
-		}
-		return item, ok
+		return getFromTable[resources.TaskSchedule](s.db, tableTaskSchedules, key)
 	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	item, ok := s.items[key]
-	return item, ok
+	return item, ok, nil
 }
 
-func (s *TaskScheduleStore) List() []resources.TaskSchedule {
+func (s *TaskScheduleStore) List() ([]resources.TaskSchedule, error) {
 	if s.db != nil {
-		items, err := listFromTable[resources.TaskSchedule](s.db, tableTaskSchedules)
-		if err != nil {
-			return []resources.TaskSchedule{}
-		}
-		return items
+		return listFromTable[resources.TaskSchedule](s.db, tableTaskSchedules)
 	}
 
 	s.mu.RLock()
@@ -1226,7 +1151,7 @@ func (s *TaskScheduleStore) List() []resources.TaskSchedule {
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].Metadata.Name < out[j].Metadata.Name
 	})
-	return out
+	return out, nil
 }
 
 func (s *TaskScheduleStore) Delete(name string) error {
@@ -1296,29 +1221,21 @@ func (s *TaskWebhookStore) Upsert(item resources.TaskWebhook) (resources.TaskWeb
 	return item, nil
 }
 
-func (s *TaskWebhookStore) Get(name string) (resources.TaskWebhook, bool) {
+func (s *TaskWebhookStore) Get(name string) (resources.TaskWebhook, bool, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		item, ok, err := getFromTable[resources.TaskWebhook](s.db, tableTaskWebhooks, key)
-		if err != nil {
-			return resources.TaskWebhook{}, false
-		}
-		return item, ok
+		return getFromTable[resources.TaskWebhook](s.db, tableTaskWebhooks, key)
 	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	item, ok := s.items[key]
-	return item, ok
+	return item, ok, nil
 }
 
-func (s *TaskWebhookStore) List() []resources.TaskWebhook {
+func (s *TaskWebhookStore) List() ([]resources.TaskWebhook, error) {
 	if s.db != nil {
-		items, err := listFromTable[resources.TaskWebhook](s.db, tableTaskWebhooks)
-		if err != nil {
-			return []resources.TaskWebhook{}
-		}
-		return items
+		return listFromTable[resources.TaskWebhook](s.db, tableTaskWebhooks)
 	}
 
 	s.mu.RLock()
@@ -1330,7 +1247,7 @@ func (s *TaskWebhookStore) List() []resources.TaskWebhook {
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].Metadata.Name < out[j].Metadata.Name
 	})
-	return out
+	return out, nil
 }
 
 func (s *TaskWebhookStore) Delete(name string) error {
@@ -1408,29 +1325,21 @@ func (s *WorkerStore) Upsert(item resources.Worker) (resources.Worker, error) {
 	return item, nil
 }
 
-func (s *WorkerStore) Get(name string) (resources.Worker, bool) {
+func (s *WorkerStore) Get(name string) (resources.Worker, bool, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		item, ok, err := getFromTable[resources.Worker](s.db, tableWorkers, key)
-		if err != nil {
-			return resources.Worker{}, false
-		}
-		return item, ok
+		return getFromTable[resources.Worker](s.db, tableWorkers, key)
 	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	item, ok := s.items[key]
-	return item, ok
+	return item, ok, nil
 }
 
-func (s *WorkerStore) List() []resources.Worker {
+func (s *WorkerStore) List() ([]resources.Worker, error) {
 	if s.db != nil {
-		items, err := listFromTable[resources.Worker](s.db, tableWorkers)
-		if err != nil {
-			return []resources.Worker{}
-		}
-		return items
+		return listFromTable[resources.Worker](s.db, tableWorkers)
 	}
 
 	s.mu.RLock()
@@ -1442,7 +1351,7 @@ func (s *WorkerStore) List() []resources.Worker {
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].Metadata.Name < out[j].Metadata.Name
 	})
-	return out
+	return out, nil
 }
 
 func (s *WorkerStore) Delete(name string) error {
@@ -1467,10 +1376,10 @@ func (s *WorkerStore) Delete(name string) error {
 	return nil
 }
 
-func (s *WorkerStore) TryAcquireSlot(name string) (resources.Worker, bool, error) {
+func (s *WorkerStore) TryAcquireSlot(ctx context.Context, name string) (resources.Worker, bool, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		return tryAcquireWorkerSlotSQL(s.db, key)
+		return tryAcquireWorkerSlotSQL(ctx, s.db, key)
 	}
 
 	s.mu.Lock()
@@ -1502,10 +1411,10 @@ func (s *WorkerStore) TryAcquireSlot(name string) (resources.Worker, bool, error
 	return worker, true, nil
 }
 
-func (s *WorkerStore) ReleaseSlot(name string) error {
+func (s *WorkerStore) ReleaseSlot(ctx context.Context, name string) error {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		return releaseWorkerSlotSQL(s.db, key)
+		return releaseWorkerSlotSQL(ctx, s.db, key)
 	}
 
 	s.mu.Lock()
@@ -1592,29 +1501,25 @@ func (s *TaskStore) Upsert(item resources.Task) (resources.Task, error) {
 	return item, nil
 }
 
-func (s *TaskStore) Get(name string) (resources.Task, bool) {
+func (s *TaskStore) Get(name string) (resources.Task, bool, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		item, ok, err := getFromTable[resources.Task](s.db, tableTasks, key)
-		if err != nil {
-			return resources.Task{}, false
-		}
-		return item, ok
+		return getFromTable[resources.Task](s.db, tableTasks, key)
 	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	item, ok := s.items[key]
-	return item, ok
+	return item, ok, nil
 }
 
-func (s *TaskStore) List() []resources.Task {
+func (s *TaskStore) List() ([]resources.Task, error) {
+	return s.ListPaged(0, 0)
+}
+
+func (s *TaskStore) ListPaged(limit, offset int) ([]resources.Task, error) {
 	if s.db != nil {
-		items, err := listFromTable[resources.Task](s.db, tableTasks)
-		if err != nil {
-			return []resources.Task{}
-		}
-		return items
+		return listFromTablePaged[resources.Task](s.db, tableTasks, limit, offset)
 	}
 
 	s.mu.RLock()
@@ -1626,7 +1531,16 @@ func (s *TaskStore) List() []resources.Task {
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].Metadata.Name < out[j].Metadata.Name
 	})
-	return out
+	if offset > 0 {
+		if offset >= len(out) {
+			return []resources.Task{}, nil
+		}
+		out = out[offset:]
+	}
+	if limit > 0 && limit < len(out) {
+		out = out[:limit]
+	}
+	return out, nil
 }
 
 func (s *TaskStore) Delete(name string) error {
@@ -1692,10 +1606,10 @@ func (s *TaskStore) Logs(name string) ([]string, error) {
 	return out, nil
 }
 
-func (s *TaskStore) ClaimIfDue(name, workerID string, lease time.Duration) (resources.Task, bool, error) {
+func (s *TaskStore) ClaimIfDue(ctx context.Context, name, workerID string, lease time.Duration) (resources.Task, bool, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		return claimTaskSQL(s.db, key, workerID, lease)
+		return claimTaskSQL(ctx, s.db, key, workerID, lease)
 	}
 
 	if lease <= 0 {
@@ -1721,9 +1635,9 @@ func (s *TaskStore) ClaimIfDue(name, workerID string, lease time.Duration) (reso
 	return claimedTask, true, nil
 }
 
-func (s *TaskStore) ClaimNextDue(workerID string, lease time.Duration, matches func(resources.Task) bool) (resources.Task, bool, error) {
+func (s *TaskStore) ClaimNextDue(ctx context.Context, workerID string, lease time.Duration, hints WorkerClaimHints, matches func(resources.Task) bool) (resources.Task, bool, error) {
 	if s.db != nil {
-		return claimNextDueTaskSQL(s.db, workerID, lease, matches)
+		return claimNextDueTaskSQL(ctx, s.db, workerID, lease, hints, matches)
 	}
 	if lease <= 0 {
 		lease = 30 * time.Second
@@ -1756,10 +1670,10 @@ func (s *TaskStore) ClaimNextDue(workerID string, lease time.Duration, matches f
 	return resources.Task{}, false, nil
 }
 
-func (s *TaskStore) RenewLease(name, workerID string, lease time.Duration) error {
+func (s *TaskStore) RenewLease(ctx context.Context, name, workerID string, lease time.Duration) error {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		return renewTaskLeaseSQL(s.db, key, workerID, lease)
+		return renewTaskLeaseSQL(ctx, s.db, key, workerID, lease)
 	}
 
 	if lease <= 0 {
@@ -1943,28 +1857,20 @@ func (s *McpServerStore) Upsert(item resources.McpServer) (resources.McpServer, 
 	return item, nil
 }
 
-func (s *McpServerStore) Get(name string) (resources.McpServer, bool) {
+func (s *McpServerStore) Get(name string) (resources.McpServer, bool, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		item, ok, err := getFromTable[resources.McpServer](s.db, tableMcpServers, key)
-		if err != nil {
-			return resources.McpServer{}, false
-		}
-		return item, ok
+		return getFromTable[resources.McpServer](s.db, tableMcpServers, key)
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	item, ok := s.items[key]
-	return item, ok
+	return item, ok, nil
 }
 
-func (s *McpServerStore) List() []resources.McpServer {
+func (s *McpServerStore) List() ([]resources.McpServer, error) {
 	if s.db != nil {
-		items, err := listFromTable[resources.McpServer](s.db, tableMcpServers)
-		if err != nil {
-			return []resources.McpServer{}
-		}
-		return items
+		return listFromTable[resources.McpServer](s.db, tableMcpServers)
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1975,7 +1881,7 @@ func (s *McpServerStore) List() []resources.McpServer {
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].Metadata.Name < out[j].Metadata.Name
 	})
-	return out
+	return out, nil
 }
 
 func (s *McpServerStore) Delete(name string) error {

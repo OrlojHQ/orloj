@@ -109,6 +109,9 @@ func OpenStores(cfg StoreConfig, logger *log.Logger) (*StoreSet, error) {
 		if cfg.ConnMaxLifetime > 0 {
 			db.SetConnMaxLifetime(cfg.ConnMaxLifetime)
 		}
+		// Evict idle connections after 5 minutes so firewalls/load-balancers
+		// that silently close idle TCP connections don't hand us broken conns.
+		db.SetConnMaxIdleTime(5 * time.Minute)
 
 		pingCtx, pingCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		if err := db.PingContext(pingCtx); err != nil {

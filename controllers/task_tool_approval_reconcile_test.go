@@ -60,7 +60,10 @@ func TestReconcileWaitingApprovalSweepResumesAfterApprove(t *testing.T) {
 		t.Fatalf("sweep: %v", err)
 	}
 
-	task, ok := h.taskStore.Get(taskKey)
+	task, ok, err := h.taskStore.Get(taskKey)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !ok {
 		t.Fatal("task missing after sweep")
 	}

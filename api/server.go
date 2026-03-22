@@ -10,11 +10,14 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/time/rate"
+
 	"github.com/OrlojHQ/orloj/eventbus"
 	"github.com/OrlojHQ/orloj/frontend"
 	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/runtime"
 	"github.com/OrlojHQ/orloj/store"
+	"github.com/OrlojHQ/orloj/telemetry"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -146,8 +149,37 @@ func (s *Server) SetMemoryBackends(registry *agentruntime.PersistentMemoryBacken
 	s.memoryBackends = registry
 }
 
+// maxRequestBodyBytes is the hard cap on incoming request bodies for all
+// non-streaming endpoints. 4 MB is generous for any control-plane resource
+// manifest while still preventing OOM from malicious or misconfigured clients.
+const maxRequestBodyBytes = 4 * 1024 * 1024
+
+func (s *Server) withBodyLimit(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Body != nil && r.Method != http.MethodGet && r.Method != http.MethodHead {
+			r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// globalRateLimiter caps the API server to 500 requests/second with a burst
+// of 100 to handle short spikes. This is a simple global limiter; deploy a
+// reverse proxy for per-client or per-IP limiting at scale.
+var globalRateLimiter = rate.NewLimiter(rate.Limit(500), 100)
+
+func withRateLimit(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !globalRateLimiter.Allow() {
+			http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (s *Server) Handler() http.Handler {
-	return s.withAuth(s.mux)
+	return withRateLimit(s.withBodyLimit(s.withAuth(s.mux)))
 }
 
 func (s *Server) routes() {
@@ -246,32 +278,68 @@ func (s *Server) handleNamespaces(w http.ResponseWriter, r *http.Request) {
 			seen[ns] = struct{}{}
 		}
 	}
-	for _, item := range s.stores.Agents.List() {
-		collect(item.Metadata.Namespace)
+	if agents, err := s.stores.Agents.List(); writeStoreFetchError(w, err) {
+		return
+	} else {
+		for _, item := range agents {
+			collect(item.Metadata.Namespace)
+		}
 	}
-	for _, item := range s.stores.AgentSystems.List() {
-		collect(item.Metadata.Namespace)
+	if agentSystems, err := s.stores.AgentSystems.List(); writeStoreFetchError(w, err) {
+		return
+	} else {
+		for _, item := range agentSystems {
+			collect(item.Metadata.Namespace)
+		}
 	}
-	for _, item := range s.stores.ModelEPs.List() {
-		collect(item.Metadata.Namespace)
+	if modelEPs, err := s.stores.ModelEPs.List(); writeStoreFetchError(w, err) {
+		return
+	} else {
+		for _, item := range modelEPs {
+			collect(item.Metadata.Namespace)
+		}
 	}
-	for _, item := range s.stores.Tools.List() {
-		collect(item.Metadata.Namespace)
+	if tools, err := s.stores.Tools.List(); writeStoreFetchError(w, err) {
+		return
+	} else {
+		for _, item := range tools {
+			collect(item.Metadata.Namespace)
+		}
 	}
-	for _, item := range s.stores.Secrets.List() {
-		collect(item.Metadata.Namespace)
+	if secrets, err := s.stores.Secrets.List(); writeStoreFetchError(w, err) {
+		return
+	} else {
+		for _, item := range secrets {
+			collect(item.Metadata.Namespace)
+		}
 	}
-	for _, item := range s.stores.Memories.List() {
-		collect(item.Metadata.Namespace)
+	if memories, err := s.stores.Memories.List(); writeStoreFetchError(w, err) {
+		return
+	} else {
+		for _, item := range memories {
+			collect(item.Metadata.Namespace)
+		}
 	}
-	for _, item := range s.stores.Policies.List() {
-		collect(item.Metadata.Namespace)
+	if policies, err := s.stores.Policies.List(); writeStoreFetchError(w, err) {
+		return
+	} else {
+		for _, item := range policies {
+			collect(item.Metadata.Namespace)
+		}
 	}
-	for _, item := range s.stores.Tasks.List() {
-		collect(item.Metadata.Namespace)
+	if tasks, err := s.stores.Tasks.List(); writeStoreFetchError(w, err) {
+		return
+	} else {
+		for _, item := range tasks {
+			collect(item.Metadata.Namespace)
+		}
 	}
-	for _, item := range s.stores.Workers.List() {
-		collect(item.Metadata.Namespace)
+	if workers, err := s.stores.Workers.List(); writeStoreFetchError(w, err) {
+		return
+	} else {
+		for _, item := range workers {
+			collect(item.Metadata.Namespace)
+		}
 	}
 	if len(seen) == 0 {
 		seen[resources.DefaultNamespace] = struct{}{}
@@ -346,7 +414,8 @@ func (s *Server) handleAgentByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		current, ok := s.stores.Agents.Get(key)
+		current, ok, err := s.stores.Agents.Get(key)
+		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("agent %q not found", name), http.StatusNotFound)
 			return
@@ -388,7 +457,9 @@ func (s *Server) createOrUpdateAgent(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if existing, ok := s.stores.Agents.Get(store.ScopedName(agent.Metadata.Namespace, agent.Metadata.Name)); ok {
+	existing, ok, err := s.stores.Agents.Get(store.ScopedName(agent.Metadata.Namespace, agent.Metadata.Name))
+	if writeStoreFetchError(w, err) { return }
+	if ok {
 		agent.Status = existing.Status
 	}
 	agent, err = s.stores.Agents.Upsert(agent)
@@ -402,7 +473,8 @@ func (s *Server) createOrUpdateAgent(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
-	agents := s.stores.Agents.List()
+	agents, err := s.stores.Agents.List()
+	if writeStoreFetchError(w, err) { return }
 	ns, hasNS := namespaceFilter(r)
 	selector, err := labelSelectorFilter(r)
 	if err != nil {
@@ -426,7 +498,8 @@ func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) getAgent(w http.ResponseWriter, key, name string) {
-	agent, ok := s.stores.Agents.Get(key)
+	agent, ok, err := s.stores.Agents.Get(key)
+	if writeStoreFetchError(w, err) { return }
 	if !ok {
 		http.Error(w, fmt.Sprintf("agent %q not found", name), http.StatusNotFound)
 		return
@@ -445,7 +518,9 @@ func (s *Server) deleteAgent(w http.ResponseWriter, r *http.Request, key, name s
 }
 
 func (s *Server) getAgentLogs(w http.ResponseWriter, key, name string) {
-	if _, ok := s.stores.Agents.Get(key); !ok {
+	_, ok, err := s.stores.Agents.Get(key)
+	if writeStoreFetchError(w, err) { return }
+	if !ok {
 		http.Error(w, fmt.Sprintf("agent %q not found", name), http.StatusNotFound)
 		return
 	}
@@ -455,7 +530,8 @@ func (s *Server) getAgentLogs(w http.ResponseWriter, key, name string) {
 func (s *Server) handleAgentSystems(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		items := s.stores.AgentSystems.List()
+		items, err := s.stores.AgentSystems.List()
+		if writeStoreFetchError(w, err) { return }
 		ns, hasNS := namespaceFilter(r)
 		selector, err := labelSelectorFilter(r)
 		if err != nil {
@@ -488,7 +564,9 @@ func (s *Server) handleAgentSystems(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if existing, ok := s.stores.AgentSystems.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name)); ok {
+		existing, ok, err := s.stores.AgentSystems.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
+		if writeStoreFetchError(w, err) { return }
+		if ok {
 			obj.Status = existing.Status
 		}
 		obj, err = s.stores.AgentSystems.Upsert(obj)
@@ -522,7 +600,8 @@ func (s *Server) handleAgentSystemByName(w http.ResponseWriter, r *http.Request)
 	key := scopedNameForRequest(r, name)
 	switch r.Method {
 	case http.MethodGet:
-		obj, ok := s.stores.AgentSystems.Get(key)
+		obj, ok, err := s.stores.AgentSystems.Get(key)
+		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("agentsystem %q not found", name), http.StatusNotFound)
 			return
@@ -546,7 +625,8 @@ func (s *Server) handleAgentSystemByName(w http.ResponseWriter, r *http.Request)
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		current, ok := s.stores.AgentSystems.Get(key)
+		current, ok, err := s.stores.AgentSystems.Get(key)
+		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("agentsystem %q not found", name), http.StatusNotFound)
 			return
@@ -576,7 +656,8 @@ func (s *Server) handleAgentSystemByName(w http.ResponseWriter, r *http.Request)
 func (s *Server) handleModelEndpoints(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		items := s.stores.ModelEPs.List()
+		items, err := s.stores.ModelEPs.List()
+		if writeStoreFetchError(w, err) { return }
 		ns, hasNS := namespaceFilter(r)
 		selector, err := labelSelectorFilter(r)
 		if err != nil {
@@ -609,7 +690,9 @@ func (s *Server) handleModelEndpoints(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if existing, ok := s.stores.ModelEPs.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name)); ok {
+		existing, ok, err := s.stores.ModelEPs.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
+		if writeStoreFetchError(w, err) { return }
+		if ok {
 			obj.Status = existing.Status
 		}
 		obj, err = s.stores.ModelEPs.Upsert(obj)
@@ -643,7 +726,8 @@ func (s *Server) handleModelEndpointByName(w http.ResponseWriter, r *http.Reques
 	key := scopedNameForRequest(r, name)
 	switch r.Method {
 	case http.MethodGet:
-		obj, ok := s.stores.ModelEPs.Get(key)
+		obj, ok, err := s.stores.ModelEPs.Get(key)
+		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("modelendpoint %q not found", name), http.StatusNotFound)
 			return
@@ -667,7 +751,8 @@ func (s *Server) handleModelEndpointByName(w http.ResponseWriter, r *http.Reques
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		current, ok := s.stores.ModelEPs.Get(key)
+		current, ok, err := s.stores.ModelEPs.Get(key)
+		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("modelendpoint %q not found", name), http.StatusNotFound)
 			return
@@ -697,7 +782,8 @@ func (s *Server) handleModelEndpointByName(w http.ResponseWriter, r *http.Reques
 func (s *Server) handleTools(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		items := s.stores.Tools.List()
+		items, err := s.stores.Tools.List()
+		if writeStoreFetchError(w, err) { return }
 		ns, hasNS := namespaceFilter(r)
 		selector, err := labelSelectorFilter(r)
 		if err != nil {
@@ -730,7 +816,9 @@ func (s *Server) handleTools(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if existing, ok := s.stores.Tools.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name)); ok {
+		existing, ok, err := s.stores.Tools.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
+		if writeStoreFetchError(w, err) { return }
+		if ok {
 			obj.Status = existing.Status
 		}
 		obj, err = s.stores.Tools.Upsert(obj)
@@ -764,7 +852,8 @@ func (s *Server) handleToolByName(w http.ResponseWriter, r *http.Request) {
 	key := scopedNameForRequest(r, name)
 	switch r.Method {
 	case http.MethodGet:
-		obj, ok := s.stores.Tools.Get(key)
+		obj, ok, err := s.stores.Tools.Get(key)
+		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("tool %q not found", name), http.StatusNotFound)
 			return
@@ -788,7 +877,8 @@ func (s *Server) handleToolByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		current, ok := s.stores.Tools.Get(key)
+		current, ok, err := s.stores.Tools.Get(key)
+		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("tool %q not found", name), http.StatusNotFound)
 			return
@@ -818,7 +908,8 @@ func (s *Server) handleToolByName(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleSecrets(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		items := s.stores.Secrets.List()
+		items, err := s.stores.Secrets.List()
+		if writeStoreFetchError(w, err) { return }
 		ns, hasNS := namespaceFilter(r)
 		selector, err := labelSelectorFilter(r)
 		if err != nil {
@@ -851,7 +942,9 @@ func (s *Server) handleSecrets(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if existing, ok := s.stores.Secrets.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name)); ok {
+		existing, ok, err := s.stores.Secrets.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
+		if writeStoreFetchError(w, err) { return }
+		if ok {
 			obj.Status = existing.Status
 		}
 		obj, err = s.stores.Secrets.Upsert(obj)
@@ -876,7 +969,8 @@ func (s *Server) handleSecretByName(w http.ResponseWriter, r *http.Request) {
 	key := scopedNameForRequest(r, name)
 	switch r.Method {
 	case http.MethodGet:
-		obj, ok := s.stores.Secrets.Get(key)
+		obj, ok, err := s.stores.Secrets.Get(key)
+		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("secret %q not found", name), http.StatusNotFound)
 			return
@@ -900,7 +994,8 @@ func (s *Server) handleSecretByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		current, ok := s.stores.Secrets.Get(key)
+		current, ok, err := s.stores.Secrets.Get(key)
+		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("secret %q not found", name), http.StatusNotFound)
 			return
@@ -930,7 +1025,8 @@ func (s *Server) handleSecretByName(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleMemories(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		items := s.stores.Memories.List()
+		items, err := s.stores.Memories.List()
+		if writeStoreFetchError(w, err) { return }
 		ns, hasNS := namespaceFilter(r)
 		selector, err := labelSelectorFilter(r)
 		if err != nil {
@@ -963,7 +1059,9 @@ func (s *Server) handleMemories(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if existing, ok := s.stores.Memories.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name)); ok {
+		existing, ok, err := s.stores.Memories.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
+		if writeStoreFetchError(w, err) { return }
+		if ok {
 			obj.Status = existing.Status
 		}
 		obj, err = s.stores.Memories.Upsert(obj)
@@ -1006,7 +1104,8 @@ func (s *Server) handleMemoryByName(w http.ResponseWriter, r *http.Request) {
 	key := scopedNameForRequest(r, name)
 	switch r.Method {
 	case http.MethodGet:
-		obj, ok := s.stores.Memories.Get(key)
+		obj, ok, err := s.stores.Memories.Get(key)
+		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("memory %q not found", name), http.StatusNotFound)
 			return
@@ -1030,7 +1129,8 @@ func (s *Server) handleMemoryByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		current, ok := s.stores.Memories.Get(key)
+		current, ok, err := s.stores.Memories.Get(key)
+		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("memory %q not found", name), http.StatusNotFound)
 			return
@@ -1063,7 +1163,9 @@ func (s *Server) handleMemoryEntries(w http.ResponseWriter, r *http.Request, nam
 		return
 	}
 	key := scopedNameForRequest(r, name)
-	if _, ok := s.stores.Memories.Get(key); !ok {
+	_, ok, err := s.stores.Memories.Get(key)
+	if writeStoreFetchError(w, err) { return }
+	if !ok {
 		http.Error(w, fmt.Sprintf("memory %q not found", name), http.StatusNotFound)
 		return
 	}
@@ -1112,7 +1214,8 @@ func (s *Server) handleMemoryEntries(w http.ResponseWriter, r *http.Request, nam
 func (s *Server) handlePolicies(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		items := s.stores.Policies.List()
+		items, err := s.stores.Policies.List()
+		if writeStoreFetchError(w, err) { return }
 		ns, hasNS := namespaceFilter(r)
 		selector, err := labelSelectorFilter(r)
 		if err != nil {
@@ -1145,7 +1248,9 @@ func (s *Server) handlePolicies(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if existing, ok := s.stores.Policies.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name)); ok {
+		existing, ok, err := s.stores.Policies.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
+		if writeStoreFetchError(w, err) { return }
+		if ok {
 			obj.Status = existing.Status
 		}
 		obj, err = s.stores.Policies.Upsert(obj)
@@ -1179,7 +1284,8 @@ func (s *Server) handlePolicyByName(w http.ResponseWriter, r *http.Request) {
 	key := scopedNameForRequest(r, name)
 	switch r.Method {
 	case http.MethodGet:
-		obj, ok := s.stores.Policies.Get(key)
+		obj, ok, err := s.stores.Policies.Get(key)
+		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("agentpolicy %q not found", name), http.StatusNotFound)
 			return
@@ -1203,7 +1309,8 @@ func (s *Server) handlePolicyByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		current, ok := s.stores.Policies.Get(key)
+		current, ok, err := s.stores.Policies.Get(key)
+		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("agentpolicy %q not found", name), http.StatusNotFound)
 			return
@@ -1233,7 +1340,8 @@ func (s *Server) handlePolicyByName(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAgentRoles(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		items := s.stores.AgentRoles.List()
+		items, err := s.stores.AgentRoles.List()
+		if writeStoreFetchError(w, err) { return }
 		ns, hasNS := namespaceFilter(r)
 		selector, err := labelSelectorFilter(r)
 		if err != nil {
@@ -1266,7 +1374,9 @@ func (s *Server) handleAgentRoles(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if existing, ok := s.stores.AgentRoles.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name)); ok {
+		existing, ok, err := s.stores.AgentRoles.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
+		if writeStoreFetchError(w, err) { return }
+		if ok {
 			obj.Status = existing.Status
 		}
 		obj, err = s.stores.AgentRoles.Upsert(obj)
@@ -1291,7 +1401,8 @@ func (s *Server) handleAgentRoleByName(w http.ResponseWriter, r *http.Request) {
 	key := scopedNameForRequest(r, name)
 	switch r.Method {
 	case http.MethodGet:
-		obj, ok := s.stores.AgentRoles.Get(key)
+		obj, ok, err := s.stores.AgentRoles.Get(key)
+		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("agentrole %q not found", name), http.StatusNotFound)
 			return
@@ -1315,7 +1426,8 @@ func (s *Server) handleAgentRoleByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		current, ok := s.stores.AgentRoles.Get(key)
+		current, ok, err := s.stores.AgentRoles.Get(key)
+		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("agentrole %q not found", name), http.StatusNotFound)
 			return
@@ -1345,7 +1457,8 @@ func (s *Server) handleAgentRoleByName(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleToolPermissions(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		items := s.stores.ToolPerms.List()
+		items, err := s.stores.ToolPerms.List()
+		if writeStoreFetchError(w, err) { return }
 		ns, hasNS := namespaceFilter(r)
 		selector, err := labelSelectorFilter(r)
 		if err != nil {
@@ -1378,7 +1491,9 @@ func (s *Server) handleToolPermissions(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if existing, ok := s.stores.ToolPerms.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name)); ok {
+		existing, ok, err := s.stores.ToolPerms.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
+		if writeStoreFetchError(w, err) { return }
+		if ok {
 			obj.Status = existing.Status
 		}
 		obj, err = s.stores.ToolPerms.Upsert(obj)
@@ -1403,7 +1518,8 @@ func (s *Server) handleToolPermissionByName(w http.ResponseWriter, r *http.Reque
 	key := scopedNameForRequest(r, name)
 	switch r.Method {
 	case http.MethodGet:
-		obj, ok := s.stores.ToolPerms.Get(key)
+		obj, ok, err := s.stores.ToolPerms.Get(key)
+		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("toolpermission %q not found", name), http.StatusNotFound)
 			return
@@ -1427,7 +1543,8 @@ func (s *Server) handleToolPermissionByName(w http.ResponseWriter, r *http.Reque
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		current, ok := s.stores.ToolPerms.Get(key)
+		current, ok, err := s.stores.ToolPerms.Get(key)
+		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("toolpermission %q not found", name), http.StatusNotFound)
 			return
@@ -1457,7 +1574,8 @@ func (s *Server) handleToolPermissionByName(w http.ResponseWriter, r *http.Reque
 func (s *Server) handleToolApprovals(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		items := s.stores.ToolApprovals.List()
+		items, err := s.stores.ToolApprovals.List()
+		if writeStoreFetchError(w, err) { return }
 		ns, hasNS := namespaceFilter(r)
 		selector, err := labelSelectorFilter(r)
 		if err != nil {
@@ -1490,7 +1608,9 @@ func (s *Server) handleToolApprovals(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if existing, ok := s.stores.ToolApprovals.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name)); ok {
+		existing, ok, err := s.stores.ToolApprovals.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
+		if writeStoreFetchError(w, err) { return }
+		if ok {
 			obj.Status = existing.Status
 		}
 		obj, err = s.stores.ToolApprovals.Upsert(obj)
@@ -1526,7 +1646,8 @@ func (s *Server) handleToolApprovalByName(w http.ResponseWriter, r *http.Request
 	key := scopedNameForRequest(r, name)
 	switch r.Method {
 	case http.MethodGet:
-		obj, ok := s.stores.ToolApprovals.Get(key)
+		obj, ok, err := s.stores.ToolApprovals.Get(key)
+		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("toolapproval %q not found", name), http.StatusNotFound)
 			return
@@ -1549,16 +1670,6 @@ func (s *Server) handleToolApprovalDecision(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	key := scopedNameForRequest(r, name)
-	obj, ok := s.stores.ToolApprovals.Get(key)
-	if !ok {
-		http.Error(w, fmt.Sprintf("toolapproval %q not found", name), http.StatusNotFound)
-		return
-	}
-	if obj.Status.Phase != "Pending" {
-		http.Error(w, fmt.Sprintf("toolapproval %q is already %s", name, obj.Status.Phase), http.StatusConflict)
-		return
-	}
 
 	var body struct {
 		DecidedBy string `json:"decided_by"`
@@ -1570,24 +1681,46 @@ func (s *Server) handleToolApprovalDecision(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	obj.Status.Phase = phase
-	obj.Status.Decision = decision
-	obj.Status.DecidedBy = body.DecidedBy
-	obj.Status.DecidedAt = time.Now().UTC().Format(time.RFC3339)
-
-	obj, err := s.stores.ToolApprovals.Upsert(obj)
-	if err != nil {
-		writeStoreError(w, err)
+	key := scopedNameForRequest(r, name)
+	// Retry optimistic-concurrency loop: read, check phase, CAS-write.
+	// This eliminates the TOCTOU race where two concurrent approve/deny
+	// requests could both pass the Pending guard and both commit.
+	for attempt := 0; attempt < 5; attempt++ {
+		obj, ok, err := s.stores.ToolApprovals.Get(key)
+		if writeStoreFetchError(w, err) { return }
+		if !ok {
+			http.Error(w, fmt.Sprintf("toolapproval %q not found", name), http.StatusNotFound)
+			return
+		}
+		if obj.Status.Phase != "Pending" {
+			http.Error(w, fmt.Sprintf("toolapproval %q is already %s", name, obj.Status.Phase), http.StatusConflict)
+			return
+		}
+		obj.Status.Phase = phase
+		obj.Status.Decision = decision
+		obj.Status.DecidedBy = body.DecidedBy
+		obj.Status.DecidedAt = time.Now().UTC().Format(time.RFC3339)
+		updated, err := s.stores.ToolApprovals.Upsert(obj)
+		if err != nil {
+			if store.IsConflict(err) {
+				continue
+			}
+			writeStoreError(w, err)
+			return
+		}
+		s.publishResourceEvent("ToolApproval", updated.Metadata.Name, decision, updated)
+		writeJSON(w, http.StatusOK, updated)
 		return
 	}
-	s.publishResourceEvent("ToolApproval", obj.Metadata.Name, decision, obj)
-	writeJSON(w, http.StatusOK, obj)
+	http.Error(w, "conflict updating tool approval, please retry", http.StatusConflict)
 }
 
 func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		items := s.stores.Tasks.List()
+		limit, offset := paginationParams(r)
+		items, err := s.stores.Tasks.ListPaged(limit, offset)
+		if writeStoreFetchError(w, err) { return }
 		ns, hasNS := namespaceFilter(r)
 		selector, err := labelSelectorFilter(r)
 		if err != nil {
@@ -1620,9 +1753,16 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if existing, ok := s.stores.Tasks.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name)); ok {
+		existing, ok, err := s.stores.Tasks.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
+		if writeStoreFetchError(w, err) { return }
+		if ok {
 			obj.Status = existing.Status
 		}
+		// Stamp W3C trace context so task execution spans link back to this request.
+		if obj.Metadata.Annotations == nil {
+			obj.Metadata.Annotations = make(map[string]string)
+		}
+		telemetry.InjectTraceContext(r.Context(), obj.Metadata.Annotations)
 		obj, err = s.stores.Tasks.Upsert(obj)
 		if err != nil {
 			writeStoreError(w, err)
@@ -1703,7 +1843,8 @@ func (s *Server) handleTaskByName(w http.ResponseWriter, r *http.Request) {
 	key := scopedNameForRequest(r, name)
 	switch r.Method {
 	case http.MethodGet:
-		obj, ok := s.stores.Tasks.Get(key)
+		obj, ok, err := s.stores.Tasks.Get(key)
+		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("task %q not found", name), http.StatusNotFound)
 			return
@@ -1727,7 +1868,8 @@ func (s *Server) handleTaskByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		current, ok := s.stores.Tasks.Get(key)
+		current, ok, err := s.stores.Tasks.Get(key)
+		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("task %q not found", name), http.StatusNotFound)
 			return
@@ -1742,6 +1884,16 @@ func (s *Server) handleTaskByName(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		obj.Status = current.Status
+		// Preserve origin trace context set at creation time.
+		if tp, ok := current.Metadata.Annotations[telemetry.AnnotationTraceparent]; ok {
+			if obj.Metadata.Annotations == nil {
+				obj.Metadata.Annotations = make(map[string]string)
+			}
+			obj.Metadata.Annotations[telemetry.AnnotationTraceparent] = tp
+			if ts, ok := current.Metadata.Annotations[telemetry.AnnotationTracestate]; ok {
+				obj.Metadata.Annotations[telemetry.AnnotationTracestate] = ts
+			}
+		}
 		obj, err = s.stores.Tasks.Upsert(obj)
 		if err != nil {
 			writeStoreError(w, err)
@@ -1769,7 +1921,8 @@ func (s *Server) getTaskLogs(w http.ResponseWriter, key, name string) {
 func (s *Server) handleTaskSchedules(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		items := s.stores.TaskSchedules.List()
+		items, err := s.stores.TaskSchedules.List()
+		if writeStoreFetchError(w, err) { return }
 		ns, hasNS := namespaceFilter(r)
 		selector, err := labelSelectorFilter(r)
 		if err != nil {
@@ -1802,7 +1955,9 @@ func (s *Server) handleTaskSchedules(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if existing, ok := s.stores.TaskSchedules.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name)); ok {
+		existing, ok, err := s.stores.TaskSchedules.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
+		if writeStoreFetchError(w, err) { return }
+		if ok {
 			obj.Status = existing.Status
 		}
 		obj, err = s.stores.TaskSchedules.Upsert(obj)
@@ -1846,7 +2001,8 @@ func (s *Server) handleTaskScheduleByName(w http.ResponseWriter, r *http.Request
 	key := scopedNameForRequest(r, name)
 	switch r.Method {
 	case http.MethodGet:
-		obj, ok := s.stores.TaskSchedules.Get(key)
+		obj, ok, err := s.stores.TaskSchedules.Get(key)
+		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("taskschedule %q not found", name), http.StatusNotFound)
 			return
@@ -1870,7 +2026,8 @@ func (s *Server) handleTaskScheduleByName(w http.ResponseWriter, r *http.Request
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		current, ok := s.stores.TaskSchedules.Get(key)
+		current, ok, err := s.stores.TaskSchedules.Get(key)
+		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("taskschedule %q not found", name), http.StatusNotFound)
 			return
@@ -1900,7 +2057,8 @@ func (s *Server) handleTaskScheduleByName(w http.ResponseWriter, r *http.Request
 func (s *Server) handleWorkers(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		items := s.stores.Workers.List()
+		items, err := s.stores.Workers.List()
+		if writeStoreFetchError(w, err) { return }
 		ns, hasNS := namespaceFilter(r)
 		selector, err := labelSelectorFilter(r)
 		if err != nil {
@@ -1933,7 +2091,9 @@ func (s *Server) handleWorkers(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if existing, ok := s.stores.Workers.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name)); ok {
+		existing, ok, err := s.stores.Workers.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
+		if writeStoreFetchError(w, err) { return }
+		if ok {
 			obj.Status = existing.Status
 		}
 		obj, err = s.stores.Workers.Upsert(obj)
@@ -1967,7 +2127,8 @@ func (s *Server) handleWorkerByName(w http.ResponseWriter, r *http.Request) {
 	key := scopedNameForRequest(r, name)
 	switch r.Method {
 	case http.MethodGet:
-		obj, ok := s.stores.Workers.Get(key)
+		obj, ok, err := s.stores.Workers.Get(key)
+		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("worker %q not found", name), http.StatusNotFound)
 			return
@@ -1991,7 +2152,8 @@ func (s *Server) handleWorkerByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		current, ok := s.stores.Workers.Get(key)
+		current, ok, err := s.stores.Workers.Get(key)
+		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("worker %q not found", name), http.StatusNotFound)
 			return
@@ -2042,7 +2204,8 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 func (s *Server) handleMcpServers(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		items := s.stores.McpServers.List()
+		items, err := s.stores.McpServers.List()
+		if writeStoreFetchError(w, err) { return }
 		ns, hasNS := namespaceFilter(r)
 		selector, err := labelSelectorFilter(r)
 		if err != nil {
@@ -2075,7 +2238,9 @@ func (s *Server) handleMcpServers(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if existing, ok := s.stores.McpServers.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name)); ok {
+		existing, ok, err := s.stores.McpServers.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
+		if writeStoreFetchError(w, err) { return }
+		if ok {
 			obj.Status = existing.Status
 		}
 		obj, err = s.stores.McpServers.Upsert(obj)
@@ -2100,7 +2265,8 @@ func (s *Server) handleMcpServerByName(w http.ResponseWriter, r *http.Request) {
 	key := scopedNameForRequest(r, name)
 	switch r.Method {
 	case http.MethodGet:
-		obj, ok := s.stores.McpServers.Get(key)
+		obj, ok, err := s.stores.McpServers.Get(key)
+		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("mcp-server %q not found", name), http.StatusNotFound)
 			return

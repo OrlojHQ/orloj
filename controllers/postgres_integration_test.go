@@ -104,7 +104,10 @@ func TestPostgresTaskClaimSingleExecutionAcrossWorkers(t *testing.T) {
 	}()
 	wg.Wait()
 
-	task, ok := taskStore.Get("postgres-claim-task")
+	task, ok, err := taskStore.Get("postgres-claim-task")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !ok {
 		t.Fatal("task not found")
 	}

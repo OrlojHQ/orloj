@@ -150,7 +150,7 @@ func TestMcpEndToEnd(t *testing.T) {
 	}
 
 	// Verify tools were created
-	allTools := toolStore.List()
+	allTools, _ := toolStore.List()
 	if len(allTools) != 2 {
 		t.Fatalf("expected 2 generated tools, got %d", len(allTools))
 	}

@@ -58,8 +58,20 @@ func getFromTable[T any](db *sql.DB, table, name string) (T, bool, error) {
 	return item, true, nil
 }
 
+// defaultListLimit is a safety cap for all list queries. Callers that need
+// more results should implement cursor-based pagination; for now this prevents
+// unbounded full-table scans from a single API call.
+const defaultListLimit = 1000
+
 func listFromTable[T any](db *sql.DB, table string) ([]T, error) {
-	rows, err := db.Query(fmt.Sprintf(`SELECT payload FROM %s ORDER BY name ASC`, table))
+	return listFromTablePaged[T](db, table, defaultListLimit, 0)
+}
+
+func listFromTablePaged[T any](db *sql.DB, table string, limit, offset int) ([]T, error) {
+	if limit <= 0 {
+		limit = defaultListLimit
+	}
+	rows, err := db.Query(fmt.Sprintf(`SELECT payload FROM %s ORDER BY name ASC LIMIT $1 OFFSET $2`, table), limit, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -468,12 +480,12 @@ func updateTaskInTx(tx *sql.Tx, name string, task resources.Task) error {
 	return err
 }
 
-func claimTaskSQL(db *sql.DB, name, workerID string, lease time.Duration) (resources.Task, bool, error) {
+func claimTaskSQL(ctx context.Context, db *sql.DB, name, workerID string, lease time.Duration) (resources.Task, bool, error) {
 	if lease <= 0 {
 		lease = 30 * time.Second
 	}
 	now := time.Now().UTC()
-	tx, err := db.BeginTx(context.Background(), nil)
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return resources.Task{}, false, err
 	}
@@ -512,18 +524,52 @@ func claimTaskSQL(db *sql.DB, name, workerID string, lease time.Duration) (resou
 	return task, true, nil
 }
 
-func claimNextDueTaskSQL(db *sql.DB, workerID string, lease time.Duration, matches func(resources.Task) bool) (resources.Task, bool, error) {
+// WorkerClaimHints carries worker capability filters that are pushed into the
+// SQL WHERE clause so a worker never fetches tasks it cannot run.
+// Zero-value fields mean "no filter".
+type WorkerClaimHints struct {
+	AssignedWorker  string // match tasks assigned to this worker (or unassigned)
+	Region          string // match tasks with this region requirement (case-insensitive), or no requirement
+	RequiresGPU     bool   // when false, skip GPU filter; when true only tasks with gpu=true
+	SupportedModels []string // if non-empty, only tasks whose model requirement is in this list (or unset)
+}
+
+func claimNextDueTaskSQL(ctx context.Context, db *sql.DB, workerID string, lease time.Duration, hints WorkerClaimHints, matches func(resources.Task) bool) (resources.Task, bool, error) {
 	if lease <= 0 {
 		lease = 30 * time.Second
 	}
 	now := time.Now().UTC()
-	tx, err := db.BeginTx(context.Background(), nil)
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return resources.Task{}, false, err
 	}
 	defer tx.Rollback()
 
-	rows, err := tx.Query(
+	// Build extra WHERE clauses from hints to avoid fetching tasks the worker
+	// cannot execute, which would starve workers with specialized requirements.
+	extraWhere := ""
+	args := []any{}
+	argIdx := 1
+
+	if hints.Region != "" {
+		argIdx++
+		extraWhere += fmt.Sprintf(` AND (
+			payload->'spec'->'requirements'->>'region' IS NULL
+			OR payload->'spec'->'requirements'->>'region' = ''
+			OR LOWER(payload->'spec'->'requirements'->>'region') = LOWER($%d)
+		)`, argIdx)
+		args = append(args, hints.Region)
+	}
+	if hints.AssignedWorker != "" {
+		argIdx++
+		extraWhere += fmt.Sprintf(` AND (
+			assigned_worker = ''
+			OR LOWER(assigned_worker) = LOWER($%d)
+		)`, argIdx)
+		args = append(args, hints.AssignedWorker)
+	}
+
+	query := fmt.Sprintf(
 		`SELECT name, payload
 		 FROM tasks
 		 WHERE mode != 'template'
@@ -535,14 +581,15 @@ func claimNextDueTaskSQL(db *sql.DB, workerID string, lease time.Duration, match
 		       AND (claimed_by = '' OR lease_until IS NULL OR lease_until <= NOW())
 		     )
 		   )
+		   %s
 		 ORDER BY updated_at ASC
 		 FOR UPDATE SKIP LOCKED
-		 LIMIT 64`,
-	)
+		 LIMIT 64`, extraWhere)
+
+	rows, err := tx.Query(query, args...)
 	if err != nil {
 		return resources.Task{}, false, err
 	}
-	defer rows.Close()
 
 	var (
 		selectedName string
@@ -555,10 +602,12 @@ func claimNextDueTaskSQL(db *sql.DB, workerID string, lease time.Duration, match
 			payload []byte
 		)
 		if err := rows.Scan(&rName, &payload); err != nil {
+			rows.Close()
 			return resources.Task{}, false, err
 		}
 		var task resources.Task
 		if err := json.Unmarshal(payload, &task); err != nil {
+			rows.Close()
 			return resources.Task{}, false, err
 		}
 		if !isTaskClaimable(task, workerID, now) {
@@ -572,8 +621,10 @@ func claimNextDueTaskSQL(db *sql.DB, workerID string, lease time.Duration, match
 		found = true
 		break
 	}
-	if err := rows.Err(); err != nil {
-		return resources.Task{}, false, err
+	rowsErr := rows.Err()
+	rows.Close()
+	if rowsErr != nil {
+		return resources.Task{}, false, rowsErr
 	}
 	if !found {
 		if err := tx.Commit(); err != nil {
@@ -595,12 +646,12 @@ func claimNextDueTaskSQL(db *sql.DB, workerID string, lease time.Duration, match
 	return task, true, nil
 }
 
-func renewTaskLeaseSQL(db *sql.DB, name, workerID string, lease time.Duration) error {
+func renewTaskLeaseSQL(ctx context.Context, db *sql.DB, name, workerID string, lease time.Duration) error {
 	if lease <= 0 {
 		lease = 30 * time.Second
 	}
 	now := time.Now().UTC()
-	tx, err := db.BeginTx(context.Background(), nil)
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -645,28 +696,11 @@ func renewTaskLeaseSQL(db *sql.DB, name, workerID string, lease time.Duration) e
 // ---------------------------------------------------------------------------
 
 func appendTaskLogSQL(db *sql.DB, taskName, entry string) error {
-	var exists int
-	err := db.QueryRow(`SELECT 1 FROM tasks WHERE name = $1`, taskName).Scan(&exists)
-	if err == sql.ErrNoRows {
-		return fmt.Errorf("task %q not found", taskName)
-	}
-	if err != nil {
-		return err
-	}
-	_, err = db.Exec(`INSERT INTO task_logs(task_name, entry, created_at) VALUES($1, $2, NOW())`, taskName, entry)
+	_, err := db.Exec(`INSERT INTO task_logs(task_name, entry, created_at) VALUES($1, $2, NOW())`, taskName, entry)
 	return err
 }
 
 func listTaskLogsSQL(db *sql.DB, taskName string) ([]string, error) {
-	var exists int
-	err := db.QueryRow(`SELECT 1 FROM tasks WHERE name = $1`, taskName).Scan(&exists)
-	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("task %q not found", taskName)
-	}
-	if err != nil {
-		return nil, err
-	}
-
 	rows, err := db.Query(`SELECT entry FROM task_logs WHERE task_name = $1 ORDER BY created_at ASC, id ASC`, taskName)
 	if err != nil {
 		return nil, err
@@ -718,8 +752,8 @@ func updateWorkerInTx(tx *sql.Tx, name string, worker resources.Worker) error {
 	return err
 }
 
-func tryAcquireWorkerSlotSQL(db *sql.DB, name string) (resources.Worker, bool, error) {
-	tx, err := db.BeginTx(context.Background(), nil)
+func tryAcquireWorkerSlotSQL(ctx context.Context, db *sql.DB, name string) (resources.Worker, bool, error) {
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return resources.Worker{}, false, err
 	}
@@ -773,8 +807,8 @@ func tryAcquireWorkerSlotSQL(db *sql.DB, name string) (resources.Worker, bool, e
 	return worker, true, nil
 }
 
-func releaseWorkerSlotSQL(db *sql.DB, name string) error {
-	tx, err := db.BeginTx(context.Background(), nil)
+func releaseWorkerSlotSQL(ctx context.Context, db *sql.DB, name string) error {
+	tx, err := db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -887,6 +921,11 @@ func parseTimestampPtr(value string) *time.Time {
 	}
 	t, err := parseTimestamp(v)
 	if err != nil {
+		// Returning nil here clears lease/retry timestamps which can cause
+		// unexpected task re-scheduling. Bad timestamp values indicate corrupt
+		// task state; emit a stderr line for diagnostics rather than silently
+		// proceeding.
+		fmt.Printf("store: WARNING: parseTimestampPtr: ignoring unparseable timestamp %q: %v\n", v, err)
 		return nil
 	}
 	return &t

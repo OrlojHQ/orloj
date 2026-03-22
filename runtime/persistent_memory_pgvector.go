@@ -3,11 +3,15 @@ package agentruntime
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	pgvector "github.com/pgvector/pgvector-go"
 )
+
+var validTableName = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]{0,62}$`)
 
 // PgvectorOptions configures optional behaviour of the pgvector backend.
 type PgvectorOptions struct {
@@ -36,20 +40,28 @@ func NewPgvectorBackend(dsn string, embedder EmbeddingProvider, opts PgvectorOpt
 		return nil, fmt.Errorf("pgvector: embedding provider (spec.embedding_model → ModelEndpoint) is required")
 	}
 
-	ctx := context.Background()
-	pool, err := pgxpool.New(ctx, dsn)
-	if err != nil {
-		return nil, fmt.Errorf("pgvector: connect: %w", err)
-	}
-
 	table := strings.TrimSpace(opts.Table)
 	if table == "" {
 		table = "orloj_memory"
 	}
+	// Validate table name to prevent SQL injection. Table names are not
+	// parameterisable in DDL/DML statements so we enforce a strict allowlist.
+	if !validTableName.MatchString(table) {
+		return nil, fmt.Errorf("pgvector: invalid table name %q: must match ^[a-zA-Z_][a-zA-Z0-9_]{0,62}$", table)
+	}
+
+	connCtx, connCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer connCancel()
+	pool, err := pgxpool.New(connCtx, dsn)
+	if err != nil {
+		return nil, fmt.Errorf("pgvector: connect: %w", err)
+	}
 
 	dim := opts.Dimension
 	if dim <= 0 {
-		vecs, err := embedder.Embed(ctx, []string{"dimension probe"})
+		probeCtx, probeCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer probeCancel()
+		vecs, err := embedder.Embed(probeCtx, []string{"dimension probe"})
 		if err != nil {
 			pool.Close()
 			return nil, fmt.Errorf("pgvector: detect embedding dimension: %w", err)
@@ -61,7 +73,9 @@ func NewPgvectorBackend(dsn string, embedder EmbeddingProvider, opts PgvectorOpt
 		dim = len(vecs[0])
 	}
 
-	if err := initSchema(ctx, pool, table, dim); err != nil {
+	schemaCtx, schemaCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer schemaCancel()
+	if err := initSchema(schemaCtx, pool, table, dim); err != nil {
 		pool.Close()
 		return nil, err
 	}

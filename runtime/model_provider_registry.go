@@ -2,6 +2,8 @@ package agentruntime
 
 import (
 	"fmt"
+	"log"
+	"os"
 	"strings"
 	"sync"
 )
@@ -101,7 +103,8 @@ func mustRegisterBuiltinModelProviders(registry *ModelProviderRegistry) {
 	}
 	for _, plugin := range builtins {
 		if err := registry.Register(plugin); err != nil {
-			panic(fmt.Sprintf("register builtin model provider %q failed: %v", plugin.Name(), err))
+			log.Fatalf("FATAL: register builtin model provider %q failed: %v", plugin.Name(), err)
+			os.Exit(1)
 		}
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -275,27 +276,39 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
+	var wg sync.WaitGroup
+
+	startBackground := func(fn func()) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			fn()
+		}()
+	}
+
 	if strings.EqualFold(strings.TrimSpace(*taskExecutionMode), "message-driven") {
 		logger.Printf("agent runtime reconciliation disabled in message-driven mode")
 	} else {
-		go agentController.Start(ctx)
+		startBackground(func() { agentController.Start(ctx) })
 	}
-	go agentSystemController.Start(ctx)
-	go modelEndpointController.Start(ctx)
-	go toolController.Start(ctx)
-	go memoryController.Start(ctx)
-	go policyController.Start(ctx)
-	go secretController.Start(ctx)
-	go taskSchedulerController.Start(ctx)
-	go taskScheduleController.Start(ctx)
-	go workerController.Start(ctx)
-	go mcpServerController.Start(ctx)
+	startBackground(func() { agentSystemController.Start(ctx) })
+	startBackground(func() { modelEndpointController.Start(ctx) })
+	startBackground(func() { toolController.Start(ctx) })
+	startBackground(func() { memoryController.Start(ctx) })
+	startBackground(func() { policyController.Start(ctx) })
+	startBackground(func() { secretController.Start(ctx) })
+	startBackground(func() { taskSchedulerController.Start(ctx) })
+	startBackground(func() { taskScheduleController.Start(ctx) })
+	startBackground(func() { workerController.Start(ctx) })
+	startBackground(func() { mcpServerController.Start(ctx) })
 	if *runTaskWorker || *embeddedWorker {
-		go heartbeatWorkerRegistration(ctx, stores.Workers, logger, *taskWorkerID, resources.WorkerSpec{
-			Region:             *taskWorkerRegion,
-			MaxConcurrentTasks: *embeddedWorkerMaxConcurrentTasks,
-		}, *taskHeartbeatInterval)
-		go taskController.Start(ctx)
+		startBackground(func() {
+			startup.HeartbeatWorkerRegistration(ctx, stores.Workers, logger, *taskWorkerID, resources.WorkerSpec{
+				Region:             *taskWorkerRegion,
+				MaxConcurrentTasks: *embeddedWorkerMaxConcurrentTasks,
+			}, *taskHeartbeatInterval)
+		})
+		startBackground(func() { taskController.Start(ctx) })
 		if strings.EqualFold(strings.TrimSpace(*taskExecutionMode), "message-driven") {
 			if agentMessageBus == nil {
 				logger.Printf("embedded runtime inbox consumer disabled: agent message bus backend is none")
@@ -321,7 +334,7 @@ func main() {
 						ToolApprovals:       stores.ToolApprovals,
 					},
 				)
-				go consumer.Start(ctx)
+				startBackground(func() { consumer.Start(ctx) })
 				logger.Printf("embedded runtime inbox consumers enabled refresh=%s dedupe=%s", (10 * time.Second).String(), (10 * time.Minute).String())
 			}
 		}
@@ -344,76 +357,9 @@ func main() {
 	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		logger.Fatalf("server error: %v", err)
 	}
+	wg.Wait()
 }
 
-func heartbeatWorkerRegistration(
-	ctx context.Context,
-	workerStore *store.WorkerStore,
-	logger *log.Logger,
-	workerID string,
-	spec resources.WorkerSpec,
-	interval time.Duration,
-) {
-	if interval <= 0 {
-		interval = 10 * time.Second
-	}
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	for {
-		now := time.Now().UTC().Format(time.RFC3339Nano)
-		worker := resources.Worker{
-			APIVersion: "orloj.dev/v1",
-			Kind:       "Worker",
-			Metadata:   resources.ObjectMeta{Name: workerID},
-			Spec:       spec,
-			Status: resources.WorkerStatus{
-				Phase:         "Ready",
-				LastHeartbeat: now,
-				CurrentTasks:  0,
-			},
-		}
-		for attempt := 0; attempt < 3; attempt++ {
-			if existing, ok := workerStore.Get(workerID); ok {
-				worker.Metadata.ResourceVersion = existing.Metadata.ResourceVersion
-				worker.Metadata.Generation = existing.Metadata.Generation
-				worker.Metadata.CreatedAt = existing.Metadata.CreatedAt
-				worker.Status.ObservedGeneration = existing.Metadata.Generation
-				if strings.EqualFold(strings.TrimSpace(existing.Status.Phase), "ready") ||
-					strings.EqualFold(strings.TrimSpace(existing.Status.Phase), "pending") {
-					worker.Status.CurrentTasks = existing.Status.CurrentTasks
-				} else {
-					worker.Status.CurrentTasks = 0
-				}
-			}
-			_, err := workerStore.Upsert(worker)
-			if err == nil {
-				break
-			}
-			if !store.IsConflict(err) {
-				if logger != nil {
-					logger.Printf("worker heartbeat upsert failed: %v", err)
-				}
-				break
-			}
-		}
-
-		select {
-		case <-ctx.Done():
-			final := worker
-			final.Status.Phase = "NotReady"
-			final.Status.LastError = "worker stopped"
-			if existing, ok := workerStore.Get(workerID); ok {
-				final.Metadata.ResourceVersion = existing.Metadata.ResourceVersion
-				final.Metadata.Generation = existing.Metadata.Generation
-				final.Metadata.CreatedAt = existing.Metadata.CreatedAt
-			}
-			_, _ = workerStore.Upsert(final)
-			return
-		case <-ticker.C:
-		}
-	}
-}
 
 func runLocalAdminPasswordReset(stores *startup.StoreSet, username, password string) error {
 	if stores == nil || stores.LocalAdmins == nil || stores.AuthSessions == nil {

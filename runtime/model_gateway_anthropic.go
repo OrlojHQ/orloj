@@ -170,7 +170,11 @@ func (g *AnthropicModelGateway) Complete(ctx context.Context, req ModelRequest) 
 		if providerErr == "" {
 			providerErr = strings.TrimSpace(string(respBody))
 		}
-		return ModelResponse{}, fmt.Errorf("model request failed status=%d: %s", httpResp.StatusCode, providerErr)
+		return ModelResponse{}, &ModelGatewayError{
+			StatusCode: httpResp.StatusCode,
+			Provider:   "anthropic",
+			Message:    providerErr,
+		}
 	}
 
 	parsed := anthropicMessagesResponse{}

@@ -21,7 +21,7 @@ type MCPToolRuntime struct {
 
 // McpServerLookup resolves McpServer resources by scoped name.
 type McpServerLookup interface {
-	Get(name string) (resources.McpServer, bool)
+	Get(name string) (resources.McpServer, bool, error)
 }
 
 func NewMCPToolRuntime(
@@ -161,9 +161,20 @@ func (r *MCPToolRuntime) resolveServer(serverRef string) (resources.McpServer, e
 	if r.namespace != "" && !strings.Contains(serverRef, "/") {
 		scopedName = r.namespace + "/" + serverRef
 	}
-	server, ok := r.mcpServerStore.Get(scopedName)
-	if !ok && strings.Contains(serverRef, "/") {
-		server, ok = r.mcpServerStore.Get(serverRef)
+	server, ok, err := r.mcpServerStore.Get(scopedName)
+	if err == nil && !ok && strings.Contains(serverRef, "/") {
+		server, ok, err = r.mcpServerStore.Get(serverRef)
+	}
+	if err != nil {
+		return resources.McpServer{}, NewToolError(
+			ToolStatusError,
+			ToolCodeUnsupportedTool,
+			ToolReasonToolUnsupported,
+			true,
+			fmt.Sprintf("mcp server %q lookup failed: %v", serverRef, err),
+			err,
+			map[string]string{"mcp_server": serverRef},
+		)
 	}
 	if !ok {
 		return resources.McpServer{}, NewToolError(

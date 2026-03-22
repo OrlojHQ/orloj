@@ -78,16 +78,31 @@ func TestAuthzEnforcement(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	// Webhook delivery endpoint bypasses bearer auth and uses signature-based auth.
+	// Webhook delivery endpoint now requires at least writer auth to prevent
+	// unauthenticated triggering of webhooks.
 	req, _ = http.NewRequest(http.MethodPost, httpServer.URL+"/v1/webhook-deliveries/nonexistent", bytes.NewReader([]byte(`{}`)))
 	req.Header.Set("Content-Type", "application/json")
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatalf("webhook delivery request failed: %v", err)
+		t.Fatalf("webhook delivery unauthenticated request failed: %v", err)
+	}
+	if resp.StatusCode != http.StatusUnauthorized {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 401 for unauthenticated webhook delivery, got %d body=%s", resp.StatusCode, string(b))
+	}
+	resp.Body.Close()
+
+	// With a writer token the endpoint is reachable (returns 404 for non-existent webhook, not 401).
+	req, _ = http.NewRequest(http.MethodPost, httpServer.URL+"/v1/webhook-deliveries/nonexistent", bytes.NewReader([]byte(`{}`)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer writer-token")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("webhook delivery with writer token failed: %v", err)
 	}
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		b, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected webhook delivery auth bypass (non-401/403), got %d body=%s", resp.StatusCode, string(b))
+		t.Fatalf("expected webhook delivery to be accessible with writer token, got %d body=%s", resp.StatusCode, string(b))
 	}
 	resp.Body.Close()
 

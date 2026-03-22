@@ -84,3 +84,41 @@ func Init(ctx context.Context, cfg Config) (func(context.Context) error, error) 
 func Tracer() trace.Tracer {
 	return otel.Tracer(TracerName)
 }
+
+// Annotation keys used to carry W3C trace context through resource metadata.
+const (
+	AnnotationTraceparent = "orloj.io/traceparent"
+	AnnotationTracestate  = "orloj.io/tracestate"
+)
+
+// InjectTraceContext serializes the current W3C trace context from ctx into
+// annotations using the global propagator. Reports whether any trace context
+// was available to inject. Safe to call when OTel is disabled (no-op).
+func InjectTraceContext(ctx context.Context, annotations map[string]string) bool {
+	carrier := propagation.MapCarrier{}
+	otel.GetTextMapPropagator().Inject(ctx, carrier)
+	tp := carrier.Get("traceparent")
+	if tp == "" {
+		return false
+	}
+	annotations[AnnotationTraceparent] = tp
+	if ts := carrier.Get("tracestate"); ts != "" {
+		annotations[AnnotationTracestate] = ts
+	}
+	return true
+}
+
+// ExtractTraceContext returns a context carrying the remote span described by
+// trace annotations stored on the resource. Returns ctx unchanged when no
+// valid trace context is found in annotations.
+func ExtractTraceContext(ctx context.Context, annotations map[string]string) context.Context {
+	tp, ok := annotations[AnnotationTraceparent]
+	if !ok || tp == "" {
+		return ctx
+	}
+	carrier := propagation.MapCarrier{"traceparent": tp}
+	if ts, ok := annotations[AnnotationTracestate]; ok && ts != "" {
+		carrier["tracestate"] = ts
+	}
+	return otel.GetTextMapPropagator().Extract(ctx, carrier)
+}

@@ -68,7 +68,10 @@ func TestTaskControllerMessageDrivenKickoff(t *testing.T) {
 		t.Fatalf("reconcile failed: %v", err)
 	}
 
-	task, ok := stores.taskStore.Get("message-driven-task")
+	task, ok, err := stores.taskStore.Get("message-driven-task")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !ok {
 		t.Fatal("task not found")
 	}
@@ -168,7 +171,10 @@ func TestTaskControllerMessageDrivenRejectsCycleWithoutMaxTurns(t *testing.T) {
 		t.Fatalf("reconcile failed: %v", err)
 	}
 
-	task, ok := stores.taskStore.Get("cycle-no-max-turns")
+	task, ok, err := stores.taskStore.Get("cycle-no-max-turns")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !ok {
 		t.Fatal("task not found")
 	}
@@ -236,7 +242,10 @@ func TestTaskControllerMessageDrivenAllowsCycleWithMaxTurns(t *testing.T) {
 		t.Fatalf("reconcile failed: %v", err)
 	}
 
-	task, ok := stores.taskStore.Get("cycle-with-max-turns")
+	task, ok, err := stores.taskStore.Get("cycle-with-max-turns")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !ok {
 		t.Fatal("task not found")
 	}

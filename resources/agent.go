@@ -18,6 +18,7 @@ type ObjectMeta struct {
 	Name            string            `json:"name"`
 	Namespace       string            `json:"namespace,omitempty"`
 	Labels          map[string]string `json:"labels,omitempty"`
+	Annotations     map[string]string `json:"annotations,omitempty"`
 	ResourceVersion string            `json:"resourceVersion,omitempty"`
 	Generation      int64             `json:"generation,omitempty"`
 	CreatedAt       string            `json:"createdAt,omitempty"`

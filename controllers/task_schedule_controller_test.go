@@ -58,7 +58,10 @@ func TestTaskScheduleControllerCreatesRunAndIsIdempotent(t *testing.T) {
 		t.Fatalf("second reconcile failed: %v", err)
 	}
 
-	tasks := taskStore.List()
+	tasks, err := taskStore.List()
+	if err != nil {
+		t.Fatal(err)
+	}
 	generated := 0
 	for _, task := range tasks {
 		if task.Metadata.Labels[taskScheduleNameLabel] != "weekly-report" {
@@ -133,7 +136,11 @@ func TestTaskScheduleControllerForbidOverlapSkipsNewRun(t *testing.T) {
 	}
 
 	generated := 0
-	for _, task := range taskStore.List() {
+	_taskList, _err := taskStore.List()
+	if _err != nil {
+		t.Fatal(_err)
+	}
+	for _, task := range _taskList {
 		if task.Metadata.Labels[taskScheduleNameLabel] == "overlap" {
 			generated++
 		}
@@ -178,7 +185,11 @@ func TestTaskScheduleControllerMissedDeadlineSkipsRun(t *testing.T) {
 		t.Fatalf("reconcile failed: %v", err)
 	}
 
-	for _, task := range taskStore.List() {
+	_taskList, _err := taskStore.List()
+	if _err != nil {
+		t.Fatal(_err)
+	}
+	for _, task := range _taskList {
 		if task.Metadata.Labels[taskScheduleNameLabel] == "deadline" {
 			t.Fatalf("expected no generated run on missed deadline, found %s", task.Metadata.Name)
 		}
@@ -249,7 +260,11 @@ func TestTaskScheduleControllerRetentionPrunesHistory(t *testing.T) {
 	}
 
 	remaining := map[string]struct{}{}
-	for _, task := range taskStore.List() {
+	_taskList, _err := taskStore.List()
+	if _err != nil {
+		t.Fatal(_err)
+	}
+	for _, task := range _taskList {
 		if task.Metadata.Labels[taskScheduleNameLabel] == "retention" {
 			remaining[task.Metadata.Name] = struct{}{}
 		}
@@ -309,11 +324,17 @@ func TestTaskScheduleEnsureRunUsesLatestTemplateSpec(t *testing.T) {
 		t.Fatalf("expected distinct run keys, got %s", run1)
 	}
 
-	task1, ok := taskStore.Get(run1)
+	task1, ok, err := taskStore.Get(run1)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !ok {
 		t.Fatalf("run1 not found")
 	}
-	task2, ok := taskStore.Get(run2)
+	task2, ok, err := taskStore.Get(run2)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !ok {
 		t.Fatalf("run2 not found")
 	}

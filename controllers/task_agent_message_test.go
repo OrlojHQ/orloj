@@ -102,7 +102,10 @@ func TestTaskControllerPublishesAgentHandoffMessages(t *testing.T) {
 		t.Fatalf("reconcile failed: %v", err)
 	}
 
-	task, ok := stores.taskStore.Get("message-task")
+	task, ok, err := stores.taskStore.Get("message-task")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !ok {
 		t.Fatal("task not found")
 	}
@@ -206,7 +209,10 @@ func TestTaskControllerFailsTaskWhenMessagePublishFails(t *testing.T) {
 		t.Fatalf("reconcile failed: %v", err)
 	}
 
-	task, ok := stores.taskStore.Get("message-fail-task")
+	task, ok, err := stores.taskStore.Get("message-fail-task")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !ok {
 		t.Fatal("task not found")
 	}

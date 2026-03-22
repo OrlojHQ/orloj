@@ -133,7 +133,11 @@ func (g *OllamaModelGateway) Complete(ctx context.Context, req ModelRequest) (Mo
 		if providerErr == "" {
 			providerErr = strings.TrimSpace(string(respBody))
 		}
-		return ModelResponse{}, fmt.Errorf("model request failed status=%d: %s", httpResp.StatusCode, providerErr)
+		return ModelResponse{}, &ModelGatewayError{
+			StatusCode: httpResp.StatusCode,
+			Provider:   "ollama",
+			Message:    providerErr,
+		}
 	}
 
 	parsed := ollamaChatResponse{}

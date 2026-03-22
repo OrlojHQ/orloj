@@ -26,11 +26,11 @@ type ToolCallAuthorizer interface {
 }
 
 type AgentRoleLookup interface {
-	Get(name string) (resources.AgentRole, bool)
+	Get(name string) (resources.AgentRole, bool, error)
 }
 
 type ToolPermissionLookup interface {
-	List() []resources.ToolPermission
+	List() ([]resources.ToolPermission, error)
 }
 
 type toolPermissionRule struct {
@@ -87,11 +87,11 @@ func NewAgentToolAuthorizer(
 			a.missingRoles = append(a.missingRoles, roleName)
 			continue
 		}
-		role, ok := roleLookup.Get(scopedRuntimeName(namespace, roleName))
-		if !ok && strings.Contains(roleName, "/") {
-			role, ok = roleLookup.Get(roleName)
+		role, ok, roleErr := roleLookup.Get(scopedRuntimeName(namespace, roleName))
+		if roleErr == nil && !ok && strings.Contains(roleName, "/") {
+			role, ok, roleErr = roleLookup.Get(roleName)
 		}
-		if !ok {
+		if roleErr != nil || !ok {
 			a.missingRoles = append(a.missingRoles, roleName)
 			continue
 		}
@@ -107,7 +107,8 @@ func NewAgentToolAuthorizer(
 	if permissionLookup == nil {
 		return a
 	}
-	for _, item := range permissionLookup.List() {
+	perms, _ := permissionLookup.List()
+	for _, item := range perms {
 		if resources.NormalizeNamespace(item.Metadata.Namespace) != resources.NormalizeNamespace(namespace) {
 			continue
 		}

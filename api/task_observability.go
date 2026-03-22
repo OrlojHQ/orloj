@@ -96,7 +96,8 @@ func (s *Server) getTaskMessages(w http.ResponseWriter, r *http.Request, name st
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	task, ok := s.stores.Tasks.Get(scopedNameForRequest(r, name))
+	task, ok, err := s.stores.Tasks.Get(scopedNameForRequest(r, name))
+	if writeStoreFetchError(w, err) { return }
 	if !ok {
 		http.Error(w, fmt.Sprintf("task %q not found", name), http.StatusNotFound)
 		return
@@ -123,7 +124,8 @@ func (s *Server) getTaskMessageMetrics(w http.ResponseWriter, r *http.Request, n
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	task, ok := s.stores.Tasks.Get(scopedNameForRequest(r, name))
+	task, ok, err := s.stores.Tasks.Get(scopedNameForRequest(r, name))
+	if writeStoreFetchError(w, err) { return }
 	if !ok {
 		http.Error(w, fmt.Sprintf("task %q not found", name), http.StatusNotFound)
 		return

@@ -7,6 +7,7 @@ import (
 	"hash/fnv"
 	"log"
 	"math"
+	"math/bits"
 	"regexp"
 	"strconv"
 	"strings"
@@ -22,25 +23,25 @@ var hopPattern = regexp.MustCompile(`/h([0-9]+)(?:/|$)`) //nolint:gochecknogloba
 
 // AgentRegistry lists and resolves declared agents for message consumer subscriptions/execution.
 type AgentRegistry interface {
-	List() []resources.Agent
-	Get(name string) (resources.Agent, bool)
+	List() ([]resources.Agent, error)
+	Get(name string) (resources.Agent, bool, error)
 }
 
 // AgentSystemRegistry resolves AgentSystem resources for next-hop routing.
 type AgentSystemRegistry interface {
-	Get(name string) (resources.AgentSystem, bool)
+	Get(name string) (resources.AgentSystem, bool, error)
 }
 
 // TaskStateStore stores task status updates produced by message consumers.
 type TaskStateStore interface {
-	Get(name string) (resources.Task, bool)
+	Get(name string) (resources.Task, bool, error)
 	Upsert(item resources.Task) (resources.Task, error)
 	AppendLog(name, message string) error
 }
 
 // MemoryResourceLookup resolves Memory CRDs by name.
 type MemoryResourceLookup interface {
-	Get(name string) (resources.Memory, bool)
+	Get(name string) (resources.Memory, bool, error)
 }
 
 // AgentMessageConsumerOptions configures inbox consumers in a worker.
@@ -68,7 +69,7 @@ type AgentMessageConsumerOptions struct {
 // ToolApprovalUpserter persists ToolApproval resources when a governed tool requires approval.
 type ToolApprovalUpserter interface {
 	Upsert(item resources.ToolApproval) (resources.ToolApproval, error)
-	Get(key string) (resources.ToolApproval, bool)
+	Get(key string) (resources.ToolApproval, bool, error)
 }
 
 // AgentMessageConsumerManager watches agents and consumes runtime inbox messages per agent.
@@ -97,6 +98,7 @@ type AgentMessageConsumerManager struct {
 	modelEPs       resources.ModelEndpointLookup
 	toolApprovals  ToolApprovalUpserter
 	mu             sync.Mutex
+	seenMu         sync.Mutex
 	consumers      map[string]context.CancelFunc
 	seenMessage    map[string]time.Time
 	taskMemory     map[string]*SharedMemoryStore
@@ -182,7 +184,13 @@ func (m *AgentMessageConsumerManager) Start(ctx context.Context) {
 }
 
 func (m *AgentMessageConsumerManager) reconcileConsumers(ctx context.Context) {
-	agents := m.agents.List()
+	agents, err := m.agents.List()
+	if err != nil {
+		if m.logger != nil {
+			m.logger.Printf("consumer reconcile: failed to list agents: %v", err)
+		}
+		return
+	}
 	desired := make(map[string]AgentMessageSubscription, len(agents))
 	for _, agent := range agents {
 		name := strings.TrimSpace(agent.Metadata.Name)
@@ -201,6 +209,13 @@ func (m *AgentMessageConsumerManager) reconcileConsumers(ctx context.Context) {
 		}
 	}
 
+	type pendingStart struct {
+		key string
+		sub AgentMessageSubscription
+		ctx context.Context
+	}
+	var toStart []pendingStart
+
 	m.mu.Lock()
 	for key, cancel := range m.consumers {
 		if _, keep := desired[key]; keep {
@@ -218,12 +233,16 @@ func (m *AgentMessageConsumerManager) reconcileConsumers(ctx context.Context) {
 		}
 		childCtx, cancel := context.WithCancel(ctx)
 		m.consumers[key] = cancel
-		go m.consumeLoop(childCtx, key, sub)
-		if m.logger != nil {
-			m.logger.Printf("agent message consumer started agent=%s durable=%s", key, sub.Durable)
-		}
+		toStart = append(toStart, pendingStart{key: key, sub: sub, ctx: childCtx})
 	}
 	m.mu.Unlock()
+
+	for _, ps := range toStart {
+		go m.consumeLoop(ps.ctx, ps.key, ps.sub)
+		if m.logger != nil {
+			m.logger.Printf("agent message consumer started agent=%s durable=%s", ps.key, ps.sub.Durable)
+		}
+	}
 }
 
 func (m *AgentMessageConsumerManager) stopAllConsumers() {
@@ -265,7 +284,10 @@ func (m *AgentMessageConsumerManager) handleDelivery(ctx context.Context, _ stri
 		return nil
 	}
 
-	task, ok := m.tasks.Get(taskKey)
+	task, ok, err := m.tasks.Get(taskKey)
+	if err != nil {
+		return err
+	}
 	if !ok {
 		if m.logger != nil {
 			m.logger.Printf("agent message dropped: task not found task=%s message_id=%s", taskKey, msg.MessageID)
@@ -286,11 +308,16 @@ func (m *AgentMessageConsumerManager) handleDelivery(ctx context.Context, _ stri
 }
 
 func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKey string, msg AgentMessage) error {
+	// Restore the W3C trace context from task annotations so the message span
+	// is linked as a continuation of the HTTP request that created the task.
+	if task, ok, err := m.tasks.Get(taskKey); err == nil && ok {
+		ctx = telemetry.ExtractTraceContext(ctx, task.Metadata.Annotations)
+	}
 	ctx, msgSpan := telemetry.StartMessageSpan(ctx, taskKey,
 		msg.MessageID, msg.FromAgent, msg.ToAgent, msg.BranchID)
 	defer msgSpan.End()
 
-	task, record, skip, retryAfter, err := m.beginMessageAttempt(taskKey, msg)
+	task, record, skip, retryAfter, err := m.beginMessageAttempt(ctx, taskKey, msg)
 	if err != nil {
 		telemetry.EndSpanError(msgSpan, err)
 		return err
@@ -304,9 +331,12 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 
 	ns, _ := splitTaskKey(taskKey)
 	systemKey := scopedTaskName(ns, task.Spec.System)
-	system, ok := m.systems.Get(systemKey)
+	system, ok, sysErr := m.systems.Get(systemKey)
+	if sysErr != nil {
+		return sysErr
+	}
 	if !ok {
-		retryScheduled, delay, markErr := m.recordRetryOrDeadLetter(taskKey, msg, record, fmt.Errorf("agentsystem %q not found", task.Spec.System))
+		retryScheduled, delay, markErr := m.recordRetryOrDeadLetter(ctx, taskKey, msg, record, fmt.Errorf("agentsystem %q not found", task.Spec.System))
 		if markErr != nil {
 			return markErr
 		}
@@ -316,7 +346,7 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 		return nil
 	}
 
-	joinDecision, err := m.applyJoinGate(taskKey, msg, system)
+	joinDecision, err := m.applyJoinGate(ctx, taskKey, msg, system)
 	if err != nil {
 		return err
 	}
@@ -325,9 +355,12 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 	}
 
 	agentKey := scopedTaskName(ns, msg.ToAgent)
-	agent, ok := m.agents.Get(agentKey)
+	agent, ok, agentErr := m.agents.Get(agentKey)
+	if agentErr != nil {
+		return agentErr
+	}
 	if !ok {
-		retryScheduled, delay, markErr := m.recordRetryOrDeadLetter(taskKey, msg, record, fmt.Errorf("agent %q not found for message processing", msg.ToAgent))
+		retryScheduled, delay, markErr := m.recordRetryOrDeadLetter(ctx, taskKey, msg, record, fmt.Errorf("agent %q not found for message processing", msg.ToAgent))
 		if markErr != nil {
 			return markErr
 		}
@@ -338,7 +371,7 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 	}
 	_, effectiveModel, err := resources.ResolveAgentModelRef(ns, agent.Spec.ModelRef, m.modelEPs)
 	if err != nil {
-		retryScheduled, delay, markErr := m.recordRetryOrDeadLetter(taskKey, msg, record, fmt.Errorf("agent %s model resolution failed: %w", agent.Metadata.Name, err))
+		retryScheduled, delay, markErr := m.recordRetryOrDeadLetter(ctx, taskKey, msg, record, fmt.Errorf("agent %s model resolution failed: %w", agent.Metadata.Name, err))
 		if markErr != nil {
 			return markErr
 		}
@@ -371,7 +404,7 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 	if m.toolApprovals != nil {
 		approvals := m.toolApprovals
 		approvalCtx = &GovernedToolApprovalContext{
-			Getter: func(key string) (resources.ToolApproval, bool) {
+			Getter: func(key string) (resources.ToolApproval, bool, error) {
 				return approvals.Get(key)
 			},
 			TaskKey:   taskKey,
@@ -411,13 +444,13 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 	if err != nil {
 		telemetry.EndSpanError(agentSpan, err)
 		if IsApprovalRequiredError(err) && m.toolApprovals != nil {
-			if pauseErr := m.pauseTaskForToolApproval(taskKey, msg, record, agent, err); pauseErr == nil {
+			if pauseErr := m.pauseTaskForToolApproval(ctx, taskKey, msg, record, agent, err); pauseErr == nil {
 				return RetryAfter(2*time.Second, nil)
 			} else if m.logger != nil {
 				m.logger.Printf("tool approval pause failed task=%s message_id=%s: %v", taskKey, msg.MessageID, pauseErr)
 			}
 		}
-		retryScheduled, delay, markErr := m.recordRetryOrDeadLetter(taskKey, msg, record, fmt.Errorf("agent %s execution failed: %w", agent.Metadata.Name, err))
+		retryScheduled, delay, markErr := m.recordRetryOrDeadLetter(ctx, taskKey, msg, record, fmt.Errorf("agent %s execution failed: %w", agent.Metadata.Name, err))
 		if markErr != nil {
 			return markErr
 		}
@@ -445,7 +478,7 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 			tokenBudget(task),
 			strings.TrimSpace(result.TokenSource),
 		)
-		retryScheduled, delay, markErr := m.recordRetryOrDeadLetter(taskKey, msg, record, reason)
+		retryScheduled, delay, markErr := m.recordRetryOrDeadLetter(ctx, taskKey, msg, record, reason)
 		if markErr != nil {
 			return markErr
 		}
@@ -456,7 +489,7 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 	}
 
 	if limitReached, branchTurns, maxTurns := shouldStopForTurnLimit(task, msg); limitReached {
-		if err := m.completeTaskSuccess(taskKey, msg, record, result); err != nil {
+		if err := m.completeTaskSuccess(ctx, taskKey, msg, record, result); err != nil {
 			return err
 		}
 		_ = m.tasks.AppendLog(taskKey, fmt.Sprintf(
@@ -480,7 +513,7 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 
 	nextAgents := nextAgentsFromSystem(system, strings.TrimSpace(msg.ToAgent))
 	if len(nextAgents) == 0 {
-		if err := m.completeTaskSuccess(taskKey, msg, record, result); err != nil {
+		if err := m.completeTaskSuccess(ctx, taskKey, msg, record, result); err != nil {
 			return err
 		}
 		if m.logger != nil {
@@ -490,9 +523,9 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 	}
 
 	nextMessages := buildNextAgentMessages(task, msg, result, nextAgents)
-	for _, nextMessage := range nextMessages {
+		for _, nextMessage := range nextMessages {
 		if _, err := m.bus.Publish(ctx, nextMessage); err != nil {
-			retryScheduled, delay, markErr := m.recordRetryOrDeadLetter(taskKey, msg, record, fmt.Errorf("publish next message to %s failed: %w", nextMessage.ToAgent, err))
+			retryScheduled, delay, markErr := m.recordRetryOrDeadLetter(ctx, taskKey, msg, record, fmt.Errorf("publish next message to %s failed: %w", nextMessage.ToAgent, err))
 			if markErr != nil {
 				return markErr
 			}
@@ -502,7 +535,7 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 			return nil
 		}
 	}
-	if err := m.recordForward(taskKey, msg, record, result, nextMessages); err != nil {
+	if err := m.recordForward(ctx, taskKey, msg, record, result, nextMessages); err != nil {
 		return err
 	}
 	if m.logger != nil {
@@ -573,7 +606,7 @@ func (d joinGateDecision) SourcePayloads() string {
 	return strings.Join(values, " | ")
 }
 
-func (m *AgentMessageConsumerManager) applyJoinGate(taskKey string, msg AgentMessage, system resources.AgentSystem) (joinGateDecision, error) {
+func (m *AgentMessageConsumerManager) applyJoinGate(ctx context.Context, taskKey string, msg AgentMessage, system resources.AgentSystem) (joinGateDecision, error) {
 	joinMode, expected, required, enabled := joinRequirements(system, strings.TrimSpace(msg.ToAgent))
 	if !enabled {
 		return joinGateDecision{}, nil
@@ -581,7 +614,14 @@ func (m *AgentMessageConsumerManager) applyJoinGate(taskKey string, msg AgentMes
 
 	var lastErr error
 	for attempt := 0; attempt < 5; attempt++ {
-		task, ok := m.tasks.Get(taskKey)
+		task, ok, err := m.tasks.Get(taskKey)
+		if err != nil {
+			lastErr = err
+			if !casRetryDelay(ctx, attempt) {
+				break
+			}
+			continue
+		}
 		if !ok {
 			return joinGateDecision{SkipExecution: true}, nil
 		}
@@ -625,15 +665,17 @@ func (m *AgentMessageConsumerManager) applyJoinGate(taskKey string, msg AgentMes
 			trimTaskIdempotency(&task)
 			task.Status.ObservedGeneration = task.Metadata.Generation
 			if _, err := m.tasks.Upsert(task); err != nil {
-				lastErr = err
-				time.Sleep(time.Duration(attempt+1) * 20 * time.Millisecond)
-				continue
+			lastErr = err
+			if !casRetryDelay(ctx, attempt) {
+				return joinGateDecision{}, ctx.Err()
 			}
-			return joinGateDecision{SkipExecution: true, JoinMode: state.Mode, Required: state.QuorumRequired, Sources: state.Sources}, nil
+			continue
 		}
+		return joinGateDecision{SkipExecution: true, JoinMode: state.Mode, Required: state.QuorumRequired, Sources: state.Sources}, nil
+	}
 
-		ready := len(state.Sources) >= state.QuorumRequired
-		if !ready {
+	ready := len(state.Sources) >= state.QuorumRequired
+	if !ready {
 			current.Phase = "Succeeded"
 			current.Worker = strings.TrimSpace(m.workerID)
 			current.ProcessedAt = now
@@ -649,36 +691,47 @@ func (m *AgentMessageConsumerManager) applyJoinGate(taskKey string, msg AgentMes
 			trimTaskIdempotency(&task)
 			task.Status.ObservedGeneration = task.Metadata.Generation
 			if _, err := m.tasks.Upsert(task); err != nil {
-				lastErr = err
-				time.Sleep(time.Duration(attempt+1) * 20 * time.Millisecond)
-				continue
+			lastErr = err
+			if !casRetryDelay(ctx, attempt) {
+				return joinGateDecision{}, ctx.Err()
 			}
-			return joinGateDecision{SkipExecution: true, JoinMode: state.Mode, Required: state.QuorumRequired, Sources: state.Sources}, nil
+			continue
 		}
+		return joinGateDecision{SkipExecution: true, JoinMode: state.Mode, Required: state.QuorumRequired, Sources: state.Sources}, nil
+	}
 
-		state.Activated = true
+	state.Activated = true
 		state.ActivatedAt = now
 		state.ActivatedBy = strings.TrimSpace(msg.MessageID)
 		task.Status.JoinStates[stateIdx] = state
 		trimTaskJoinStates(&task)
 		task.Status.ObservedGeneration = task.Metadata.Generation
 		if _, err := m.tasks.Upsert(task); err != nil {
-			lastErr = err
-			time.Sleep(time.Duration(attempt+1) * 20 * time.Millisecond)
-			continue
+		lastErr = err
+		if !casRetryDelay(ctx, attempt) {
+			return joinGateDecision{}, ctx.Err()
 		}
-		return joinGateDecision{SkipExecution: false, JoinMode: state.Mode, Required: state.QuorumRequired, Sources: state.Sources}, nil
+		continue
 	}
+	return joinGateDecision{SkipExecution: false, JoinMode: state.Mode, Required: state.QuorumRequired, Sources: state.Sources}, nil
+}
 	if lastErr != nil {
 		return joinGateDecision{}, lastErr
 	}
 	return joinGateDecision{}, nil
 }
 
-func (m *AgentMessageConsumerManager) completeTaskSuccess(taskKey string, msg AgentMessage, record resources.TaskMessage, result AgentExecutionResult) error {
+func (m *AgentMessageConsumerManager) completeTaskSuccess(ctx context.Context, taskKey string, msg AgentMessage, record resources.TaskMessage, result AgentExecutionResult) error {
 	var lastErr error
 	for attempt := 0; attempt < 5; attempt++ {
-		task, ok := m.tasks.Get(taskKey)
+		task, ok, err := m.tasks.Get(taskKey)
+		if err != nil {
+			lastErr = err
+			if !casRetryDelay(ctx, attempt) {
+				break
+			}
+			continue
+		}
 		if !ok {
 			return nil
 		}
@@ -730,13 +783,16 @@ func (m *AgentMessageConsumerManager) completeTaskSuccess(taskKey string, msg Ag
 		task.Status.ObservedGeneration = task.Metadata.Generation
 
 		if _, err := m.tasks.Upsert(task); err != nil {
-			lastErr = err
-			time.Sleep(time.Duration(attempt+1) * 20 * time.Millisecond)
-			continue
+		lastErr = err
+		if !casRetryDelay(ctx, attempt) {
+			return ctx.Err()
 		}
-		_ = m.tasks.AppendLog(taskKey, fmt.Sprintf("agent message processed: id=%s terminal_agent=%s task_phase=%s", msg.MessageID, result.Agent, task.Status.Phase))
+		continue
+	}
+	m.deleteTaskSharedMemory(taskKey)
+	_ = m.tasks.AppendLog(taskKey, fmt.Sprintf("agent message processed: id=%s terminal_agent=%s task_phase=%s", msg.MessageID, result.Agent, task.Status.Phase))
 		namespace, taskName := splitTaskKey(taskKey)
-		m.emitMetering(context.Background(), MeteringEvent{
+		m.emitMetering(ctx, MeteringEvent{
 			Timestamp:       time.Now().UTC().Format(time.RFC3339Nano),
 			Component:       "agent-message-consumer",
 			Type:            "message.completed",
@@ -752,7 +808,7 @@ func (m *AgentMessageConsumerManager) completeTaskSuccess(taskKey string, msg Ag
 			TokensEstimated: result.EstimatedTokens,
 			ToolCalls:       result.ToolCalls,
 		})
-		m.emitAudit(context.Background(), AuditEvent{
+		m.emitAudit(ctx, AuditEvent{
 			Timestamp:    time.Now().UTC().Format(time.RFC3339Nano),
 			Component:    "agent-message-consumer",
 			Action:       "message.completed",
@@ -774,10 +830,17 @@ func (m *AgentMessageConsumerManager) completeTaskSuccess(taskKey string, msg Ag
 	return lastErr
 }
 
-func (m *AgentMessageConsumerManager) recordForward(taskKey string, msg AgentMessage, record resources.TaskMessage, result AgentExecutionResult, nextMessages []AgentMessage) error {
+func (m *AgentMessageConsumerManager) recordForward(ctx context.Context, taskKey string, msg AgentMessage, record resources.TaskMessage, result AgentExecutionResult, nextMessages []AgentMessage) error {
 	var lastErr error
 	for attempt := 0; attempt < 5; attempt++ {
-		task, ok := m.tasks.Get(taskKey)
+		task, ok, err := m.tasks.Get(taskKey)
+		if err != nil {
+			lastErr = err
+			if !casRetryDelay(ctx, attempt) {
+				break
+			}
+			continue
+		}
 		if !ok {
 			return nil
 		}
@@ -829,11 +892,13 @@ func (m *AgentMessageConsumerManager) recordForward(taskKey string, msg AgentMes
 		task.Status.ObservedGeneration = task.Metadata.Generation
 
 		if _, err := m.tasks.Upsert(task); err != nil {
-			lastErr = err
-			time.Sleep(time.Duration(attempt+1) * 20 * time.Millisecond)
-			continue
+		lastErr = err
+		if !casRetryDelay(ctx, attempt) {
+			return ctx.Err()
 		}
-		targets = make([]string, 0, len(nextMessages))
+		continue
+	}
+	targets = make([]string, 0, len(nextMessages))
 		nextIDs := make([]string, 0, len(nextMessages))
 		for _, next := range nextMessages {
 			targets = append(targets, next.ToAgent)
@@ -841,7 +906,7 @@ func (m *AgentMessageConsumerManager) recordForward(taskKey string, msg AgentMes
 		}
 		_ = m.tasks.AppendLog(taskKey, fmt.Sprintf("agent message processed: id=%s forwarded_to=%s next_messages=%s", msg.MessageID, strings.Join(targets, ","), strings.Join(nextIDs, ",")))
 		namespace, taskName := splitTaskKey(taskKey)
-		m.emitMetering(context.Background(), MeteringEvent{
+		m.emitMetering(ctx, MeteringEvent{
 			Timestamp:       time.Now().UTC().Format(time.RFC3339Nano),
 			Component:       "agent-message-consumer",
 			Type:            "message.completed",
@@ -860,7 +925,7 @@ func (m *AgentMessageConsumerManager) recordForward(taskKey string, msg AgentMes
 				"forwarded_to": strings.Join(targets, ","),
 			},
 		})
-		m.emitAudit(context.Background(), AuditEvent{
+		m.emitAudit(ctx, AuditEvent{
 			Timestamp:    time.Now().UTC().Format(time.RFC3339Nano),
 			Component:    "agent-message-consumer",
 			Action:       "message.forwarded",
@@ -879,10 +944,17 @@ func (m *AgentMessageConsumerManager) recordForward(taskKey string, msg AgentMes
 	return lastErr
 }
 
-func (m *AgentMessageConsumerManager) beginMessageAttempt(taskKey string, msg AgentMessage) (resources.Task, resources.TaskMessage, bool, time.Duration, error) {
+func (m *AgentMessageConsumerManager) beginMessageAttempt(ctx context.Context, taskKey string, msg AgentMessage) (resources.Task, resources.TaskMessage, bool, time.Duration, error) {
 	var lastErr error
 	for attempt := 0; attempt < 5; attempt++ {
-		task, ok := m.tasks.Get(taskKey)
+		task, ok, err := m.tasks.Get(taskKey)
+		if err != nil {
+			lastErr = err
+			if !casRetryDelay(ctx, attempt) {
+				break
+			}
+			continue
+		}
 		if !ok {
 			return resources.Task{}, resources.TaskMessage{}, true, 0, nil
 		}
@@ -907,13 +979,15 @@ func (m *AgentMessageConsumerManager) beginMessageAttempt(taskKey string, msg Ag
 		if strings.EqualFold(strings.TrimSpace(record.Phase), "retrypending") {
 			wait := retryWaitDuration(record.NextAttemptAt)
 			if wait > 0 {
-				if ownershipChanged {
-					task.Status.ObservedGeneration = task.Metadata.Generation
-					if _, err := m.tasks.Upsert(task); err != nil {
-						lastErr = err
-						time.Sleep(time.Duration(attempt+1) * 20 * time.Millisecond)
-						continue
+			if ownershipChanged {
+				task.Status.ObservedGeneration = task.Metadata.Generation
+				if _, err := m.tasks.Upsert(task); err != nil {
+					lastErr = err
+					if !casRetryDelay(ctx, attempt) {
+						return resources.Task{}, resources.TaskMessage{}, false, 0, ctx.Err()
 					}
+					continue
+				}
 					if takeover {
 						_ = m.tasks.AppendLog(taskKey, fmt.Sprintf("agent message lease takeover: message_id=%s worker=%s", msg.MessageID, m.workerID))
 					}
@@ -935,16 +1009,18 @@ func (m *AgentMessageConsumerManager) beginMessageAttempt(taskKey string, msg Ag
 		task.Status.ObservedGeneration = task.Metadata.Generation
 
 		if _, err := m.tasks.Upsert(task); err != nil {
-			lastErr = err
-			time.Sleep(time.Duration(attempt+1) * 20 * time.Millisecond)
-			continue
+		lastErr = err
+		if !casRetryDelay(ctx, attempt) {
+			return resources.Task{}, resources.TaskMessage{}, false, 0, ctx.Err()
 		}
-		if takeover {
-			_ = m.tasks.AppendLog(taskKey, fmt.Sprintf("agent message lease takeover: message_id=%s worker=%s", msg.MessageID, m.workerID))
-		}
-		_ = m.tasks.AppendLog(taskKey, fmt.Sprintf("agent message attempt started: id=%s attempt=%d/%d", msg.MessageID, record.Attempts, record.MaxAttempts))
+		continue
+	}
+	if takeover {
+		_ = m.tasks.AppendLog(taskKey, fmt.Sprintf("agent message lease takeover: message_id=%s worker=%s", msg.MessageID, m.workerID))
+	}
+	_ = m.tasks.AppendLog(taskKey, fmt.Sprintf("agent message attempt started: id=%s attempt=%d/%d", msg.MessageID, record.Attempts, record.MaxAttempts))
 		namespace, taskName := splitTaskKey(taskKey)
-		m.emitMetering(context.Background(), MeteringEvent{
+		m.emitMetering(ctx, MeteringEvent{
 			Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 			Component: "agent-message-consumer",
 			Type:      "message.attempt_started",
@@ -961,7 +1037,7 @@ func (m *AgentMessageConsumerManager) beginMessageAttempt(taskKey string, msg Ag
 				"message_type":    strings.TrimSpace(msg.Type),
 			},
 		})
-		m.emitAudit(context.Background(), AuditEvent{
+		m.emitAudit(ctx, AuditEvent{
 			Timestamp:    time.Now().UTC().Format(time.RFC3339Nano),
 			Component:    "agent-message-consumer",
 			Action:       "message.attempt_started",
@@ -993,10 +1069,23 @@ func (m *AgentMessageConsumerManager) taskSharedMemory(taskKey string) *SharedMe
 	return mem
 }
 
-func (m *AgentMessageConsumerManager) recordRetryOrDeadLetter(taskKey string, msg AgentMessage, record resources.TaskMessage, processErr error) (bool, time.Duration, error) {
+func (m *AgentMessageConsumerManager) deleteTaskSharedMemory(taskKey string) {
+	m.taskMemoryMu.Lock()
+	defer m.taskMemoryMu.Unlock()
+	delete(m.taskMemory, taskKey)
+}
+
+func (m *AgentMessageConsumerManager) recordRetryOrDeadLetter(ctx context.Context, taskKey string, msg AgentMessage, record resources.TaskMessage, processErr error) (bool, time.Duration, error) {
 	var lastErr error
 	for attempt := 0; attempt < 5; attempt++ {
-		task, ok := m.tasks.Get(taskKey)
+		task, ok, err := m.tasks.Get(taskKey)
+		if err != nil {
+			lastErr = err
+			if !casRetryDelay(ctx, attempt) {
+				break
+			}
+			continue
+		}
 		if !ok {
 			return false, 0, nil
 		}
@@ -1028,15 +1117,17 @@ func (m *AgentMessageConsumerManager) recordRetryOrDeadLetter(taskKey string, ms
 			appendMessageTrace(&task, msg, "agent_message_retry_scheduled", fmt.Sprintf("message_id=%s attempt=%d/%d delay=%s error=%s", msg.MessageID, current.Attempts, current.MaxAttempts, delay.String(), current.LastError))
 			task.Status.ObservedGeneration = task.Metadata.Generation
 			if _, err := m.tasks.Upsert(task); err != nil {
-				lastErr = err
-				time.Sleep(time.Duration(attempt+1) * 20 * time.Millisecond)
-				continue
+			lastErr = err
+			if !casRetryDelay(ctx, attempt) {
+				return false, 0, ctx.Err()
 			}
-			_ = m.tasks.AppendLog(taskKey, fmt.Sprintf("agent message retry scheduled: id=%s attempt=%d/%d delay=%s error=%s", msg.MessageID, current.Attempts, current.MaxAttempts, delay.String(), current.LastError))
+			continue
+		}
+		_ = m.tasks.AppendLog(taskKey, fmt.Sprintf("agent message retry scheduled: id=%s attempt=%d/%d delay=%s error=%s", msg.MessageID, current.Attempts, current.MaxAttempts, delay.String(), current.LastError))
 			telemetry.RecordRetry(strings.TrimSpace(msg.ToAgent))
 			telemetry.RecordMessagePhase("retrypending", strings.TrimSpace(msg.ToAgent))
 			namespace, taskName := splitTaskKey(taskKey)
-			m.emitMetering(context.Background(), MeteringEvent{
+			m.emitMetering(ctx, MeteringEvent{
 				Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 				Component: "agent-message-consumer",
 				Type:      "message.retry_scheduled",
@@ -1053,7 +1144,7 @@ func (m *AgentMessageConsumerManager) recordRetryOrDeadLetter(taskKey string, ms
 					"error": current.LastError,
 				},
 			})
-			m.emitAudit(context.Background(), AuditEvent{
+			m.emitAudit(ctx, AuditEvent{
 				Timestamp:    time.Now().UTC().Format(time.RFC3339Nano),
 				Component:    "agent-message-consumer",
 				Action:       "message.retry_scheduled",
@@ -1103,15 +1194,18 @@ func (m *AgentMessageConsumerManager) recordRetryOrDeadLetter(taskKey string, ms
 		trimTaskHistory(&task)
 
 		if _, err := m.tasks.Upsert(task); err != nil {
-			lastErr = err
-			time.Sleep(time.Duration(attempt+1) * 20 * time.Millisecond)
-			continue
+		lastErr = err
+		if !casRetryDelay(ctx, attempt) {
+			return false, 0, ctx.Err()
 		}
-		_ = m.tasks.AppendLog(taskKey, fmt.Sprintf("agent message dead-lettered: id=%s attempts=%d error=%s", msg.MessageID, current.Attempts, current.LastError))
+		continue
+	}
+	m.deleteTaskSharedMemory(taskKey)
+	_ = m.tasks.AppendLog(taskKey, fmt.Sprintf("agent message dead-lettered: id=%s attempts=%d error=%s", msg.MessageID, current.Attempts, current.LastError))
 		telemetry.RecordDeadLetter(strings.TrimSpace(msg.ToAgent))
 		telemetry.RecordMessagePhase("deadletter", strings.TrimSpace(msg.ToAgent))
 		namespace, taskName := splitTaskKey(taskKey)
-		m.emitMetering(context.Background(), MeteringEvent{
+		m.emitMetering(ctx, MeteringEvent{
 			Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 			Component: "agent-message-consumer",
 			Type:      "message.completed",
@@ -1127,7 +1221,7 @@ func (m *AgentMessageConsumerManager) recordRetryOrDeadLetter(taskKey string, ms
 				"error": current.LastError,
 			},
 		})
-		m.emitAudit(context.Background(), AuditEvent{
+		m.emitAudit(ctx, AuditEvent{
 			Timestamp:    time.Now().UTC().Format(time.RFC3339Nano),
 			Component:    "agent-message-consumer",
 			Action:       "message.completed",
@@ -1153,8 +1247,8 @@ func (m *AgentMessageConsumerManager) isDuplicate(msg AgentMessage) bool {
 		id = fmt.Sprintf("%s|%s|%s|%s|%d", strings.TrimSpace(msg.TaskID), strings.TrimSpace(msg.FromAgent), strings.TrimSpace(msg.ToAgent), strings.TrimSpace(msg.Timestamp), msg.Attempt)
 	}
 
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.seenMu.Lock()
+	defer m.seenMu.Unlock()
 	cutoff := now.Add(-m.dedupeTTL)
 	for seenID, seenAt := range m.seenMessage {
 		if seenAt.Before(cutoff) {
@@ -1346,6 +1440,19 @@ func appendRuntimeStepTrace(task *resources.Task, agentName string, events []Age
 	trimTaskTrace(task)
 }
 
+// maxTaskOutputValueBytes is the per-value size cap applied to agent output
+// written into task.Status.Output. 256 KB per value prevents a single large
+// model response from bloating the task row and SSE watch streams.
+const maxTaskOutputValueBytes = 256 * 1024
+
+func truncateOutputValue(v string) string {
+	if len(v) <= maxTaskOutputValueBytes {
+		return v
+	}
+	const suffix = "...[truncated]"
+	return v[:maxTaskOutputValueBytes-len(suffix)] + suffix
+}
+
 func updateTaskOutput(task *resources.Task, result AgentExecutionResult, mode string) {
 	if task == nil {
 		return
@@ -1357,7 +1464,7 @@ func updateTaskOutput(task *resources.Task, result AgentExecutionResult, mode st
 	cloned["runtime.mode"] = strings.TrimSpace(mode)
 	cloned["last_agent"] = strings.TrimSpace(result.Agent)
 	cloned["last_event"] = strings.TrimSpace(result.LastEvent)
-	cloned["last_output"] = strings.TrimSpace(result.Output)
+	cloned["last_output"] = truncateOutputValue(strings.TrimSpace(result.Output))
 	cloned["last_duration_ms"] = strconv.FormatInt(result.Duration.Milliseconds(), 10)
 	cloned["last_tool_calls"] = strconv.Itoa(result.ToolCalls)
 	cloned["last_steps"] = strconv.Itoa(result.Steps)
@@ -1504,6 +1611,19 @@ func retryWaitDuration(nextAttemptAt string) time.Duration {
 	return wait
 }
 
+// casRetryDelay sleeps for attempt-based linear backoff and returns true when the
+// sleep completes normally. It returns false immediately when ctx is cancelled,
+// signalling that the caller's retry loop should abort.
+func casRetryDelay(ctx context.Context, attempt int) bool {
+	d := time.Duration(attempt+1) * 20 * time.Millisecond
+	select {
+	case <-time.After(d):
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
 func computeMessageRetryDelay(policy resources.TaskMessageRetryPolicy, msg AgentMessage, messageAttempts int) time.Duration {
 	base := parseDurationOrDefault(policy.Backoff, 0)
 	if base <= 0 {
@@ -1519,6 +1639,18 @@ func computeMessageRetryDelay(policy resources.TaskMessageRetryPolicy, msg Agent
 	exp := messageAttempts - 1
 	if exp > 20 {
 		exp = 20
+	}
+	// Guard against int64 overflow: cap exp so base*(1<<exp) never wraps.
+	// time.Duration is int64 nanoseconds; max ~9.2e18. If 1<<exp would push
+	// base*multiplier past maxBackoff, just return maxBackoff directly.
+	if base > 0 && exp > 0 {
+		maxExp := 63 - bits.LeadingZeros64(uint64(maxBackoff/base))
+		if maxExp < 0 {
+			maxExp = 0
+		}
+		if exp > maxExp {
+			return maxBackoff
+		}
 	}
 	delay := base * time.Duration(1<<exp)
 	if delay > maxBackoff {
@@ -1557,6 +1689,10 @@ type messageRetryClassification struct {
 func classifyMessageRetryability(policy resources.TaskMessageRetryPolicy, processErr error) messageRetryClassification {
 	if processErr == nil {
 		return messageRetryClassification{Retryable: true, Reason: "none"}
+	}
+	if mge, retryable := IsModelGatewayError(processErr); mge != nil {
+		reason := fmt.Sprintf("model_gateway_http_%d", mge.StatusCode)
+		return messageRetryClassification{Retryable: retryable, Reason: reason}
 	}
 	if code, reason, retryable, ok := ToolErrorMeta(processErr); ok {
 		classificationReason := strings.TrimSpace(reason)
@@ -2156,7 +2292,7 @@ func parseToolFromApprovalChain(err error) string {
 	return ""
 }
 
-func (m *AgentMessageConsumerManager) pauseTaskForToolApproval(taskKey string, msg AgentMessage, _ resources.TaskMessage, agent resources.Agent, execErr error) error {
+func (m *AgentMessageConsumerManager) pauseTaskForToolApproval(ctx context.Context, taskKey string, msg AgentMessage, _ resources.TaskMessage, agent resources.Agent, execErr error) error {
 	if m == nil || m.tasks == nil || m.toolApprovals == nil {
 		return fmt.Errorf("approval pause not configured")
 	}
@@ -2194,13 +2330,26 @@ func (m *AgentMessageConsumerManager) pauseTaskForToolApproval(taskKey string, m
 	if _, err := m.toolApprovals.Upsert(approval); err != nil {
 		return err
 	}
-	if task, ok := m.tasks.Get(taskKey); ok && strings.EqualFold(strings.TrimSpace(task.Status.Phase), "waitingapproval") {
-		return nil
+	{
+		t, ok, err := m.tasks.Get(taskKey)
+		if err != nil {
+			return err
+		}
+		if ok && strings.EqualFold(strings.TrimSpace(t.Status.Phase), "waitingapproval") {
+			return nil
+		}
 	}
 
 	var lastUpsert error
 	for attempt := 0; attempt < 5; attempt++ {
-		task, ok := m.tasks.Get(taskKey)
+		task, ok, err := m.tasks.Get(taskKey)
+		if err != nil {
+			lastUpsert = err
+			if !casRetryDelay(ctx, attempt) {
+				break
+			}
+			continue
+		}
 		if !ok {
 			return fmt.Errorf("task not found")
 		}
@@ -2217,7 +2366,9 @@ func (m *AgentMessageConsumerManager) pauseTaskForToolApproval(taskKey string, m
 		updated, err := m.tasks.Upsert(task)
 		if err != nil {
 			lastUpsert = err
-			time.Sleep(time.Duration(attempt+1) * 20 * time.Millisecond)
+			if !casRetryDelay(ctx, attempt) {
+				return ctx.Err()
+			}
 			continue
 		}
 		_ = updated

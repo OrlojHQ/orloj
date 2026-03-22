@@ -41,28 +41,28 @@ type staticToolLookup struct {
 	items map[string]resources.Tool
 }
 
-func (l staticToolLookup) Get(name string) (resources.Tool, bool) {
+func (l staticToolLookup) Get(name string) (resources.Tool, bool, error) {
 	item, ok := l.items[name]
-	return item, ok
+	return item, ok, nil
 }
 
 type staticRoleLookup struct {
 	items map[string]resources.AgentRole
 }
 
-func (l staticRoleLookup) Get(name string) (resources.AgentRole, bool) {
+func (l staticRoleLookup) Get(name string) (resources.AgentRole, bool, error) {
 	item, ok := l.items[name]
-	return item, ok
+	return item, ok, nil
 }
 
 type staticToolPermissionLookup struct {
 	items []resources.ToolPermission
 }
 
-func (l staticToolPermissionLookup) List() []resources.ToolPermission {
+func (l staticToolPermissionLookup) List() ([]resources.ToolPermission, error) {
 	out := make([]resources.ToolPermission, len(l.items))
 	copy(out, l.items)
-	return out
+	return out, nil
 }
 
 func TestGovernedToolRuntimeStrictUnsupportedTool(t *testing.T) {

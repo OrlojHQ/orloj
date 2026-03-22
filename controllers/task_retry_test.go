@@ -56,7 +56,10 @@ func TestTaskRetrySchedulesNextAttemptOnTimeout(t *testing.T) {
 		t.Fatalf("first reconcile: %v", err)
 	}
 
-	taskAfterFirst, ok := stores.taskStore.Get("retry-task")
+	taskAfterFirst, ok, err := stores.taskStore.Get("retry-task")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !ok {
 		t.Fatal("task not found after first reconcile")
 	}
@@ -78,7 +81,10 @@ func TestTaskRetrySchedulesNextAttemptOnTimeout(t *testing.T) {
 		t.Fatalf("second reconcile: %v", err)
 	}
 
-	taskAfterSecond, ok := stores.taskStore.Get("retry-task")
+	taskAfterSecond, ok, err := stores.taskStore.Get("retry-task")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !ok {
 		t.Fatal("task not found after second reconcile")
 	}
@@ -96,7 +102,7 @@ func TestTaskRetrySchedulesNextAttemptOnTimeout(t *testing.T) {
 	if err := controller.ReconcileOnce(context.Background()); err != nil {
 		t.Fatalf("third reconcile: %v", err)
 	}
-	finalTask, _ := stores.taskStore.Get("retry-task")
+	finalTask, _, _ := stores.taskStore.Get("retry-task")
 	if finalTask.Status.Phase != "DeadLetter" {
 		t.Fatalf("expected DeadLetter after max retries reached, got %q", finalTask.Status.Phase)
 	}
@@ -163,7 +169,10 @@ func TestTaskNonRetryablePolicyViolationFailsImmediately(t *testing.T) {
 		t.Fatalf("first reconcile: %v", err)
 	}
 
-	finalTask, ok := stores.taskStore.Get("policy-task")
+	finalTask, ok, err := stores.taskStore.Get("policy-task")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !ok {
 		t.Fatal("task not found")
 	}

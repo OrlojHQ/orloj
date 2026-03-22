@@ -78,7 +78,10 @@ func (c *TaskSchedulerController) ReconcileOnce() error {
 		return nil
 	}
 
-	workers := c.workerStore.List()
+	workers, err := c.workerStore.List()
+	if err != nil {
+		return err
+	}
 	if len(workers) == 0 {
 		return nil
 	}
@@ -93,7 +96,10 @@ func (c *TaskSchedulerController) ReconcileOnce() error {
 		return nil
 	}
 
-	tasks := c.taskStore.List()
+	tasks, err := c.taskStore.List()
+	if err != nil {
+		return err
+	}
 	sort.Slice(tasks, func(i, j int) bool {
 		return tasks[i].Metadata.Name < tasks[j].Metadata.Name
 	})
@@ -257,7 +263,10 @@ func (c *TaskSchedulerController) upsertTask(task resources.Task) (resources.Tas
 			return resources.Task{}, err
 		}
 		lastErr = err
-		current, ok := c.taskStore.Get(store.ScopedName(task.Metadata.Namespace, task.Metadata.Name))
+		current, ok, err := c.taskStore.Get(store.ScopedName(task.Metadata.Namespace, task.Metadata.Name))
+		if err != nil {
+			return resources.Task{}, err
+		}
 		if !ok {
 			return resources.Task{}, err
 		}
