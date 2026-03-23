@@ -186,6 +186,29 @@ GET /v1/agents?namespace=default
 
 Returns an array of all resources of that type in the specified namespace.
 
+#### Pagination
+
+All list endpoints support cursor-based pagination via query parameters:
+
+| Parameter | Description |
+|---|---|
+| `limit` | Maximum number of items to return (1–1000). |
+| `after` | Cursor token — the `metadata.name` of the last item from the previous page. Returns items with names lexicographically after this value. |
+| `namespace` | Filter by namespace. |
+
+When more results are available, the response includes a `continue` field:
+
+```json
+{
+  "continue": "task-00042",
+  "items": [ ... ]
+}
+```
+
+Pass `continue` as the `after` parameter in the next request to fetch the next page. When `continue` is absent or empty, there are no more results.
+
+Offset-based pagination (`?offset=N`) is supported for backward compatibility on the Tasks endpoint but is deprecated in favor of `?after=`.
+
 ### Watch Resources
 
 ```

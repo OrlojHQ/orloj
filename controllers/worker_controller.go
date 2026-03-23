@@ -50,7 +50,7 @@ func (c *WorkerController) Start(ctx context.Context) {
 	defer ticker.Stop()
 
 	for {
-		c.enqueueAll(queue)
+		c.enqueueAll(ctx, queue)
 		select {
 		case <-ctx.Done():
 			return
@@ -65,13 +65,14 @@ func (c *WorkerController) SetEventBus(bus eventbus.Bus) {
 }
 
 func (c *WorkerController) ReconcileOnce() error {
+	ctx := context.Background()
 	queue := newKeyQueue(1024)
-	c.enqueueAll(queue)
+	c.enqueueAll(ctx, queue)
 
 	for {
 		select {
 		case key := <-queue.ch:
-			if err := c.reconcileByName(key); err != nil {
+			if err := c.reconcileByName(ctx, key); err != nil {
 				return err
 			}
 			queue.Done(key)
@@ -87,15 +88,15 @@ func (c *WorkerController) runWorker(ctx context.Context, queue *keyQueue) {
 		if !ok {
 			return
 		}
-		if err := c.reconcileByName(key); err != nil && c.logger != nil {
+		if err := c.reconcileByName(ctx, key); err != nil && c.logger != nil {
 			c.logger.Printf("worker controller reconcile error: %v", err)
 		}
 		queue.Done(key)
 	}
 }
 
-func (c *WorkerController) enqueueAll(queue *keyQueue) {
-	_itemList, err := c.store.List()
+func (c *WorkerController) enqueueAll(ctx context.Context, queue *keyQueue) {
+	_itemList, err := c.store.List(ctx)
 	if err != nil {
 		return
 	}
@@ -104,9 +105,9 @@ func (c *WorkerController) enqueueAll(queue *keyQueue) {
 	}
 }
 
-func (c *WorkerController) reconcileByName(name string) error {
+func (c *WorkerController) reconcileByName(ctx context.Context, name string) error {
 	for attempt := 0; attempt < 3; attempt++ {
-		err := c.tryReconcile(name)
+		err := c.tryReconcile(ctx, name)
 		if err == nil || !store.IsConflict(err) {
 			return err
 		}
@@ -114,8 +115,8 @@ func (c *WorkerController) reconcileByName(name string) error {
 	return nil
 }
 
-func (c *WorkerController) tryReconcile(name string) error {
-	item, ok, err := c.store.Get(name)
+func (c *WorkerController) tryReconcile(ctx context.Context, name string) error {
+	item, ok, err := c.store.Get(ctx, name)
 	if err != nil {
 		return err
 	}
@@ -129,7 +130,7 @@ func (c *WorkerController) tryReconcile(name string) error {
 		item.Status.Phase = "NotReady"
 		item.Status.LastError = "no heartbeat received"
 		item.Status.ObservedGeneration = item.Metadata.Generation
-		_, err := c.store.Upsert(item)
+		_, err := c.store.Upsert(ctx, item)
 		c.publishWorkerEvent(item, "worker.not_ready", item.Status.LastError)
 		return err
 	}
@@ -139,7 +140,7 @@ func (c *WorkerController) tryReconcile(name string) error {
 		item.Status.Phase = "NotReady"
 		item.Status.LastError = "invalid heartbeat timestamp"
 		item.Status.ObservedGeneration = item.Metadata.Generation
-		_, upsertErr := c.store.Upsert(item)
+		_, upsertErr := c.store.Upsert(ctx, item)
 		c.publishWorkerEvent(item, "worker.not_ready", item.Status.LastError)
 		if upsertErr != nil {
 			return upsertErr
@@ -152,7 +153,7 @@ func (c *WorkerController) tryReconcile(name string) error {
 			item.Status.Phase = "NotReady"
 			item.Status.LastError = "worker heartbeat stale"
 			item.Status.ObservedGeneration = item.Metadata.Generation
-			_, err := c.store.Upsert(item)
+			_, err := c.store.Upsert(ctx, item)
 			c.publishWorkerEvent(item, "worker.not_ready", item.Status.LastError)
 			return err
 		}
@@ -163,7 +164,7 @@ func (c *WorkerController) tryReconcile(name string) error {
 		item.Status.Phase = "Ready"
 		item.Status.LastError = ""
 		item.Status.ObservedGeneration = item.Metadata.Generation
-		_, err := c.store.Upsert(item)
+		_, err := c.store.Upsert(ctx, item)
 		c.publishWorkerEvent(item, "worker.ready", "worker ready")
 		return err
 	}

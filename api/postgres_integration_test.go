@@ -90,7 +90,7 @@ func TestPostgresTaskLifecycleApplyScheduleRunTrace(t *testing.T) {
 		},
 	})
 
-	if err := h.scheduler.ReconcileOnce(); err != nil {
+	if err := h.scheduler.ReconcileOnce(context.Background()); err != nil {
 		t.Fatalf("scheduler reconcile failed: %v", err)
 	}
 	if err := h.taskController.ReconcileOnce(context.Background()); err != nil {
@@ -191,7 +191,7 @@ func TestPostgresMultiWorkerSingleExecutionWithAssignment(t *testing.T) {
 		},
 	})
 
-	if err := h.scheduler.ReconcileOnce(); err != nil {
+	if err := h.scheduler.ReconcileOnce(context.Background()); err != nil {
 		t.Fatalf("scheduler reconcile failed: %v", err)
 	}
 

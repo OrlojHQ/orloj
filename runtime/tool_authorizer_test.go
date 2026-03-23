@@ -1,6 +1,7 @@
 package agentruntime
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -11,7 +12,7 @@ type authTestRoleLookup struct {
 	roles map[string]resources.AgentRole
 }
 
-func (s *authTestRoleLookup) Get(name string) (resources.AgentRole, bool, error) {
+func (s *authTestRoleLookup) Get(_ context.Context, name string) (resources.AgentRole, bool, error) {
 	r, ok := s.roles[name]
 	return r, ok, nil
 }
@@ -20,13 +21,13 @@ type authTestPermLookup struct {
 	items []resources.ToolPermission
 }
 
-func (s *authTestPermLookup) List() ([]resources.ToolPermission, error) {
+func (s *authTestPermLookup) List(_ context.Context) ([]resources.ToolPermission, error) {
 	return s.items, nil
 }
 
 func TestAuthorizerAllowWhenNoRolesNoRules(t *testing.T) {
 	agent := resources.Agent{Metadata: resources.ObjectMeta{Name: "a"}}
-	auth := NewAgentToolAuthorizer("default", agent, nil, nil)
+	auth := NewAgentToolAuthorizer(context.Background(), "default", agent, nil, nil)
 	result, err := auth.Authorize("web_search", resources.ToolSpec{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -41,7 +42,7 @@ func TestAuthorizerAllowWhenToolInAllowedList(t *testing.T) {
 		Metadata: resources.ObjectMeta{Name: "a"},
 		Spec:     resources.AgentSpec{AllowedTools: []string{"web_search"}, Roles: []string{"missing-role"}},
 	}
-	auth := NewAgentToolAuthorizer("default", agent, nil, nil)
+	auth := NewAgentToolAuthorizer(context.Background(), "default", agent, nil, nil)
 	result, err := auth.Authorize("web_search", resources.ToolSpec{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -56,7 +57,7 @@ func TestAuthorizerDenyWhenMissingRoles(t *testing.T) {
 		Metadata: resources.ObjectMeta{Name: "a"},
 		Spec:     resources.AgentSpec{Roles: []string{"admin"}},
 	}
-	auth := NewAgentToolAuthorizer("default", agent, nil, nil)
+	auth := NewAgentToolAuthorizer(context.Background(), "default", agent, nil, nil)
 	_, err := auth.Authorize("web_search", resources.ToolSpec{})
 	if err == nil {
 		t.Fatal("expected error")
@@ -82,7 +83,7 @@ func TestAuthorizerTriStateApprovalRequired(t *testing.T) {
 		},
 	}}
 
-	auth := NewAgentToolAuthorizer("default", agent, nil, perms)
+	auth := NewAgentToolAuthorizer(context.Background(), "default", agent, nil, perms)
 	result, err := auth.Authorize("deploy-tool", resources.ToolSpec{OperationClasses: []string{"write"}})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -108,7 +109,7 @@ func TestAuthorizerTriStateDenyOverridesApproval(t *testing.T) {
 		},
 	}}
 
-	auth := NewAgentToolAuthorizer("default", agent, nil, perms)
+	auth := NewAgentToolAuthorizer(context.Background(), "default", agent, nil, perms)
 	_, err := auth.Authorize("admin-tool", resources.ToolSpec{OperationClasses: []string{"write", "admin"}})
 	if err == nil {
 		t.Fatal("expected error (deny overrides approval)")
@@ -139,7 +140,7 @@ func TestAuthorizerBackwardCompatibleWhenNoOperationRules(t *testing.T) {
 		},
 	}}
 
-	auth := NewAgentToolAuthorizer("default", agent, roles, perms)
+	auth := NewAgentToolAuthorizer(context.Background(), "default", agent, roles, perms)
 	result, err := auth.Authorize("simple-tool", resources.ToolSpec{OperationClasses: []string{"read"}})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -164,7 +165,7 @@ func TestAuthorizerWildcardOperationRule(t *testing.T) {
 		},
 	}}
 
-	auth := NewAgentToolAuthorizer("default", agent, nil, perms)
+	auth := NewAgentToolAuthorizer(context.Background(), "default", agent, nil, perms)
 	result, err := auth.Authorize("any-tool", resources.ToolSpec{OperationClasses: []string{"delete"}})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

@@ -83,6 +83,50 @@ Model endpoints and tools reference secrets via `secretRef` fields. The runtime 
 
 Pass `--secret-encryption-key` (or set `ORLOJ_SECRET_ENCRYPTION_KEY`) on both `orlojd` and `orlojworker` to encrypt `Secret.spec.data` values in the database using AES-256-GCM. The same key must be used by all processes sharing the database. See [Security and Isolation -- Encryption at Rest](./security.md#encryption-at-rest) for key generation and usage.
 
+## Postgres Tuning
+
+### Connection Pool (main store)
+
+The main Postgres pool is configured via CLI flags:
+
+| Flag | Default | Description |
+|---|---|---|
+| `--postgres-max-open-conns` | 20 | Maximum open connections |
+| `--postgres-max-idle-conns` | 10 | Maximum idle connections kept warm |
+| `--postgres-conn-max-lifetime` | 30m | Maximum lifetime of a connection before recycling |
+
+Idle connections are evicted after 5 minutes to avoid stale TCP connections behind firewalls or load balancers.
+
+### Connection Pool (pgvector memory backend)
+
+The pgvector memory backend uses a separate `pgxpool` connection pool created from the Memory resource's `spec.endpoint` DSN. Pool behavior can be tuned by appending query parameters to the endpoint URL:
+
+```
+postgres://user:pass@host:5432/db?pool_max_conns=10&pool_min_conns=2&pool_max_conn_idle_time=5m&pool_health_check_period=1m
+```
+
+| Parameter | Default | Description |
+|---|---|---|
+| `pool_max_conns` | max(4, NumCPU) | Maximum pool size |
+| `pool_min_conns` | 0 | Minimum warm connections |
+| `pool_max_conn_lifetime` | 1h | Recycle connections after this duration |
+| `pool_max_conn_idle_time` | 30m | Close idle connections after this duration |
+| `pool_health_check_period` | 1m | How often to ping idle connections |
+
+### Statement Timeout
+
+Neither the main store nor the pgvector backend sets a `statement_timeout` by default. To protect against runaway queries, add it to the DSN:
+
+```bash
+# Main store (30-second statement timeout)
+--postgres-dsn="postgres://user:pass@host:5432/db?options=-c%20statement_timeout%3D30000"
+
+# pgvector memory endpoint (in the Memory resource spec.endpoint)
+postgres://user:pass@host:5432/db?options=-c%20statement_timeout%3D30000&pool_max_conns=10
+```
+
+The `statement_timeout` value is in milliseconds. Postgres cancels any single statement that exceeds this limit.
+
 ## Recommended Production Baseline
 
 - `orlojd`: `--storage-backend=postgres`, `--task-execution-mode=message-driven`, `--agent-message-bus-backend=nats-jetstream`

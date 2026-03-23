@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"context"
 	"io"
 	"log"
 	"strings"
@@ -61,7 +62,7 @@ func TestTaskSchedulerAssignsTasksByRequirementsAndCapacity(t *testing.T) {
 		},
 	}
 	for _, worker := range workers {
-		if _, err := workerStore.Upsert(worker); err != nil {
+		if _, err := workerStore.Upsert(context.Background(),worker); err != nil {
 			t.Fatalf("upsert worker %s: %v", worker.Metadata.Name, err)
 		}
 	}
@@ -101,29 +102,29 @@ func TestTaskSchedulerAssignsTasksByRequirementsAndCapacity(t *testing.T) {
 		},
 	}
 	for _, task := range tasks {
-		if _, err := taskStore.Upsert(task); err != nil {
+		if _, err := taskStore.Upsert(context.Background(),task); err != nil {
 			t.Fatalf("upsert task %s: %v", task.Metadata.Name, err)
 		}
 	}
 
 	controller := NewTaskSchedulerController(taskStore, workerStore, logger, 5*time.Millisecond, 30*time.Second)
-	if err := controller.ReconcileOnce(); err != nil {
+	if err := controller.ReconcileOnce(context.Background()); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
 
-	tWest1, _, _ := taskStore.Get("task-west-gpu-1")
+	tWest1, _, _ := taskStore.Get(context.Background(),"task-west-gpu-1")
 	if tWest1.Status.AssignedWorker != "worker-c" {
 		t.Fatalf("expected task-west-gpu-1 assigned to worker-c, got %q", tWest1.Status.AssignedWorker)
 	}
-	tEast, _, _ := taskStore.Get("task-east")
+	tEast, _, _ := taskStore.Get(context.Background(),"task-east")
 	if tEast.Status.AssignedWorker != "worker-a" {
 		t.Fatalf("expected task-east assigned to worker-a, got %q", tEast.Status.AssignedWorker)
 	}
-	tWest2, _, _ := taskStore.Get("task-west-gpu-2")
+	tWest2, _, _ := taskStore.Get(context.Background(),"task-west-gpu-2")
 	if tWest2.Status.AssignedWorker != "worker-c" {
 		t.Fatalf("expected task-west-gpu-2 assigned to worker-c, got %q", tWest2.Status.AssignedWorker)
 	}
-	tNoMatch, _, _ := taskStore.Get("task-no-match")
+	tNoMatch, _, _ := taskStore.Get(context.Background(),"task-no-match")
 	if tNoMatch.Status.AssignedWorker != "" {
 		t.Fatalf("expected task-no-match to remain unassigned, got %q", tNoMatch.Status.AssignedWorker)
 	}
@@ -139,7 +140,7 @@ func TestTaskSchedulerClearsAndReassignsInvalidAssignment(t *testing.T) {
 	workerStore := store.NewWorkerStore()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
-	if _, err := workerStore.Upsert(resources.Worker{
+	if _, err := workerStore.Upsert(context.Background(),resources.Worker{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Worker",
 		Metadata:   resources.ObjectMeta{Name: "worker-ready"},
@@ -152,7 +153,7 @@ func TestTaskSchedulerClearsAndReassignsInvalidAssignment(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert worker-ready: %v", err)
 	}
-	if _, err := workerStore.Upsert(resources.Worker{
+	if _, err := workerStore.Upsert(context.Background(),resources.Worker{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Worker",
 		Metadata:   resources.ObjectMeta{Name: "worker-stale"},
@@ -166,7 +167,7 @@ func TestTaskSchedulerClearsAndReassignsInvalidAssignment(t *testing.T) {
 		t.Fatalf("upsert worker-stale: %v", err)
 	}
 
-	if _, err := taskStore.Upsert(resources.Task{
+	if _, err := taskStore.Upsert(context.Background(),resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
 		Metadata:   resources.ObjectMeta{Name: "task-1"},
@@ -179,11 +180,11 @@ func TestTaskSchedulerClearsAndReassignsInvalidAssignment(t *testing.T) {
 	}
 
 	controller := NewTaskSchedulerController(taskStore, workerStore, logger, 5*time.Millisecond, 30*time.Second)
-	if err := controller.ReconcileOnce(); err != nil {
+	if err := controller.ReconcileOnce(context.Background()); err != nil {
 		t.Fatalf("reconcile: %v", err)
 	}
 
-	task, _, _ := taskStore.Get("task-1")
+	task, _, _ := taskStore.Get(context.Background(),"task-1")
 	if task.Status.AssignedWorker != "worker-ready" {
 		t.Fatalf("expected reassignment to worker-ready, got %q", task.Status.AssignedWorker)
 	}

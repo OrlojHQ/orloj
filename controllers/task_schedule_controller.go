@@ -60,7 +60,7 @@ func (c *TaskScheduleController) Start(ctx context.Context) {
 	}
 
 	for {
-		if err := c.ReconcileOnce(); err != nil && c.logger != nil {
+		if err := c.ReconcileOnce(ctx); err != nil && c.logger != nil {
 			c.logger.Printf("task schedule controller reconcile error: %v", err)
 		}
 		select {
@@ -76,11 +76,11 @@ func (c *TaskScheduleController) Start(ctx context.Context) {
 	}
 }
 
-func (c *TaskScheduleController) ReconcileOnce() error {
+func (c *TaskScheduleController) ReconcileOnce(ctx context.Context) error {
 	if c.taskScheduleStore == nil || c.taskStore == nil {
 		return nil
 	}
-	items, err := c.taskScheduleStore.List()
+	items, err := c.taskScheduleStore.List(ctx)
 	if err != nil {
 		return err
 	}
@@ -91,21 +91,21 @@ func (c *TaskScheduleController) ReconcileOnce() error {
 	})
 
 	for _, item := range items {
-		if err := c.reconcileSchedule(item); err != nil {
+		if err := c.reconcileSchedule(ctx, item); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (c *TaskScheduleController) reconcileSchedule(item resources.TaskSchedule) error {
+func (c *TaskScheduleController) reconcileSchedule(ctx context.Context, item resources.TaskSchedule) error {
 	now := time.Now().UTC()
 	expr, loc, err := parseScheduleSpec(item)
 	if err != nil {
 		item.Status.LastError = err.Error()
 		item.Status.Phase = "Error"
 		item.Status.ObservedGeneration = item.Metadata.Generation
-		return c.upsertTaskSchedule(item)
+		return c.upsertTaskSchedule(ctx, item)
 	}
 	item.Status.LastError = ""
 
@@ -119,10 +119,10 @@ func (c *TaskScheduleController) reconcileSchedule(item resources.TaskSchedule) 
 			item.Status.NextScheduleTime = ""
 		}
 		item.Status.ObservedGeneration = item.Metadata.Generation
-		return c.refreshScheduleStatus(item)
+		return c.refreshScheduleStatus(ctx, item)
 	}
 
-	generated := c.generatedTasks(item)
+	generated := c.generatedTasks(ctx, item)
 	activeRuns := listActiveRuns(generated)
 
 	latestSlot, hasDue, withinDeadline, dueErr := evaluateDueSlot(item, expr, loc, now)
@@ -130,7 +130,7 @@ func (c *TaskScheduleController) reconcileSchedule(item resources.TaskSchedule) 
 		item.Status.LastError = dueErr.Error()
 		item.Status.Phase = "Error"
 		item.Status.ObservedGeneration = item.Metadata.Generation
-		return c.upsertTaskSchedule(item)
+		return c.upsertTaskSchedule(ctx, item)
 	}
 
 	if hasDue {
@@ -146,7 +146,7 @@ func (c *TaskScheduleController) reconcileSchedule(item resources.TaskSchedule) 
 				"activeRun": activeRuns[0],
 			})
 		default:
-			runScopedName, runErr := c.ensureRunTask(item, latestSlot)
+			runScopedName, runErr := c.ensureRunTask(ctx, item, latestSlot)
 			if runErr != nil {
 				item.Status.LastError = runErr.Error()
 				item.Status.Phase = "Error"
@@ -161,7 +161,7 @@ func (c *TaskScheduleController) reconcileSchedule(item resources.TaskSchedule) 
 		}
 	}
 
-	deleted, cleanupErr := c.cleanupHistory(item)
+	deleted, cleanupErr := c.cleanupHistory(ctx, item)
 	if cleanupErr != nil {
 		item.Status.LastError = cleanupErr.Error()
 		item.Status.Phase = "Error"
@@ -178,7 +178,7 @@ func (c *TaskScheduleController) reconcileSchedule(item resources.TaskSchedule) 
 		item.Status.NextScheduleTime = ""
 	}
 
-	return c.refreshScheduleStatus(item)
+	return c.refreshScheduleStatus(ctx, item)
 }
 
 func parseScheduleSpec(item resources.TaskSchedule) (cronexpr.Expression, *time.Location, error) {
@@ -217,13 +217,13 @@ func evaluateDueSlot(item resources.TaskSchedule, expr cronexpr.Expression, loc 
 	return latestUTC, true, withinDeadline, nil
 }
 
-func (c *TaskScheduleController) ensureRunTask(item resources.TaskSchedule, slot time.Time) (string, error) {
+func (c *TaskScheduleController) ensureRunTask(ctx context.Context, item resources.TaskSchedule, slot time.Time) (string, error) {
 	templateNS, templateName, err := resolveTaskRef(item.Metadata.Namespace, item.Spec.TaskRef)
 	if err != nil {
 		return "", err
 	}
 	templateKey := store.ScopedName(templateNS, templateName)
-	template, ok, err := c.taskStore.Get(templateKey)
+	template, ok, err := c.taskStore.Get(ctx, templateKey)
 	if err != nil {
 		return "", fmt.Errorf("task template %q lookup failed: %w", item.Spec.TaskRef, err)
 	}
@@ -238,7 +238,7 @@ func (c *TaskScheduleController) ensureRunTask(item resources.TaskSchedule, slot
 	runNamespace := template.Metadata.Namespace
 	runKey := store.ScopedName(runNamespace, runName)
 
-	if existing, ok, _ := c.taskStore.Get(runKey); ok {
+	if existing, ok, _ := c.taskStore.Get(ctx, runKey); ok {
 		labels := existing.Metadata.Labels
 		if labels != nil &&
 			strings.EqualFold(strings.TrimSpace(labels[taskScheduleNameLabel]), strings.TrimSpace(item.Metadata.Name)) &&
@@ -269,14 +269,14 @@ func (c *TaskScheduleController) ensureRunTask(item resources.TaskSchedule, slot
 		},
 		Spec: spec,
 	}
-	if _, err := c.taskStore.Upsert(runTask); err != nil {
+	if _, err := c.taskStore.Upsert(ctx, runTask); err != nil {
 		return "", err
 	}
 	return runKey, nil
 }
 
-func (c *TaskScheduleController) cleanupHistory(item resources.TaskSchedule) (int, error) {
-	generated := c.generatedTasks(item)
+func (c *TaskScheduleController) cleanupHistory(ctx context.Context, item resources.TaskSchedule) (int, error) {
+	generated := c.generatedTasks(ctx, item)
 	successes := make([]resources.Task, 0, len(generated))
 	failures := make([]resources.Task, 0, len(generated))
 	for _, task := range generated {
@@ -296,13 +296,13 @@ func (c *TaskScheduleController) cleanupHistory(item resources.TaskSchedule) (in
 
 	deleted := 0
 	for i := item.Spec.SuccessfulHistoryLimit; i < len(successes); i++ {
-		if err := c.taskStore.Delete(store.ScopedName(successes[i].Metadata.Namespace, successes[i].Metadata.Name)); err != nil {
+		if err := c.taskStore.Delete(ctx, store.ScopedName(successes[i].Metadata.Namespace, successes[i].Metadata.Name)); err != nil {
 			return deleted, err
 		}
 		deleted++
 	}
 	for i := item.Spec.FailedHistoryLimit; i < len(failures); i++ {
-		if err := c.taskStore.Delete(store.ScopedName(failures[i].Metadata.Namespace, failures[i].Metadata.Name)); err != nil {
+		if err := c.taskStore.Delete(ctx, store.ScopedName(failures[i].Metadata.Namespace, failures[i].Metadata.Name)); err != nil {
 			return deleted, err
 		}
 		deleted++
@@ -310,8 +310,8 @@ func (c *TaskScheduleController) cleanupHistory(item resources.TaskSchedule) (in
 	return deleted, nil
 }
 
-func (c *TaskScheduleController) generatedTasks(item resources.TaskSchedule) []resources.Task {
-	all, err := c.taskStore.List()
+func (c *TaskScheduleController) generatedTasks(ctx context.Context, item resources.TaskSchedule) []resources.Task {
+	all, err := c.taskStore.List(ctx)
 	if err != nil {
 		return nil
 	}
@@ -361,8 +361,8 @@ func taskTerminalTime(task resources.Task) time.Time {
 	return time.Time{}
 }
 
-func (c *TaskScheduleController) refreshScheduleStatus(item resources.TaskSchedule) error {
-	generated := c.generatedTasks(item)
+func (c *TaskScheduleController) refreshScheduleStatus(ctx context.Context, item resources.TaskSchedule) error {
+	generated := c.generatedTasks(ctx, item)
 	item.Status.ActiveRuns = listActiveRuns(generated)
 
 	lastSuccess := time.Time{}
@@ -385,13 +385,13 @@ func (c *TaskScheduleController) refreshScheduleStatus(item resources.TaskSchedu
 		item.Status.Phase = "Ready"
 	}
 	item.Status.ObservedGeneration = item.Metadata.Generation
-	return c.upsertTaskSchedule(item)
+	return c.upsertTaskSchedule(ctx, item)
 }
 
-func (c *TaskScheduleController) upsertTaskSchedule(item resources.TaskSchedule) error {
+func (c *TaskScheduleController) upsertTaskSchedule(ctx context.Context, item resources.TaskSchedule) error {
 	var lastErr error
 	for i := 0; i < 5; i++ {
-		if _, err := c.taskScheduleStore.Upsert(item); err == nil {
+		if _, err := c.taskScheduleStore.Upsert(ctx, item); err == nil {
 			return nil
 		} else if !store.IsConflict(err) {
 			return err
@@ -399,7 +399,7 @@ func (c *TaskScheduleController) upsertTaskSchedule(item resources.TaskSchedule)
 			lastErr = err
 		}
 
-		current, ok, err := c.taskScheduleStore.Get(store.ScopedName(item.Metadata.Namespace, item.Metadata.Name))
+		current, ok, err := c.taskScheduleStore.Get(ctx, store.ScopedName(item.Metadata.Namespace, item.Metadata.Name))
 		if err != nil {
 			return err
 		}
@@ -415,7 +415,7 @@ func (c *TaskScheduleController) upsertTaskSchedule(item resources.TaskSchedule)
 	if lastErr != nil {
 		return lastErr
 	}
-	_, err := c.taskScheduleStore.Upsert(item)
+	_, err := c.taskScheduleStore.Upsert(ctx, item)
 	return err
 }
 

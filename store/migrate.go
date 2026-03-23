@@ -12,6 +12,10 @@ import (
 //go:embed migrations/*.up.sql
 var migrationFS embed.FS
 
+// migrationAdvisoryLockID is a fixed int used with pg_advisory_lock to prevent
+// concurrent server instances from racing on migration application.
+const migrationAdvisoryLockID = 7_301_947
+
 // Migrate runs all pending database migrations in order. It creates a
 // schema_migrations tracking table if it does not already exist and skips
 // migrations that have already been applied.
@@ -19,6 +23,11 @@ func Migrate(db *sql.DB) error {
 	if db == nil {
 		return fmt.Errorf("db is required")
 	}
+
+	if _, err := db.Exec(`SELECT pg_advisory_lock($1)`, migrationAdvisoryLockID); err != nil {
+		return fmt.Errorf("acquire migration lock: %w", err)
+	}
+	defer db.Exec(`SELECT pg_advisory_unlock($1)`, migrationAdvisoryLockID) //nolint:errcheck
 
 	_, err := db.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (
 		version TEXT PRIMARY KEY,

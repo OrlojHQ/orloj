@@ -39,6 +39,12 @@ func NormalizeObjectMetaNamespace(meta *ObjectMeta) {
 	meta.Namespace = NormalizeNamespace(meta.Namespace)
 }
 
+// ListMeta carries pagination metadata in list responses. Continue holds the
+// cursor (last item's name) for the next page; empty means no more results.
+type ListMeta struct {
+	Continue string `json:"continue,omitempty"`
+}
+
 // Agent represents the desired and observed state for a single agent runtime.
 type Agent struct {
 	APIVersion string      `json:"apiVersion"`
@@ -50,7 +56,8 @@ type Agent struct {
 
 // AgentList is returned by list API calls.
 type AgentList struct {
-	Items []Agent `json:"items"`
+	ListMeta `json:",inline"`
+	Items    []Agent `json:"items"`
 }
 
 // AgentSpec defines desired runtime behavior.

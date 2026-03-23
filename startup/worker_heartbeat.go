@@ -42,7 +42,7 @@ func HeartbeatWorkerRegistration(
 			},
 		}
 		for attempt := 0; attempt < 3; attempt++ {
-		if existing, ok, _ := workerStore.Get(workerID); ok {
+		if existing, ok, _ := workerStore.Get(ctx, workerID); ok {
 			worker.Metadata.ResourceVersion = existing.Metadata.ResourceVersion
 			worker.Metadata.Generation = existing.Metadata.Generation
 			worker.Metadata.CreatedAt = existing.Metadata.CreatedAt
@@ -54,7 +54,7 @@ func HeartbeatWorkerRegistration(
 				worker.Status.CurrentTasks = 0
 			}
 		}
-			_, err := workerStore.Upsert(worker)
+			_, err := workerStore.Upsert(ctx, worker)
 			if err == nil {
 				break
 			}
@@ -71,12 +71,12 @@ func HeartbeatWorkerRegistration(
 			final := worker
 			final.Status.Phase = "NotReady"
 			final.Status.LastError = "worker stopped"
-		if existing, ok, _ := workerStore.Get(workerID); ok {
+		if existing, ok, _ := workerStore.Get(ctx, workerID); ok {
 			final.Metadata.ResourceVersion = existing.Metadata.ResourceVersion
 			final.Metadata.Generation = existing.Metadata.Generation
 			final.Metadata.CreatedAt = existing.Metadata.CreatedAt
 		}
-			_, _ = workerStore.Upsert(final)
+			_, _ = workerStore.Upsert(ctx, final)
 			return
 		case <-ticker.C:
 		}

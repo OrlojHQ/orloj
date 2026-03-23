@@ -1,6 +1,7 @@
 package agentruntime
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"sort"
@@ -26,11 +27,11 @@ type ToolCallAuthorizer interface {
 }
 
 type AgentRoleLookup interface {
-	Get(name string) (resources.AgentRole, bool, error)
+	Get(ctx context.Context, name string) (resources.AgentRole, bool, error)
 }
 
 type ToolPermissionLookup interface {
-	List() ([]resources.ToolPermission, error)
+	List(ctx context.Context) ([]resources.ToolPermission, error)
 }
 
 type toolPermissionRule struct {
@@ -52,6 +53,7 @@ type AgentToolAuthorizer struct {
 }
 
 func NewAgentToolAuthorizer(
+	ctx context.Context,
 	namespace string,
 	agent resources.Agent,
 	roleLookup AgentRoleLookup,
@@ -87,9 +89,9 @@ func NewAgentToolAuthorizer(
 			a.missingRoles = append(a.missingRoles, roleName)
 			continue
 		}
-		role, ok, roleErr := roleLookup.Get(scopedRuntimeName(namespace, roleName))
+		role, ok, roleErr := roleLookup.Get(ctx, scopedRuntimeName(namespace, roleName))
 		if roleErr == nil && !ok && strings.Contains(roleName, "/") {
-			role, ok, roleErr = roleLookup.Get(roleName)
+			role, ok, roleErr = roleLookup.Get(ctx, roleName)
 		}
 		if roleErr != nil || !ok {
 			a.missingRoles = append(a.missingRoles, roleName)
@@ -107,7 +109,7 @@ func NewAgentToolAuthorizer(
 	if permissionLookup == nil {
 		return a
 	}
-	perms, _ := permissionLookup.List()
+	perms, _ := permissionLookup.List(ctx)
 	for _, item := range perms {
 		if resources.NormalizeNamespace(item.Metadata.Namespace) != resources.NormalizeNamespace(namespace) {
 			continue

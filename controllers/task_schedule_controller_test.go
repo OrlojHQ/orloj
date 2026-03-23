@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"context"
 	"io"
 	"log"
 	"strings"
@@ -27,7 +28,7 @@ func TestTaskScheduleControllerCreatesRunAndIsIdempotent(t *testing.T) {
 			Input:    map[string]string{"topic": "weekly"},
 		},
 	}
-	if _, err := taskStore.Upsert(template); err != nil {
+	if _, err := taskStore.Upsert(context.Background(),template); err != nil {
 		t.Fatalf("upsert template failed: %v", err)
 	}
 
@@ -46,19 +47,19 @@ func TestTaskScheduleControllerCreatesRunAndIsIdempotent(t *testing.T) {
 			LastScheduleTime: time.Now().UTC().Add(-2 * time.Minute).Format(time.RFC3339Nano),
 		},
 	}
-	if _, err := taskScheduleStore.Upsert(schedule); err != nil {
+	if _, err := taskScheduleStore.Upsert(context.Background(),schedule); err != nil {
 		t.Fatalf("upsert schedule failed: %v", err)
 	}
 
 	controller := NewTaskScheduleController(taskScheduleStore, taskStore, logger, 5*time.Millisecond)
-	if err := controller.ReconcileOnce(); err != nil {
+	if err := controller.ReconcileOnce(context.Background()); err != nil {
 		t.Fatalf("reconcile failed: %v", err)
 	}
-	if err := controller.ReconcileOnce(); err != nil {
+	if err := controller.ReconcileOnce(context.Background()); err != nil {
 		t.Fatalf("second reconcile failed: %v", err)
 	}
 
-	tasks, err := taskStore.List()
+	tasks, err := taskStore.List(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,7 +86,7 @@ func TestTaskScheduleControllerForbidOverlapSkipsNewRun(t *testing.T) {
 	taskScheduleStore := store.NewTaskScheduleStore()
 	logger := log.New(io.Discard, "", 0)
 
-	if _, err := taskStore.Upsert(resources.Task{
+	if _, err := taskStore.Upsert(context.Background(),resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
 		Metadata:   resources.ObjectMeta{Name: "tmpl", Namespace: "default"},
@@ -94,7 +95,7 @@ func TestTaskScheduleControllerForbidOverlapSkipsNewRun(t *testing.T) {
 		t.Fatalf("upsert template failed: %v", err)
 	}
 
-	if _, err := taskStore.Upsert(resources.Task{
+	if _, err := taskStore.Upsert(context.Background(),resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
 		Metadata: resources.ObjectMeta{
@@ -112,7 +113,7 @@ func TestTaskScheduleControllerForbidOverlapSkipsNewRun(t *testing.T) {
 		t.Fatalf("upsert existing run failed: %v", err)
 	}
 
-	if _, err := taskScheduleStore.Upsert(resources.TaskSchedule{
+	if _, err := taskScheduleStore.Upsert(context.Background(),resources.TaskSchedule{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "TaskSchedule",
 		Metadata:   resources.ObjectMeta{Name: "overlap", Namespace: "default"},
@@ -131,12 +132,12 @@ func TestTaskScheduleControllerForbidOverlapSkipsNewRun(t *testing.T) {
 	}
 
 	controller := NewTaskScheduleController(taskScheduleStore, taskStore, logger, 5*time.Millisecond)
-	if err := controller.ReconcileOnce(); err != nil {
+	if err := controller.ReconcileOnce(context.Background()); err != nil {
 		t.Fatalf("reconcile failed: %v", err)
 	}
 
 	generated := 0
-	_taskList, _err := taskStore.List()
+	_taskList, _err := taskStore.List(context.Background())
 	if _err != nil {
 		t.Fatal(_err)
 	}
@@ -155,7 +156,7 @@ func TestTaskScheduleControllerMissedDeadlineSkipsRun(t *testing.T) {
 	taskScheduleStore := store.NewTaskScheduleStore()
 	logger := log.New(io.Discard, "", 0)
 
-	if _, err := taskStore.Upsert(resources.Task{
+	if _, err := taskStore.Upsert(context.Background(),resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
 		Metadata:   resources.ObjectMeta{Name: "tmpl", Namespace: "default"},
@@ -163,7 +164,7 @@ func TestTaskScheduleControllerMissedDeadlineSkipsRun(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert template failed: %v", err)
 	}
-	if _, err := taskScheduleStore.Upsert(resources.TaskSchedule{
+	if _, err := taskScheduleStore.Upsert(context.Background(),resources.TaskSchedule{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "TaskSchedule",
 		Metadata:   resources.ObjectMeta{Name: "deadline", Namespace: "default"},
@@ -181,11 +182,11 @@ func TestTaskScheduleControllerMissedDeadlineSkipsRun(t *testing.T) {
 	}
 
 	controller := NewTaskScheduleController(taskScheduleStore, taskStore, logger, 5*time.Millisecond)
-	if err := controller.ReconcileOnce(); err != nil {
+	if err := controller.ReconcileOnce(context.Background()); err != nil {
 		t.Fatalf("reconcile failed: %v", err)
 	}
 
-	_taskList, _err := taskStore.List()
+	_taskList, _err := taskStore.List(context.Background())
 	if _err != nil {
 		t.Fatal(_err)
 	}
@@ -216,7 +217,7 @@ func TestTaskScheduleControllerRetentionPrunesHistory(t *testing.T) {
 			LastScheduleTime: time.Now().UTC().Format(time.RFC3339Nano),
 		},
 	}
-	if _, err := taskScheduleStore.Upsert(schedule); err != nil {
+	if _, err := taskScheduleStore.Upsert(context.Background(),schedule); err != nil {
 		t.Fatalf("upsert schedule failed: %v", err)
 	}
 
@@ -232,7 +233,7 @@ func TestTaskScheduleControllerRetentionPrunesHistory(t *testing.T) {
 		{name: "f-new", phase: "DeadLetter", completed: now.Add(-1 * time.Minute)},
 	}
 	for _, tc := range cases {
-		if _, err := taskStore.Upsert(resources.Task{
+		if _, err := taskStore.Upsert(context.Background(),resources.Task{
 			APIVersion: "orloj.dev/v1",
 			Kind:       "Task",
 			Metadata: resources.ObjectMeta{
@@ -255,12 +256,12 @@ func TestTaskScheduleControllerRetentionPrunesHistory(t *testing.T) {
 	}
 
 	controller := NewTaskScheduleController(taskScheduleStore, taskStore, logger, 5*time.Millisecond)
-	if err := controller.ReconcileOnce(); err != nil {
+	if err := controller.ReconcileOnce(context.Background()); err != nil {
 		t.Fatalf("reconcile failed: %v", err)
 	}
 
 	remaining := map[string]struct{}{}
-	_taskList, _err := taskStore.List()
+	_taskList, _err := taskStore.List(context.Background())
 	if _err != nil {
 		t.Fatal(_err)
 	}
@@ -291,7 +292,7 @@ func TestTaskScheduleEnsureRunUsesLatestTemplateSpec(t *testing.T) {
 		Metadata:   resources.ObjectMeta{Name: "tmpl", Namespace: "default"},
 		Spec:       resources.TaskSpec{Mode: "template", System: "sys-v1"},
 	}
-	if _, err := taskStore.Upsert(template); err != nil {
+	if _, err := taskStore.Upsert(context.Background(),template); err != nil {
 		t.Fatalf("upsert template failed: %v", err)
 	}
 
@@ -306,17 +307,17 @@ func TestTaskScheduleEnsureRunUsesLatestTemplateSpec(t *testing.T) {
 	}
 
 	slot1 := time.Now().UTC().Add(-2 * time.Minute).Truncate(time.Minute)
-	run1, err := controller.ensureRunTask(schedule, slot1)
+	run1, err := controller.ensureRunTask(context.Background(), schedule, slot1)
 	if err != nil {
 		t.Fatalf("ensure run v1 failed: %v", err)
 	}
 
 	template.Spec.System = "sys-v2"
-	if _, err := taskStore.Upsert(template); err != nil {
+	if _, err := taskStore.Upsert(context.Background(),template); err != nil {
 		t.Fatalf("update template failed: %v", err)
 	}
 	slot2 := slot1.Add(time.Minute)
-	run2, err := controller.ensureRunTask(schedule, slot2)
+	run2, err := controller.ensureRunTask(context.Background(), schedule, slot2)
 	if err != nil {
 		t.Fatalf("ensure run v2 failed: %v", err)
 	}
@@ -324,14 +325,14 @@ func TestTaskScheduleEnsureRunUsesLatestTemplateSpec(t *testing.T) {
 		t.Fatalf("expected distinct run keys, got %s", run1)
 	}
 
-	task1, ok, err := taskStore.Get(run1)
+	task1, ok, err := taskStore.Get(context.Background(), run1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !ok {
 		t.Fatalf("run1 not found")
 	}
-	task2, ok, err := taskStore.Get(run2)
+	task2, ok, err := taskStore.Get(context.Background(), run2)
 	if err != nil {
 		t.Fatal(err)
 	}

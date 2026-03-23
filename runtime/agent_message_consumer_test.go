@@ -14,7 +14,7 @@ import (
 func newTestModelEndpointStore(t *testing.T) *store.ModelEndpointStore {
 	t.Helper()
 	modelEPStore := store.NewModelEndpointStore()
-	if _, err := modelEPStore.Upsert(resources.ModelEndpoint{
+	if _, err := modelEPStore.Upsert(context.Background(), resources.ModelEndpoint{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "ModelEndpoint",
 		Metadata:   resources.ObjectMeta{Name: "openai-default", Namespace: "default"},
@@ -58,12 +58,12 @@ func TestAgentMessageConsumerExecutesGraphAndCompletesTask(t *testing.T) {
 			},
 		},
 	} {
-		if _, err := agentStore.Upsert(agent); err != nil {
+		if _, err := agentStore.Upsert(context.Background(), agent); err != nil {
 			t.Fatalf("upsert agent failed: %v", err)
 		}
 	}
 
-	if _, err := systemStore.Upsert(resources.AgentSystem{
+	if _, err := systemStore.Upsert(context.Background(), resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
 		Metadata:   resources.ObjectMeta{Name: "report-system"},
@@ -77,7 +77,7 @@ func TestAgentMessageConsumerExecutesGraphAndCompletesTask(t *testing.T) {
 		t.Fatalf("upsert system failed: %v", err)
 	}
 
-	if _, err := taskStore.Upsert(resources.Task{
+	if _, err := taskStore.Upsert(context.Background(), resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
 		Metadata:   resources.ObjectMeta{Name: "task-1"},
@@ -128,11 +128,11 @@ func TestAgentMessageConsumerExecutesGraphAndCompletesTask(t *testing.T) {
 	}
 
 	waitForConsumer(t, 2*time.Second, func() bool {
-		task, ok, _ := taskStore.Get("task-1")
+		task, ok, _ := taskStore.Get(context.Background(), "task-1")
 		return ok && strings.EqualFold(task.Status.Phase, "succeeded")
 	})
 
-	task, _, _ := taskStore.Get("task-1")
+	task, _, _ := taskStore.Get(context.Background(), "task-1")
 	if task.Status.Phase != "Succeeded" {
 		t.Fatalf("expected task succeeded, got %q", task.Status.Phase)
 	}
@@ -165,7 +165,7 @@ func TestAgentMessageConsumerWaitsForLeaseThenTakesOver(t *testing.T) {
 	systemStore := store.NewAgentSystemStore()
 	taskStore := store.NewTaskStore()
 
-	if _, err := agentStore.Upsert(resources.Agent{
+	if _, err := agentStore.Upsert(context.Background(), resources.Agent{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
 		Metadata:   resources.ObjectMeta{Name: "research-agent"},
@@ -173,7 +173,7 @@ func TestAgentMessageConsumerWaitsForLeaseThenTakesOver(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert agent failed: %v", err)
 	}
-	if _, err := systemStore.Upsert(resources.AgentSystem{
+	if _, err := systemStore.Upsert(context.Background(), resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
 		Metadata:   resources.ObjectMeta{Name: "report-system"},
@@ -182,7 +182,7 @@ func TestAgentMessageConsumerWaitsForLeaseThenTakesOver(t *testing.T) {
 		t.Fatalf("upsert system failed: %v", err)
 	}
 
-	if _, err := taskStore.Upsert(resources.Task{
+	if _, err := taskStore.Upsert(context.Background(), resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
 		Metadata:   resources.ObjectMeta{Name: "task-2"},
@@ -228,7 +228,7 @@ func TestAgentMessageConsumerWaitsForLeaseThenTakesOver(t *testing.T) {
 	}
 	time.Sleep(90 * time.Millisecond)
 
-	task, _, _ := taskStore.Get("task-2")
+	task, _, _ := taskStore.Get(context.Background(), "task-2")
 	if countMessages(task.Status.Messages, "msg-skip") != 0 {
 		t.Fatalf("expected no message persisted for non-owner worker, got %d", countMessages(task.Status.Messages, "msg-skip"))
 	}
@@ -237,7 +237,7 @@ func TestAgentMessageConsumerWaitsForLeaseThenTakesOver(t *testing.T) {
 	}
 
 	waitForConsumer(t, 2*time.Second, func() bool {
-		current, ok, err := taskStore.Get("task-2")
+		current, ok, err := taskStore.Get(context.Background(), "task-2")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -247,7 +247,7 @@ func TestAgentMessageConsumerWaitsForLeaseThenTakesOver(t *testing.T) {
 		return strings.EqualFold(current.Status.Phase, "succeeded") && countTraceByTypeAndMessage(current.Status.Trace, "agent_message_processed", "msg-skip") == 1
 	})
 
-	task, _, _ = taskStore.Get("task-2")
+	task, _, _ = taskStore.Get(context.Background(), "task-2")
 	seenTakeover := false
 	for _, entry := range task.Status.History {
 		if strings.EqualFold(strings.TrimSpace(entry.Type), "takeover") && strings.EqualFold(strings.TrimSpace(entry.Worker), "worker-other") {
@@ -268,7 +268,7 @@ func TestAgentMessageConsumerRetriesThenDeadLettersMessage(t *testing.T) {
 	systemStore := store.NewAgentSystemStore()
 	taskStore := store.NewTaskStore()
 
-	if _, err := agentStore.Upsert(resources.Agent{
+	if _, err := agentStore.Upsert(context.Background(), resources.Agent{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
 		Metadata:   resources.ObjectMeta{Name: "planner-agent"},
@@ -280,7 +280,7 @@ func TestAgentMessageConsumerRetriesThenDeadLettersMessage(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert agent failed: %v", err)
 	}
-	if _, err := systemStore.Upsert(resources.AgentSystem{
+	if _, err := systemStore.Upsert(context.Background(), resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
 		Metadata:   resources.ObjectMeta{Name: "retry-system"},
@@ -288,7 +288,7 @@ func TestAgentMessageConsumerRetriesThenDeadLettersMessage(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert system failed: %v", err)
 	}
-	if _, err := taskStore.Upsert(resources.Task{
+	if _, err := taskStore.Upsert(context.Background(), resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
 		Metadata:   resources.ObjectMeta{Name: "retry-task"},
@@ -349,14 +349,14 @@ func TestAgentMessageConsumerRetriesThenDeadLettersMessage(t *testing.T) {
 	start := time.Now()
 	deadline := time.Now().Add(4 * time.Second)
 	for time.Now().Before(deadline) {
-		task, ok, _ := taskStore.Get("retry-task")
+		task, ok, _ := taskStore.Get(context.Background(), "retry-task")
 		if ok && strings.EqualFold(task.Status.Phase, "deadletter") {
 			break
 		}
 		time.Sleep(25 * time.Millisecond)
 	}
 
-	task, _, _ := taskStore.Get("retry-task")
+	task, _, _ := taskStore.Get(context.Background(), "retry-task")
 	if task.Status.Phase != "DeadLetter" {
 		payload, _ := json.Marshal(task.Status)
 		t.Fatalf("expected task DeadLetter, got %q status=%s", task.Status.Phase, string(payload))
@@ -396,7 +396,7 @@ func TestAgentMessageConsumerNonRetryableInvalidSystemDeadLettersImmediately(t *
 	systemStore := store.NewAgentSystemStore()
 	taskStore := store.NewTaskStore()
 
-	if _, err := agentStore.Upsert(resources.Agent{
+	if _, err := agentStore.Upsert(context.Background(), resources.Agent{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
 		Metadata:   resources.ObjectMeta{Name: "runner-agent"},
@@ -404,7 +404,7 @@ func TestAgentMessageConsumerNonRetryableInvalidSystemDeadLettersImmediately(t *
 	}); err != nil {
 		t.Fatalf("upsert agent failed: %v", err)
 	}
-	if _, err := taskStore.Upsert(resources.Task{
+	if _, err := taskStore.Upsert(context.Background(), resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
 		Metadata:   resources.ObjectMeta{Name: "invalid-ref-task"},
@@ -459,11 +459,11 @@ func TestAgentMessageConsumerNonRetryableInvalidSystemDeadLettersImmediately(t *
 	}
 
 	waitForConsumer(t, 2*time.Second, func() bool {
-		task, ok, _ := taskStore.Get("invalid-ref-task")
+		task, ok, _ := taskStore.Get(context.Background(), "invalid-ref-task")
 		return ok && strings.EqualFold(task.Status.Phase, "deadletter")
 	})
 
-	task, _, _ := taskStore.Get("invalid-ref-task")
+	task, _, _ := taskStore.Get(context.Background(), "invalid-ref-task")
 	if countTraceByTypeAndMessage(task.Status.Trace, "agent_message_retry_scheduled", "msg-invalid-agent") != 0 {
 		t.Fatalf("expected no retry for non-retryable invalid system ref, trace=%+v", task.Status.Trace)
 	}
@@ -487,7 +487,7 @@ func TestAgentMessageConsumerContractViolationDeadLettersWithoutRetry(t *testing
 	systemStore := store.NewAgentSystemStore()
 	taskStore := store.NewTaskStore()
 
-	if _, err := agentStore.Upsert(resources.Agent{
+	if _, err := agentStore.Upsert(context.Background(), resources.Agent{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
 		Metadata:   resources.ObjectMeta{Name: "contract-agent"},
@@ -505,7 +505,7 @@ func TestAgentMessageConsumerContractViolationDeadLettersWithoutRetry(t *testing
 	}); err != nil {
 		t.Fatalf("upsert agent failed: %v", err)
 	}
-	if _, err := systemStore.Upsert(resources.AgentSystem{
+	if _, err := systemStore.Upsert(context.Background(), resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
 		Metadata:   resources.ObjectMeta{Name: "contract-system"},
@@ -515,7 +515,7 @@ func TestAgentMessageConsumerContractViolationDeadLettersWithoutRetry(t *testing
 	}); err != nil {
 		t.Fatalf("upsert system failed: %v", err)
 	}
-	if _, err := taskStore.Upsert(resources.Task{
+	if _, err := taskStore.Upsert(context.Background(), resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
 		Metadata:   resources.ObjectMeta{Name: "contract-task"},
@@ -582,11 +582,11 @@ func TestAgentMessageConsumerContractViolationDeadLettersWithoutRetry(t *testing
 	}
 
 	waitForConsumer(t, 2*time.Second, func() bool {
-		task, ok, _ := taskStore.Get("contract-task")
+		task, ok, _ := taskStore.Get(context.Background(), "contract-task")
 		return ok && strings.EqualFold(task.Status.Phase, "deadletter")
 	})
 
-	task, _, _ := taskStore.Get("contract-task")
+	task, _, _ := taskStore.Get(context.Background(), "contract-task")
 	if countTraceByTypeAndMessage(task.Status.Trace, "agent_message_retry_scheduled", "msg-contract-violation") != 0 {
 		t.Fatalf("expected no retry for contract violation, trace=%+v", task.Status.Trace)
 	}
@@ -681,12 +681,12 @@ func TestAgentMessageConsumerFanOutJoinWaitForAll(t *testing.T) {
 			Spec:       resources.AgentSpec{ModelRef: "openai-default", Prompt: "write", Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"}},
 		},
 	} {
-		if _, err := agentStore.Upsert(agent); err != nil {
+		if _, err := agentStore.Upsert(context.Background(), agent); err != nil {
 			t.Fatalf("upsert agent failed: %v", err)
 		}
 	}
 
-	if _, err := systemStore.Upsert(resources.AgentSystem{
+	if _, err := systemStore.Upsert(context.Background(), resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
 		Metadata:   resources.ObjectMeta{Name: "fanout-system"},
@@ -710,7 +710,7 @@ func TestAgentMessageConsumerFanOutJoinWaitForAll(t *testing.T) {
 		t.Fatalf("upsert system failed: %v", err)
 	}
 
-	if _, err := taskStore.Upsert(resources.Task{
+	if _, err := taskStore.Upsert(context.Background(), resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
 		Metadata:   resources.ObjectMeta{Name: "fanout-task"},
@@ -760,11 +760,11 @@ func TestAgentMessageConsumerFanOutJoinWaitForAll(t *testing.T) {
 	}
 
 	waitForConsumer(t, 4*time.Second, func() bool {
-		task, ok, _ := taskStore.Get("fanout-task")
+		task, ok, _ := taskStore.Get(context.Background(), "fanout-task")
 		return ok && strings.EqualFold(task.Status.Phase, "succeeded")
 	})
 
-	task, _, _ := taskStore.Get("fanout-task")
+	task, _, _ := taskStore.Get(context.Background(), "fanout-task")
 	if task.Status.Phase != "Succeeded" {
 		t.Fatalf("expected fanout task succeeded, got %q", task.Status.Phase)
 	}
@@ -809,7 +809,7 @@ func TestAgentMessageConsumerJoinWaitPersistsIdempotencyAndSkipsDuplicate(t *tes
 	systemStore := store.NewAgentSystemStore()
 	taskStore := store.NewTaskStore()
 
-	if _, err := agentStore.Upsert(resources.Agent{
+	if _, err := agentStore.Upsert(context.Background(), resources.Agent{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
 		Metadata:   resources.ObjectMeta{Name: "writer-agent"},
@@ -817,7 +817,7 @@ func TestAgentMessageConsumerJoinWaitPersistsIdempotencyAndSkipsDuplicate(t *tes
 	}); err != nil {
 		t.Fatalf("upsert writer failed: %v", err)
 	}
-	if _, err := systemStore.Upsert(resources.AgentSystem{
+	if _, err := systemStore.Upsert(context.Background(), resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
 		Metadata:   resources.ObjectMeta{Name: "join-system"},
@@ -832,7 +832,7 @@ func TestAgentMessageConsumerJoinWaitPersistsIdempotencyAndSkipsDuplicate(t *tes
 	}); err != nil {
 		t.Fatalf("upsert system failed: %v", err)
 	}
-	if _, err := taskStore.Upsert(resources.Task{
+	if _, err := taskStore.Upsert(context.Background(), resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
 		Metadata:   resources.ObjectMeta{Name: "join-task"},
@@ -875,7 +875,7 @@ func TestAgentMessageConsumerJoinWaitPersistsIdempotencyAndSkipsDuplicate(t *tes
 		t.Fatalf("publish first join msg failed: %v", err)
 	}
 	waitForConsumer(t, 2*time.Second, func() bool {
-		task, ok, err := taskStore.Get("join-task")
+		task, ok, err := taskStore.Get(context.Background(), "join-task")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -892,7 +892,7 @@ func TestAgentMessageConsumerJoinWaitPersistsIdempotencyAndSkipsDuplicate(t *tes
 	}
 	time.Sleep(150 * time.Millisecond)
 
-	task, _, _ := taskStore.Get("join-task")
+	task, _, _ := taskStore.Get(context.Background(), "join-task")
 	msg, ok := taskMessageByID(task.Status.Messages, "msg-join-1")
 	if !ok {
 		t.Fatal("expected join message record")
@@ -937,12 +937,12 @@ func TestAgentMessageConsumerStopsCyclicBranchAtTaskMaxTurns(t *testing.T) {
 			Spec:       resources.AgentSpec{ModelRef: "openai-default", Prompt: "research", Limits: resources.AgentLimits{MaxSteps: 1, Timeout: "1s"}},
 		},
 	} {
-		if _, err := agentStore.Upsert(agent); err != nil {
+		if _, err := agentStore.Upsert(context.Background(), agent); err != nil {
 			t.Fatalf("upsert agent failed: %v", err)
 		}
 	}
 
-	if _, err := systemStore.Upsert(resources.AgentSystem{
+	if _, err := systemStore.Upsert(context.Background(), resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
 		Metadata:   resources.ObjectMeta{Name: "cycle-system"},
@@ -957,7 +957,7 @@ func TestAgentMessageConsumerStopsCyclicBranchAtTaskMaxTurns(t *testing.T) {
 		t.Fatalf("upsert system failed: %v", err)
 	}
 
-	if _, err := taskStore.Upsert(resources.Task{
+	if _, err := taskStore.Upsert(context.Background(), resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
 		Metadata:   resources.ObjectMeta{Name: "cycle-task"},
@@ -1009,11 +1009,11 @@ func TestAgentMessageConsumerStopsCyclicBranchAtTaskMaxTurns(t *testing.T) {
 	}
 
 	waitForConsumer(t, 3*time.Second, func() bool {
-		task, ok, _ := taskStore.Get("cycle-task")
+		task, ok, _ := taskStore.Get(context.Background(), "cycle-task")
 		return ok && strings.EqualFold(task.Status.Phase, "succeeded")
 	})
 
-	task, _, _ := taskStore.Get("cycle-task")
+	task, _, _ := taskStore.Get(context.Background(), "cycle-task")
 	if task.Status.Phase != "Succeeded" {
 		t.Fatalf("expected task succeeded, got %q", task.Status.Phase)
 	}

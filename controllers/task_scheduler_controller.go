@@ -54,7 +54,7 @@ func (c *TaskSchedulerController) Start(ctx context.Context) {
 	}
 
 	for {
-		if err := c.ReconcileOnce(); err != nil && c.logger != nil {
+		if err := c.ReconcileOnce(ctx); err != nil && c.logger != nil {
 			c.logger.Printf("task scheduler reconcile error: %v", err)
 		}
 		select {
@@ -73,12 +73,12 @@ func (c *TaskSchedulerController) SetEventBus(bus eventbus.Bus) {
 	c.eventBus = bus
 }
 
-func (c *TaskSchedulerController) ReconcileOnce() error {
+func (c *TaskSchedulerController) ReconcileOnce(ctx context.Context) error {
 	if c.taskStore == nil || c.workerStore == nil {
 		return nil
 	}
 
-	workers, err := c.workerStore.List()
+	workers, err := c.workerStore.List(ctx)
 	if err != nil {
 		return err
 	}
@@ -96,7 +96,7 @@ func (c *TaskSchedulerController) ReconcileOnce() error {
 		return nil
 	}
 
-	tasks, err := c.taskStore.List()
+	tasks, err := c.taskStore.List(ctx)
 	if err != nil {
 		return err
 	}
@@ -110,7 +110,7 @@ func (c *TaskSchedulerController) ReconcileOnce() error {
 			continue
 		}
 
-		changed, err := c.reconcileTaskAssignment(task, eligible, newAssignments)
+		changed, err := c.reconcileTaskAssignment(ctx, task, eligible, newAssignments)
 		if err != nil {
 			return err
 		}
@@ -122,7 +122,7 @@ func (c *TaskSchedulerController) ReconcileOnce() error {
 	return nil
 }
 
-func (c *TaskSchedulerController) reconcileTaskAssignment(task resources.Task, eligible map[string]resources.Worker, newAssignments map[string]int) (bool, error) {
+func (c *TaskSchedulerController) reconcileTaskAssignment(ctx context.Context, task resources.Task, eligible map[string]resources.Worker, newAssignments map[string]int) (bool, error) {
 	current := strings.TrimSpace(task.Status.AssignedWorker)
 	if current != "" {
 		worker, ok := eligible[current]
@@ -138,7 +138,7 @@ func (c *TaskSchedulerController) reconcileTaskAssignment(task resources.Task, e
 	name, ok := c.selectWorker(task, eligible, newAssignments)
 	if !ok {
 		if current != "" {
-			_, err := c.upsertTask(task)
+			_, err := c.upsertTask(ctx, task)
 			return true, err
 		}
 		return false, nil
@@ -146,7 +146,7 @@ func (c *TaskSchedulerController) reconcileTaskAssignment(task resources.Task, e
 
 	task.Status.AssignedWorker = name
 	appendHistoryWithWorker(&task, "assigned", name, fmt.Sprintf("task assigned to worker=%s", name))
-	if _, err := c.upsertTask(task); err != nil {
+	if _, err := c.upsertTask(ctx, task); err != nil {
 		return false, err
 	}
 	c.publishAssignmentEvent(task, "task.assigned", fmt.Sprintf("task assigned to worker=%s", name))
@@ -252,10 +252,10 @@ func appendHistoryWithWorker(task *resources.Task, eventType, worker, message st
 	}
 }
 
-func (c *TaskSchedulerController) upsertTask(task resources.Task) (resources.Task, error) {
+func (c *TaskSchedulerController) upsertTask(ctx context.Context, task resources.Task) (resources.Task, error) {
 	var lastErr error
 	for i := 0; i < 5; i++ {
-		updated, err := c.taskStore.Upsert(task)
+		updated, err := c.taskStore.Upsert(ctx, task)
 		if err == nil {
 			return updated, nil
 		}
@@ -263,7 +263,7 @@ func (c *TaskSchedulerController) upsertTask(task resources.Task) (resources.Tas
 			return resources.Task{}, err
 		}
 		lastErr = err
-		current, ok, err := c.taskStore.Get(store.ScopedName(task.Metadata.Namespace, task.Metadata.Name))
+		current, ok, err := c.taskStore.Get(ctx, store.ScopedName(task.Metadata.Namespace, task.Metadata.Name))
 		if err != nil {
 			return resources.Task{}, err
 		}
@@ -278,7 +278,7 @@ func (c *TaskSchedulerController) upsertTask(task resources.Task) (resources.Tas
 	if lastErr != nil {
 		return resources.Task{}, lastErr
 	}
-	return c.taskStore.Upsert(task)
+	return c.taskStore.Upsert(ctx, task)
 }
 
 func (c *TaskSchedulerController) publishAssignmentEvent(task resources.Task, eventType string, message string) {

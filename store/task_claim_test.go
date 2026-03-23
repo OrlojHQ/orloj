@@ -10,6 +10,7 @@ import (
 
 func TestTaskStoreClaimAndRenewLease(t *testing.T) {
 	s := NewTaskStore()
+	bg := context.Background()
 	task := resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
@@ -20,11 +21,10 @@ func TestTaskStoreClaimAndRenewLease(t *testing.T) {
 			Retry:  resources.TaskRetryPolicy{MaxAttempts: 3, Backoff: "10ms"},
 		},
 	}
-	if _, err := s.Upsert(task); err != nil {
+	if _, err := s.Upsert(bg, task); err != nil {
 		t.Fatalf("upsert failed: %v", err)
 	}
 
-	bg := context.Background()
 	claimed, ok, err := s.ClaimIfDue(bg, "t1", "worker-a", 50*time.Millisecond)
 	if err != nil {
 		t.Fatalf("claim failed: %v", err)
@@ -50,6 +50,7 @@ func TestTaskStoreClaimAndRenewLease(t *testing.T) {
 
 func TestTaskStoreClaimFailoverOnLeaseExpiry(t *testing.T) {
 	s := NewTaskStore()
+	bg := context.Background()
 	task := resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
@@ -59,11 +60,10 @@ func TestTaskStoreClaimFailoverOnLeaseExpiry(t *testing.T) {
 			Input:  map[string]string{"topic": "x"},
 		},
 	}
-	if _, err := s.Upsert(task); err != nil {
+	if _, err := s.Upsert(bg, task); err != nil {
 		t.Fatalf("upsert failed: %v", err)
 	}
 
-	bg := context.Background()
 	if _, ok, err := s.ClaimIfDue(bg, "t2", "worker-a", 20*time.Millisecond); err != nil {
 		t.Fatalf("first claim failed: %v", err)
 	} else if !ok {

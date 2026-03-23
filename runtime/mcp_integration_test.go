@@ -90,7 +90,7 @@ func TestMcpEndToEnd(t *testing.T) {
 	}
 
 	mcpServerStore := store.NewMcpServerStore()
-	mcpServer, err := mcpServerStore.Upsert(mcpServer)
+	mcpServer, err := mcpServerStore.Upsert(context.Background(), mcpServer)
 	if err != nil {
 		t.Fatalf("upsert mcpserver: %v", err)
 	}
@@ -143,14 +143,14 @@ func TestMcpEndToEnd(t *testing.T) {
 				InputSchema:  mcpTool.InputSchema,
 			},
 		}
-		_, err := toolStore.Upsert(tool)
+		_, err := toolStore.Upsert(context.Background(), tool)
 		if err != nil {
 			t.Fatalf("upsert tool %s: %v", toolName, err)
 		}
 	}
 
 	// Verify tools were created
-	allTools, _ := toolStore.List()
+	allTools, _ := toolStore.List(context.Background())
 	if len(allTools) != 2 {
 		t.Fatalf("expected 2 generated tools, got %d", len(allTools))
 	}
@@ -671,7 +671,7 @@ func TestGovernedToolRuntimeMcpDispatch(t *testing.T) {
 	_ = server.Normalize()
 
 	mcpServerStore := store.NewMcpServerStore()
-	_, _ = mcpServerStore.Upsert(server)
+	_, _ = mcpServerStore.Upsert(context.Background(), server)
 
 	sessionMgr := NewMcpSessionManager(nil)
 	defer sessionMgr.Close()

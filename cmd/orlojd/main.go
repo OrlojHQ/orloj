@@ -85,7 +85,7 @@ func main() {
 	postgresDSN := flag.String("postgres-dsn", os.Getenv("ORLOJ_POSTGRES_DSN"), "postgres DSN (required when --storage-backend=postgres)")
 	sqlDriver := flag.String("sql-driver", "pgx", "database/sql driver name used for --storage-backend=postgres")
 	postgresMaxOpenConns := flag.Int("postgres-max-open-conns", 20, "max open postgres connections")
-	postgresMaxIdleConns := flag.Int("postgres-max-idle-conns", 5, "max idle postgres connections")
+	postgresMaxIdleConns := flag.Int("postgres-max-idle-conns", 10, "max idle postgres connections")
 	postgresConnMaxLifetime := flag.Duration("postgres-conn-max-lifetime", 30*time.Minute, "max lifetime of postgres connections")
 	flag.Parse()
 
@@ -301,6 +301,18 @@ func main() {
 	startBackground(func() { taskScheduleController.Start(ctx) })
 	startBackground(func() { workerController.Start(ctx) })
 	startBackground(func() { mcpServerController.Start(ctx) })
+	startBackground(func() {
+		ticker := time.NewTicker(60 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				_ = stores.WebhookDedupe.PruneExpired(ctx, time.Now())
+			}
+		}
+	})
 	if *runTaskWorker || *embeddedWorker {
 		startBackground(func() {
 			startup.HeartbeatWorkerRegistration(ctx, stores.Workers, logger, *taskWorkerID, resources.WorkerSpec{

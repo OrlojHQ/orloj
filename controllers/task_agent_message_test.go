@@ -70,12 +70,12 @@ func TestTaskControllerPublishesAgentHandoffMessages(t *testing.T) {
 			},
 		},
 	} {
-		if _, err := stores.agentStore.Upsert(agent); err != nil {
+		if _, err := stores.agentStore.Upsert(context.Background(), agent); err != nil {
 			t.Fatalf("upsert agent %s: %v", agent.Metadata.Name, err)
 		}
 	}
 
-	if _, err := stores.agentSystemStore.Upsert(resources.AgentSystem{
+	if _, err := stores.agentSystemStore.Upsert(context.Background(), resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
 		Metadata:   resources.ObjectMeta{Name: "message-system"},
@@ -89,7 +89,7 @@ func TestTaskControllerPublishesAgentHandoffMessages(t *testing.T) {
 		t.Fatalf("upsert system: %v", err)
 	}
 
-	if _, err := stores.taskStore.Upsert(resources.Task{
+	if _, err := stores.taskStore.Upsert(context.Background(), resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
 		Metadata:   resources.ObjectMeta{Name: "message-task"},
@@ -102,7 +102,7 @@ func TestTaskControllerPublishesAgentHandoffMessages(t *testing.T) {
 		t.Fatalf("reconcile failed: %v", err)
 	}
 
-	task, ok, err := stores.taskStore.Get("message-task")
+	task, ok, err := stores.taskStore.Get(context.Background(), "message-task")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,12 +177,12 @@ func TestTaskControllerFailsTaskWhenMessagePublishFails(t *testing.T) {
 			},
 		},
 	} {
-		if _, err := stores.agentStore.Upsert(agent); err != nil {
+		if _, err := stores.agentStore.Upsert(context.Background(), agent); err != nil {
 			t.Fatalf("upsert agent %s: %v", agent.Metadata.Name, err)
 		}
 	}
 
-	if _, err := stores.agentSystemStore.Upsert(resources.AgentSystem{
+	if _, err := stores.agentSystemStore.Upsert(context.Background(), resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
 		Metadata:   resources.ObjectMeta{Name: "message-system"},
@@ -196,7 +196,7 @@ func TestTaskControllerFailsTaskWhenMessagePublishFails(t *testing.T) {
 		t.Fatalf("upsert system: %v", err)
 	}
 
-	if _, err := stores.taskStore.Upsert(resources.Task{
+	if _, err := stores.taskStore.Upsert(context.Background(), resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
 		Metadata:   resources.ObjectMeta{Name: "message-fail-task"},
@@ -209,7 +209,7 @@ func TestTaskControllerFailsTaskWhenMessagePublishFails(t *testing.T) {
 		t.Fatalf("reconcile failed: %v", err)
 	}
 
-	task, ok, err := stores.taskStore.Get("message-fail-task")
+	task, ok, err := stores.taskStore.Get(context.Background(), "message-fail-task")
 	if err != nil {
 		t.Fatal(err)
 	}

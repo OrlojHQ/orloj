@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"strings"
 	"sync"
@@ -27,7 +28,7 @@ func NewWebhookDedupeStoreWithDB(db *sql.DB) *WebhookDedupeStore {
 	return &WebhookDedupeStore{items: make(map[string]webhookDedupeItem), db: db}
 }
 
-func (s *WebhookDedupeStore) Put(endpointID, eventID, taskName string, expiresAt time.Time) error {
+func (s *WebhookDedupeStore) Put(ctx context.Context, endpointID, eventID, taskName string, expiresAt time.Time) error {
 	endpointID = strings.TrimSpace(endpointID)
 	eventID = strings.TrimSpace(eventID)
 	taskName = strings.TrimSpace(taskName)
@@ -35,10 +36,7 @@ func (s *WebhookDedupeStore) Put(endpointID, eventID, taskName string, expiresAt
 		return nil
 	}
 	if s.db != nil {
-		if err := pruneWebhookDedupeSQL(s.db, time.Now().UTC()); err != nil {
-			return err
-		}
-		return upsertWebhookDedupeSQL(s.db, endpointID, eventID, taskName, expiresAt)
+		return upsertWebhookDedupeSQL(ctx, s.db, endpointID, eventID, taskName, expiresAt)
 	}
 
 	now := time.Now().UTC()
@@ -53,17 +51,14 @@ func (s *WebhookDedupeStore) Put(endpointID, eventID, taskName string, expiresAt
 	return nil
 }
 
-func (s *WebhookDedupeStore) Get(endpointID, eventID string, now time.Time) (string, bool, error) {
+func (s *WebhookDedupeStore) Get(ctx context.Context, endpointID, eventID string, now time.Time) (string, bool, error) {
 	endpointID = strings.TrimSpace(endpointID)
 	eventID = strings.TrimSpace(eventID)
 	if endpointID == "" || eventID == "" {
 		return "", false, nil
 	}
 	if s.db != nil {
-		if err := pruneWebhookDedupeSQL(s.db, now.UTC()); err != nil {
-			return "", false, err
-		}
-		return getWebhookDedupeSQL(s.db, endpointID, eventID, now.UTC())
+		return getWebhookDedupeSQL(ctx, s.db, endpointID, eventID, now.UTC())
 	}
 
 	s.mu.Lock()
@@ -83,7 +78,7 @@ func (s *WebhookDedupeStore) Get(endpointID, eventID string, now time.Time) (str
 // TryInsert atomically checks for a live duplicate and inserts a new entry
 // if none exists. Returns (existingTask, true) if a live duplicate was found.
 // For in-memory mode, Get+Put is combined under the write lock.
-func (s *WebhookDedupeStore) TryInsert(endpointID, eventID, taskName string, expiresAt, now time.Time) (string, bool, error) {
+func (s *WebhookDedupeStore) TryInsert(ctx context.Context, endpointID, eventID, taskName string, expiresAt, now time.Time) (string, bool, error) {
 	endpointID = strings.TrimSpace(endpointID)
 	eventID = strings.TrimSpace(eventID)
 	taskName = strings.TrimSpace(taskName)
@@ -91,8 +86,7 @@ func (s *WebhookDedupeStore) TryInsert(endpointID, eventID, taskName string, exp
 		return "", false, nil
 	}
 	if s.db != nil {
-		_ = pruneWebhookDedupeSQL(s.db, now.UTC())
-		return tryInsertWebhookDedupeSQL(s.db, endpointID, eventID, taskName, expiresAt, now)
+		return tryInsertWebhookDedupeSQL(ctx, s.db, endpointID, eventID, taskName, expiresAt, now)
 	}
 
 	nowUTC := now.UTC()
@@ -111,9 +105,9 @@ func (s *WebhookDedupeStore) TryInsert(endpointID, eventID, taskName string, exp
 	return "", false, nil
 }
 
-func (s *WebhookDedupeStore) PruneExpired(now time.Time) error {
+func (s *WebhookDedupeStore) PruneExpired(ctx context.Context, now time.Time) error {
 	if s.db != nil {
-		return pruneWebhookDedupeSQL(s.db, now.UTC())
+		return pruneWebhookDedupeSQL(ctx, s.db, now.UTC())
 	}
 	s.mu.Lock()
 	for key, item := range s.items {

@@ -101,7 +101,7 @@ func writeStoreFetchError(w http.ResponseWriter, err error) bool {
 }
 
 func (s *Server) handleAgentStatusByName(w http.ResponseWriter, r *http.Request, name string) {
-	obj, ok, err := s.stores.Agents.Get(scopedNameForRequest(r, name))
+	obj, ok, err := s.stores.Agents.Get(r.Context(), scopedNameForRequest(r, name))
 	if writeStoreFetchError(w, err) { return }
 	if !ok {
 		http.Error(w, fmt.Sprintf("agent %q not found", name), http.StatusNotFound)
@@ -125,7 +125,7 @@ func (s *Server) handleAgentStatusByName(w http.ResponseWriter, r *http.Request,
 			obj.Status.ObservedGeneration = obj.Metadata.Generation
 		}
 		obj.Metadata.ResourceVersion = patch.Metadata.ResourceVersion
-		updated, err := s.stores.Agents.Upsert(obj)
+		updated, err := s.stores.Agents.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -138,7 +138,7 @@ func (s *Server) handleAgentStatusByName(w http.ResponseWriter, r *http.Request,
 }
 
 func (s *Server) handleAgentSystemStatusByName(w http.ResponseWriter, r *http.Request, name string) {
-	obj, ok, err := s.stores.AgentSystems.Get(scopedNameForRequest(r, name))
+	obj, ok, err := s.stores.AgentSystems.Get(r.Context(), scopedNameForRequest(r, name))
 	if writeStoreFetchError(w, err) { return }
 	if !ok {
 		http.Error(w, fmt.Sprintf("agentsystem %q not found", name), http.StatusNotFound)
@@ -162,7 +162,7 @@ func (s *Server) handleAgentSystemStatusByName(w http.ResponseWriter, r *http.Re
 			obj.Status.ObservedGeneration = obj.Metadata.Generation
 		}
 		obj.Metadata.ResourceVersion = patch.Metadata.ResourceVersion
-		updated, err := s.stores.AgentSystems.Upsert(obj)
+		updated, err := s.stores.AgentSystems.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -175,7 +175,7 @@ func (s *Server) handleAgentSystemStatusByName(w http.ResponseWriter, r *http.Re
 }
 
 func (s *Server) handleToolStatusByName(w http.ResponseWriter, r *http.Request, name string) {
-	obj, ok, err := s.stores.Tools.Get(scopedNameForRequest(r, name))
+	obj, ok, err := s.stores.Tools.Get(r.Context(), scopedNameForRequest(r, name))
 	if writeStoreFetchError(w, err) { return }
 	if !ok {
 		http.Error(w, fmt.Sprintf("tool %q not found", name), http.StatusNotFound)
@@ -199,7 +199,7 @@ func (s *Server) handleToolStatusByName(w http.ResponseWriter, r *http.Request, 
 			obj.Status.ObservedGeneration = obj.Metadata.Generation
 		}
 		obj.Metadata.ResourceVersion = patch.Metadata.ResourceVersion
-		updated, err := s.stores.Tools.Upsert(obj)
+		updated, err := s.stores.Tools.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -212,7 +212,7 @@ func (s *Server) handleToolStatusByName(w http.ResponseWriter, r *http.Request, 
 }
 
 func (s *Server) handleModelEndpointStatusByName(w http.ResponseWriter, r *http.Request, name string) {
-	obj, ok, err := s.stores.ModelEPs.Get(scopedNameForRequest(r, name))
+	obj, ok, err := s.stores.ModelEPs.Get(r.Context(), scopedNameForRequest(r, name))
 	if writeStoreFetchError(w, err) { return }
 	if !ok {
 		http.Error(w, fmt.Sprintf("modelendpoint %q not found", name), http.StatusNotFound)
@@ -236,7 +236,7 @@ func (s *Server) handleModelEndpointStatusByName(w http.ResponseWriter, r *http.
 			obj.Status.ObservedGeneration = obj.Metadata.Generation
 		}
 		obj.Metadata.ResourceVersion = patch.Metadata.ResourceVersion
-		updated, err := s.stores.ModelEPs.Upsert(obj)
+		updated, err := s.stores.ModelEPs.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -249,7 +249,7 @@ func (s *Server) handleModelEndpointStatusByName(w http.ResponseWriter, r *http.
 }
 
 func (s *Server) handleMemoryStatusByName(w http.ResponseWriter, r *http.Request, name string) {
-	obj, ok, err := s.stores.Memories.Get(scopedNameForRequest(r, name))
+	obj, ok, err := s.stores.Memories.Get(r.Context(), scopedNameForRequest(r, name))
 	if writeStoreFetchError(w, err) { return }
 	if !ok {
 		http.Error(w, fmt.Sprintf("memory %q not found", name), http.StatusNotFound)
@@ -273,7 +273,7 @@ func (s *Server) handleMemoryStatusByName(w http.ResponseWriter, r *http.Request
 			obj.Status.ObservedGeneration = obj.Metadata.Generation
 		}
 		obj.Metadata.ResourceVersion = patch.Metadata.ResourceVersion
-		updated, err := s.stores.Memories.Upsert(obj)
+		updated, err := s.stores.Memories.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -286,7 +286,7 @@ func (s *Server) handleMemoryStatusByName(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) handlePolicyStatusByName(w http.ResponseWriter, r *http.Request, name string) {
-	obj, ok, err := s.stores.Policies.Get(scopedNameForRequest(r, name))
+	obj, ok, err := s.stores.Policies.Get(r.Context(), scopedNameForRequest(r, name))
 	if writeStoreFetchError(w, err) { return }
 	if !ok {
 		http.Error(w, fmt.Sprintf("agentpolicy %q not found", name), http.StatusNotFound)
@@ -310,7 +310,7 @@ func (s *Server) handlePolicyStatusByName(w http.ResponseWriter, r *http.Request
 			obj.Status.ObservedGeneration = obj.Metadata.Generation
 		}
 		obj.Metadata.ResourceVersion = patch.Metadata.ResourceVersion
-		updated, err := s.stores.Policies.Upsert(obj)
+		updated, err := s.stores.Policies.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -323,7 +323,7 @@ func (s *Server) handlePolicyStatusByName(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) handleTaskStatusByName(w http.ResponseWriter, r *http.Request, name string) {
-	obj, ok, err := s.stores.Tasks.Get(scopedNameForRequest(r, name))
+	obj, ok, err := s.stores.Tasks.Get(r.Context(), scopedNameForRequest(r, name))
 	if writeStoreFetchError(w, err) { return }
 	if !ok {
 		http.Error(w, fmt.Sprintf("task %q not found", name), http.StatusNotFound)
@@ -347,7 +347,7 @@ func (s *Server) handleTaskStatusByName(w http.ResponseWriter, r *http.Request, 
 			obj.Status.ObservedGeneration = obj.Metadata.Generation
 		}
 		obj.Metadata.ResourceVersion = patch.Metadata.ResourceVersion
-		updated, err := s.stores.Tasks.Upsert(obj)
+		updated, err := s.stores.Tasks.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -360,7 +360,7 @@ func (s *Server) handleTaskStatusByName(w http.ResponseWriter, r *http.Request, 
 }
 
 func (s *Server) handleTaskScheduleStatusByName(w http.ResponseWriter, r *http.Request, name string) {
-	obj, ok, err := s.stores.TaskSchedules.Get(scopedNameForRequest(r, name))
+	obj, ok, err := s.stores.TaskSchedules.Get(r.Context(), scopedNameForRequest(r, name))
 	if writeStoreFetchError(w, err) { return }
 	if !ok {
 		http.Error(w, fmt.Sprintf("taskschedule %q not found", name), http.StatusNotFound)
@@ -384,7 +384,7 @@ func (s *Server) handleTaskScheduleStatusByName(w http.ResponseWriter, r *http.R
 			obj.Status.ObservedGeneration = obj.Metadata.Generation
 		}
 		obj.Metadata.ResourceVersion = patch.Metadata.ResourceVersion
-		updated, err := s.stores.TaskSchedules.Upsert(obj)
+		updated, err := s.stores.TaskSchedules.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -397,7 +397,7 @@ func (s *Server) handleTaskScheduleStatusByName(w http.ResponseWriter, r *http.R
 }
 
 func (s *Server) handleTaskWebhookStatusByName(w http.ResponseWriter, r *http.Request, name string) {
-	obj, ok, err := s.stores.TaskWebhooks.Get(scopedNameForRequest(r, name))
+	obj, ok, err := s.stores.TaskWebhooks.Get(r.Context(), scopedNameForRequest(r, name))
 	if writeStoreFetchError(w, err) { return }
 	if !ok {
 		http.Error(w, fmt.Sprintf("taskwebhook %q not found", name), http.StatusNotFound)
@@ -421,7 +421,7 @@ func (s *Server) handleTaskWebhookStatusByName(w http.ResponseWriter, r *http.Re
 			obj.Status.ObservedGeneration = obj.Metadata.Generation
 		}
 		obj.Metadata.ResourceVersion = patch.Metadata.ResourceVersion
-		updated, err := s.stores.TaskWebhooks.Upsert(obj)
+		updated, err := s.stores.TaskWebhooks.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -434,7 +434,7 @@ func (s *Server) handleTaskWebhookStatusByName(w http.ResponseWriter, r *http.Re
 }
 
 func (s *Server) handleWorkerStatusByName(w http.ResponseWriter, r *http.Request, name string) {
-	obj, ok, err := s.stores.Workers.Get(scopedNameForRequest(r, name))
+	obj, ok, err := s.stores.Workers.Get(r.Context(), scopedNameForRequest(r, name))
 	if writeStoreFetchError(w, err) { return }
 	if !ok {
 		http.Error(w, fmt.Sprintf("worker %q not found", name), http.StatusNotFound)
@@ -458,7 +458,7 @@ func (s *Server) handleWorkerStatusByName(w http.ResponseWriter, r *http.Request
 			obj.Status.ObservedGeneration = obj.Metadata.Generation
 		}
 		obj.Metadata.ResourceVersion = patch.Metadata.ResourceVersion
-		updated, err := s.stores.Workers.Upsert(obj)
+		updated, err := s.stores.Workers.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return

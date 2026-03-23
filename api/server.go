@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -184,7 +185,26 @@ func withRateLimit(next http.Handler) http.Handler {
 }
 
 func (s *Server) Handler() http.Handler {
-	return withRateLimit(s.withBodyLimit(s.withAuth(s.mux)))
+	return withRequestTimeout(withRateLimit(s.withBodyLimit(s.withAuth(s.mux))))
+}
+
+const (
+	apiReadTimeout  = 30 * time.Second
+	apiWriteTimeout = 60 * time.Second
+)
+
+// withRequestTimeout adds a deadline to every request's context. Read methods
+// (GET, HEAD) get a shorter deadline than mutating methods.
+func withRequestTimeout(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		timeout := apiWriteTimeout
+		if r.Method == http.MethodGet || r.Method == http.MethodHead {
+			timeout = apiReadTimeout
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), timeout)
+		defer cancel()
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 func (s *Server) routes() {
@@ -283,63 +303,63 @@ func (s *Server) handleNamespaces(w http.ResponseWriter, r *http.Request) {
 			seen[ns] = struct{}{}
 		}
 	}
-	if agents, err := s.stores.Agents.List(); writeStoreFetchError(w, err) {
+	if agents, err := s.stores.Agents.List(r.Context()); writeStoreFetchError(w, err) {
 		return
 	} else {
 		for _, item := range agents {
 			collect(item.Metadata.Namespace)
 		}
 	}
-	if agentSystems, err := s.stores.AgentSystems.List(); writeStoreFetchError(w, err) {
+	if agentSystems, err := s.stores.AgentSystems.List(r.Context()); writeStoreFetchError(w, err) {
 		return
 	} else {
 		for _, item := range agentSystems {
 			collect(item.Metadata.Namespace)
 		}
 	}
-	if modelEPs, err := s.stores.ModelEPs.List(); writeStoreFetchError(w, err) {
+	if modelEPs, err := s.stores.ModelEPs.List(r.Context()); writeStoreFetchError(w, err) {
 		return
 	} else {
 		for _, item := range modelEPs {
 			collect(item.Metadata.Namespace)
 		}
 	}
-	if tools, err := s.stores.Tools.List(); writeStoreFetchError(w, err) {
+	if tools, err := s.stores.Tools.List(r.Context()); writeStoreFetchError(w, err) {
 		return
 	} else {
 		for _, item := range tools {
 			collect(item.Metadata.Namespace)
 		}
 	}
-	if secrets, err := s.stores.Secrets.List(); writeStoreFetchError(w, err) {
+	if secrets, err := s.stores.Secrets.List(r.Context()); writeStoreFetchError(w, err) {
 		return
 	} else {
 		for _, item := range secrets {
 			collect(item.Metadata.Namespace)
 		}
 	}
-	if memories, err := s.stores.Memories.List(); writeStoreFetchError(w, err) {
+	if memories, err := s.stores.Memories.List(r.Context()); writeStoreFetchError(w, err) {
 		return
 	} else {
 		for _, item := range memories {
 			collect(item.Metadata.Namespace)
 		}
 	}
-	if policies, err := s.stores.Policies.List(); writeStoreFetchError(w, err) {
+	if policies, err := s.stores.Policies.List(r.Context()); writeStoreFetchError(w, err) {
 		return
 	} else {
 		for _, item := range policies {
 			collect(item.Metadata.Namespace)
 		}
 	}
-	if tasks, err := s.stores.Tasks.List(); writeStoreFetchError(w, err) {
+	if tasks, err := s.stores.Tasks.List(r.Context()); writeStoreFetchError(w, err) {
 		return
 	} else {
 		for _, item := range tasks {
 			collect(item.Metadata.Namespace)
 		}
 	}
-	if workers, err := s.stores.Workers.List(); writeStoreFetchError(w, err) {
+	if workers, err := s.stores.Workers.List(r.Context()); writeStoreFetchError(w, err) {
 		return
 	} else {
 		for _, item := range workers {
@@ -388,7 +408,7 @@ func (s *Server) handleAgentByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		s.getAgentLogs(w, scopedNameForRequest(r, name), name)
+		s.getAgentLogs(w, r.Context(), scopedNameForRequest(r, name), name)
 		return
 	}
 	if strings.HasSuffix(path, "/status") {
@@ -405,7 +425,7 @@ func (s *Server) handleAgentByName(w http.ResponseWriter, r *http.Request) {
 	key := scopedNameForRequest(r, name)
 	switch r.Method {
 	case http.MethodGet:
-		s.getAgent(w, key, name)
+		s.getAgent(w, r.Context(), key, name)
 	case http.MethodDelete:
 		s.deleteAgent(w, r, key, name)
 	case http.MethodPut:
@@ -419,7 +439,7 @@ func (s *Server) handleAgentByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		current, ok, err := s.stores.Agents.Get(key)
+		current, ok, err := s.stores.Agents.Get(r.Context(), key)
 		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("agent %q not found", name), http.StatusNotFound)
@@ -435,7 +455,7 @@ func (s *Server) handleAgentByName(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		agent.Status = current.Status
-		agent, err = s.stores.Agents.Upsert(agent)
+		agent, err = s.stores.Agents.Upsert(r.Context(), agent)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -462,12 +482,12 @@ func (s *Server) createOrUpdateAgent(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	existing, ok, err := s.stores.Agents.Get(store.ScopedName(agent.Metadata.Namespace, agent.Metadata.Name))
+	existing, ok, err := s.stores.Agents.Get(r.Context(), store.ScopedName(agent.Metadata.Namespace, agent.Metadata.Name))
 	if writeStoreFetchError(w, err) { return }
 	if ok {
 		agent.Status = existing.Status
 	}
-	agent, err = s.stores.Agents.Upsert(agent)
+	agent, err = s.stores.Agents.Upsert(r.Context(), agent)
 	if err != nil {
 		writeStoreError(w, err)
 		return
@@ -478,18 +498,28 @@ func (s *Server) createOrUpdateAgent(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
-	agents, err := s.stores.Agents.List()
-	if writeStoreFetchError(w, err) { return }
+	limit, _ := paginationParams(r)
+	after := cursorParam(r)
 	ns, hasNS := namespaceFilter(r)
+	nsFilter := ""
+	if hasNS {
+		nsFilter = ns
+	}
+	agents, err := s.stores.Agents.ListCursor(r.Context(), limit, after, nsFilter)
+	if writeStoreFetchError(w, err) { return }
+	cont := listContinue(limit, len(agents), "")
+	if len(agents) > 0 {
+		cont = listContinue(limit, len(agents), agents[len(agents)-1].Metadata.Name)
+	}
 	selector, err := labelSelectorFilter(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if hasNS || len(selector) > 0 {
+	if len(selector) > 0 {
 		filtered := make([]resources.Agent, 0, len(agents))
 		for _, agent := range agents {
-			if !matchMetadataFilters(agent.Metadata, ns, hasNS, selector) {
+			if !matchMetadataFilters(agent.Metadata, "", false, selector) {
 				continue
 			}
 			filtered = append(filtered, agent)
@@ -499,11 +529,11 @@ func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
 	for i := range agents {
 		agents[i] = s.withRuntimeStatus(agents[i])
 	}
-	writeJSON(w, http.StatusOK, resources.AgentList{Items: agents})
+	writeJSON(w, http.StatusOK, resources.AgentList{ListMeta: resources.ListMeta{Continue: cont}, Items: agents})
 }
 
-func (s *Server) getAgent(w http.ResponseWriter, key, name string) {
-	agent, ok, err := s.stores.Agents.Get(key)
+func (s *Server) getAgent(w http.ResponseWriter, ctx context.Context, key, name string) {
+	agent, ok, err := s.stores.Agents.Get(ctx, key)
 	if writeStoreFetchError(w, err) { return }
 	if !ok {
 		http.Error(w, fmt.Sprintf("agent %q not found", name), http.StatusNotFound)
@@ -513,7 +543,7 @@ func (s *Server) getAgent(w http.ResponseWriter, key, name string) {
 }
 
 func (s *Server) deleteAgent(w http.ResponseWriter, r *http.Request, key, name string) {
-	if err := s.stores.Agents.Delete(key); err != nil {
+	if err := s.stores.Agents.Delete(r.Context(), key); err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
@@ -522,8 +552,8 @@ func (s *Server) deleteAgent(w http.ResponseWriter, r *http.Request, key, name s
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) getAgentLogs(w http.ResponseWriter, key, name string) {
-	_, ok, err := s.stores.Agents.Get(key)
+func (s *Server) getAgentLogs(w http.ResponseWriter, ctx context.Context, key, name string) {
+	_, ok, err := s.stores.Agents.Get(ctx, key)
 	if writeStoreFetchError(w, err) { return }
 	if !ok {
 		http.Error(w, fmt.Sprintf("agent %q not found", name), http.StatusNotFound)
@@ -535,25 +565,35 @@ func (s *Server) getAgentLogs(w http.ResponseWriter, key, name string) {
 func (s *Server) handleAgentSystems(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		items, err := s.stores.AgentSystems.List()
-		if writeStoreFetchError(w, err) { return }
+		limit, _ := paginationParams(r)
+		after := cursorParam(r)
 		ns, hasNS := namespaceFilter(r)
+		nsFilter := ""
+		if hasNS {
+			nsFilter = ns
+		}
+		items, err := s.stores.AgentSystems.ListCursor(r.Context(), limit, after, nsFilter)
+		if writeStoreFetchError(w, err) { return }
+		cont := listContinue(limit, len(items), "")
+		if len(items) > 0 {
+			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
+		}
 		selector, err := labelSelectorFilter(r)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if hasNS || len(selector) > 0 {
+		if len(selector) > 0 {
 			filtered := make([]resources.AgentSystem, 0, len(items))
 			for _, item := range items {
-				if !matchMetadataFilters(item.Metadata, ns, hasNS, selector) {
+				if !matchMetadataFilters(item.Metadata, "", false, selector) {
 					continue
 				}
 				filtered = append(filtered, item)
 			}
 			items = filtered
 		}
-		writeJSON(w, http.StatusOK, resources.AgentSystemList{Items: items})
+		writeJSON(w, http.StatusOK, resources.AgentSystemList{ListMeta: resources.ListMeta{Continue: cont}, Items: items})
 	case http.MethodPost:
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -569,12 +609,12 @@ func (s *Server) handleAgentSystems(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		existing, ok, err := s.stores.AgentSystems.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
+		existing, ok, err := s.stores.AgentSystems.Get(r.Context(), store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
 		if writeStoreFetchError(w, err) { return }
 		if ok {
 			obj.Status = existing.Status
 		}
-		obj, err = s.stores.AgentSystems.Upsert(obj)
+		obj, err = s.stores.AgentSystems.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -605,7 +645,7 @@ func (s *Server) handleAgentSystemByName(w http.ResponseWriter, r *http.Request)
 	key := scopedNameForRequest(r, name)
 	switch r.Method {
 	case http.MethodGet:
-		obj, ok, err := s.stores.AgentSystems.Get(key)
+		obj, ok, err := s.stores.AgentSystems.Get(r.Context(), key)
 		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("agentsystem %q not found", name), http.StatusNotFound)
@@ -613,7 +653,7 @@ func (s *Server) handleAgentSystemByName(w http.ResponseWriter, r *http.Request)
 		}
 		writeJSON(w, http.StatusOK, obj)
 	case http.MethodDelete:
-		if err := s.stores.AgentSystems.Delete(key); err != nil {
+		if err := s.stores.AgentSystems.Delete(r.Context(), key); err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
@@ -630,7 +670,7 @@ func (s *Server) handleAgentSystemByName(w http.ResponseWriter, r *http.Request)
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		current, ok, err := s.stores.AgentSystems.Get(key)
+		current, ok, err := s.stores.AgentSystems.Get(r.Context(), key)
 		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("agentsystem %q not found", name), http.StatusNotFound)
@@ -646,7 +686,7 @@ func (s *Server) handleAgentSystemByName(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		obj.Status = current.Status
-		obj, err = s.stores.AgentSystems.Upsert(obj)
+		obj, err = s.stores.AgentSystems.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -661,25 +701,35 @@ func (s *Server) handleAgentSystemByName(w http.ResponseWriter, r *http.Request)
 func (s *Server) handleModelEndpoints(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		items, err := s.stores.ModelEPs.List()
-		if writeStoreFetchError(w, err) { return }
+		limit, _ := paginationParams(r)
+		after := cursorParam(r)
 		ns, hasNS := namespaceFilter(r)
+		nsFilter := ""
+		if hasNS {
+			nsFilter = ns
+		}
+		items, err := s.stores.ModelEPs.ListCursor(r.Context(), limit, after, nsFilter)
+		if writeStoreFetchError(w, err) { return }
+		cont := listContinue(limit, len(items), "")
+		if len(items) > 0 {
+			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
+		}
 		selector, err := labelSelectorFilter(r)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if hasNS || len(selector) > 0 {
+		if len(selector) > 0 {
 			filtered := make([]resources.ModelEndpoint, 0, len(items))
 			for _, item := range items {
-				if !matchMetadataFilters(item.Metadata, ns, hasNS, selector) {
+				if !matchMetadataFilters(item.Metadata, "", false, selector) {
 					continue
 				}
 				filtered = append(filtered, item)
 			}
 			items = filtered
 		}
-		writeJSON(w, http.StatusOK, resources.ModelEndpointList{Items: items})
+		writeJSON(w, http.StatusOK, resources.ModelEndpointList{ListMeta: resources.ListMeta{Continue: cont}, Items: items})
 	case http.MethodPost:
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -695,12 +745,12 @@ func (s *Server) handleModelEndpoints(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		existing, ok, err := s.stores.ModelEPs.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
+		existing, ok, err := s.stores.ModelEPs.Get(r.Context(), store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
 		if writeStoreFetchError(w, err) { return }
 		if ok {
 			obj.Status = existing.Status
 		}
-		obj, err = s.stores.ModelEPs.Upsert(obj)
+		obj, err = s.stores.ModelEPs.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -731,7 +781,7 @@ func (s *Server) handleModelEndpointByName(w http.ResponseWriter, r *http.Reques
 	key := scopedNameForRequest(r, name)
 	switch r.Method {
 	case http.MethodGet:
-		obj, ok, err := s.stores.ModelEPs.Get(key)
+		obj, ok, err := s.stores.ModelEPs.Get(r.Context(), key)
 		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("modelendpoint %q not found", name), http.StatusNotFound)
@@ -739,7 +789,7 @@ func (s *Server) handleModelEndpointByName(w http.ResponseWriter, r *http.Reques
 		}
 		writeJSON(w, http.StatusOK, obj)
 	case http.MethodDelete:
-		if err := s.stores.ModelEPs.Delete(key); err != nil {
+		if err := s.stores.ModelEPs.Delete(r.Context(), key); err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
@@ -756,7 +806,7 @@ func (s *Server) handleModelEndpointByName(w http.ResponseWriter, r *http.Reques
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		current, ok, err := s.stores.ModelEPs.Get(key)
+		current, ok, err := s.stores.ModelEPs.Get(r.Context(), key)
 		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("modelendpoint %q not found", name), http.StatusNotFound)
@@ -772,7 +822,7 @@ func (s *Server) handleModelEndpointByName(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		obj.Status = current.Status
-		obj, err = s.stores.ModelEPs.Upsert(obj)
+		obj, err = s.stores.ModelEPs.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -787,25 +837,35 @@ func (s *Server) handleModelEndpointByName(w http.ResponseWriter, r *http.Reques
 func (s *Server) handleTools(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		items, err := s.stores.Tools.List()
-		if writeStoreFetchError(w, err) { return }
+		limit, _ := paginationParams(r)
+		after := cursorParam(r)
 		ns, hasNS := namespaceFilter(r)
+		nsFilter := ""
+		if hasNS {
+			nsFilter = ns
+		}
+		items, err := s.stores.Tools.ListCursor(r.Context(), limit, after, nsFilter)
+		if writeStoreFetchError(w, err) { return }
+		cont := listContinue(limit, len(items), "")
+		if len(items) > 0 {
+			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
+		}
 		selector, err := labelSelectorFilter(r)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if hasNS || len(selector) > 0 {
+		if len(selector) > 0 {
 			filtered := make([]resources.Tool, 0, len(items))
 			for _, item := range items {
-				if !matchMetadataFilters(item.Metadata, ns, hasNS, selector) {
+				if !matchMetadataFilters(item.Metadata, "", false, selector) {
 					continue
 				}
 				filtered = append(filtered, item)
 			}
 			items = filtered
 		}
-		writeJSON(w, http.StatusOK, resources.ToolList{Items: items})
+		writeJSON(w, http.StatusOK, resources.ToolList{ListMeta: resources.ListMeta{Continue: cont}, Items: items})
 	case http.MethodPost:
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -821,12 +881,12 @@ func (s *Server) handleTools(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		existing, ok, err := s.stores.Tools.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
+		existing, ok, err := s.stores.Tools.Get(r.Context(), store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
 		if writeStoreFetchError(w, err) { return }
 		if ok {
 			obj.Status = existing.Status
 		}
-		obj, err = s.stores.Tools.Upsert(obj)
+		obj, err = s.stores.Tools.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -857,7 +917,7 @@ func (s *Server) handleToolByName(w http.ResponseWriter, r *http.Request) {
 	key := scopedNameForRequest(r, name)
 	switch r.Method {
 	case http.MethodGet:
-		obj, ok, err := s.stores.Tools.Get(key)
+		obj, ok, err := s.stores.Tools.Get(r.Context(), key)
 		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("tool %q not found", name), http.StatusNotFound)
@@ -865,7 +925,7 @@ func (s *Server) handleToolByName(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, obj)
 	case http.MethodDelete:
-		if err := s.stores.Tools.Delete(key); err != nil {
+		if err := s.stores.Tools.Delete(r.Context(), key); err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
@@ -882,7 +942,7 @@ func (s *Server) handleToolByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		current, ok, err := s.stores.Tools.Get(key)
+		current, ok, err := s.stores.Tools.Get(r.Context(), key)
 		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("tool %q not found", name), http.StatusNotFound)
@@ -898,7 +958,7 @@ func (s *Server) handleToolByName(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		obj.Status = current.Status
-		obj, err = s.stores.Tools.Upsert(obj)
+		obj, err = s.stores.Tools.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -913,18 +973,28 @@ func (s *Server) handleToolByName(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleSecrets(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		items, err := s.stores.Secrets.List()
-		if writeStoreFetchError(w, err) { return }
+		limit, _ := paginationParams(r)
+		after := cursorParam(r)
 		ns, hasNS := namespaceFilter(r)
+		nsFilter := ""
+		if hasNS {
+			nsFilter = ns
+		}
+		items, err := s.stores.Secrets.ListCursor(r.Context(), limit, after, nsFilter)
+		if writeStoreFetchError(w, err) { return }
+		cont := listContinue(limit, len(items), "")
+		if len(items) > 0 {
+			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
+		}
 		selector, err := labelSelectorFilter(r)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if hasNS || len(selector) > 0 {
+		if len(selector) > 0 {
 			filtered := make([]resources.Secret, 0, len(items))
 			for _, item := range items {
-				if !matchMetadataFilters(item.Metadata, ns, hasNS, selector) {
+				if !matchMetadataFilters(item.Metadata, "", false, selector) {
 					continue
 				}
 				filtered = append(filtered, item)
@@ -934,7 +1004,7 @@ func (s *Server) handleSecrets(w http.ResponseWriter, r *http.Request) {
 		for i := range items {
 			redactSecretData(&items[i])
 		}
-		writeJSON(w, http.StatusOK, resources.SecretList{Items: items})
+		writeJSON(w, http.StatusOK, resources.SecretList{ListMeta: resources.ListMeta{Continue: cont}, Items: items})
 	case http.MethodPost:
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -950,12 +1020,12 @@ func (s *Server) handleSecrets(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		existing, ok, err := s.stores.Secrets.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
+		existing, ok, err := s.stores.Secrets.Get(r.Context(), store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
 		if writeStoreFetchError(w, err) { return }
 		if ok {
 			obj.Status = existing.Status
 		}
-		obj, err = s.stores.Secrets.Upsert(obj)
+		obj, err = s.stores.Secrets.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -979,7 +1049,7 @@ func (s *Server) handleSecretByName(w http.ResponseWriter, r *http.Request) {
 	key := scopedNameForRequest(r, name)
 	switch r.Method {
 	case http.MethodGet:
-		obj, ok, err := s.stores.Secrets.Get(key)
+		obj, ok, err := s.stores.Secrets.Get(r.Context(), key)
 		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("secret %q not found", name), http.StatusNotFound)
@@ -988,7 +1058,7 @@ func (s *Server) handleSecretByName(w http.ResponseWriter, r *http.Request) {
 		redactSecretData(&obj)
 		writeJSON(w, http.StatusOK, obj)
 	case http.MethodDelete:
-		if err := s.stores.Secrets.Delete(key); err != nil {
+		if err := s.stores.Secrets.Delete(r.Context(), key); err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
@@ -1005,7 +1075,7 @@ func (s *Server) handleSecretByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		current, ok, err := s.stores.Secrets.Get(key)
+		current, ok, err := s.stores.Secrets.Get(r.Context(), key)
 		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("secret %q not found", name), http.StatusNotFound)
@@ -1021,7 +1091,7 @@ func (s *Server) handleSecretByName(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		obj.Status = current.Status
-		obj, err = s.stores.Secrets.Upsert(obj)
+		obj, err = s.stores.Secrets.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -1054,25 +1124,35 @@ func redactSecretData(secret *resources.Secret) {
 func (s *Server) handleMemories(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		items, err := s.stores.Memories.List()
-		if writeStoreFetchError(w, err) { return }
+		limit, _ := paginationParams(r)
+		after := cursorParam(r)
 		ns, hasNS := namespaceFilter(r)
+		nsFilter := ""
+		if hasNS {
+			nsFilter = ns
+		}
+		items, err := s.stores.Memories.ListCursor(r.Context(), limit, after, nsFilter)
+		if writeStoreFetchError(w, err) { return }
+		cont := listContinue(limit, len(items), "")
+		if len(items) > 0 {
+			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
+		}
 		selector, err := labelSelectorFilter(r)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if hasNS || len(selector) > 0 {
+		if len(selector) > 0 {
 			filtered := make([]resources.Memory, 0, len(items))
 			for _, item := range items {
-				if !matchMetadataFilters(item.Metadata, ns, hasNS, selector) {
+				if !matchMetadataFilters(item.Metadata, "", false, selector) {
 					continue
 				}
 				filtered = append(filtered, item)
 			}
 			items = filtered
 		}
-		writeJSON(w, http.StatusOK, resources.MemoryList{Items: items})
+		writeJSON(w, http.StatusOK, resources.MemoryList{ListMeta: resources.ListMeta{Continue: cont}, Items: items})
 	case http.MethodPost:
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -1088,12 +1168,12 @@ func (s *Server) handleMemories(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		existing, ok, err := s.stores.Memories.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
+		existing, ok, err := s.stores.Memories.Get(r.Context(), store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
 		if writeStoreFetchError(w, err) { return }
 		if ok {
 			obj.Status = existing.Status
 		}
-		obj, err = s.stores.Memories.Upsert(obj)
+		obj, err = s.stores.Memories.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -1133,7 +1213,7 @@ func (s *Server) handleMemoryByName(w http.ResponseWriter, r *http.Request) {
 	key := scopedNameForRequest(r, name)
 	switch r.Method {
 	case http.MethodGet:
-		obj, ok, err := s.stores.Memories.Get(key)
+		obj, ok, err := s.stores.Memories.Get(r.Context(), key)
 		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("memory %q not found", name), http.StatusNotFound)
@@ -1141,7 +1221,7 @@ func (s *Server) handleMemoryByName(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, obj)
 	case http.MethodDelete:
-		if err := s.stores.Memories.Delete(key); err != nil {
+		if err := s.stores.Memories.Delete(r.Context(), key); err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
@@ -1158,7 +1238,7 @@ func (s *Server) handleMemoryByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		current, ok, err := s.stores.Memories.Get(key)
+		current, ok, err := s.stores.Memories.Get(r.Context(), key)
 		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("memory %q not found", name), http.StatusNotFound)
@@ -1174,7 +1254,7 @@ func (s *Server) handleMemoryByName(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		obj.Status = current.Status
-		obj, err = s.stores.Memories.Upsert(obj)
+		obj, err = s.stores.Memories.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -1192,7 +1272,7 @@ func (s *Server) handleMemoryEntries(w http.ResponseWriter, r *http.Request, nam
 		return
 	}
 	key := scopedNameForRequest(r, name)
-	_, ok, err := s.stores.Memories.Get(key)
+	_, ok, err := s.stores.Memories.Get(r.Context(), key)
 	if writeStoreFetchError(w, err) { return }
 	if !ok {
 		http.Error(w, fmt.Sprintf("memory %q not found", name), http.StatusNotFound)
@@ -1243,25 +1323,35 @@ func (s *Server) handleMemoryEntries(w http.ResponseWriter, r *http.Request, nam
 func (s *Server) handlePolicies(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		items, err := s.stores.Policies.List()
-		if writeStoreFetchError(w, err) { return }
+		limit, _ := paginationParams(r)
+		after := cursorParam(r)
 		ns, hasNS := namespaceFilter(r)
+		nsFilter := ""
+		if hasNS {
+			nsFilter = ns
+		}
+		items, err := s.stores.Policies.ListCursor(r.Context(), limit, after, nsFilter)
+		if writeStoreFetchError(w, err) { return }
+		cont := listContinue(limit, len(items), "")
+		if len(items) > 0 {
+			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
+		}
 		selector, err := labelSelectorFilter(r)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if hasNS || len(selector) > 0 {
+		if len(selector) > 0 {
 			filtered := make([]resources.AgentPolicy, 0, len(items))
 			for _, item := range items {
-				if !matchMetadataFilters(item.Metadata, ns, hasNS, selector) {
+				if !matchMetadataFilters(item.Metadata, "", false, selector) {
 					continue
 				}
 				filtered = append(filtered, item)
 			}
 			items = filtered
 		}
-		writeJSON(w, http.StatusOK, resources.AgentPolicyList{Items: items})
+		writeJSON(w, http.StatusOK, resources.AgentPolicyList{ListMeta: resources.ListMeta{Continue: cont}, Items: items})
 	case http.MethodPost:
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -1277,12 +1367,12 @@ func (s *Server) handlePolicies(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		existing, ok, err := s.stores.Policies.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
+		existing, ok, err := s.stores.Policies.Get(r.Context(), store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
 		if writeStoreFetchError(w, err) { return }
 		if ok {
 			obj.Status = existing.Status
 		}
-		obj, err = s.stores.Policies.Upsert(obj)
+		obj, err = s.stores.Policies.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -1313,7 +1403,7 @@ func (s *Server) handlePolicyByName(w http.ResponseWriter, r *http.Request) {
 	key := scopedNameForRequest(r, name)
 	switch r.Method {
 	case http.MethodGet:
-		obj, ok, err := s.stores.Policies.Get(key)
+		obj, ok, err := s.stores.Policies.Get(r.Context(), key)
 		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("agentpolicy %q not found", name), http.StatusNotFound)
@@ -1321,7 +1411,7 @@ func (s *Server) handlePolicyByName(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, obj)
 	case http.MethodDelete:
-		if err := s.stores.Policies.Delete(key); err != nil {
+		if err := s.stores.Policies.Delete(r.Context(), key); err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
@@ -1338,7 +1428,7 @@ func (s *Server) handlePolicyByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		current, ok, err := s.stores.Policies.Get(key)
+		current, ok, err := s.stores.Policies.Get(r.Context(), key)
 		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("agentpolicy %q not found", name), http.StatusNotFound)
@@ -1354,7 +1444,7 @@ func (s *Server) handlePolicyByName(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		obj.Status = current.Status
-		obj, err = s.stores.Policies.Upsert(obj)
+		obj, err = s.stores.Policies.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -1369,25 +1459,35 @@ func (s *Server) handlePolicyByName(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAgentRoles(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		items, err := s.stores.AgentRoles.List()
-		if writeStoreFetchError(w, err) { return }
+		limit, _ := paginationParams(r)
+		after := cursorParam(r)
 		ns, hasNS := namespaceFilter(r)
+		nsFilter := ""
+		if hasNS {
+			nsFilter = ns
+		}
+		items, err := s.stores.AgentRoles.ListCursor(r.Context(), limit, after, nsFilter)
+		if writeStoreFetchError(w, err) { return }
+		cont := listContinue(limit, len(items), "")
+		if len(items) > 0 {
+			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
+		}
 		selector, err := labelSelectorFilter(r)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if hasNS || len(selector) > 0 {
+		if len(selector) > 0 {
 			filtered := make([]resources.AgentRole, 0, len(items))
 			for _, item := range items {
-				if !matchMetadataFilters(item.Metadata, ns, hasNS, selector) {
+				if !matchMetadataFilters(item.Metadata, "", false, selector) {
 					continue
 				}
 				filtered = append(filtered, item)
 			}
 			items = filtered
 		}
-		writeJSON(w, http.StatusOK, resources.AgentRoleList{Items: items})
+		writeJSON(w, http.StatusOK, resources.AgentRoleList{ListMeta: resources.ListMeta{Continue: cont}, Items: items})
 	case http.MethodPost:
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -1403,12 +1503,12 @@ func (s *Server) handleAgentRoles(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		existing, ok, err := s.stores.AgentRoles.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
+		existing, ok, err := s.stores.AgentRoles.Get(r.Context(), store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
 		if writeStoreFetchError(w, err) { return }
 		if ok {
 			obj.Status = existing.Status
 		}
-		obj, err = s.stores.AgentRoles.Upsert(obj)
+		obj, err = s.stores.AgentRoles.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -1430,7 +1530,7 @@ func (s *Server) handleAgentRoleByName(w http.ResponseWriter, r *http.Request) {
 	key := scopedNameForRequest(r, name)
 	switch r.Method {
 	case http.MethodGet:
-		obj, ok, err := s.stores.AgentRoles.Get(key)
+		obj, ok, err := s.stores.AgentRoles.Get(r.Context(), key)
 		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("agentrole %q not found", name), http.StatusNotFound)
@@ -1438,7 +1538,7 @@ func (s *Server) handleAgentRoleByName(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, obj)
 	case http.MethodDelete:
-		if err := s.stores.AgentRoles.Delete(key); err != nil {
+		if err := s.stores.AgentRoles.Delete(r.Context(), key); err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
@@ -1455,7 +1555,7 @@ func (s *Server) handleAgentRoleByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		current, ok, err := s.stores.AgentRoles.Get(key)
+		current, ok, err := s.stores.AgentRoles.Get(r.Context(), key)
 		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("agentrole %q not found", name), http.StatusNotFound)
@@ -1471,7 +1571,7 @@ func (s *Server) handleAgentRoleByName(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		obj.Status = current.Status
-		obj, err = s.stores.AgentRoles.Upsert(obj)
+		obj, err = s.stores.AgentRoles.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -1486,25 +1586,35 @@ func (s *Server) handleAgentRoleByName(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleToolPermissions(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		items, err := s.stores.ToolPerms.List()
-		if writeStoreFetchError(w, err) { return }
+		limit, _ := paginationParams(r)
+		after := cursorParam(r)
 		ns, hasNS := namespaceFilter(r)
+		nsFilter := ""
+		if hasNS {
+			nsFilter = ns
+		}
+		items, err := s.stores.ToolPerms.ListCursor(r.Context(), limit, after, nsFilter)
+		if writeStoreFetchError(w, err) { return }
+		cont := listContinue(limit, len(items), "")
+		if len(items) > 0 {
+			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
+		}
 		selector, err := labelSelectorFilter(r)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if hasNS || len(selector) > 0 {
+		if len(selector) > 0 {
 			filtered := make([]resources.ToolPermission, 0, len(items))
 			for _, item := range items {
-				if !matchMetadataFilters(item.Metadata, ns, hasNS, selector) {
+				if !matchMetadataFilters(item.Metadata, "", false, selector) {
 					continue
 				}
 				filtered = append(filtered, item)
 			}
 			items = filtered
 		}
-		writeJSON(w, http.StatusOK, resources.ToolPermissionList{Items: items})
+		writeJSON(w, http.StatusOK, resources.ToolPermissionList{ListMeta: resources.ListMeta{Continue: cont}, Items: items})
 	case http.MethodPost:
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -1520,12 +1630,12 @@ func (s *Server) handleToolPermissions(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		existing, ok, err := s.stores.ToolPerms.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
+		existing, ok, err := s.stores.ToolPerms.Get(r.Context(), store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
 		if writeStoreFetchError(w, err) { return }
 		if ok {
 			obj.Status = existing.Status
 		}
-		obj, err = s.stores.ToolPerms.Upsert(obj)
+		obj, err = s.stores.ToolPerms.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -1547,7 +1657,7 @@ func (s *Server) handleToolPermissionByName(w http.ResponseWriter, r *http.Reque
 	key := scopedNameForRequest(r, name)
 	switch r.Method {
 	case http.MethodGet:
-		obj, ok, err := s.stores.ToolPerms.Get(key)
+		obj, ok, err := s.stores.ToolPerms.Get(r.Context(), key)
 		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("toolpermission %q not found", name), http.StatusNotFound)
@@ -1555,7 +1665,7 @@ func (s *Server) handleToolPermissionByName(w http.ResponseWriter, r *http.Reque
 		}
 		writeJSON(w, http.StatusOK, obj)
 	case http.MethodDelete:
-		if err := s.stores.ToolPerms.Delete(key); err != nil {
+		if err := s.stores.ToolPerms.Delete(r.Context(), key); err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
@@ -1572,7 +1682,7 @@ func (s *Server) handleToolPermissionByName(w http.ResponseWriter, r *http.Reque
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		current, ok, err := s.stores.ToolPerms.Get(key)
+		current, ok, err := s.stores.ToolPerms.Get(r.Context(), key)
 		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("toolpermission %q not found", name), http.StatusNotFound)
@@ -1588,7 +1698,7 @@ func (s *Server) handleToolPermissionByName(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		obj.Status = current.Status
-		obj, err = s.stores.ToolPerms.Upsert(obj)
+		obj, err = s.stores.ToolPerms.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -1603,25 +1713,35 @@ func (s *Server) handleToolPermissionByName(w http.ResponseWriter, r *http.Reque
 func (s *Server) handleToolApprovals(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		items, err := s.stores.ToolApprovals.List()
-		if writeStoreFetchError(w, err) { return }
+		limit, _ := paginationParams(r)
+		after := cursorParam(r)
 		ns, hasNS := namespaceFilter(r)
+		nsFilter := ""
+		if hasNS {
+			nsFilter = ns
+		}
+		items, err := s.stores.ToolApprovals.ListCursor(r.Context(), limit, after, nsFilter)
+		if writeStoreFetchError(w, err) { return }
+		cont := listContinue(limit, len(items), "")
+		if len(items) > 0 {
+			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
+		}
 		selector, err := labelSelectorFilter(r)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if hasNS || len(selector) > 0 {
+		if len(selector) > 0 {
 			filtered := make([]resources.ToolApproval, 0, len(items))
 			for _, item := range items {
-				if !matchMetadataFilters(item.Metadata, ns, hasNS, selector) {
+				if !matchMetadataFilters(item.Metadata, "", false, selector) {
 					continue
 				}
 				filtered = append(filtered, item)
 			}
 			items = filtered
 		}
-		writeJSON(w, http.StatusOK, resources.ToolApprovalList{Items: items})
+		writeJSON(w, http.StatusOK, resources.ToolApprovalList{ListMeta: resources.ListMeta{Continue: cont}, Items: items})
 	case http.MethodPost:
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -1637,12 +1757,12 @@ func (s *Server) handleToolApprovals(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		existing, ok, err := s.stores.ToolApprovals.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
+		existing, ok, err := s.stores.ToolApprovals.Get(r.Context(), store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
 		if writeStoreFetchError(w, err) { return }
 		if ok {
 			obj.Status = existing.Status
 		}
-		obj, err = s.stores.ToolApprovals.Upsert(obj)
+		obj, err = s.stores.ToolApprovals.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -1675,7 +1795,7 @@ func (s *Server) handleToolApprovalByName(w http.ResponseWriter, r *http.Request
 	key := scopedNameForRequest(r, name)
 	switch r.Method {
 	case http.MethodGet:
-		obj, ok, err := s.stores.ToolApprovals.Get(key)
+		obj, ok, err := s.stores.ToolApprovals.Get(r.Context(), key)
 		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("toolapproval %q not found", name), http.StatusNotFound)
@@ -1683,7 +1803,7 @@ func (s *Server) handleToolApprovalByName(w http.ResponseWriter, r *http.Request
 		}
 		writeJSON(w, http.StatusOK, obj)
 	case http.MethodDelete:
-		if err := s.stores.ToolApprovals.Delete(key); err != nil {
+		if err := s.stores.ToolApprovals.Delete(r.Context(), key); err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
@@ -1715,7 +1835,7 @@ func (s *Server) handleToolApprovalDecision(w http.ResponseWriter, r *http.Reque
 	// This eliminates the TOCTOU race where two concurrent approve/deny
 	// requests could both pass the Pending guard and both commit.
 	for attempt := 0; attempt < 5; attempt++ {
-		obj, ok, err := s.stores.ToolApprovals.Get(key)
+		obj, ok, err := s.stores.ToolApprovals.Get(r.Context(), key)
 		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("toolapproval %q not found", name), http.StatusNotFound)
@@ -1729,7 +1849,7 @@ func (s *Server) handleToolApprovalDecision(w http.ResponseWriter, r *http.Reque
 		obj.Status.Decision = decision
 		obj.Status.DecidedBy = body.DecidedBy
 		obj.Status.DecidedAt = time.Now().UTC().Format(time.RFC3339)
-		updated, err := s.stores.ToolApprovals.Upsert(obj)
+		updated, err := s.stores.ToolApprovals.Upsert(r.Context(), obj)
 		if err != nil {
 			if store.IsConflict(err) {
 				continue
@@ -1748,25 +1868,40 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		limit, offset := paginationParams(r)
-		items, err := s.stores.Tasks.ListPaged(limit, offset)
-		if writeStoreFetchError(w, err) { return }
+		after := cursorParam(r)
 		ns, hasNS := namespaceFilter(r)
+		nsFilter := ""
+		if hasNS {
+			nsFilter = ns
+		}
+		var items []resources.Task
+		var err error
+		if after != "" {
+			items, err = s.stores.Tasks.ListCursor(r.Context(), limit, after, nsFilter)
+		} else {
+			items, err = s.stores.Tasks.ListPaged(r.Context(), limit, offset, nsFilter)
+		}
+		if writeStoreFetchError(w, err) { return }
+		cont := listContinue(limit, len(items), "")
+		if len(items) > 0 {
+			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
+		}
 		selector, err := labelSelectorFilter(r)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if hasNS || len(selector) > 0 {
+		if len(selector) > 0 {
 			filtered := make([]resources.Task, 0, len(items))
 			for _, item := range items {
-				if !matchMetadataFilters(item.Metadata, ns, hasNS, selector) {
+				if !matchMetadataFilters(item.Metadata, "", false, selector) {
 					continue
 				}
 				filtered = append(filtered, item)
 			}
 			items = filtered
 		}
-		writeJSON(w, http.StatusOK, resources.TaskList{Items: items})
+		writeJSON(w, http.StatusOK, resources.TaskList{ListMeta: resources.ListMeta{Continue: cont}, Items: items})
 	case http.MethodPost:
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -1782,7 +1917,7 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		existing, ok, err := s.stores.Tasks.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
+		existing, ok, err := s.stores.Tasks.Get(r.Context(), store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
 		if writeStoreFetchError(w, err) { return }
 		if ok {
 			obj.Status = existing.Status
@@ -1792,7 +1927,7 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 			obj.Metadata.Annotations = make(map[string]string)
 		}
 		telemetry.InjectTraceContext(r.Context(), obj.Metadata.Annotations)
-		obj, err = s.stores.Tasks.Upsert(obj)
+		obj, err = s.stores.Tasks.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -1829,7 +1964,7 @@ func (s *Server) handleTaskByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		s.getTaskLogs(w, scopedNameForRequest(r, name), name)
+		s.getTaskLogs(w, r.Context(), scopedNameForRequest(r, name), name)
 		return
 	}
 	if strings.HasSuffix(path, "/messages") {
@@ -1872,7 +2007,7 @@ func (s *Server) handleTaskByName(w http.ResponseWriter, r *http.Request) {
 	key := scopedNameForRequest(r, name)
 	switch r.Method {
 	case http.MethodGet:
-		obj, ok, err := s.stores.Tasks.Get(key)
+		obj, ok, err := s.stores.Tasks.Get(r.Context(), key)
 		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("task %q not found", name), http.StatusNotFound)
@@ -1880,7 +2015,7 @@ func (s *Server) handleTaskByName(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, obj)
 	case http.MethodDelete:
-		if err := s.stores.Tasks.Delete(key); err != nil {
+		if err := s.stores.Tasks.Delete(r.Context(), key); err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
@@ -1897,7 +2032,7 @@ func (s *Server) handleTaskByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		current, ok, err := s.stores.Tasks.Get(key)
+		current, ok, err := s.stores.Tasks.Get(r.Context(), key)
 		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("task %q not found", name), http.StatusNotFound)
@@ -1923,7 +2058,7 @@ func (s *Server) handleTaskByName(w http.ResponseWriter, r *http.Request) {
 				obj.Metadata.Annotations[telemetry.AnnotationTracestate] = ts
 			}
 		}
-		obj, err = s.stores.Tasks.Upsert(obj)
+		obj, err = s.stores.Tasks.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -1935,8 +2070,8 @@ func (s *Server) handleTaskByName(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) getTaskLogs(w http.ResponseWriter, key, name string) {
-	logs, err := s.stores.Tasks.Logs(key)
+func (s *Server) getTaskLogs(w http.ResponseWriter, ctx context.Context, key, name string) {
+	logs, err := s.stores.Tasks.GetLogs(ctx, key)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
@@ -1950,25 +2085,35 @@ func (s *Server) getTaskLogs(w http.ResponseWriter, key, name string) {
 func (s *Server) handleTaskSchedules(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		items, err := s.stores.TaskSchedules.List()
-		if writeStoreFetchError(w, err) { return }
+		limit, _ := paginationParams(r)
+		after := cursorParam(r)
 		ns, hasNS := namespaceFilter(r)
+		nsFilter := ""
+		if hasNS {
+			nsFilter = ns
+		}
+		items, err := s.stores.TaskSchedules.ListCursor(r.Context(), limit, after, nsFilter)
+		if writeStoreFetchError(w, err) { return }
+		cont := listContinue(limit, len(items), "")
+		if len(items) > 0 {
+			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
+		}
 		selector, err := labelSelectorFilter(r)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if hasNS || len(selector) > 0 {
+		if len(selector) > 0 {
 			filtered := make([]resources.TaskSchedule, 0, len(items))
 			for _, item := range items {
-				if !matchMetadataFilters(item.Metadata, ns, hasNS, selector) {
+				if !matchMetadataFilters(item.Metadata, "", false, selector) {
 					continue
 				}
 				filtered = append(filtered, item)
 			}
 			items = filtered
 		}
-		writeJSON(w, http.StatusOK, resources.TaskScheduleList{Items: items})
+		writeJSON(w, http.StatusOK, resources.TaskScheduleList{ListMeta: resources.ListMeta{Continue: cont}, Items: items})
 	case http.MethodPost:
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -1984,12 +2129,12 @@ func (s *Server) handleTaskSchedules(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		existing, ok, err := s.stores.TaskSchedules.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
+		existing, ok, err := s.stores.TaskSchedules.Get(r.Context(), store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
 		if writeStoreFetchError(w, err) { return }
 		if ok {
 			obj.Status = existing.Status
 		}
-		obj, err = s.stores.TaskSchedules.Upsert(obj)
+		obj, err = s.stores.TaskSchedules.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -2030,7 +2175,7 @@ func (s *Server) handleTaskScheduleByName(w http.ResponseWriter, r *http.Request
 	key := scopedNameForRequest(r, name)
 	switch r.Method {
 	case http.MethodGet:
-		obj, ok, err := s.stores.TaskSchedules.Get(key)
+		obj, ok, err := s.stores.TaskSchedules.Get(r.Context(), key)
 		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("taskschedule %q not found", name), http.StatusNotFound)
@@ -2038,7 +2183,7 @@ func (s *Server) handleTaskScheduleByName(w http.ResponseWriter, r *http.Request
 		}
 		writeJSON(w, http.StatusOK, obj)
 	case http.MethodDelete:
-		if err := s.stores.TaskSchedules.Delete(key); err != nil {
+		if err := s.stores.TaskSchedules.Delete(r.Context(), key); err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
@@ -2055,7 +2200,7 @@ func (s *Server) handleTaskScheduleByName(w http.ResponseWriter, r *http.Request
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		current, ok, err := s.stores.TaskSchedules.Get(key)
+		current, ok, err := s.stores.TaskSchedules.Get(r.Context(), key)
 		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("taskschedule %q not found", name), http.StatusNotFound)
@@ -2071,7 +2216,7 @@ func (s *Server) handleTaskScheduleByName(w http.ResponseWriter, r *http.Request
 			return
 		}
 		obj.Status = current.Status
-		obj, err = s.stores.TaskSchedules.Upsert(obj)
+		obj, err = s.stores.TaskSchedules.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -2086,25 +2231,35 @@ func (s *Server) handleTaskScheduleByName(w http.ResponseWriter, r *http.Request
 func (s *Server) handleWorkers(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		items, err := s.stores.Workers.List()
-		if writeStoreFetchError(w, err) { return }
+		limit, _ := paginationParams(r)
+		after := cursorParam(r)
 		ns, hasNS := namespaceFilter(r)
+		nsFilter := ""
+		if hasNS {
+			nsFilter = ns
+		}
+		items, err := s.stores.Workers.ListCursor(r.Context(), limit, after, nsFilter)
+		if writeStoreFetchError(w, err) { return }
+		cont := listContinue(limit, len(items), "")
+		if len(items) > 0 {
+			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
+		}
 		selector, err := labelSelectorFilter(r)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if hasNS || len(selector) > 0 {
+		if len(selector) > 0 {
 			filtered := make([]resources.Worker, 0, len(items))
 			for _, item := range items {
-				if !matchMetadataFilters(item.Metadata, ns, hasNS, selector) {
+				if !matchMetadataFilters(item.Metadata, "", false, selector) {
 					continue
 				}
 				filtered = append(filtered, item)
 			}
 			items = filtered
 		}
-		writeJSON(w, http.StatusOK, resources.WorkerList{Items: items})
+		writeJSON(w, http.StatusOK, resources.WorkerList{ListMeta: resources.ListMeta{Continue: cont}, Items: items})
 	case http.MethodPost:
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -2120,12 +2275,12 @@ func (s *Server) handleWorkers(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		existing, ok, err := s.stores.Workers.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
+		existing, ok, err := s.stores.Workers.Get(r.Context(), store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
 		if writeStoreFetchError(w, err) { return }
 		if ok {
 			obj.Status = existing.Status
 		}
-		obj, err = s.stores.Workers.Upsert(obj)
+		obj, err = s.stores.Workers.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -2156,7 +2311,7 @@ func (s *Server) handleWorkerByName(w http.ResponseWriter, r *http.Request) {
 	key := scopedNameForRequest(r, name)
 	switch r.Method {
 	case http.MethodGet:
-		obj, ok, err := s.stores.Workers.Get(key)
+		obj, ok, err := s.stores.Workers.Get(r.Context(), key)
 		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("worker %q not found", name), http.StatusNotFound)
@@ -2164,7 +2319,7 @@ func (s *Server) handleWorkerByName(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, obj)
 	case http.MethodDelete:
-		if err := s.stores.Workers.Delete(key); err != nil {
+		if err := s.stores.Workers.Delete(r.Context(), key); err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
@@ -2181,7 +2336,7 @@ func (s *Server) handleWorkerByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		current, ok, err := s.stores.Workers.Get(key)
+		current, ok, err := s.stores.Workers.Get(r.Context(), key)
 		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("worker %q not found", name), http.StatusNotFound)
@@ -2197,7 +2352,7 @@ func (s *Server) handleWorkerByName(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		obj.Status = current.Status
-		obj, err = s.stores.Workers.Upsert(obj)
+		obj, err = s.stores.Workers.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -2233,25 +2388,35 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 func (s *Server) handleMcpServers(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		items, err := s.stores.McpServers.List()
-		if writeStoreFetchError(w, err) { return }
+		limit, _ := paginationParams(r)
+		after := cursorParam(r)
 		ns, hasNS := namespaceFilter(r)
+		nsFilter := ""
+		if hasNS {
+			nsFilter = ns
+		}
+		items, err := s.stores.McpServers.ListCursor(r.Context(), limit, after, nsFilter)
+		if writeStoreFetchError(w, err) { return }
+		cont := listContinue(limit, len(items), "")
+		if len(items) > 0 {
+			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
+		}
 		selector, err := labelSelectorFilter(r)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if hasNS || len(selector) > 0 {
+		if len(selector) > 0 {
 			filtered := make([]resources.McpServer, 0, len(items))
 			for _, item := range items {
-				if !matchMetadataFilters(item.Metadata, ns, hasNS, selector) {
+				if !matchMetadataFilters(item.Metadata, "", false, selector) {
 					continue
 				}
 				filtered = append(filtered, item)
 			}
 			items = filtered
 		}
-		writeJSON(w, http.StatusOK, resources.McpServerList{Items: items})
+		writeJSON(w, http.StatusOK, resources.McpServerList{ListMeta: resources.ListMeta{Continue: cont}, Items: items})
 	case http.MethodPost:
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -2267,12 +2432,12 @@ func (s *Server) handleMcpServers(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		existing, ok, err := s.stores.McpServers.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
+		existing, ok, err := s.stores.McpServers.Get(r.Context(), store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
 		if writeStoreFetchError(w, err) { return }
 		if ok {
 			obj.Status = existing.Status
 		}
-		obj, err = s.stores.McpServers.Upsert(obj)
+		obj, err = s.stores.McpServers.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -2294,7 +2459,7 @@ func (s *Server) handleMcpServerByName(w http.ResponseWriter, r *http.Request) {
 	key := scopedNameForRequest(r, name)
 	switch r.Method {
 	case http.MethodGet:
-		obj, ok, err := s.stores.McpServers.Get(key)
+		obj, ok, err := s.stores.McpServers.Get(r.Context(), key)
 		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("mcp-server %q not found", name), http.StatusNotFound)
@@ -2302,7 +2467,7 @@ func (s *Server) handleMcpServerByName(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, obj)
 	case http.MethodDelete:
-		if err := s.stores.McpServers.Delete(key); err != nil {
+		if err := s.stores.McpServers.Delete(r.Context(), key); err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}

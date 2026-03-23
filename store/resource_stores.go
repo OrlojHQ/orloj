@@ -13,6 +13,29 @@ import (
 	"github.com/OrlojHQ/orloj/resources"
 )
 
+// cursorFilter applies keyset cursor pagination to a pre-sorted slice.
+// Items are assumed sorted by name ASC already. It filters by namespace
+// (when non-empty) and returns at most limit items with name > after.
+func cursorFilter[T any](items []T, getName func(T) string, getNamespace func(T) string, limit int, after, namespace string) []T {
+	if limit <= 0 {
+		limit = defaultListLimit
+	}
+	result := make([]T, 0)
+	for _, item := range items {
+		if after != "" && getName(item) <= after {
+			continue
+		}
+		if namespace != "" && !strings.EqualFold(getNamespace(item), namespace) {
+			continue
+		}
+		result = append(result, item)
+		if len(result) >= limit {
+			break
+		}
+	}
+	return result
+}
+
 type AgentSystemStore struct {
 	mu    sync.RWMutex
 	items map[string]resources.AgentSystem
@@ -27,13 +50,19 @@ func NewAgentSystemStoreWithDB(db *sql.DB) *AgentSystemStore {
 	return &AgentSystemStore{items: make(map[string]resources.AgentSystem), db: db}
 }
 
-func (s *AgentSystemStore) Upsert(item resources.AgentSystem) (resources.AgentSystem, error) {
+func (s *AgentSystemStore) Upsert(ctx context.Context, item resources.AgentSystem) (resources.AgentSystem, error) {
 	if err := item.Normalize(); err != nil {
 		return resources.AgentSystem{}, err
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		existing, found, err := getFromTable[resources.AgentSystem](s.db, tableAgentSystems, key)
+		tx, err := s.db.Begin()
+		if err != nil {
+			return resources.AgentSystem{}, err
+		}
+		defer tx.Rollback()
+
+		existing, found, err := getFromTableForUpdate[resources.AgentSystem](ctx, tx, tableAgentSystems, key)
 		if err != nil {
 			return resources.AgentSystem{}, err
 		}
@@ -47,7 +76,10 @@ func (s *AgentSystemStore) Upsert(item resources.AgentSystem) (resources.AgentSy
 				return resources.AgentSystem{}, err
 			}
 		}
-		if err := upsertAgentSystemSQL(s.db, key, item); err != nil {
+		if err := upsertAgentSystemSQL(ctx, tx, key, item); err != nil {
+			return resources.AgentSystem{}, err
+		}
+		if err := tx.Commit(); err != nil {
 			return resources.AgentSystem{}, err
 		}
 		return item, nil
@@ -71,10 +103,10 @@ func (s *AgentSystemStore) Upsert(item resources.AgentSystem) (resources.AgentSy
 	return item, nil
 }
 
-func (s *AgentSystemStore) Get(name string) (resources.AgentSystem, bool, error) {
+func (s *AgentSystemStore) Get(ctx context.Context, name string) (resources.AgentSystem, bool, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		return getFromTable[resources.AgentSystem](s.db, tableAgentSystems, key)
+		return getFromTable[resources.AgentSystem](ctx, s.db, tableAgentSystems, key)
 	}
 
 	s.mu.RLock()
@@ -83,9 +115,9 @@ func (s *AgentSystemStore) Get(name string) (resources.AgentSystem, bool, error)
 	return item, ok, nil
 }
 
-func (s *AgentSystemStore) List() ([]resources.AgentSystem, error) {
+func (s *AgentSystemStore) List(ctx context.Context) ([]resources.AgentSystem, error) {
 	if s.db != nil {
-		return listFromTable[resources.AgentSystem](s.db, tableAgentSystems)
+		return listFromTable[resources.AgentSystem](ctx, s.db, tableAgentSystems)
 	}
 
 	s.mu.RLock()
@@ -100,10 +132,30 @@ func (s *AgentSystemStore) List() ([]resources.AgentSystem, error) {
 	return out, nil
 }
 
-func (s *AgentSystemStore) Delete(name string) error {
+func (s *AgentSystemStore) ListCursor(ctx context.Context, limit int, after, namespace string) ([]resources.AgentSystem, error) {
+	if s.db != nil {
+		return listFromTableCursor[resources.AgentSystem](ctx, s.db, tableAgentSystems, limit, after, namespace)
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]resources.AgentSystem, 0, len(s.items))
+	for _, item := range s.items {
+		out = append(out, item)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Metadata.Name < out[j].Metadata.Name
+	})
+	return cursorFilter(out,
+		func(a resources.AgentSystem) string { return a.Metadata.Name },
+		func(a resources.AgentSystem) string { return resources.NormalizeNamespace(a.Metadata.Namespace) },
+		limit, after, namespace,
+	), nil
+}
+
+func (s *AgentSystemStore) Delete(ctx context.Context, name string) error {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		deleted, err := deleteFromTable(s.db, tableAgentSystems, key)
+		deleted, err := deleteFromTable(ctx, s.db, tableAgentSystems, key)
 		if err != nil {
 			return err
 		}
@@ -136,13 +188,19 @@ func NewModelEndpointStoreWithDB(db *sql.DB) *ModelEndpointStore {
 	return &ModelEndpointStore{items: make(map[string]resources.ModelEndpoint), db: db}
 }
 
-func (s *ModelEndpointStore) Upsert(item resources.ModelEndpoint) (resources.ModelEndpoint, error) {
+func (s *ModelEndpointStore) Upsert(ctx context.Context, item resources.ModelEndpoint) (resources.ModelEndpoint, error) {
 	if err := item.Normalize(); err != nil {
 		return resources.ModelEndpoint{}, err
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		existing, found, err := getFromTable[resources.ModelEndpoint](s.db, tableModelEndpoints, key)
+		tx, err := s.db.Begin()
+		if err != nil {
+			return resources.ModelEndpoint{}, err
+		}
+		defer tx.Rollback()
+
+		existing, found, err := getFromTableForUpdate[resources.ModelEndpoint](ctx, tx, tableModelEndpoints, key)
 		if err != nil {
 			return resources.ModelEndpoint{}, err
 		}
@@ -156,7 +214,10 @@ func (s *ModelEndpointStore) Upsert(item resources.ModelEndpoint) (resources.Mod
 				return resources.ModelEndpoint{}, err
 			}
 		}
-		if err := upsertModelEndpointSQL(s.db, key, item); err != nil {
+		if err := upsertModelEndpointSQL(ctx, tx, key, item); err != nil {
+			return resources.ModelEndpoint{}, err
+		}
+		if err := tx.Commit(); err != nil {
 			return resources.ModelEndpoint{}, err
 		}
 		return item, nil
@@ -180,10 +241,10 @@ func (s *ModelEndpointStore) Upsert(item resources.ModelEndpoint) (resources.Mod
 	return item, nil
 }
 
-func (s *ModelEndpointStore) Get(name string) (resources.ModelEndpoint, bool, error) {
+func (s *ModelEndpointStore) Get(ctx context.Context, name string) (resources.ModelEndpoint, bool, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		return getFromTable[resources.ModelEndpoint](s.db, tableModelEndpoints, key)
+		return getFromTable[resources.ModelEndpoint](ctx, s.db, tableModelEndpoints, key)
 	}
 
 	s.mu.RLock()
@@ -192,9 +253,9 @@ func (s *ModelEndpointStore) Get(name string) (resources.ModelEndpoint, bool, er
 	return item, ok, nil
 }
 
-func (s *ModelEndpointStore) List() ([]resources.ModelEndpoint, error) {
+func (s *ModelEndpointStore) List(ctx context.Context) ([]resources.ModelEndpoint, error) {
 	if s.db != nil {
-		return listFromTable[resources.ModelEndpoint](s.db, tableModelEndpoints)
+		return listFromTable[resources.ModelEndpoint](ctx, s.db, tableModelEndpoints)
 	}
 
 	s.mu.RLock()
@@ -209,10 +270,30 @@ func (s *ModelEndpointStore) List() ([]resources.ModelEndpoint, error) {
 	return out, nil
 }
 
-func (s *ModelEndpointStore) Delete(name string) error {
+func (s *ModelEndpointStore) ListCursor(ctx context.Context, limit int, after, namespace string) ([]resources.ModelEndpoint, error) {
+	if s.db != nil {
+		return listFromTableCursor[resources.ModelEndpoint](ctx, s.db, tableModelEndpoints, limit, after, namespace)
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]resources.ModelEndpoint, 0, len(s.items))
+	for _, item := range s.items {
+		out = append(out, item)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Metadata.Name < out[j].Metadata.Name
+	})
+	return cursorFilter(out,
+		func(a resources.ModelEndpoint) string { return a.Metadata.Name },
+		func(a resources.ModelEndpoint) string { return resources.NormalizeNamespace(a.Metadata.Namespace) },
+		limit, after, namespace,
+	), nil
+}
+
+func (s *ModelEndpointStore) Delete(ctx context.Context, name string) error {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		deleted, err := deleteFromTable(s.db, tableModelEndpoints, key)
+		deleted, err := deleteFromTable(ctx, s.db, tableModelEndpoints, key)
 		if err != nil {
 			return err
 		}
@@ -245,13 +326,19 @@ func NewToolStoreWithDB(db *sql.DB) *ToolStore {
 	return &ToolStore{items: make(map[string]resources.Tool), db: db}
 }
 
-func (s *ToolStore) Upsert(item resources.Tool) (resources.Tool, error) {
+func (s *ToolStore) Upsert(ctx context.Context, item resources.Tool) (resources.Tool, error) {
 	if err := item.Normalize(); err != nil {
 		return resources.Tool{}, err
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		existing, found, err := getFromTable[resources.Tool](s.db, tableTools, key)
+		tx, err := s.db.Begin()
+		if err != nil {
+			return resources.Tool{}, err
+		}
+		defer tx.Rollback()
+
+		existing, found, err := getFromTableForUpdate[resources.Tool](ctx, tx, tableTools, key)
 		if err != nil {
 			return resources.Tool{}, err
 		}
@@ -265,7 +352,10 @@ func (s *ToolStore) Upsert(item resources.Tool) (resources.Tool, error) {
 				return resources.Tool{}, err
 			}
 		}
-		if err := upsertToolSQL(s.db, key, item); err != nil {
+		if err := upsertToolSQL(ctx, tx, key, item); err != nil {
+			return resources.Tool{}, err
+		}
+		if err := tx.Commit(); err != nil {
 			return resources.Tool{}, err
 		}
 		return item, nil
@@ -289,10 +379,10 @@ func (s *ToolStore) Upsert(item resources.Tool) (resources.Tool, error) {
 	return item, nil
 }
 
-func (s *ToolStore) Get(name string) (resources.Tool, bool, error) {
+func (s *ToolStore) Get(ctx context.Context, name string) (resources.Tool, bool, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		return getFromTable[resources.Tool](s.db, tableTools, key)
+		return getFromTable[resources.Tool](ctx, s.db, tableTools, key)
 	}
 
 	s.mu.RLock()
@@ -301,9 +391,9 @@ func (s *ToolStore) Get(name string) (resources.Tool, bool, error) {
 	return item, ok, nil
 }
 
-func (s *ToolStore) List() ([]resources.Tool, error) {
+func (s *ToolStore) List(ctx context.Context) ([]resources.Tool, error) {
 	if s.db != nil {
-		return listFromTable[resources.Tool](s.db, tableTools)
+		return listFromTable[resources.Tool](ctx, s.db, tableTools)
 	}
 
 	s.mu.RLock()
@@ -318,10 +408,30 @@ func (s *ToolStore) List() ([]resources.Tool, error) {
 	return out, nil
 }
 
-func (s *ToolStore) Delete(name string) error {
+func (s *ToolStore) ListCursor(ctx context.Context, limit int, after, namespace string) ([]resources.Tool, error) {
+	if s.db != nil {
+		return listFromTableCursor[resources.Tool](ctx, s.db, tableTools, limit, after, namespace)
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]resources.Tool, 0, len(s.items))
+	for _, item := range s.items {
+		out = append(out, item)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Metadata.Name < out[j].Metadata.Name
+	})
+	return cursorFilter(out,
+		func(a resources.Tool) string { return a.Metadata.Name },
+		func(a resources.Tool) string { return resources.NormalizeNamespace(a.Metadata.Namespace) },
+		limit, after, namespace,
+	), nil
+}
+
+func (s *ToolStore) Delete(ctx context.Context, name string) error {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		deleted, err := deleteFromTable(s.db, tableTools, key)
+		deleted, err := deleteFromTable(ctx, s.db, tableTools, key)
 		if err != nil {
 			return err
 		}
@@ -363,7 +473,7 @@ func NewSecretStoreWithEncryption(db *sql.DB, key []byte) *SecretStore {
 func (s *SecretStore) SetEncryptionKey(key []byte)       { s.encryptionKey = key }
 func (s *SecretStore) SetRequireEncryption(require bool) { s.requireEncryption = require }
 
-func (s *SecretStore) Upsert(item resources.Secret) (resources.Secret, error) {
+func (s *SecretStore) Upsert(ctx context.Context, item resources.Secret) (resources.Secret, error) {
 	if err := item.Normalize(); err != nil {
 		return resources.Secret{}, err
 	}
@@ -372,7 +482,13 @@ func (s *SecretStore) Upsert(item resources.Secret) (resources.Secret, error) {
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		existing, found, err := s.getDecrypted(key)
+		tx, err := s.db.Begin()
+		if err != nil {
+			return resources.Secret{}, err
+		}
+		defer tx.Rollback()
+
+		existing, found, err := s.getDecryptedFrom(ctx, tx, key)
 		if err != nil {
 			return resources.Secret{}, err
 		}
@@ -394,7 +510,10 @@ func (s *SecretStore) Upsert(item resources.Secret) (resources.Secret, error) {
 			}
 			toStore.Spec.Data = enc
 		}
-		if err := upsertSecretSQL(s.db, key, toStore); err != nil {
+		if err := upsertSecretSQL(ctx, tx, key, toStore); err != nil {
+			return resources.Secret{}, err
+		}
+		if err := tx.Commit(); err != nil {
 			return resources.Secret{}, err
 		}
 		return item, nil
@@ -418,8 +537,8 @@ func (s *SecretStore) Upsert(item resources.Secret) (resources.Secret, error) {
 	return item, nil
 }
 
-func (s *SecretStore) getDecrypted(key string) (resources.Secret, bool, error) {
-	item, ok, err := getFromTable[resources.Secret](s.db, tableSecrets, key)
+func (s *SecretStore) getDecrypted(ctx context.Context, key string) (resources.Secret, bool, error) {
+	item, ok, err := getFromTable[resources.Secret](ctx, s.db, tableSecrets, key)
 	if err != nil || !ok {
 		return item, ok, err
 	}
@@ -433,10 +552,26 @@ func (s *SecretStore) getDecrypted(key string) (resources.Secret, bool, error) {
 	return item, true, nil
 }
 
-func (s *SecretStore) Get(name string) (resources.Secret, bool, error) {
+// getDecryptedFrom reads a secret with FOR UPDATE within an existing transaction.
+func (s *SecretStore) getDecryptedFrom(ctx context.Context, tx *sql.Tx, key string) (resources.Secret, bool, error) {
+	item, ok, err := getFromTableForUpdate[resources.Secret](ctx, tx, tableSecrets, key)
+	if err != nil || !ok {
+		return item, ok, err
+	}
+	if len(s.encryptionKey) > 0 && len(item.Spec.Data) > 0 {
+		dec, err := decryptSecretData(s.encryptionKey, item.Spec.Data)
+		if err != nil {
+			return resources.Secret{}, false, err
+		}
+		item.Spec.Data = dec
+	}
+	return item, true, nil
+}
+
+func (s *SecretStore) Get(ctx context.Context, name string) (resources.Secret, bool, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		return s.getDecrypted(key)
+		return s.getDecrypted(ctx, key)
 	}
 
 	s.mu.RLock()
@@ -445,9 +580,9 @@ func (s *SecretStore) Get(name string) (resources.Secret, bool, error) {
 	return item, ok, nil
 }
 
-func (s *SecretStore) List() ([]resources.Secret, error) {
+func (s *SecretStore) List(ctx context.Context) ([]resources.Secret, error) {
 	if s.db != nil {
-		items, err := listFromTable[resources.Secret](s.db, tableSecrets)
+		items, err := listFromTable[resources.Secret](ctx, s.db, tableSecrets)
 		if err != nil {
 			return nil, err
 		}
@@ -477,17 +612,59 @@ func (s *SecretStore) List() ([]resources.Secret, error) {
 	return out, nil
 }
 
+func (s *SecretStore) ListCursor(ctx context.Context, limit int, after, namespace string) ([]resources.Secret, error) {
+	if s.db != nil {
+		items, err := listFromTableCursor[resources.Secret](ctx, s.db, tableSecrets, limit, after, namespace)
+		if err != nil {
+			return nil, err
+		}
+		if len(s.encryptionKey) > 0 {
+			for i := range items {
+				if len(items[i].Spec.Data) > 0 {
+					dec, err := decryptSecretData(s.encryptionKey, items[i].Spec.Data)
+					if err != nil {
+						return nil, fmt.Errorf("decrypt secret %q: %w", items[i].Metadata.Name, err)
+					}
+					items[i].Spec.Data = dec
+				}
+			}
+		}
+		return items, nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]resources.Secret, 0, len(s.items))
+	for _, item := range s.items {
+		out = append(out, item)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Metadata.Name < out[j].Metadata.Name
+	})
+	return cursorFilter(out,
+		func(a resources.Secret) string { return a.Metadata.Name },
+		func(a resources.Secret) string { return resources.NormalizeNamespace(a.Metadata.Namespace) },
+		limit, after, namespace,
+	), nil
+}
+
 // ReEncryptAll re-encrypts all secrets with the current encryption key.
 // This is used during key rotation: set the old key to decrypt, call
 // SetEncryptionKey with the new key, then call ReEncryptAll.
-func (s *SecretStore) ReEncryptAll(oldKey, newKey []byte) (int, error) {
+func (s *SecretStore) ReEncryptAll(ctx context.Context, oldKey, newKey []byte) (int, error) {
 	if s.db == nil {
 		return 0, fmt.Errorf("re-encryption requires a database backend")
 	}
 	if len(newKey) == 0 {
 		return 0, fmt.Errorf("new encryption key is required")
 	}
-	items, err := listFromTable[resources.Secret](s.db, tableSecrets)
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	items, err := listFromTable[resources.Secret](ctx, tx, tableSecrets)
 	if err != nil {
 		return 0, fmt.Errorf("list secrets: %w", err)
 	}
@@ -499,28 +676,31 @@ func (s *SecretStore) ReEncryptAll(oldKey, newKey []byte) (int, error) {
 		if len(oldKey) > 0 {
 			dec, err := decryptSecretData(oldKey, item.Spec.Data)
 			if err != nil {
-				return count, fmt.Errorf("decrypt secret %q: %w", item.Metadata.Name, err)
+				return 0, fmt.Errorf("decrypt secret %q: %w", item.Metadata.Name, err)
 			}
 			item.Spec.Data = dec
 		}
 		enc, err := encryptSecretData(newKey, item.Spec.Data)
 		if err != nil {
-			return count, fmt.Errorf("re-encrypt secret %q: %w", item.Metadata.Name, err)
+			return 0, fmt.Errorf("re-encrypt secret %q: %w", item.Metadata.Name, err)
 		}
 		item.Spec.Data = enc
 		key := scopedNameFromMeta(item.Metadata)
-		if err := upsertSecretSQL(s.db, key, item); err != nil {
-			return count, fmt.Errorf("store re-encrypted secret %q: %w", item.Metadata.Name, err)
+		if err := upsertSecretSQL(ctx, tx, key, item); err != nil {
+			return 0, fmt.Errorf("store re-encrypted secret %q: %w", item.Metadata.Name, err)
 		}
 		count++
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("commit re-encryption: %w", err)
 	}
 	return count, nil
 }
 
-func (s *SecretStore) Delete(name string) error {
+func (s *SecretStore) Delete(ctx context.Context, name string) error {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		deleted, err := deleteFromTable(s.db, tableSecrets, key)
+		deleted, err := deleteFromTable(ctx, s.db, tableSecrets, key)
 		if err != nil {
 			return err
 		}
@@ -553,13 +733,19 @@ func NewMemoryStoreWithDB(db *sql.DB) *MemoryStore {
 	return &MemoryStore{items: make(map[string]resources.Memory), db: db}
 }
 
-func (s *MemoryStore) Upsert(item resources.Memory) (resources.Memory, error) {
+func (s *MemoryStore) Upsert(ctx context.Context, item resources.Memory) (resources.Memory, error) {
 	if err := item.Normalize(); err != nil {
 		return resources.Memory{}, err
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		existing, found, err := getFromTable[resources.Memory](s.db, tableMemories, key)
+		tx, err := s.db.Begin()
+		if err != nil {
+			return resources.Memory{}, err
+		}
+		defer tx.Rollback()
+
+		existing, found, err := getFromTableForUpdate[resources.Memory](ctx, tx, tableMemories, key)
 		if err != nil {
 			return resources.Memory{}, err
 		}
@@ -573,7 +759,10 @@ func (s *MemoryStore) Upsert(item resources.Memory) (resources.Memory, error) {
 				return resources.Memory{}, err
 			}
 		}
-		if err := upsertMemorySQL(s.db, key, item); err != nil {
+		if err := upsertMemorySQL(ctx, tx, key, item); err != nil {
+			return resources.Memory{}, err
+		}
+		if err := tx.Commit(); err != nil {
 			return resources.Memory{}, err
 		}
 		return item, nil
@@ -597,10 +786,10 @@ func (s *MemoryStore) Upsert(item resources.Memory) (resources.Memory, error) {
 	return item, nil
 }
 
-func (s *MemoryStore) Get(name string) (resources.Memory, bool, error) {
+func (s *MemoryStore) Get(ctx context.Context, name string) (resources.Memory, bool, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		return getFromTable[resources.Memory](s.db, tableMemories, key)
+		return getFromTable[resources.Memory](ctx, s.db, tableMemories, key)
 	}
 
 	s.mu.RLock()
@@ -609,9 +798,9 @@ func (s *MemoryStore) Get(name string) (resources.Memory, bool, error) {
 	return item, ok, nil
 }
 
-func (s *MemoryStore) List() ([]resources.Memory, error) {
+func (s *MemoryStore) List(ctx context.Context) ([]resources.Memory, error) {
 	if s.db != nil {
-		return listFromTable[resources.Memory](s.db, tableMemories)
+		return listFromTable[resources.Memory](ctx, s.db, tableMemories)
 	}
 
 	s.mu.RLock()
@@ -626,10 +815,30 @@ func (s *MemoryStore) List() ([]resources.Memory, error) {
 	return out, nil
 }
 
-func (s *MemoryStore) Delete(name string) error {
+func (s *MemoryStore) ListCursor(ctx context.Context, limit int, after, namespace string) ([]resources.Memory, error) {
+	if s.db != nil {
+		return listFromTableCursor[resources.Memory](ctx, s.db, tableMemories, limit, after, namespace)
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]resources.Memory, 0, len(s.items))
+	for _, item := range s.items {
+		out = append(out, item)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Metadata.Name < out[j].Metadata.Name
+	})
+	return cursorFilter(out,
+		func(a resources.Memory) string { return a.Metadata.Name },
+		func(a resources.Memory) string { return resources.NormalizeNamespace(a.Metadata.Namespace) },
+		limit, after, namespace,
+	), nil
+}
+
+func (s *MemoryStore) Delete(ctx context.Context, name string) error {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		deleted, err := deleteFromTable(s.db, tableMemories, key)
+		deleted, err := deleteFromTable(ctx, s.db, tableMemories, key)
 		if err != nil {
 			return err
 		}
@@ -662,13 +871,19 @@ func NewAgentPolicyStoreWithDB(db *sql.DB) *AgentPolicyStore {
 	return &AgentPolicyStore{items: make(map[string]resources.AgentPolicy), db: db}
 }
 
-func (s *AgentPolicyStore) Upsert(item resources.AgentPolicy) (resources.AgentPolicy, error) {
+func (s *AgentPolicyStore) Upsert(ctx context.Context, item resources.AgentPolicy) (resources.AgentPolicy, error) {
 	if err := item.Normalize(); err != nil {
 		return resources.AgentPolicy{}, err
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		existing, found, err := getFromTable[resources.AgentPolicy](s.db, tableAgentPolicies, key)
+		tx, err := s.db.Begin()
+		if err != nil {
+			return resources.AgentPolicy{}, err
+		}
+		defer tx.Rollback()
+
+		existing, found, err := getFromTableForUpdate[resources.AgentPolicy](ctx, tx, tableAgentPolicies, key)
 		if err != nil {
 			return resources.AgentPolicy{}, err
 		}
@@ -682,7 +897,10 @@ func (s *AgentPolicyStore) Upsert(item resources.AgentPolicy) (resources.AgentPo
 				return resources.AgentPolicy{}, err
 			}
 		}
-		if err := upsertAgentPolicySQL(s.db, key, item); err != nil {
+		if err := upsertAgentPolicySQL(ctx, tx, key, item); err != nil {
+			return resources.AgentPolicy{}, err
+		}
+		if err := tx.Commit(); err != nil {
 			return resources.AgentPolicy{}, err
 		}
 		return item, nil
@@ -706,10 +924,10 @@ func (s *AgentPolicyStore) Upsert(item resources.AgentPolicy) (resources.AgentPo
 	return item, nil
 }
 
-func (s *AgentPolicyStore) Get(name string) (resources.AgentPolicy, bool, error) {
+func (s *AgentPolicyStore) Get(ctx context.Context, name string) (resources.AgentPolicy, bool, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		return getFromTable[resources.AgentPolicy](s.db, tableAgentPolicies, key)
+		return getFromTable[resources.AgentPolicy](ctx, s.db, tableAgentPolicies, key)
 	}
 
 	s.mu.RLock()
@@ -718,9 +936,9 @@ func (s *AgentPolicyStore) Get(name string) (resources.AgentPolicy, bool, error)
 	return item, ok, nil
 }
 
-func (s *AgentPolicyStore) List() ([]resources.AgentPolicy, error) {
+func (s *AgentPolicyStore) List(ctx context.Context) ([]resources.AgentPolicy, error) {
 	if s.db != nil {
-		return listFromTable[resources.AgentPolicy](s.db, tableAgentPolicies)
+		return listFromTable[resources.AgentPolicy](ctx, s.db, tableAgentPolicies)
 	}
 
 	s.mu.RLock()
@@ -735,10 +953,30 @@ func (s *AgentPolicyStore) List() ([]resources.AgentPolicy, error) {
 	return out, nil
 }
 
-func (s *AgentPolicyStore) Delete(name string) error {
+func (s *AgentPolicyStore) ListCursor(ctx context.Context, limit int, after, namespace string) ([]resources.AgentPolicy, error) {
+	if s.db != nil {
+		return listFromTableCursor[resources.AgentPolicy](ctx, s.db, tableAgentPolicies, limit, after, namespace)
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]resources.AgentPolicy, 0, len(s.items))
+	for _, item := range s.items {
+		out = append(out, item)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Metadata.Name < out[j].Metadata.Name
+	})
+	return cursorFilter(out,
+		func(a resources.AgentPolicy) string { return a.Metadata.Name },
+		func(a resources.AgentPolicy) string { return resources.NormalizeNamespace(a.Metadata.Namespace) },
+		limit, after, namespace,
+	), nil
+}
+
+func (s *AgentPolicyStore) Delete(ctx context.Context, name string) error {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		deleted, err := deleteFromTable(s.db, tableAgentPolicies, key)
+		deleted, err := deleteFromTable(ctx, s.db, tableAgentPolicies, key)
 		if err != nil {
 			return err
 		}
@@ -771,13 +1009,19 @@ func NewAgentRoleStoreWithDB(db *sql.DB) *AgentRoleStore {
 	return &AgentRoleStore{items: make(map[string]resources.AgentRole), db: db}
 }
 
-func (s *AgentRoleStore) Upsert(item resources.AgentRole) (resources.AgentRole, error) {
+func (s *AgentRoleStore) Upsert(ctx context.Context, item resources.AgentRole) (resources.AgentRole, error) {
 	if err := item.Normalize(); err != nil {
 		return resources.AgentRole{}, err
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		existing, found, err := getFromTable[resources.AgentRole](s.db, tableAgentRoles, key)
+		tx, err := s.db.Begin()
+		if err != nil {
+			return resources.AgentRole{}, err
+		}
+		defer tx.Rollback()
+
+		existing, found, err := getFromTableForUpdate[resources.AgentRole](ctx, tx, tableAgentRoles, key)
 		if err != nil {
 			return resources.AgentRole{}, err
 		}
@@ -791,7 +1035,10 @@ func (s *AgentRoleStore) Upsert(item resources.AgentRole) (resources.AgentRole, 
 				return resources.AgentRole{}, err
 			}
 		}
-		if err := upsertAgentRoleSQL(s.db, key, item); err != nil {
+		if err := upsertAgentRoleSQL(ctx, tx, key, item); err != nil {
+			return resources.AgentRole{}, err
+		}
+		if err := tx.Commit(); err != nil {
 			return resources.AgentRole{}, err
 		}
 		return item, nil
@@ -815,10 +1062,10 @@ func (s *AgentRoleStore) Upsert(item resources.AgentRole) (resources.AgentRole, 
 	return item, nil
 }
 
-func (s *AgentRoleStore) Get(name string) (resources.AgentRole, bool, error) {
+func (s *AgentRoleStore) Get(ctx context.Context, name string) (resources.AgentRole, bool, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		return getFromTable[resources.AgentRole](s.db, tableAgentRoles, key)
+		return getFromTable[resources.AgentRole](ctx, s.db, tableAgentRoles, key)
 	}
 
 	s.mu.RLock()
@@ -827,9 +1074,9 @@ func (s *AgentRoleStore) Get(name string) (resources.AgentRole, bool, error) {
 	return item, ok, nil
 }
 
-func (s *AgentRoleStore) List() ([]resources.AgentRole, error) {
+func (s *AgentRoleStore) List(ctx context.Context) ([]resources.AgentRole, error) {
 	if s.db != nil {
-		return listFromTable[resources.AgentRole](s.db, tableAgentRoles)
+		return listFromTable[resources.AgentRole](ctx, s.db, tableAgentRoles)
 	}
 
 	s.mu.RLock()
@@ -844,10 +1091,30 @@ func (s *AgentRoleStore) List() ([]resources.AgentRole, error) {
 	return out, nil
 }
 
-func (s *AgentRoleStore) Delete(name string) error {
+func (s *AgentRoleStore) ListCursor(ctx context.Context, limit int, after, namespace string) ([]resources.AgentRole, error) {
+	if s.db != nil {
+		return listFromTableCursor[resources.AgentRole](ctx, s.db, tableAgentRoles, limit, after, namespace)
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]resources.AgentRole, 0, len(s.items))
+	for _, item := range s.items {
+		out = append(out, item)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Metadata.Name < out[j].Metadata.Name
+	})
+	return cursorFilter(out,
+		func(a resources.AgentRole) string { return a.Metadata.Name },
+		func(a resources.AgentRole) string { return resources.NormalizeNamespace(a.Metadata.Namespace) },
+		limit, after, namespace,
+	), nil
+}
+
+func (s *AgentRoleStore) Delete(ctx context.Context, name string) error {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		deleted, err := deleteFromTable(s.db, tableAgentRoles, key)
+		deleted, err := deleteFromTable(ctx, s.db, tableAgentRoles, key)
 		if err != nil {
 			return err
 		}
@@ -880,13 +1147,19 @@ func NewToolPermissionStoreWithDB(db *sql.DB) *ToolPermissionStore {
 	return &ToolPermissionStore{items: make(map[string]resources.ToolPermission), db: db}
 }
 
-func (s *ToolPermissionStore) Upsert(item resources.ToolPermission) (resources.ToolPermission, error) {
+func (s *ToolPermissionStore) Upsert(ctx context.Context, item resources.ToolPermission) (resources.ToolPermission, error) {
 	if err := item.Normalize(); err != nil {
 		return resources.ToolPermission{}, err
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		existing, found, err := getFromTable[resources.ToolPermission](s.db, tableToolPermissions, key)
+		tx, err := s.db.Begin()
+		if err != nil {
+			return resources.ToolPermission{}, err
+		}
+		defer tx.Rollback()
+
+		existing, found, err := getFromTableForUpdate[resources.ToolPermission](ctx, tx, tableToolPermissions, key)
 		if err != nil {
 			return resources.ToolPermission{}, err
 		}
@@ -900,7 +1173,10 @@ func (s *ToolPermissionStore) Upsert(item resources.ToolPermission) (resources.T
 				return resources.ToolPermission{}, err
 			}
 		}
-		if err := upsertToolPermissionSQL(s.db, key, item); err != nil {
+		if err := upsertToolPermissionSQL(ctx, tx, key, item); err != nil {
+			return resources.ToolPermission{}, err
+		}
+		if err := tx.Commit(); err != nil {
 			return resources.ToolPermission{}, err
 		}
 		return item, nil
@@ -924,10 +1200,10 @@ func (s *ToolPermissionStore) Upsert(item resources.ToolPermission) (resources.T
 	return item, nil
 }
 
-func (s *ToolPermissionStore) Get(name string) (resources.ToolPermission, bool, error) {
+func (s *ToolPermissionStore) Get(ctx context.Context, name string) (resources.ToolPermission, bool, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		return getFromTable[resources.ToolPermission](s.db, tableToolPermissions, key)
+		return getFromTable[resources.ToolPermission](ctx, s.db, tableToolPermissions, key)
 	}
 
 	s.mu.RLock()
@@ -936,9 +1212,9 @@ func (s *ToolPermissionStore) Get(name string) (resources.ToolPermission, bool, 
 	return item, ok, nil
 }
 
-func (s *ToolPermissionStore) List() ([]resources.ToolPermission, error) {
+func (s *ToolPermissionStore) List(ctx context.Context) ([]resources.ToolPermission, error) {
 	if s.db != nil {
-		return listFromTable[resources.ToolPermission](s.db, tableToolPermissions)
+		return listFromTable[resources.ToolPermission](ctx, s.db, tableToolPermissions)
 	}
 
 	s.mu.RLock()
@@ -953,10 +1229,30 @@ func (s *ToolPermissionStore) List() ([]resources.ToolPermission, error) {
 	return out, nil
 }
 
-func (s *ToolPermissionStore) Delete(name string) error {
+func (s *ToolPermissionStore) ListCursor(ctx context.Context, limit int, after, namespace string) ([]resources.ToolPermission, error) {
+	if s.db != nil {
+		return listFromTableCursor[resources.ToolPermission](ctx, s.db, tableToolPermissions, limit, after, namespace)
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]resources.ToolPermission, 0, len(s.items))
+	for _, item := range s.items {
+		out = append(out, item)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Metadata.Name < out[j].Metadata.Name
+	})
+	return cursorFilter(out,
+		func(a resources.ToolPermission) string { return a.Metadata.Name },
+		func(a resources.ToolPermission) string { return resources.NormalizeNamespace(a.Metadata.Namespace) },
+		limit, after, namespace,
+	), nil
+}
+
+func (s *ToolPermissionStore) Delete(ctx context.Context, name string) error {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		deleted, err := deleteFromTable(s.db, tableToolPermissions, key)
+		deleted, err := deleteFromTable(ctx, s.db, tableToolPermissions, key)
 		if err != nil {
 			return err
 		}
@@ -989,13 +1285,19 @@ func NewToolApprovalStoreWithDB(db *sql.DB) *ToolApprovalStore {
 	return &ToolApprovalStore{items: make(map[string]resources.ToolApproval), db: db}
 }
 
-func (s *ToolApprovalStore) Upsert(item resources.ToolApproval) (resources.ToolApproval, error) {
+func (s *ToolApprovalStore) Upsert(ctx context.Context, item resources.ToolApproval) (resources.ToolApproval, error) {
 	if err := item.Normalize(); err != nil {
 		return resources.ToolApproval{}, err
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		existing, found, err := getFromTable[resources.ToolApproval](s.db, tableToolApprovals, key)
+		tx, err := s.db.Begin()
+		if err != nil {
+			return resources.ToolApproval{}, err
+		}
+		defer tx.Rollback()
+
+		existing, found, err := getFromTableForUpdate[resources.ToolApproval](ctx, tx, tableToolApprovals, key)
 		if err != nil {
 			return resources.ToolApproval{}, err
 		}
@@ -1009,7 +1311,10 @@ func (s *ToolApprovalStore) Upsert(item resources.ToolApproval) (resources.ToolA
 				return resources.ToolApproval{}, err
 			}
 		}
-		if err := upsertToolApprovalSQL(s.db, key, item); err != nil {
+		if err := upsertToolApprovalSQL(ctx, tx, key, item); err != nil {
+			return resources.ToolApproval{}, err
+		}
+		if err := tx.Commit(); err != nil {
 			return resources.ToolApproval{}, err
 		}
 		return item, nil
@@ -1033,10 +1338,10 @@ func (s *ToolApprovalStore) Upsert(item resources.ToolApproval) (resources.ToolA
 	return item, nil
 }
 
-func (s *ToolApprovalStore) Get(name string) (resources.ToolApproval, bool, error) {
+func (s *ToolApprovalStore) Get(ctx context.Context, name string) (resources.ToolApproval, bool, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		return getFromTable[resources.ToolApproval](s.db, tableToolApprovals, key)
+		return getFromTable[resources.ToolApproval](ctx, s.db, tableToolApprovals, key)
 	}
 
 	s.mu.RLock()
@@ -1045,9 +1350,9 @@ func (s *ToolApprovalStore) Get(name string) (resources.ToolApproval, bool, erro
 	return item, ok, nil
 }
 
-func (s *ToolApprovalStore) List() ([]resources.ToolApproval, error) {
+func (s *ToolApprovalStore) List(ctx context.Context) ([]resources.ToolApproval, error) {
 	if s.db != nil {
-		return listFromTable[resources.ToolApproval](s.db, tableToolApprovals)
+		return listFromTable[resources.ToolApproval](ctx, s.db, tableToolApprovals)
 	}
 
 	s.mu.RLock()
@@ -1062,10 +1367,30 @@ func (s *ToolApprovalStore) List() ([]resources.ToolApproval, error) {
 	return out, nil
 }
 
-func (s *ToolApprovalStore) Delete(name string) error {
+func (s *ToolApprovalStore) ListCursor(ctx context.Context, limit int, after, namespace string) ([]resources.ToolApproval, error) {
+	if s.db != nil {
+		return listFromTableCursor[resources.ToolApproval](ctx, s.db, tableToolApprovals, limit, after, namespace)
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]resources.ToolApproval, 0, len(s.items))
+	for _, item := range s.items {
+		out = append(out, item)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Metadata.Name < out[j].Metadata.Name
+	})
+	return cursorFilter(out,
+		func(a resources.ToolApproval) string { return a.Metadata.Name },
+		func(a resources.ToolApproval) string { return resources.NormalizeNamespace(a.Metadata.Namespace) },
+		limit, after, namespace,
+	), nil
+}
+
+func (s *ToolApprovalStore) Delete(ctx context.Context, name string) error {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		deleted, err := deleteFromTable(s.db, tableToolApprovals, key)
+		deleted, err := deleteFromTable(ctx, s.db, tableToolApprovals, key)
 		if err != nil {
 			return err
 		}
@@ -1125,13 +1450,19 @@ func NewTaskWebhookStoreWithDB(db *sql.DB) *TaskWebhookStore {
 	return &TaskWebhookStore{items: make(map[string]resources.TaskWebhook), db: db}
 }
 
-func (s *TaskScheduleStore) Upsert(item resources.TaskSchedule) (resources.TaskSchedule, error) {
+func (s *TaskScheduleStore) Upsert(ctx context.Context, item resources.TaskSchedule) (resources.TaskSchedule, error) {
 	if err := item.Normalize(); err != nil {
 		return resources.TaskSchedule{}, err
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		existing, found, err := getFromTable[resources.TaskSchedule](s.db, tableTaskSchedules, key)
+		tx, err := s.db.Begin()
+		if err != nil {
+			return resources.TaskSchedule{}, err
+		}
+		defer tx.Rollback()
+
+		existing, found, err := getFromTableForUpdate[resources.TaskSchedule](ctx, tx, tableTaskSchedules, key)
 		if err != nil {
 			return resources.TaskSchedule{}, err
 		}
@@ -1145,7 +1476,10 @@ func (s *TaskScheduleStore) Upsert(item resources.TaskSchedule) (resources.TaskS
 				return resources.TaskSchedule{}, err
 			}
 		}
-		if err := upsertTaskScheduleSQL(s.db, key, item); err != nil {
+		if err := upsertTaskScheduleSQL(ctx, tx, key, item); err != nil {
+			return resources.TaskSchedule{}, err
+		}
+		if err := tx.Commit(); err != nil {
 			return resources.TaskSchedule{}, err
 		}
 		return item, nil
@@ -1170,10 +1504,10 @@ func (s *TaskScheduleStore) Upsert(item resources.TaskSchedule) (resources.TaskS
 	return item, nil
 }
 
-func (s *TaskScheduleStore) Get(name string) (resources.TaskSchedule, bool, error) {
+func (s *TaskScheduleStore) Get(ctx context.Context, name string) (resources.TaskSchedule, bool, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		return getFromTable[resources.TaskSchedule](s.db, tableTaskSchedules, key)
+		return getFromTable[resources.TaskSchedule](ctx, s.db, tableTaskSchedules, key)
 	}
 
 	s.mu.RLock()
@@ -1182,9 +1516,9 @@ func (s *TaskScheduleStore) Get(name string) (resources.TaskSchedule, bool, erro
 	return item, ok, nil
 }
 
-func (s *TaskScheduleStore) List() ([]resources.TaskSchedule, error) {
+func (s *TaskScheduleStore) List(ctx context.Context) ([]resources.TaskSchedule, error) {
 	if s.db != nil {
-		return listFromTable[resources.TaskSchedule](s.db, tableTaskSchedules)
+		return listFromTable[resources.TaskSchedule](ctx, s.db, tableTaskSchedules)
 	}
 
 	s.mu.RLock()
@@ -1199,10 +1533,30 @@ func (s *TaskScheduleStore) List() ([]resources.TaskSchedule, error) {
 	return out, nil
 }
 
-func (s *TaskScheduleStore) Delete(name string) error {
+func (s *TaskScheduleStore) ListCursor(ctx context.Context, limit int, after, namespace string) ([]resources.TaskSchedule, error) {
+	if s.db != nil {
+		return listFromTableCursor[resources.TaskSchedule](ctx, s.db, tableTaskSchedules, limit, after, namespace)
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]resources.TaskSchedule, 0, len(s.items))
+	for _, item := range s.items {
+		out = append(out, item)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Metadata.Name < out[j].Metadata.Name
+	})
+	return cursorFilter(out,
+		func(a resources.TaskSchedule) string { return a.Metadata.Name },
+		func(a resources.TaskSchedule) string { return resources.NormalizeNamespace(a.Metadata.Namespace) },
+		limit, after, namespace,
+	), nil
+}
+
+func (s *TaskScheduleStore) Delete(ctx context.Context, name string) error {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		deleted, err := deleteFromTable(s.db, tableTaskSchedules, key)
+		deleted, err := deleteFromTable(ctx, s.db, tableTaskSchedules, key)
 		if err != nil {
 			return err
 		}
@@ -1221,13 +1575,19 @@ func (s *TaskScheduleStore) Delete(name string) error {
 	return nil
 }
 
-func (s *TaskWebhookStore) Upsert(item resources.TaskWebhook) (resources.TaskWebhook, error) {
+func (s *TaskWebhookStore) Upsert(ctx context.Context, item resources.TaskWebhook) (resources.TaskWebhook, error) {
 	if err := item.Normalize(); err != nil {
 		return resources.TaskWebhook{}, err
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		existing, found, err := getFromTable[resources.TaskWebhook](s.db, tableTaskWebhooks, key)
+		tx, err := s.db.Begin()
+		if err != nil {
+			return resources.TaskWebhook{}, err
+		}
+		defer tx.Rollback()
+
+		existing, found, err := getFromTableForUpdate[resources.TaskWebhook](ctx, tx, tableTaskWebhooks, key)
 		if err != nil {
 			return resources.TaskWebhook{}, err
 		}
@@ -1241,7 +1601,10 @@ func (s *TaskWebhookStore) Upsert(item resources.TaskWebhook) (resources.TaskWeb
 				return resources.TaskWebhook{}, err
 			}
 		}
-		if err := upsertTaskWebhookSQL(s.db, key, item); err != nil {
+		if err := upsertTaskWebhookSQL(ctx, tx, key, item); err != nil {
+			return resources.TaskWebhook{}, err
+		}
+		if err := tx.Commit(); err != nil {
 			return resources.TaskWebhook{}, err
 		}
 		return item, nil
@@ -1266,10 +1629,10 @@ func (s *TaskWebhookStore) Upsert(item resources.TaskWebhook) (resources.TaskWeb
 	return item, nil
 }
 
-func (s *TaskWebhookStore) Get(name string) (resources.TaskWebhook, bool, error) {
+func (s *TaskWebhookStore) Get(ctx context.Context, name string) (resources.TaskWebhook, bool, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		return getFromTable[resources.TaskWebhook](s.db, tableTaskWebhooks, key)
+		return getFromTable[resources.TaskWebhook](ctx, s.db, tableTaskWebhooks, key)
 	}
 
 	s.mu.RLock()
@@ -1278,9 +1641,9 @@ func (s *TaskWebhookStore) Get(name string) (resources.TaskWebhook, bool, error)
 	return item, ok, nil
 }
 
-func (s *TaskWebhookStore) List() ([]resources.TaskWebhook, error) {
+func (s *TaskWebhookStore) List(ctx context.Context) ([]resources.TaskWebhook, error) {
 	if s.db != nil {
-		return listFromTable[resources.TaskWebhook](s.db, tableTaskWebhooks)
+		return listFromTable[resources.TaskWebhook](ctx, s.db, tableTaskWebhooks)
 	}
 
 	s.mu.RLock()
@@ -1295,10 +1658,30 @@ func (s *TaskWebhookStore) List() ([]resources.TaskWebhook, error) {
 	return out, nil
 }
 
-func (s *TaskWebhookStore) Delete(name string) error {
+func (s *TaskWebhookStore) ListCursor(ctx context.Context, limit int, after, namespace string) ([]resources.TaskWebhook, error) {
+	if s.db != nil {
+		return listFromTableCursor[resources.TaskWebhook](ctx, s.db, tableTaskWebhooks, limit, after, namespace)
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]resources.TaskWebhook, 0, len(s.items))
+	for _, item := range s.items {
+		out = append(out, item)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Metadata.Name < out[j].Metadata.Name
+	})
+	return cursorFilter(out,
+		func(a resources.TaskWebhook) string { return a.Metadata.Name },
+		func(a resources.TaskWebhook) string { return resources.NormalizeNamespace(a.Metadata.Namespace) },
+		limit, after, namespace,
+	), nil
+}
+
+func (s *TaskWebhookStore) Delete(ctx context.Context, name string) error {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		deleted, err := deleteFromTable(s.db, tableTaskWebhooks, key)
+		deleted, err := deleteFromTable(ctx, s.db, tableTaskWebhooks, key)
 		if err != nil {
 			return err
 		}
@@ -1325,13 +1708,19 @@ func NewWorkerStoreWithDB(db *sql.DB) *WorkerStore {
 	return &WorkerStore{items: make(map[string]resources.Worker), db: db}
 }
 
-func (s *WorkerStore) Upsert(item resources.Worker) (resources.Worker, error) {
+func (s *WorkerStore) Upsert(ctx context.Context, item resources.Worker) (resources.Worker, error) {
 	if err := item.Normalize(); err != nil {
 		return resources.Worker{}, err
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		existing, found, err := getFromTable[resources.Worker](s.db, tableWorkers, key)
+		tx, err := s.db.Begin()
+		if err != nil {
+			return resources.Worker{}, err
+		}
+		defer tx.Rollback()
+
+		existing, found, err := getFromTableForUpdate[resources.Worker](ctx, tx, tableWorkers, key)
 		if err != nil {
 			return resources.Worker{}, err
 		}
@@ -1345,7 +1734,10 @@ func (s *WorkerStore) Upsert(item resources.Worker) (resources.Worker, error) {
 				return resources.Worker{}, err
 			}
 		}
-		if err := upsertWorkerSQL(s.db, key, item); err != nil {
+		if err := upsertWorkerSQL(ctx, tx, key, item); err != nil {
+			return resources.Worker{}, err
+		}
+		if err := tx.Commit(); err != nil {
 			return resources.Worker{}, err
 		}
 		return item, nil
@@ -1370,10 +1762,10 @@ func (s *WorkerStore) Upsert(item resources.Worker) (resources.Worker, error) {
 	return item, nil
 }
 
-func (s *WorkerStore) Get(name string) (resources.Worker, bool, error) {
+func (s *WorkerStore) Get(ctx context.Context, name string) (resources.Worker, bool, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		return getFromTable[resources.Worker](s.db, tableWorkers, key)
+		return getFromTable[resources.Worker](ctx, s.db, tableWorkers, key)
 	}
 
 	s.mu.RLock()
@@ -1382,9 +1774,9 @@ func (s *WorkerStore) Get(name string) (resources.Worker, bool, error) {
 	return item, ok, nil
 }
 
-func (s *WorkerStore) List() ([]resources.Worker, error) {
+func (s *WorkerStore) List(ctx context.Context) ([]resources.Worker, error) {
 	if s.db != nil {
-		return listFromTable[resources.Worker](s.db, tableWorkers)
+		return listFromTable[resources.Worker](ctx, s.db, tableWorkers)
 	}
 
 	s.mu.RLock()
@@ -1399,10 +1791,30 @@ func (s *WorkerStore) List() ([]resources.Worker, error) {
 	return out, nil
 }
 
-func (s *WorkerStore) Delete(name string) error {
+func (s *WorkerStore) ListCursor(ctx context.Context, limit int, after, namespace string) ([]resources.Worker, error) {
+	if s.db != nil {
+		return listFromTableCursor[resources.Worker](ctx, s.db, tableWorkers, limit, after, namespace)
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]resources.Worker, 0, len(s.items))
+	for _, item := range s.items {
+		out = append(out, item)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Metadata.Name < out[j].Metadata.Name
+	})
+	return cursorFilter(out,
+		func(a resources.Worker) string { return a.Metadata.Name },
+		func(a resources.Worker) string { return resources.NormalizeNamespace(a.Metadata.Namespace) },
+		limit, after, namespace,
+	), nil
+}
+
+func (s *WorkerStore) Delete(ctx context.Context, name string) error {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		deleted, err := deleteFromTable(s.db, tableWorkers, key)
+		deleted, err := deleteFromTable(ctx, s.db, tableWorkers, key)
 		if err != nil {
 			return err
 		}
@@ -1501,13 +1913,19 @@ func NewTaskStoreWithDB(db *sql.DB) *TaskStore {
 	}
 }
 
-func (s *TaskStore) Upsert(item resources.Task) (resources.Task, error) {
+func (s *TaskStore) Upsert(ctx context.Context, item resources.Task) (resources.Task, error) {
 	if err := item.Normalize(); err != nil {
 		return resources.Task{}, err
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		existing, found, err := getFromTable[resources.Task](s.db, tableTasks, key)
+		tx, err := s.db.Begin()
+		if err != nil {
+			return resources.Task{}, err
+		}
+		defer tx.Rollback()
+
+		meta, found, err := getUpsertMetaForUpdate(ctx, tx, tableTasks, key)
 		if err != nil {
 			return resources.Task{}, err
 		}
@@ -1516,12 +1934,21 @@ func (s *TaskStore) Upsert(item resources.Task) (resources.Task, error) {
 				return resources.Task{}, err
 			}
 		} else {
-			specChanged := !reflect.DeepEqual(existing.Spec, item.Spec)
-			if err := initializeUpdateMetadata("Task", &item.Metadata, existing.Metadata, specChanged); err != nil {
+			newHash := specHash(item.Spec)
+			specChanged := meta.SpecHash == "" || meta.SpecHash != newHash
+			existing := resources.ObjectMeta{
+				Generation:      meta.Generation,
+				ResourceVersion: meta.ResourceVersion,
+				CreatedAt:       meta.CreatedAt,
+			}
+			if err := initializeUpdateMetadata("Task", &item.Metadata, existing, specChanged); err != nil {
 				return resources.Task{}, err
 			}
 		}
-		if err := upsertTaskSQL(s.db, key, item); err != nil {
+		if err := upsertTaskSQL(ctx, tx, key, item); err != nil {
+			return resources.Task{}, err
+		}
+		if err := tx.Commit(); err != nil {
 			return resources.Task{}, err
 		}
 		return item, nil
@@ -1546,10 +1973,10 @@ func (s *TaskStore) Upsert(item resources.Task) (resources.Task, error) {
 	return item, nil
 }
 
-func (s *TaskStore) Get(name string) (resources.Task, bool, error) {
+func (s *TaskStore) Get(ctx context.Context, name string) (resources.Task, bool, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		return getFromTable[resources.Task](s.db, tableTasks, key)
+		return getFromTable[resources.Task](ctx, s.db, tableTasks, key)
 	}
 
 	s.mu.RLock()
@@ -1558,19 +1985,24 @@ func (s *TaskStore) Get(name string) (resources.Task, bool, error) {
 	return item, ok, nil
 }
 
-func (s *TaskStore) List() ([]resources.Task, error) {
-	return s.ListPaged(0, 0)
+func (s *TaskStore) List(ctx context.Context) ([]resources.Task, error) {
+	return s.ListPaged(ctx, 0, 0, "")
 }
 
-func (s *TaskStore) ListPaged(limit, offset int) ([]resources.Task, error) {
+// ListPaged returns tasks with pagination. When namespace is non-empty the
+// filter is pushed into SQL so LIMIT/OFFSET operate on the correct subset.
+func (s *TaskStore) ListPaged(ctx context.Context, limit, offset int, namespace string) ([]resources.Task, error) {
 	if s.db != nil {
-		return listFromTablePaged[resources.Task](s.db, tableTasks, limit, offset)
+		return listFromTableFiltered[resources.Task](ctx, s.db, tableTasks, limit, offset, namespace)
 	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make([]resources.Task, 0, len(s.items))
 	for _, item := range s.items {
+		if namespace != "" && !strings.EqualFold(resources.NormalizeNamespace(item.Metadata.Namespace), namespace) {
+			continue
+		}
 		out = append(out, item)
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -1588,18 +2020,36 @@ func (s *TaskStore) ListPaged(limit, offset int) ([]resources.Task, error) {
 	return out, nil
 }
 
-func (s *TaskStore) Delete(name string) error {
+func (s *TaskStore) ListCursor(ctx context.Context, limit int, after, namespace string) ([]resources.Task, error) {
+	if s.db != nil {
+		return listFromTableCursor[resources.Task](ctx, s.db, tableTasks, limit, after, namespace)
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]resources.Task, 0, len(s.items))
+	for _, item := range s.items {
+		out = append(out, item)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Metadata.Name < out[j].Metadata.Name
+	})
+	return cursorFilter(out,
+		func(a resources.Task) string { return a.Metadata.Name },
+		func(a resources.Task) string { return resources.NormalizeNamespace(a.Metadata.Namespace) },
+		limit, after, namespace,
+	), nil
+}
+
+func (s *TaskStore) Delete(ctx context.Context, name string) error {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		deleted, err := deleteFromTable(s.db, tableTasks, key)
+		deleted, err := deleteFromTable(ctx, s.db, tableTasks, key)
 		if err != nil {
 			return err
 		}
 		if !deleted {
 			return fmt.Errorf("task %q not found", name)
-		}
-		if err := deleteTaskLogsSQL(s.db, key); err != nil {
-			return err
 		}
 		return nil
 	}
@@ -1614,11 +2064,11 @@ func (s *TaskStore) Delete(name string) error {
 	return nil
 }
 
-func (s *TaskStore) AppendLog(name, message string) error {
+func (s *TaskStore) AppendLog(ctx context.Context, name, message string) error {
 	key := normalizeLookupName(name)
 	if s.db != nil {
 		entry := fmt.Sprintf("%s %s", time.Now().UTC().Format(time.RFC3339), message)
-		return appendTaskLogSQL(s.db, key, entry)
+		return appendTaskLogSQL(ctx, s.db, key, entry)
 	}
 
 	s.mu.Lock()
@@ -1634,10 +2084,10 @@ func (s *TaskStore) AppendLog(name, message string) error {
 	return nil
 }
 
-func (s *TaskStore) Logs(name string) ([]string, error) {
+func (s *TaskStore) GetLogs(ctx context.Context, name string) ([]string, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		return listTaskLogsSQL(s.db, key)
+		return listTaskLogsSQL(ctx, s.db, key)
 	}
 
 	s.mu.RLock()
@@ -1858,13 +2308,19 @@ func NewMcpServerStoreWithDB(db *sql.DB) *McpServerStore {
 	return &McpServerStore{items: make(map[string]resources.McpServer), db: db}
 }
 
-func (s *McpServerStore) Upsert(item resources.McpServer) (resources.McpServer, error) {
+func (s *McpServerStore) Upsert(ctx context.Context, item resources.McpServer) (resources.McpServer, error) {
 	if err := item.Normalize(); err != nil {
 		return resources.McpServer{}, err
 	}
 	key := scopedNameFromMeta(item.Metadata)
 	if s.db != nil {
-		existing, found, err := getFromTable[resources.McpServer](s.db, tableMcpServers, key)
+		tx, err := s.db.Begin()
+		if err != nil {
+			return resources.McpServer{}, err
+		}
+		defer tx.Rollback()
+
+		existing, found, err := getFromTableForUpdate[resources.McpServer](ctx, tx, tableMcpServers, key)
 		if err != nil {
 			return resources.McpServer{}, err
 		}
@@ -1878,7 +2334,10 @@ func (s *McpServerStore) Upsert(item resources.McpServer) (resources.McpServer, 
 				return resources.McpServer{}, err
 			}
 		}
-		if err := upsertMcpServerSQL(s.db, key, item); err != nil {
+		if err := upsertMcpServerSQL(ctx, tx, key, item); err != nil {
+			return resources.McpServer{}, err
+		}
+		if err := tx.Commit(); err != nil {
 			return resources.McpServer{}, err
 		}
 		return item, nil
@@ -1902,10 +2361,10 @@ func (s *McpServerStore) Upsert(item resources.McpServer) (resources.McpServer, 
 	return item, nil
 }
 
-func (s *McpServerStore) Get(name string) (resources.McpServer, bool, error) {
+func (s *McpServerStore) Get(ctx context.Context, name string) (resources.McpServer, bool, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		return getFromTable[resources.McpServer](s.db, tableMcpServers, key)
+		return getFromTable[resources.McpServer](ctx, s.db, tableMcpServers, key)
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1913,9 +2372,9 @@ func (s *McpServerStore) Get(name string) (resources.McpServer, bool, error) {
 	return item, ok, nil
 }
 
-func (s *McpServerStore) List() ([]resources.McpServer, error) {
+func (s *McpServerStore) List(ctx context.Context) ([]resources.McpServer, error) {
 	if s.db != nil {
-		return listFromTable[resources.McpServer](s.db, tableMcpServers)
+		return listFromTable[resources.McpServer](ctx, s.db, tableMcpServers)
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1929,10 +2388,30 @@ func (s *McpServerStore) List() ([]resources.McpServer, error) {
 	return out, nil
 }
 
-func (s *McpServerStore) Delete(name string) error {
+func (s *McpServerStore) ListCursor(ctx context.Context, limit int, after, namespace string) ([]resources.McpServer, error) {
+	if s.db != nil {
+		return listFromTableCursor[resources.McpServer](ctx, s.db, tableMcpServers, limit, after, namespace)
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]resources.McpServer, 0, len(s.items))
+	for _, item := range s.items {
+		out = append(out, item)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Metadata.Name < out[j].Metadata.Name
+	})
+	return cursorFilter(out,
+		func(a resources.McpServer) string { return a.Metadata.Name },
+		func(a resources.McpServer) string { return resources.NormalizeNamespace(a.Metadata.Namespace) },
+		limit, after, namespace,
+	), nil
+}
+
+func (s *McpServerStore) Delete(ctx context.Context, name string) error {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		deleted, err := deleteFromTable(s.db, tableMcpServers, key)
+		deleted, err := deleteFromTable(ctx, s.db, tableMcpServers, key)
 		if err != nil {
 			return err
 		}

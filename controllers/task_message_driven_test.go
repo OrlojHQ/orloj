@@ -36,12 +36,12 @@ func TestTaskControllerMessageDrivenKickoff(t *testing.T) {
 			},
 		},
 	} {
-		if _, err := stores.agentStore.Upsert(agent); err != nil {
+		if _, err := stores.agentStore.Upsert(context.Background(), agent); err != nil {
 			t.Fatalf("upsert agent %s: %v", agent.Metadata.Name, err)
 		}
 	}
 
-	if _, err := stores.agentSystemStore.Upsert(resources.AgentSystem{
+	if _, err := stores.agentSystemStore.Upsert(context.Background(), resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
 		Metadata:   resources.ObjectMeta{Name: "message-system"},
@@ -55,7 +55,7 @@ func TestTaskControllerMessageDrivenKickoff(t *testing.T) {
 		t.Fatalf("upsert system: %v", err)
 	}
 
-	if _, err := stores.taskStore.Upsert(resources.Task{
+	if _, err := stores.taskStore.Upsert(context.Background(), resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
 		Metadata:   resources.ObjectMeta{Name: "message-driven-task"},
@@ -68,7 +68,7 @@ func TestTaskControllerMessageDrivenKickoff(t *testing.T) {
 		t.Fatalf("reconcile failed: %v", err)
 	}
 
-	task, ok, err := stores.taskStore.Get("message-driven-task")
+	task, ok, err := stores.taskStore.Get(context.Background(), "message-driven-task")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,12 +138,12 @@ func TestTaskControllerMessageDrivenRejectsCycleWithoutMaxTurns(t *testing.T) {
 			Spec:       resources.AgentSpec{ModelRef: "openai-default", Prompt: "research"},
 		},
 	} {
-		if _, err := stores.agentStore.Upsert(agent); err != nil {
+		if _, err := stores.agentStore.Upsert(context.Background(), agent); err != nil {
 			t.Fatalf("upsert agent %s: %v", agent.Metadata.Name, err)
 		}
 	}
 
-	if _, err := stores.agentSystemStore.Upsert(resources.AgentSystem{
+	if _, err := stores.agentSystemStore.Upsert(context.Background(), resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
 		Metadata:   resources.ObjectMeta{Name: "cycle-system"},
@@ -158,7 +158,7 @@ func TestTaskControllerMessageDrivenRejectsCycleWithoutMaxTurns(t *testing.T) {
 		t.Fatalf("upsert system: %v", err)
 	}
 
-	if _, err := stores.taskStore.Upsert(resources.Task{
+	if _, err := stores.taskStore.Upsert(context.Background(), resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
 		Metadata:   resources.ObjectMeta{Name: "cycle-no-max-turns"},
@@ -171,7 +171,7 @@ func TestTaskControllerMessageDrivenRejectsCycleWithoutMaxTurns(t *testing.T) {
 		t.Fatalf("reconcile failed: %v", err)
 	}
 
-	task, ok, err := stores.taskStore.Get("cycle-no-max-turns")
+	task, ok, err := stores.taskStore.Get(context.Background(), "cycle-no-max-turns")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,12 +206,12 @@ func TestTaskControllerMessageDrivenAllowsCycleWithMaxTurns(t *testing.T) {
 			Spec:       resources.AgentSpec{ModelRef: "openai-default", Prompt: "research"},
 		},
 	} {
-		if _, err := stores.agentStore.Upsert(agent); err != nil {
+		if _, err := stores.agentStore.Upsert(context.Background(), agent); err != nil {
 			t.Fatalf("upsert agent %s: %v", agent.Metadata.Name, err)
 		}
 	}
 
-	if _, err := stores.agentSystemStore.Upsert(resources.AgentSystem{
+	if _, err := stores.agentSystemStore.Upsert(context.Background(), resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
 		Metadata:   resources.ObjectMeta{Name: "cycle-system"},
@@ -226,7 +226,7 @@ func TestTaskControllerMessageDrivenAllowsCycleWithMaxTurns(t *testing.T) {
 		t.Fatalf("upsert system: %v", err)
 	}
 
-	if _, err := stores.taskStore.Upsert(resources.Task{
+	if _, err := stores.taskStore.Upsert(context.Background(), resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
 		Metadata:   resources.ObjectMeta{Name: "cycle-with-max-turns"},
@@ -242,7 +242,7 @@ func TestTaskControllerMessageDrivenAllowsCycleWithMaxTurns(t *testing.T) {
 		t.Fatalf("reconcile failed: %v", err)
 	}
 
-	task, ok, err := stores.taskStore.Get("cycle-with-max-turns")
+	task, ok, err := stores.taskStore.Get(context.Background(), "cycle-with-max-turns")
 	if err != nil {
 		t.Fatal(err)
 	}

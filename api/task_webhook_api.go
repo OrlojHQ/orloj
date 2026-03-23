@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
@@ -37,7 +38,7 @@ type webhookDeliveryResponse struct {
 func (s *Server) handleTaskWebhooks(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		items, err := s.stores.TaskWebhooks.List()
+		items, err := s.stores.TaskWebhooks.List(r.Context())
 		if writeStoreFetchError(w, err) { return }
 		ns, hasNS := namespaceFilter(r)
 		selector, err := labelSelectorFilter(r)
@@ -71,12 +72,12 @@ func (s *Server) handleTaskWebhooks(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		existing, ok, err := s.stores.TaskWebhooks.Get(store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
+		existing, ok, err := s.stores.TaskWebhooks.Get(r.Context(), store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
 		if writeStoreFetchError(w, err) { return }
 		if ok {
 			obj.Status = existing.Status
 		}
-		obj, err = s.stores.TaskWebhooks.Upsert(obj)
+		obj, err = s.stores.TaskWebhooks.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -117,7 +118,7 @@ func (s *Server) handleTaskWebhookByName(w http.ResponseWriter, r *http.Request)
 	key := scopedNameForRequest(r, name)
 	switch r.Method {
 	case http.MethodGet:
-		obj, ok, err := s.stores.TaskWebhooks.Get(key)
+		obj, ok, err := s.stores.TaskWebhooks.Get(r.Context(), key)
 		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("taskwebhook %q not found", name), http.StatusNotFound)
@@ -125,7 +126,7 @@ func (s *Server) handleTaskWebhookByName(w http.ResponseWriter, r *http.Request)
 		}
 		writeJSON(w, http.StatusOK, obj)
 	case http.MethodDelete:
-		if err := s.stores.TaskWebhooks.Delete(key); err != nil {
+		if err := s.stores.TaskWebhooks.Delete(r.Context(), key); err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
@@ -142,7 +143,7 @@ func (s *Server) handleTaskWebhookByName(w http.ResponseWriter, r *http.Request)
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		current, ok, err := s.stores.TaskWebhooks.Get(key)
+		current, ok, err := s.stores.TaskWebhooks.Get(r.Context(), key)
 		if writeStoreFetchError(w, err) { return }
 		if !ok {
 			http.Error(w, fmt.Sprintf("taskwebhook %q not found", name), http.StatusNotFound)
@@ -158,7 +159,7 @@ func (s *Server) handleTaskWebhookByName(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		obj.Status = current.Status
-		obj, err = s.stores.TaskWebhooks.Upsert(obj)
+		obj, err = s.stores.TaskWebhooks.Upsert(r.Context(), obj)
 		if err != nil {
 			writeStoreError(w, err)
 			return
@@ -182,7 +183,7 @@ func (s *Server) handleWebhookDelivery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hook, ok := s.findTaskWebhookByEndpointID(endpointID)
+	hook, ok := s.findTaskWebhookByEndpointID(r.Context(), endpointID)
 	if !ok {
 		http.Error(w, "webhook endpoint not found", http.StatusNotFound)
 		return
@@ -203,7 +204,7 @@ func (s *Server) handleWebhookDelivery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	secretValue, err := s.resolveWebhookSecret(hook)
+	secretValue, err := s.resolveWebhookSecret(r.Context(), hook)
 	if err != nil {
 		s.recordTaskWebhookDeliveryResult(hook, "", "", "secret_error", true, false, err.Error())
 		http.Error(w, "webhook secret resolution failed", http.StatusBadRequest)
@@ -223,7 +224,7 @@ func (s *Server) handleWebhookDelivery(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Pre-check: fast path for duplicates without creating a task.
-	if taskName, duplicate, err := s.stores.WebhookDedupe.Get(endpointID, eventID, now); err != nil {
+	if taskName, duplicate, err := s.stores.WebhookDedupe.Get(r.Context(), endpointID, eventID, now); err != nil {
 		s.recordTaskWebhookDeliveryResult(hook, eventID, "", "dedupe_error", true, false, err.Error())
 		http.Error(w, "failed to process webhook", http.StatusInternalServerError)
 		return
@@ -239,7 +240,7 @@ func (s *Server) handleWebhookDelivery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	runTask, runErr := s.createTaskFromWebhook(hook, eventID, body, now)
+	runTask, runErr := s.createTaskFromWebhook(r.Context(), hook, eventID, body, now)
 	if runErr != nil {
 		s.recordTaskWebhookDeliveryResult(hook, eventID, "", "task_create_error", true, false, runErr.Error())
 		http.Error(w, "webhook task creation failed", http.StatusBadRequest)
@@ -249,7 +250,7 @@ func (s *Server) handleWebhookDelivery(w http.ResponseWriter, r *http.Request) {
 	// pass the pre-check above. If another request inserted first, this
 	// returns the existing task name and we treat it as a duplicate.
 	window := time.Duration(hook.Spec.Idempotency.DedupeWindowSeconds) * time.Second
-	if existingTask, isDup, err := s.stores.WebhookDedupe.TryInsert(endpointID, eventID, runTask, now.Add(window), now); err != nil {
+	if existingTask, isDup, err := s.stores.WebhookDedupe.TryInsert(r.Context(), endpointID, eventID, runTask, now.Add(window), now); err != nil {
 		s.recordTaskWebhookDeliveryResult(hook, eventID, runTask, "dedupe_store_error", true, false, err.Error())
 		http.Error(w, "failed to process webhook", http.StatusInternalServerError)
 		return
@@ -275,8 +276,8 @@ func (s *Server) handleWebhookDelivery(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) findTaskWebhookByEndpointID(endpointID string) (resources.TaskWebhook, bool) {
-	items, err := s.stores.TaskWebhooks.List()
+func (s *Server) findTaskWebhookByEndpointID(ctx context.Context, endpointID string) (resources.TaskWebhook, bool) {
+	items, err := s.stores.TaskWebhooks.List(ctx)
 	if err != nil {
 		return resources.TaskWebhook{}, false
 	}
@@ -288,12 +289,12 @@ func (s *Server) findTaskWebhookByEndpointID(endpointID string) (resources.TaskW
 	return resources.TaskWebhook{}, false
 }
 
-func (s *Server) resolveWebhookSecret(hook resources.TaskWebhook) ([]byte, error) {
+func (s *Server) resolveWebhookSecret(ctx context.Context, hook resources.TaskWebhook) ([]byte, error) {
 	secretNS, secretName, err := resolveRef(hook.Metadata.Namespace, hook.Spec.Auth.SecretRef)
 	if err != nil {
 		return nil, err
 	}
-	secret, ok, err := s.stores.Secrets.Get(store.ScopedName(secretNS, secretName))
+	secret, ok, err := s.stores.Secrets.Get(ctx, store.ScopedName(secretNS, secretName))
 	if err != nil {
 		return nil, fmt.Errorf("secret %q lookup failed: %w", hook.Spec.Auth.SecretRef, err)
 	}
@@ -428,13 +429,13 @@ func trimCaseInsensitivePrefix(value, prefix string) (string, bool) {
 	return value[len(prefix):], true
 }
 
-func (s *Server) createTaskFromWebhook(hook resources.TaskWebhook, eventID string, body []byte, now time.Time) (string, error) {
+func (s *Server) createTaskFromWebhook(ctx context.Context, hook resources.TaskWebhook, eventID string, body []byte, now time.Time) (string, error) {
 	templateNS, templateName, err := resolveRef(hook.Metadata.Namespace, hook.Spec.TaskRef)
 	if err != nil {
 		return "", err
 	}
 	templateKey := store.ScopedName(templateNS, templateName)
-	template, ok, err := s.stores.Tasks.Get(templateKey)
+	template, ok, err := s.stores.Tasks.Get(ctx, templateKey)
 	if err != nil {
 		return "", fmt.Errorf("task template %q lookup failed: %w", hook.Spec.TaskRef, err)
 	}
@@ -449,7 +450,7 @@ func (s *Server) createTaskFromWebhook(hook resources.TaskWebhook, eventID strin
 	runName := webhookTaskName(hook.Metadata.Name, eventID)
 	runNamespace := template.Metadata.Namespace
 	runKey := store.ScopedName(runNamespace, runName)
-	existing, ok, err := s.stores.Tasks.Get(runKey)
+	existing, ok, err := s.stores.Tasks.Get(ctx, runKey)
 	if err != nil {
 		return "", fmt.Errorf("task run %q lookup failed: %w", runKey, err)
 	}
@@ -491,7 +492,7 @@ func (s *Server) createTaskFromWebhook(hook resources.TaskWebhook, eventID strin
 		},
 		Spec: spec,
 	}
-	if _, err := s.stores.Tasks.Upsert(runTask); err != nil {
+	if _, err := s.stores.Tasks.Upsert(ctx, runTask); err != nil {
 		return "", err
 	}
 	s.publishResourceEvent("Task", runTask.Metadata.Name, "created", runTask)
@@ -609,9 +610,10 @@ func (s *Server) recordTaskWebhookDeliveryResult(hook resources.TaskWebhook, eve
 }
 
 func (s *Server) updateTaskWebhookStatus(namespace, name string, mutate func(*resources.TaskWebhookStatus)) (resources.TaskWebhook, error) {
+	ctx := context.Background()
 	key := store.ScopedName(namespace, name)
 	for i := 0; i < 3; i++ {
-		item, ok, err := s.stores.TaskWebhooks.Get(key)
+		item, ok, err := s.stores.TaskWebhooks.Get(ctx, key)
 		if err != nil {
 			return resources.TaskWebhook{}, fmt.Errorf("taskwebhook %q lookup failed: %w", name, err)
 		}
@@ -622,7 +624,7 @@ func (s *Server) updateTaskWebhookStatus(namespace, name string, mutate func(*re
 		if item.Status.ObservedGeneration == 0 {
 			item.Status.ObservedGeneration = item.Metadata.Generation
 		}
-		updated, err := s.stores.TaskWebhooks.Upsert(item)
+		updated, err := s.stores.TaskWebhooks.Upsert(ctx, item)
 		if err == nil {
 			s.publishResourceEvent("TaskWebhook", updated.Metadata.Name, "status", map[string]any{"metadata": updated.Metadata, "status": updated.Status})
 			return updated, nil

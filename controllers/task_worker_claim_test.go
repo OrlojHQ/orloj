@@ -23,7 +23,7 @@ func TestTaskClaimSingleExecutionAcrossWorkers(t *testing.T) {
 	policyStore := store.NewAgentPolicyStore()
 	taskStore := store.NewTaskStore()
 	workerStore := store.NewWorkerStore()
-	if _, err := modelEPStore.Upsert(resources.ModelEndpoint{
+	if _, err := modelEPStore.Upsert(context.Background(),resources.ModelEndpoint{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "ModelEndpoint",
 		Metadata:   resources.ObjectMeta{Name: "openai-default", Namespace: "default"},
@@ -46,10 +46,10 @@ func TestTaskClaimSingleExecutionAcrossWorkers(t *testing.T) {
 			Limits:   resources.AgentLimits{MaxSteps: 2, Timeout: "1s"},
 		},
 	}
-	if _, err := agentStore.Upsert(agent); err != nil {
+	if _, err := agentStore.Upsert(context.Background(), agent); err != nil {
 		t.Fatalf("upsert agent failed: %v", err)
 	}
-	if _, err := toolStore.Upsert(resources.Tool{
+	if _, err := toolStore.Upsert(context.Background(),resources.Tool{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Tool",
 		Metadata:   resources.ObjectMeta{Name: "web_search"},
@@ -57,7 +57,7 @@ func TestTaskClaimSingleExecutionAcrossWorkers(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert tool failed: %v", err)
 	}
-	if _, err := agentSystemStore.Upsert(resources.AgentSystem{
+	if _, err := agentSystemStore.Upsert(context.Background(),resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
 		Metadata:   resources.ObjectMeta{Name: "report-system"},
@@ -65,7 +65,7 @@ func TestTaskClaimSingleExecutionAcrossWorkers(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert system failed: %v", err)
 	}
-	if _, err := taskStore.Upsert(resources.Task{
+	if _, err := taskStore.Upsert(context.Background(),resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
 		Metadata:   resources.ObjectMeta{Name: "weekly-report"},
@@ -74,7 +74,7 @@ func TestTaskClaimSingleExecutionAcrossWorkers(t *testing.T) {
 		t.Fatalf("upsert task failed: %v", err)
 	}
 
-	if _, err := workerStore.Upsert(resources.Worker{
+	if _, err := workerStore.Upsert(context.Background(),resources.Worker{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Worker",
 		Metadata:   resources.ObjectMeta{Name: "worker-1"},
@@ -86,7 +86,7 @@ func TestTaskClaimSingleExecutionAcrossWorkers(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert worker-1 failed: %v", err)
 	}
-	if _, err := workerStore.Upsert(resources.Worker{
+	if _, err := workerStore.Upsert(context.Background(),resources.Worker{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Worker",
 		Metadata:   resources.ObjectMeta{Name: "worker-2"},
@@ -118,7 +118,7 @@ func TestTaskClaimSingleExecutionAcrossWorkers(t *testing.T) {
 	}()
 	wg.Wait()
 
-	task, ok, err := taskStore.Get("weekly-report")
+	task, ok, err := taskStore.Get(context.Background(),"weekly-report")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -147,7 +147,7 @@ func TestTaskClaimHonorsAssignedWorker(t *testing.T) {
 	policyStore := store.NewAgentPolicyStore()
 	taskStore := store.NewTaskStore()
 	workerStore := store.NewWorkerStore()
-	if _, err := modelEPStore.Upsert(resources.ModelEndpoint{
+	if _, err := modelEPStore.Upsert(context.Background(),resources.ModelEndpoint{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "ModelEndpoint",
 		Metadata:   resources.ObjectMeta{Name: "openai-default", Namespace: "default"},
@@ -170,10 +170,10 @@ func TestTaskClaimHonorsAssignedWorker(t *testing.T) {
 			Limits:   resources.AgentLimits{MaxSteps: 2, Timeout: "1s"},
 		},
 	}
-	if _, err := agentStore.Upsert(agent); err != nil {
+	if _, err := agentStore.Upsert(context.Background(), agent); err != nil {
 		t.Fatalf("upsert agent failed: %v", err)
 	}
-	if _, err := toolStore.Upsert(resources.Tool{
+	if _, err := toolStore.Upsert(context.Background(),resources.Tool{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Tool",
 		Metadata:   resources.ObjectMeta{Name: "web_search"},
@@ -181,7 +181,7 @@ func TestTaskClaimHonorsAssignedWorker(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert tool failed: %v", err)
 	}
-	if _, err := agentSystemStore.Upsert(resources.AgentSystem{
+	if _, err := agentSystemStore.Upsert(context.Background(),resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
 		Metadata:   resources.ObjectMeta{Name: "report-system"},
@@ -189,7 +189,7 @@ func TestTaskClaimHonorsAssignedWorker(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert system failed: %v", err)
 	}
-	if _, err := taskStore.Upsert(resources.Task{
+	if _, err := taskStore.Upsert(context.Background(),resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
 		Metadata:   resources.ObjectMeta{Name: "weekly-report"},
@@ -199,7 +199,7 @@ func TestTaskClaimHonorsAssignedWorker(t *testing.T) {
 		t.Fatalf("upsert task failed: %v", err)
 	}
 
-	if _, err := workerStore.Upsert(resources.Worker{
+	if _, err := workerStore.Upsert(context.Background(),resources.Worker{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Worker",
 		Metadata:   resources.ObjectMeta{Name: "worker-1"},
@@ -211,7 +211,7 @@ func TestTaskClaimHonorsAssignedWorker(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert worker-1 failed: %v", err)
 	}
-	if _, err := workerStore.Upsert(resources.Worker{
+	if _, err := workerStore.Upsert(context.Background(),resources.Worker{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Worker",
 		Metadata:   resources.ObjectMeta{Name: "worker-2"},
@@ -243,7 +243,7 @@ func TestTaskClaimHonorsAssignedWorker(t *testing.T) {
 	}()
 	wg.Wait()
 
-	task, ok, err := taskStore.Get("weekly-report")
+	task, ok, err := taskStore.Get(context.Background(),"weekly-report")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -276,7 +276,7 @@ func TestTaskWorkerCapacitySkipsClaimWhenFull(t *testing.T) {
 	policyStore := store.NewAgentPolicyStore()
 	workerStore := store.NewWorkerStore()
 
-	if _, err := taskStore.Upsert(resources.Task{
+	if _, err := taskStore.Upsert(context.Background(),resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
 		Metadata:   resources.ObjectMeta{Name: "capacity-task"},
@@ -284,7 +284,7 @@ func TestTaskWorkerCapacitySkipsClaimWhenFull(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert task failed: %v", err)
 	}
-	if _, err := workerStore.Upsert(resources.Worker{
+	if _, err := workerStore.Upsert(context.Background(),resources.Worker{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Worker",
 		Metadata:   resources.ObjectMeta{Name: "worker-1"},
@@ -308,7 +308,7 @@ func TestTaskWorkerCapacitySkipsClaimWhenFull(t *testing.T) {
 		t.Fatalf("reconcile failed: %v", err)
 	}
 
-	task, ok, err := taskStore.Get("capacity-task")
+	task, ok, err := taskStore.Get(context.Background(),"capacity-task")
 	if err != nil {
 		t.Fatal(err)
 	}

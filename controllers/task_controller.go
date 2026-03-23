@@ -253,10 +253,10 @@ func (c *TaskController) reconcileTask(ctx context.Context, task resources.Task)
 		if !isAttemptDue(task) {
 			return nil
 		}
-		if err := c.reconcilePending(task); err != nil {
+		if err := c.reconcilePending(ctx, task); err != nil {
 			return err
 		}
-		updated, ok, err := c.taskStore.Get(taskScopedName(task))
+		updated, ok, err := c.taskStore.Get(ctx, taskScopedName(task))
 		if err != nil {
 			return err
 		}
@@ -270,7 +270,7 @@ func (c *TaskController) reconcileTask(ctx context.Context, task resources.Task)
 	case "running":
 		return c.reconcileRunning(ctx, task)
 	case "waitingapproval":
-		return c.reconcileWaitingApproval(task)
+		return c.reconcileWaitingApproval(ctx, task)
 	case "succeeded", "failed":
 		return nil
 	default:
@@ -289,8 +289,8 @@ func (c *TaskController) reconcileTask(ctx context.Context, task resources.Task)
 	}
 }
 
-func (c *TaskController) reconcilePending(task resources.Task) error {
-	system, errs := c.validateTask(task)
+func (c *TaskController) reconcilePending(ctx context.Context, task resources.Task) error {
+	system, errs := c.validateTask(ctx, task)
 	if len(errs) > 0 {
 		return c.markFailed(task, strings.Join(errs, "; "))
 	}
@@ -324,7 +324,7 @@ func (c *TaskController) reconcilePending(task resources.Task) error {
 }
 
 func (c *TaskController) reconcileRunning(ctx context.Context, task resources.Task) error {
-	system, errs := c.validateTask(task)
+	system, errs := c.validateTask(ctx, task)
 	if len(errs) > 0 {
 		return c.handleExecutionFailure(task, strings.Join(errs, "; "))
 	}
@@ -412,7 +412,7 @@ func (c *TaskController) reconcileWaitingApprovalSweep(ctx context.Context) erro
 	if c == nil || c.taskStore == nil || c.toolApprovalStore == nil {
 		return nil
 	}
-	_taskList, err := c.taskStore.List()
+	_taskList, err := c.taskStore.List(ctx)
 	if err != nil {
 		return err
 	}
@@ -427,7 +427,7 @@ func (c *TaskController) reconcileWaitingApprovalSweep(ctx context.Context) erro
 			continue
 		}
 		key := taskScopedName(task)
-		fresh, ok, err := c.taskStore.Get(key)
+		fresh, ok, err := c.taskStore.Get(ctx, key)
 		if err != nil {
 			return err
 		}
@@ -437,7 +437,7 @@ func (c *TaskController) reconcileWaitingApprovalSweep(ctx context.Context) erro
 		if !strings.EqualFold(strings.TrimSpace(fresh.Status.Phase), "waitingapproval") {
 			continue
 		}
-		if err := c.reconcileWaitingApproval(fresh); err != nil {
+		if err := c.reconcileWaitingApproval(ctx, fresh); err != nil {
 			return err
 		}
 	}
@@ -460,7 +460,7 @@ func (c *TaskController) transitionToWaitingApproval(task resources.Task, reason
 	return nil
 }
 
-func (c *TaskController) reconcileWaitingApproval(task resources.Task) error {
+func (c *TaskController) reconcileWaitingApproval(ctx context.Context, task resources.Task) error {
 	if c.toolApprovalStore == nil {
 		return nil
 	}
@@ -468,7 +468,7 @@ func (c *TaskController) reconcileWaitingApproval(task resources.Task) error {
 	taskKey := taskScopedName(task)
 	var approval resources.ToolApproval
 	found := false
-	_aList, err := c.toolApprovalStore.List()
+	_aList, err := c.toolApprovalStore.List(ctx)
 	if err != nil {
 		return err
 	}
@@ -487,7 +487,7 @@ func (c *TaskController) reconcileWaitingApproval(task resources.Task) error {
 		if expiresAt, err := time.Parse(time.RFC3339, approval.Status.ExpiresAt); err == nil {
 			if time.Now().UTC().After(expiresAt) && approval.Status.Phase == "Pending" {
 				approval.Status.Phase = "Expired"
-				_, _ = c.toolApprovalStore.Upsert(approval)
+				_, _ = c.toolApprovalStore.Upsert(ctx, approval)
 			}
 		}
 	}
@@ -534,7 +534,7 @@ func (c *TaskController) reconcileRunningMessageDriven(ctx context.Context, task
 	}
 	allPolicies := []resources.AgentPolicy{}
 	if c.policyStore != nil {
-		if listed, err := c.policyStore.List(); err == nil {
+		if listed, err := c.policyStore.List(ctx); err == nil {
 			allPolicies = listed
 		}
 	}
@@ -771,14 +771,14 @@ func (c *TaskController) markDeadLetter(task resources.Task, reason string) erro
 	return nil
 }
 
-func (c *TaskController) validateTask(task resources.Task) (resources.AgentSystem, []string) {
+func (c *TaskController) validateTask(ctx context.Context, task resources.Task) (resources.AgentSystem, []string) {
 	errs := make([]string, 0)
 	if strings.TrimSpace(task.Spec.System) == "" {
 		errs = append(errs, "spec.system is required")
 		return resources.AgentSystem{}, errs
 	}
 
-	system, ok, err := c.agentSystemStore.Get(store.ScopedName(task.Metadata.Namespace, task.Spec.System))
+	system, ok, err := c.agentSystemStore.Get(ctx, store.ScopedName(task.Metadata.Namespace, task.Spec.System))
 	if err != nil {
 		return resources.AgentSystem{}, append(errs, fmt.Sprintf("agentsystem lookup failed: %v", err))
 	}
@@ -802,7 +802,7 @@ func (c *TaskController) validateTask(task resources.Task) (resources.AgentSyste
 	}
 
 	for _, name := range system.Spec.Agents {
-		agent, ok, err := c.agentStore.Get(store.ScopedName(task.Metadata.Namespace, name))
+		agent, ok, err := c.agentStore.Get(ctx, store.ScopedName(task.Metadata.Namespace, name))
 		if err != nil {
 			errs = append(errs, fmt.Sprintf("agent %q lookup failed: %v", name, err))
 			continue
@@ -813,7 +813,7 @@ func (c *TaskController) validateTask(task resources.Task) (resources.AgentSyste
 		}
 
 		for _, toolName := range agent.Spec.Tools {
-			if _, ok, _ := c.toolStore.Get(store.ScopedName(task.Metadata.Namespace, toolName)); !ok {
+			if _, ok, _ := c.toolStore.Get(ctx, store.ScopedName(task.Metadata.Namespace, toolName)); !ok {
 				errs = append(errs, fmt.Sprintf("agent %q references missing tool %q", name, toolName))
 			}
 		}
@@ -823,9 +823,9 @@ func (c *TaskController) validateTask(task resources.Task) (resources.AgentSyste
 					continue
 				}
 				roleKey := store.ScopedName(task.Metadata.Namespace, roleName)
-				if _, ok, _ := c.roleStore.Get(roleKey); !ok {
+				if _, ok, _ := c.roleStore.Get(ctx, roleKey); !ok {
 					if strings.Contains(roleName, "/") {
-						if _, ok, _ := c.roleStore.Get(roleName); !ok {
+						if _, ok, _ := c.roleStore.Get(ctx, roleName); !ok {
 							errs = append(errs, fmt.Sprintf("agent %q references missing role %q", name, roleName))
 						}
 					} else {
@@ -836,12 +836,12 @@ func (c *TaskController) validateTask(task resources.Task) (resources.AgentSyste
 		}
 		if strings.TrimSpace(agent.Spec.ModelRef) == "" {
 			errs = append(errs, fmt.Sprintf("agent %q must set spec.model_ref", name))
-		} else if _, _, err := resolveAgentEffectiveModel(task.Metadata.Namespace, agent, c.modelEPStore); err != nil {
+		} else if _, _, err := resolveAgentEffectiveModel(ctx, task.Metadata.Namespace, agent, c.modelEPStore); err != nil {
 			errs = append(errs, fmt.Sprintf("agent %q model resolution failed: %s", name, err.Error()))
 		}
 
 		if strings.TrimSpace(agent.Spec.Memory.Ref) != "" {
-			if _, ok, _ := c.memoryStore.Get(store.ScopedName(task.Metadata.Namespace, agent.Spec.Memory.Ref)); !ok {
+			if _, ok, _ := c.memoryStore.Get(ctx, store.ScopedName(task.Metadata.Namespace, agent.Spec.Memory.Ref)); !ok {
 				errs = append(errs, fmt.Sprintf("agent %q references missing memory %q", name, agent.Spec.Memory.Ref))
 			}
 		}
@@ -959,11 +959,11 @@ func hasGraphEntrypoint(system resources.AgentSystem, agentSet map[string]struct
 	return false
 }
 
-func resolveAgentEffectiveModel(defaultNamespace string, agent resources.Agent, modelEPStore *store.ModelEndpointStore) (resources.ModelEndpoint, string, error) {
+func resolveAgentEffectiveModel(ctx context.Context, defaultNamespace string, agent resources.Agent, modelEPStore *store.ModelEndpointStore) (resources.ModelEndpoint, string, error) {
 	if modelEPStore == nil {
 		return resources.ModelEndpoint{}, "", fmt.Errorf("no model endpoint store configured")
 	}
-	return resources.ResolveAgentModelRef(defaultNamespace, agent.Spec.ModelRef, modelEPStore)
+	return resources.ResolveAgentModelRef(ctx, defaultNamespace, agent.Spec.ModelRef, modelEPStore)
 }
 
 func executionOrder(system resources.AgentSystem) []string {
@@ -1100,7 +1100,7 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 
 	var _allPolicies []resources.AgentPolicy
 	if c.policyStore != nil {
-		if listed, err := c.policyStore.List(); err == nil {
+		if listed, err := c.policyStore.List(ctx); err == nil {
 			_allPolicies = listed
 		}
 	}
@@ -1139,7 +1139,7 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 
 	runtimeInput := copyStringMap(task.Spec.Input)
 	for idx, agentName := range order {
-		agent, ok, err := c.agentStore.Get(store.ScopedName(task.Metadata.Namespace, agentName))
+		agent, ok, err := c.agentStore.Get(ctx, store.ScopedName(task.Metadata.Namespace, agentName))
 		if err != nil {
 			return nil, err
 		}
@@ -1153,7 +1153,7 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 			})
 			return nil, fmt.Errorf("agent %q not found", agentName)
 		}
-		_, effectiveModel, err := resolveAgentEffectiveModel(task.Metadata.Namespace, agent, c.modelEPStore)
+		_, effectiveModel, err := resolveAgentEffectiveModel(ctx, task.Metadata.Namespace, agent, c.modelEPStore)
 		if err != nil {
 			c.appendTaskLog(taskScopedName(*task), fmt.Sprintf("agent model resolution failed: %s error=%s", agent.Metadata.Name, err))
 			c.appendTaskTrace(task, resources.TaskTraceEvent{
@@ -1189,6 +1189,7 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 		}
 
 		toolRuntime := agentruntime.BuildGovernedToolRuntimeForAgentWithGovernance(
+			agentCtx,
 			nil,
 			c.isolatedTools,
 			c.toolStore,
@@ -1561,7 +1562,7 @@ func (c *TaskController) taskMatchesWorker(task resources.Task) bool {
 	if c.workerStore == nil {
 		return true
 	}
-	worker, ok, err := c.workerStore.Get(c.workerID)
+	worker, ok, err := c.workerStore.Get(context.Background(), c.workerID)
 	if err != nil {
 		return false
 	}
@@ -1592,7 +1593,7 @@ func (c *TaskController) workerClaimHints() store.WorkerClaimHints {
 	if c.workerStore == nil {
 		return store.WorkerClaimHints{}
 	}
-	worker, ok, err := c.workerStore.Get(c.workerID)
+	worker, ok, err := c.workerStore.Get(context.Background(), c.workerID)
 	if err != nil {
 		return store.WorkerClaimHints{}
 	}
@@ -1910,9 +1911,10 @@ func parseTraceStepID(stepID string) (attempt int, sequence int, ok bool) {
 }
 
 func (c *TaskController) upsertTask(task resources.Task) (resources.Task, error) {
+	ctx := context.Background()
 	var lastErr error
 	for i := 0; i < 5; i++ {
-		updated, err := c.taskStore.Upsert(task)
+		updated, err := c.taskStore.Upsert(ctx, task)
 		if err == nil {
 			return updated, nil
 		}
@@ -1920,7 +1922,7 @@ func (c *TaskController) upsertTask(task resources.Task) (resources.Task, error)
 			return resources.Task{}, err
 		}
 		lastErr = err
-		current, ok, err := c.taskStore.Get(taskScopedName(task))
+		current, ok, err := c.taskStore.Get(ctx, taskScopedName(task))
 		if err != nil {
 			return resources.Task{}, err
 		}
@@ -1935,14 +1937,14 @@ func (c *TaskController) upsertTask(task resources.Task) (resources.Task, error)
 	if lastErr != nil {
 		return resources.Task{}, lastErr
 	}
-	return c.taskStore.Upsert(task)
+	return c.taskStore.Upsert(ctx, task)
 }
 
 func (c *TaskController) appendTaskLog(taskName, message string) {
 	if strings.TrimSpace(taskName) == "" || strings.TrimSpace(message) == "" {
 		return
 	}
-	if err := c.taskStore.AppendLog(taskName, message); err != nil && c.logger != nil {
+	if err := c.taskStore.AppendLog(context.Background(), taskName, message); err != nil && c.logger != nil {
 		c.logger.Printf("task=%s append log failed: %v", taskName, err)
 	}
 }
@@ -2027,3 +2029,4 @@ func parseControllerTimestamp(value string) (time.Time, error) {
 	}
 	return time.Parse(time.RFC3339, v)
 }
+

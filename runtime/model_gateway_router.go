@@ -11,7 +11,7 @@ import (
 
 // ModelEndpointLookup resolves namespaced ModelEndpoint resources.
 type ModelEndpointLookup interface {
-	Get(name string) (resources.ModelEndpoint, bool, error)
+	Get(ctx context.Context, name string) (resources.ModelEndpoint, bool, error)
 }
 
 // ModelRouterConfig configures model routing between default and referenced endpoints.
@@ -71,7 +71,7 @@ func (r *ModelRouter) Complete(ctx context.Context, req ModelRequest) (ModelResp
 		return r.fallback.Complete(ctx, req)
 	}
 
-	endpoint, endpointKey, ok, err := r.resolveEndpoint(req.Namespace, modelRef)
+	endpoint, endpointKey, ok, err := r.resolveEndpoint(ctx, req.Namespace, modelRef)
 	if err != nil {
 		return ModelResponse{}, fmt.Errorf("model endpoint %q lookup failed: %w", modelRef, err)
 	}
@@ -90,10 +90,10 @@ func (r *ModelRouter) Complete(ctx context.Context, req ModelRequest) (ModelResp
 	return gateway.Complete(ctx, routedReq)
 }
 
-func (r *ModelRouter) resolveEndpoint(namespace string, modelRef string) (resources.ModelEndpoint, string, bool, error) {
+func (r *ModelRouter) resolveEndpoint(ctx context.Context, namespace string, modelRef string) (resources.ModelEndpoint, string, bool, error) {
 	lookupNamespace, lookupName := parseModelEndpointRef(namespace, modelRef)
 	lookupKey := scopedName(lookupNamespace, lookupName)
-	endpoint, ok, err := r.endpoints.Get(lookupKey)
+	endpoint, ok, err := r.endpoints.Get(ctx, lookupKey)
 	if err != nil {
 		return resources.ModelEndpoint{}, lookupKey, false, err
 	}

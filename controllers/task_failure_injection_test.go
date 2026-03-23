@@ -17,7 +17,7 @@ func TestFailureInjectionStaleHeartbeatReassignsPendingTask(t *testing.T) {
 	taskStore := store.NewTaskStore()
 	workerStore := store.NewWorkerStore()
 
-	if _, err := workerStore.Upsert(resources.Worker{
+	if _, err := workerStore.Upsert(context.Background(), resources.Worker{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Worker",
 		Metadata:   resources.ObjectMeta{Name: "worker-a"},
@@ -29,7 +29,7 @@ func TestFailureInjectionStaleHeartbeatReassignsPendingTask(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert worker-a failed: %v", err)
 	}
-	if _, err := workerStore.Upsert(resources.Worker{
+	if _, err := workerStore.Upsert(context.Background(), resources.Worker{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Worker",
 		Metadata:   resources.ObjectMeta{Name: "worker-b"},
@@ -41,7 +41,7 @@ func TestFailureInjectionStaleHeartbeatReassignsPendingTask(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert worker-b failed: %v", err)
 	}
-	if _, err := taskStore.Upsert(resources.Task{
+	if _, err := taskStore.Upsert(context.Background(), resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
 		Metadata:   resources.ObjectMeta{Name: "stale-task"},
@@ -56,7 +56,7 @@ func TestFailureInjectionStaleHeartbeatReassignsPendingTask(t *testing.T) {
 		t.Fatalf("worker controller reconcile failed: %v", err)
 	}
 
-	workerA, ok, err := workerStore.Get("worker-a")
+	workerA, ok, err := workerStore.Get(context.Background(), "worker-a")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,11 +68,11 @@ func TestFailureInjectionStaleHeartbeatReassignsPendingTask(t *testing.T) {
 	}
 
 	scheduler := NewTaskSchedulerController(taskStore, workerStore, logger, 5*time.Millisecond, 500*time.Millisecond)
-	if err := scheduler.ReconcileOnce(); err != nil {
+	if err := scheduler.ReconcileOnce(context.Background()); err != nil {
 		t.Fatalf("scheduler reconcile failed: %v", err)
 	}
 
-	task, ok, err := taskStore.Get("stale-task")
+	task, ok, err := taskStore.Get(context.Background(), "stale-task")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +97,7 @@ func TestFailureInjectionWorkerCrashLeaseTakeover(t *testing.T) {
 	policyStore := store.NewAgentPolicyStore()
 	taskStore := store.NewTaskStore()
 	workerStore := store.NewWorkerStore()
-	if _, err := modelEPStore.Upsert(resources.ModelEndpoint{
+	if _, err := modelEPStore.Upsert(context.Background(), resources.ModelEndpoint{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "ModelEndpoint",
 		Metadata:   resources.ObjectMeta{Name: "openai-default", Namespace: "default"},
@@ -109,7 +109,7 @@ func TestFailureInjectionWorkerCrashLeaseTakeover(t *testing.T) {
 		t.Fatalf("upsert model endpoint failed: %v", err)
 	}
 
-	if _, err := toolStore.Upsert(resources.Tool{
+	if _, err := toolStore.Upsert(context.Background(), resources.Tool{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Tool",
 		Metadata:   resources.ObjectMeta{Name: "web_search"},
@@ -117,7 +117,7 @@ func TestFailureInjectionWorkerCrashLeaseTakeover(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert tool failed: %v", err)
 	}
-	if _, err := agentStore.Upsert(resources.Agent{
+	if _, err := agentStore.Upsert(context.Background(), resources.Agent{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
 		Metadata:   resources.ObjectMeta{Name: "agent-a"},
@@ -130,7 +130,7 @@ func TestFailureInjectionWorkerCrashLeaseTakeover(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert agent failed: %v", err)
 	}
-	if _, err := systemStore.Upsert(resources.AgentSystem{
+	if _, err := systemStore.Upsert(context.Background(), resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
 		Metadata:   resources.ObjectMeta{Name: "sys-a"},
@@ -138,7 +138,7 @@ func TestFailureInjectionWorkerCrashLeaseTakeover(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert system failed: %v", err)
 	}
-	if _, err := taskStore.Upsert(resources.Task{
+	if _, err := taskStore.Upsert(context.Background(), resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
 		Metadata:   resources.ObjectMeta{Name: "lease-takeover-task"},
@@ -149,7 +149,7 @@ func TestFailureInjectionWorkerCrashLeaseTakeover(t *testing.T) {
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	if _, err := workerStore.Upsert(resources.Worker{
+	if _, err := workerStore.Upsert(context.Background(), resources.Worker{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Worker",
 		Metadata:   resources.ObjectMeta{Name: "worker-a"},
@@ -161,7 +161,7 @@ func TestFailureInjectionWorkerCrashLeaseTakeover(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert worker-a failed: %v", err)
 	}
-	if _, err := workerStore.Upsert(resources.Worker{
+	if _, err := workerStore.Upsert(context.Background(), resources.Worker{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Worker",
 		Metadata:   resources.ObjectMeta{Name: "worker-b"},
@@ -180,7 +180,7 @@ func TestFailureInjectionWorkerCrashLeaseTakeover(t *testing.T) {
 		t.Fatal("expected initial claim by worker-a")
 	}
 
-	workerA, ok, err := workerStore.Get("worker-a")
+	workerA, ok, err := workerStore.Get(context.Background(), "worker-a")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +189,7 @@ func TestFailureInjectionWorkerCrashLeaseTakeover(t *testing.T) {
 	}
 	workerA.Status.Phase = "NotReady"
 	workerA.Status.LastHeartbeat = time.Now().UTC().Add(-1 * time.Minute).Format(time.RFC3339Nano)
-	if _, err := workerStore.Upsert(workerA); err != nil {
+	if _, err := workerStore.Upsert(context.Background(), workerA); err != nil {
 		t.Fatalf("mark worker-a crashed failed: %v", err)
 	}
 
@@ -212,7 +212,7 @@ func TestFailureInjectionWorkerCrashLeaseTakeover(t *testing.T) {
 		t.Fatalf("worker-b reconcile failed: %v", err)
 	}
 
-	finalTask, ok, err := taskStore.Get("lease-takeover-task")
+	finalTask, ok, err := taskStore.Get(context.Background(), "lease-takeover-task")
 	if err != nil {
 		t.Fatal(err)
 	}

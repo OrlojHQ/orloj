@@ -52,7 +52,7 @@ func (c *McpServerController) Start(ctx context.Context) {
 	defer ticker.Stop()
 
 	for {
-		c.enqueueAll(queue)
+		c.enqueueAll(ctx, queue)
 		select {
 		case <-ctx.Done():
 			if c.sessionManager != nil {
@@ -77,8 +77,8 @@ func (c *McpServerController) runWorker(ctx context.Context, queue *keyQueue) {
 	}
 }
 
-func (c *McpServerController) enqueueAll(queue *keyQueue) {
-	_itemList, err := c.store.List()
+func (c *McpServerController) enqueueAll(ctx context.Context, queue *keyQueue) {
+	_itemList, err := c.store.List(ctx)
 	if err != nil {
 		return
 	}
@@ -88,7 +88,7 @@ func (c *McpServerController) enqueueAll(queue *keyQueue) {
 }
 
 func (c *McpServerController) ReconcileOnce(ctx context.Context) error {
-	_itemList, err := c.store.List()
+	_itemList, err := c.store.List(ctx)
 	if err != nil {
 		return err
 	}
@@ -101,12 +101,12 @@ func (c *McpServerController) ReconcileOnce(ctx context.Context) error {
 }
 
 func (c *McpServerController) reconcileByName(ctx context.Context, name string) error {
-	server, ok, err := c.store.Get(name)
+	server, ok, err := c.store.Get(ctx, name)
 	if err != nil {
 		return err
 	}
 	if !ok {
-		c.garbageCollectTools(name)
+		c.garbageCollectTools(ctx, name)
 		return nil
 	}
 
@@ -118,13 +118,13 @@ func (c *McpServerController) reconcileByName(ctx context.Context, name string) 
 		server.Status.Phase = "Ready"
 		server.Status.LastError = ""
 		server.Status.ObservedGeneration = server.Metadata.Generation
-		_, err = c.store.Upsert(server)
+		_, err = c.store.Upsert(ctx, server)
 		return err
 	}
 
 	server.Status.Phase = "Connecting"
 	server.Status.LastError = ""
-	if updated, err := c.store.Upsert(server); err == nil {
+	if updated, err := c.store.Upsert(ctx, server); err == nil {
 		server = updated
 	}
 
@@ -132,7 +132,7 @@ func (c *McpServerController) reconcileByName(ctx context.Context, name string) 
 	if err != nil {
 		server.Status.Phase = "Error"
 		server.Status.LastError = err.Error()
-		if updated, uErr := c.store.Upsert(server); uErr == nil {
+		if updated, uErr := c.store.Upsert(ctx, server); uErr == nil {
 			server = updated
 		}
 		return fmt.Errorf("connect to mcp server %s: %w", name, err)
@@ -142,7 +142,7 @@ func (c *McpServerController) reconcileByName(ctx context.Context, name string) 
 	if err != nil {
 		server.Status.Phase = "Error"
 		server.Status.LastError = fmt.Sprintf("tools/list: %s", err.Error())
-		if updated, uErr := c.store.Upsert(server); uErr == nil {
+		if updated, uErr := c.store.Upsert(ctx, server); uErr == nil {
 			server = updated
 		}
 		return fmt.Errorf("list tools from mcp server %s: %w", name, err)
@@ -154,17 +154,17 @@ func (c *McpServerController) reconcileByName(ctx context.Context, name string) 
 	}
 
 	filteredTools := filterTools(tools, server.Spec.ToolFilter.Include)
-	generatedNames, err := c.syncTools(server, filteredTools)
+	generatedNames, err := c.syncTools(ctx, server, filteredTools)
 	if err != nil {
 		server.Status.Phase = "Error"
 		server.Status.LastError = fmt.Sprintf("sync tools: %s", err.Error())
-		if updated, uErr := c.store.Upsert(server); uErr == nil {
+		if updated, uErr := c.store.Upsert(ctx, server); uErr == nil {
 			server = updated
 		}
 		return err
 	}
 
-	c.deleteOrphanedTools(server, generatedNames)
+	c.deleteOrphanedTools(ctx, server, generatedNames)
 
 	server.Status.Phase = "Ready"
 	server.Status.LastError = ""
@@ -172,11 +172,11 @@ func (c *McpServerController) reconcileByName(ctx context.Context, name string) 
 	server.Status.GeneratedTools = generatedNames
 	server.Status.LastSyncedAt = time.Now().UTC().Format(time.RFC3339)
 	server.Status.ObservedGeneration = server.Metadata.Generation
-	_, err = c.store.Upsert(server)
+	_, err = c.store.Upsert(ctx, server)
 	return err
 }
 
-func (c *McpServerController) syncTools(server resources.McpServer, tools []agentruntime.McpToolDefinition) ([]string, error) {
+func (c *McpServerController) syncTools(ctx context.Context, server resources.McpServer, tools []agentruntime.McpToolDefinition) ([]string, error) {
 	ns := resources.NormalizeNamespace(server.Metadata.Namespace)
 	serverName := strings.TrimSpace(server.Metadata.Name)
 	generated := make([]string, 0, len(tools))
@@ -210,20 +210,20 @@ func (c *McpServerController) syncTools(server resources.McpServer, tools []agen
 			},
 		}
 
-		if _, err := c.toolStore.Upsert(tool); err != nil {
+		if _, err := c.toolStore.Upsert(ctx, tool); err != nil {
 			return generated, fmt.Errorf("upsert generated tool %s: %w", toolName, err)
 		}
 	}
 	return generated, nil
 }
 
-func (c *McpServerController) deleteOrphanedTools(server resources.McpServer, currentNames []string) {
+func (c *McpServerController) deleteOrphanedTools(ctx context.Context, server resources.McpServer, currentNames []string) {
 	serverName := strings.TrimSpace(server.Metadata.Name)
 	current := make(map[string]struct{}, len(currentNames))
 	for _, name := range currentNames {
 		current[name] = struct{}{}
 	}
-	_toolList, err := c.toolStore.List()
+	_toolList, err := c.toolStore.List(ctx)
 	if err != nil {
 		return
 	}
@@ -235,19 +235,19 @@ func (c *McpServerController) deleteOrphanedTools(server resources.McpServer, cu
 			continue
 		}
 		key := store.ScopedName(tool.Metadata.Namespace, tool.Metadata.Name)
-		if err := c.toolStore.Delete(key); err != nil && c.logger != nil {
+		if err := c.toolStore.Delete(ctx, key); err != nil && c.logger != nil {
 			c.logger.Printf("mcp-server controller: failed to delete orphaned tool %s: %v", key, err)
 		}
 	}
 }
 
-func (c *McpServerController) garbageCollectTools(serverKey string) {
+func (c *McpServerController) garbageCollectTools(ctx context.Context, serverKey string) {
 	parts := strings.SplitN(serverKey, "/", 2)
 	serverName := serverKey
 	if len(parts) == 2 {
 		serverName = parts[1]
 	}
-	_toolList, err := c.toolStore.List()
+	_toolList, err := c.toolStore.List(ctx)
 	if err != nil {
 		return
 	}
@@ -256,7 +256,7 @@ func (c *McpServerController) garbageCollectTools(serverKey string) {
 			continue
 		}
 		key := store.ScopedName(tool.Metadata.Namespace, tool.Metadata.Name)
-		if err := c.toolStore.Delete(key); err != nil && c.logger != nil {
+		if err := c.toolStore.Delete(ctx, key); err != nil && c.logger != nil {
 			c.logger.Printf("mcp-server controller: gc tool %s failed: %v", key, err)
 		}
 	}

@@ -56,7 +56,7 @@ func TestTaskControllerEmitsExtensionEventsSequential(t *testing.T) {
 		Audit:    audit,
 	})
 
-	if _, err := stores.agentStore.Upsert(resources.Agent{
+	if _, err := stores.agentStore.Upsert(context.Background(), resources.Agent{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
 		Metadata:   resources.ObjectMeta{Name: "planner-agent"},
@@ -68,7 +68,7 @@ func TestTaskControllerEmitsExtensionEventsSequential(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert agent failed: %v", err)
 	}
-	if _, err := stores.agentSystemStore.Upsert(resources.AgentSystem{
+	if _, err := stores.agentSystemStore.Upsert(context.Background(), resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
 		Metadata:   resources.ObjectMeta{Name: "report-system"},
@@ -78,7 +78,7 @@ func TestTaskControllerEmitsExtensionEventsSequential(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert agentsystem failed: %v", err)
 	}
-	if _, err := stores.taskStore.Upsert(resources.Task{
+	if _, err := stores.taskStore.Upsert(context.Background(), resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
 		Metadata:   resources.ObjectMeta{Name: "report-task"},
@@ -91,7 +91,7 @@ func TestTaskControllerEmitsExtensionEventsSequential(t *testing.T) {
 		t.Fatalf("reconcile failed: %v", err)
 	}
 
-	task, ok, err := stores.taskStore.Get("report-task")
+	task, ok, err := stores.taskStore.Get(context.Background(), "report-task")
 	if err != nil {
 		t.Fatal(err)
 	}

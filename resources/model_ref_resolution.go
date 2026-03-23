@@ -1,13 +1,14 @@
 package resources
 
 import (
+	"context"
 	"fmt"
 	"strings"
 )
 
 // ModelEndpointLookup resolves model endpoints by scoped name (namespace/name).
 type ModelEndpointLookup interface {
-	Get(name string) (ModelEndpoint, bool, error)
+	Get(ctx context.Context, name string) (ModelEndpoint, bool, error)
 }
 
 // ParseModelEndpointRef resolves model endpoint references in name or namespace/name form.
@@ -22,7 +23,7 @@ func ParseModelEndpointRef(defaultNamespace string, ref string) (namespace strin
 }
 
 // ResolveAgentModelRef resolves an agent model_ref to a concrete endpoint and model identifier.
-func ResolveAgentModelRef(defaultNamespace string, modelRef string, endpoints ModelEndpointLookup) (ModelEndpoint, string, error) {
+func ResolveAgentModelRef(ctx context.Context, defaultNamespace string, modelRef string, endpoints ModelEndpointLookup) (ModelEndpoint, string, error) {
 	if endpoints == nil {
 		return ModelEndpoint{}, "", fmt.Errorf("no model endpoint store configured")
 	}
@@ -32,7 +33,7 @@ func ResolveAgentModelRef(defaultNamespace string, modelRef string, endpoints Mo
 	}
 	refNamespace, refName := ParseModelEndpointRef(defaultNamespace, modelRef)
 	key := NormalizeNamespace(refNamespace) + "/" + strings.TrimSpace(refName)
-	endpoint, ok, err := endpoints.Get(key)
+	endpoint, ok, err := endpoints.Get(ctx, key)
 	if err != nil {
 		return ModelEndpoint{}, "", fmt.Errorf("model endpoint %q lookup failed: %w", modelRef, err)
 	}

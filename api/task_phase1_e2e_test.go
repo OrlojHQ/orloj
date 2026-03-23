@@ -159,11 +159,11 @@ func TestTaskLifecycleApplyScheduleClaimRunTrace(t *testing.T) {
 		},
 	})
 
-	if err := h.scheduler.ReconcileOnce(); err != nil {
+	if err := h.scheduler.ReconcileOnce(context.Background()); err != nil {
 		t.Fatalf("scheduler reconcile failed: %v", err)
 	}
 
-	scheduled, ok, err := h.taskStore.Get("weekly-report")
+	scheduled, ok, err := h.taskStore.Get(context.Background(), "weekly-report")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -264,13 +264,13 @@ func TestTaskLifecycleRetryThenDeadLetterWithTrace(t *testing.T) {
 	})
 
 	for i := 0; i < 10; i++ {
-		if err := h.scheduler.ReconcileOnce(); err != nil {
+		if err := h.scheduler.ReconcileOnce(context.Background()); err != nil {
 			t.Fatalf("scheduler reconcile failed: %v", err)
 		}
 		if err := h.taskController.ReconcileOnce(context.Background()); err != nil {
 			t.Fatalf("worker reconcile failed: %v", err)
 		}
-		task, ok, err := h.taskStore.Get("timeout-task")
+		task, ok, err := h.taskStore.Get(context.Background(), "timeout-task")
 		if err != nil {
 			t.Fatal(err)
 		}

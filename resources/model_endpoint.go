@@ -33,7 +33,8 @@ type ModelEndpointStatus struct {
 }
 
 type ModelEndpointList struct {
-	Items []ModelEndpoint `json:"items"`
+	ListMeta `json:",inline"`
+	Items    []ModelEndpoint `json:"items"`
 }
 
 func (m *ModelEndpoint) Normalize() error {

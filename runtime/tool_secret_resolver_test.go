@@ -13,7 +13,7 @@ type staticSecretLookup struct {
 	items map[string]resources.Secret
 }
 
-func (l staticSecretLookup) Get(name string) (resources.Secret, bool, error) {
+func (l staticSecretLookup) Get(_ context.Context, name string) (resources.Secret, bool, error) {
 	item, ok := l.items[name]
 	return item, ok, nil
 }

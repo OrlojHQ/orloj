@@ -56,7 +56,7 @@ func TestAgentMessageConsumerEmitsExtensionEvents(t *testing.T) {
 	systemStore := store.NewAgentSystemStore()
 	taskStore := store.NewTaskStore()
 
-	if _, err := agentStore.Upsert(resources.Agent{
+	if _, err := agentStore.Upsert(context.Background(), resources.Agent{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
 		Metadata:   resources.ObjectMeta{Name: "planner-agent"},
@@ -69,7 +69,7 @@ func TestAgentMessageConsumerEmitsExtensionEvents(t *testing.T) {
 		t.Fatalf("upsert agent failed: %v", err)
 	}
 
-	if _, err := systemStore.Upsert(resources.AgentSystem{
+	if _, err := systemStore.Upsert(context.Background(), resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
 		Metadata:   resources.ObjectMeta{Name: "report-system"},
@@ -78,7 +78,7 @@ func TestAgentMessageConsumerEmitsExtensionEvents(t *testing.T) {
 		t.Fatalf("upsert system failed: %v", err)
 	}
 
-	if _, err := taskStore.Upsert(resources.Task{
+	if _, err := taskStore.Upsert(context.Background(), resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
 		Metadata:   resources.ObjectMeta{Name: "task-extensions"},
@@ -132,7 +132,7 @@ func TestAgentMessageConsumerEmitsExtensionEvents(t *testing.T) {
 	}
 
 	waitForConsumer(t, 2*time.Second, func() bool {
-		task, ok, _ := taskStore.Get("task-extensions")
+		task, ok, _ := taskStore.Get(context.Background(), "task-extensions")
 		return ok && task.Status.Phase == "Succeeded"
 	})
 

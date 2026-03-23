@@ -26,7 +26,7 @@ type ToolCapabilityRegistry interface {
 
 // ToolResourceLookup resolves Tool CRDs by name (optionally namespace scoped).
 type ToolResourceLookup interface {
-	Get(name string) (resources.Tool, bool, error)
+	Get(ctx context.Context, name string) (resources.Tool, bool, error)
 }
 
 type registryAwareToolRuntime interface {
@@ -130,16 +130,18 @@ func NewGovernedToolRuntimeWithAuthorizer(
 // BuildGovernedToolRuntimeForAgent resolves tool policies for one agent in a namespace.
 // Missing registry entries are treated as unsupported at call time when strict mode is enabled.
 func BuildGovernedToolRuntimeForAgent(
+	ctx context.Context,
 	baseRuntime ToolRuntime,
 	isolatedRuntime ToolRuntime,
 	lookup ToolResourceLookup,
 	namespace string,
 	toolNames []string,
 ) ToolRuntime {
-	return buildGovernedToolRuntime(baseRuntime, isolatedRuntime, lookup, namespace, toolNames, nil)
+	return buildGovernedToolRuntime(ctx, baseRuntime, isolatedRuntime, lookup, namespace, toolNames, nil)
 }
 
 func BuildGovernedToolRuntimeForAgentWithGovernance(
+	ctx context.Context,
 	baseRuntime ToolRuntime,
 	isolatedRuntime ToolRuntime,
 	toolLookup ToolResourceLookup,
@@ -149,13 +151,14 @@ func BuildGovernedToolRuntimeForAgentWithGovernance(
 	agent resources.Agent,
 	approvalCtx *GovernedToolApprovalContext,
 ) ToolRuntime {
-	inner := NewAgentToolAuthorizer(namespace, agent, roleLookup, permissionLookup)
+	inner := NewAgentToolAuthorizer(ctx, namespace, agent, roleLookup, permissionLookup)
 	auth := ToolCallAuthorizer(inner)
 	if approvalCtx != nil && approvalCtx.Getter != nil &&
 		strings.TrimSpace(approvalCtx.TaskKey) != "" && strings.TrimSpace(approvalCtx.MessageID) != "" {
 		auth = NewAuthorizerWithApprovedToolGrant(inner, approvalCtx.Getter, approvalCtx.TaskKey, approvalCtx.MessageID)
 	}
 	return buildGovernedToolRuntime(
+		ctx,
 		baseRuntime,
 		isolatedRuntime,
 		toolLookup,
@@ -166,6 +169,7 @@ func BuildGovernedToolRuntimeForAgentWithGovernance(
 }
 
 func buildGovernedToolRuntime(
+	ctx context.Context,
 	baseRuntime ToolRuntime,
 	isolatedRuntime ToolRuntime,
 	lookup ToolResourceLookup,
@@ -191,9 +195,9 @@ func buildGovernedToolRuntime(
 		if lookup == nil {
 			continue
 		}
-		item, ok, lookupErr := lookup.Get(scopedRuntimeName(namespace, trimmed))
+		item, ok, lookupErr := lookup.Get(ctx, scopedRuntimeName(namespace, trimmed))
 		if lookupErr == nil && !ok && strings.Contains(trimmed, "/") {
-			item, ok, lookupErr = lookup.Get(trimmed)
+			item, ok, lookupErr = lookup.Get(ctx, trimmed)
 		}
 		if lookupErr == nil && ok {
 			specs[key] = item.Spec

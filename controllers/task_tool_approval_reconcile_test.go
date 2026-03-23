@@ -18,7 +18,7 @@ func TestReconcileWaitingApprovalSweepResumesAfterApprove(t *testing.T) {
 	taskName := "approval-wait-task"
 	taskKey := store.ScopedName(ns, taskName)
 
-	if _, err := h.taskStore.Upsert(resources.Task{
+	if _, err := h.taskStore.Upsert(context.Background(), resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
 		Metadata: resources.ObjectMeta{
@@ -35,7 +35,7 @@ func TestReconcileWaitingApprovalSweepResumesAfterApprove(t *testing.T) {
 		t.Fatalf("upsert task: %v", err)
 	}
 
-	if _, err := approvals.Upsert(resources.ToolApproval{
+	if _, err := approvals.Upsert(context.Background(), resources.ToolApproval{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "ToolApproval",
 		Metadata: resources.ObjectMeta{
@@ -60,7 +60,7 @@ func TestReconcileWaitingApprovalSweepResumesAfterApprove(t *testing.T) {
 		t.Fatalf("sweep: %v", err)
 	}
 
-	task, ok, err := h.taskStore.Get(taskKey)
+	task, ok, err := h.taskStore.Get(context.Background(), taskKey)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -53,7 +53,7 @@ func (c *MemoryController) Start(ctx context.Context) {
 	defer ticker.Stop()
 
 	for {
-		c.enqueueAll(queue)
+		c.enqueueAll(ctx, queue)
 		select {
 		case <-ctx.Done():
 			return
@@ -68,15 +68,15 @@ func (c *MemoryController) runWorker(ctx context.Context, queue *keyQueue) {
 		if !ok {
 			return
 		}
-		if err := c.reconcileByName(key); err != nil && c.logger != nil {
+		if err := c.reconcileByName(ctx, key); err != nil && c.logger != nil {
 			c.logger.Printf("memory controller reconcile error: %v", err)
 		}
 		queue.Done(key)
 	}
 }
 
-func (c *MemoryController) enqueueAll(queue *keyQueue) {
-	_itemList, err := c.store.List()
+func (c *MemoryController) enqueueAll(ctx context.Context, queue *keyQueue) {
+	_itemList, err := c.store.List(ctx)
 	if err != nil {
 		return
 	}
@@ -85,21 +85,21 @@ func (c *MemoryController) enqueueAll(queue *keyQueue) {
 	}
 }
 
-func (c *MemoryController) ReconcileOnce(_ context.Context) error {
-	_itemList, err := c.store.List()
+func (c *MemoryController) ReconcileOnce(ctx context.Context) error {
+	_itemList, err := c.store.List(ctx)
 	if err != nil {
 		return err
 	}
 	for _, item := range _itemList {
-		if err := c.reconcileByName(store.ScopedName(item.Metadata.Namespace, item.Metadata.Name)); err != nil {
+		if err := c.reconcileByName(ctx, store.ScopedName(item.Metadata.Namespace, item.Metadata.Name)); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (c *MemoryController) reconcileByName(name string) error {
-	item, ok, err := c.store.Get(name)
+func (c *MemoryController) reconcileByName(ctx context.Context, name string) error {
+	item, ok, err := c.store.Get(ctx, name)
 	if err != nil {
 		return err
 	}
@@ -121,24 +121,24 @@ func (c *MemoryController) reconcileByName(name string) error {
 				Endpoint:       item.Spec.Endpoint,
 			}
 			if ref := strings.TrimSpace(item.Spec.Auth.SecretRef); ref != "" {
-				token, err := c.resolveAuthToken(item.Metadata.Namespace, ref)
+				token, err := c.resolveAuthToken(ctx, item.Metadata.Namespace, ref)
 				if err != nil {
 					item.Status.Phase = "Error"
 					item.Status.LastError = "auth secret resolution failed: " + err.Error()
 					item.Status.ObservedGeneration = item.Metadata.Generation
-					_, upsertErr := c.store.Upsert(item)
+					_, upsertErr := c.store.Upsert(ctx, item)
 					return upsertErr
 				}
 				cfg.AuthToken = token
 			}
 
 			if embRef := strings.TrimSpace(item.Spec.EmbeddingModel); embRef != "" {
-				embedder, err := c.resolveEmbeddingProvider(item.Metadata.Namespace, embRef)
+				embedder, err := c.resolveEmbeddingProvider(ctx, item.Metadata.Namespace, embRef)
 				if err != nil {
 					item.Status.Phase = "Error"
 					item.Status.LastError = "embedding model resolution failed: " + err.Error()
 					item.Status.ObservedGeneration = item.Metadata.Generation
-					_, upsertErr := c.store.Upsert(item)
+					_, upsertErr := c.store.Upsert(ctx, item)
 					return upsertErr
 				}
 				cfg.Embedder = embedder
@@ -149,14 +149,14 @@ func (c *MemoryController) reconcileByName(name string) error {
 				item.Status.Phase = "Error"
 				item.Status.LastError = err.Error()
 				item.Status.ObservedGeneration = item.Metadata.Generation
-				_, upsertErr := c.store.Upsert(item)
+				_, upsertErr := c.store.Upsert(ctx, item)
 				return upsertErr
 			}
 			if err := backend.Ping(context.Background()); err != nil {
 				item.Status.Phase = "Error"
 				item.Status.LastError = "backend connectivity failed: " + err.Error()
 				item.Status.ObservedGeneration = item.Metadata.Generation
-				_, upsertErr := c.store.Upsert(item)
+				_, upsertErr := c.store.Upsert(ctx, item)
 				return upsertErr
 			}
 			c.backends.Register(scopedKey, backend)
@@ -169,13 +169,13 @@ func (c *MemoryController) reconcileByName(name string) error {
 	item.Status.Phase = "Ready"
 	item.Status.LastError = ""
 	item.Status.ObservedGeneration = item.Metadata.Generation
-	_, err = c.store.Upsert(item)
+	_, err = c.store.Upsert(ctx, item)
 	return err
 }
 
 // resolveEmbeddingProvider looks up a ModelEndpoint by the given reference and
 // builds an EmbeddingProvider from its base_url, auth, and default_model.
-func (c *MemoryController) resolveEmbeddingProvider(namespace, embeddingModelRef string) (agentruntime.EmbeddingProvider, error) {
+func (c *MemoryController) resolveEmbeddingProvider(ctx context.Context, namespace, embeddingModelRef string) (agentruntime.EmbeddingProvider, error) {
 	if c.modelEndpoints == nil {
 		return nil, fmt.Errorf("no model endpoint store configured")
 	}
@@ -183,7 +183,7 @@ func (c *MemoryController) resolveEmbeddingProvider(namespace, embeddingModelRef
 	if !strings.Contains(key, "/") {
 		key = store.ScopedName(namespace, embeddingModelRef)
 	}
-	ep, ok, err := c.modelEndpoints.Get(key)
+	ep, ok, err := c.modelEndpoints.Get(ctx, key)
 	if err != nil {
 		return nil, fmt.Errorf("model endpoint %q lookup failed: %w", embeddingModelRef, err)
 	}
@@ -194,7 +194,7 @@ func (c *MemoryController) resolveEmbeddingProvider(namespace, embeddingModelRef
 	apiKey := ""
 	if ref := strings.TrimSpace(ep.Spec.Auth.SecretRef); ref != "" {
 		var err error
-		apiKey, err = c.resolveAuthToken(ep.Metadata.Namespace, ref)
+		apiKey, err = c.resolveAuthToken(ctx, ep.Metadata.Namespace, ref)
 		if err != nil {
 			return nil, fmt.Errorf("resolve embedding endpoint auth: %w", err)
 		}
@@ -207,7 +207,7 @@ func (c *MemoryController) resolveEmbeddingProvider(namespace, embeddingModelRef
 
 // resolveAuthToken looks up a Secret by scoped name and returns the first
 // base64-decoded data value as a bearer token.
-func (c *MemoryController) resolveAuthToken(namespace, secretRef string) (string, error) {
+func (c *MemoryController) resolveAuthToken(ctx context.Context, namespace, secretRef string) (string, error) {
 	if c.secrets == nil {
 		return "", fmt.Errorf("no secret store configured")
 	}
@@ -215,7 +215,7 @@ func (c *MemoryController) resolveAuthToken(namespace, secretRef string) (string
 	if !strings.Contains(key, "/") {
 		key = store.ScopedName(namespace, secretRef)
 	}
-	secret, ok, err := c.secrets.Get(key)
+	secret, ok, err := c.secrets.Get(ctx, key)
 	if err != nil {
 		return "", fmt.Errorf("secret %q lookup failed: %w", secretRef, err)
 	}

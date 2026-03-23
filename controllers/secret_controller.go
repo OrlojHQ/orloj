@@ -30,7 +30,7 @@ func (c *SecretController) Start(ctx context.Context) {
 	defer ticker.Stop()
 
 	for {
-		c.enqueueAll(queue)
+		c.enqueueAll(ctx, queue)
 		select {
 		case <-ctx.Done():
 			return
@@ -45,15 +45,15 @@ func (c *SecretController) runWorker(ctx context.Context, queue *keyQueue) {
 		if !ok {
 			return
 		}
-		if err := c.reconcileByName(key); err != nil && c.logger != nil {
+		if err := c.reconcileByName(ctx, key); err != nil && c.logger != nil {
 			c.logger.Printf("secret controller reconcile error: %v", err)
 		}
 		queue.Done(key)
 	}
 }
 
-func (c *SecretController) enqueueAll(queue *keyQueue) {
-	_itemList, err := c.store.List()
+func (c *SecretController) enqueueAll(ctx context.Context, queue *keyQueue) {
+	_itemList, err := c.store.List(ctx)
 	if err != nil {
 		return
 	}
@@ -62,21 +62,21 @@ func (c *SecretController) enqueueAll(queue *keyQueue) {
 	}
 }
 
-func (c *SecretController) ReconcileOnce(_ context.Context) error {
-	_itemList, err := c.store.List()
+func (c *SecretController) ReconcileOnce(ctx context.Context) error {
+	_itemList, err := c.store.List(ctx)
 	if err != nil {
 		return err
 	}
 	for _, item := range _itemList {
-		if err := c.reconcileByName(store.ScopedName(item.Metadata.Namespace, item.Metadata.Name)); err != nil {
+		if err := c.reconcileByName(ctx, store.ScopedName(item.Metadata.Namespace, item.Metadata.Name)); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (c *SecretController) reconcileByName(name string) error {
-	item, ok, err := c.store.Get(name)
+func (c *SecretController) reconcileByName(ctx context.Context, name string) error {
+	item, ok, err := c.store.Get(ctx, name)
 	if err != nil {
 		return err
 	}
@@ -89,6 +89,6 @@ func (c *SecretController) reconcileByName(name string) error {
 	item.Status.Phase = "Ready"
 	item.Status.LastError = ""
 	item.Status.ObservedGeneration = item.Metadata.Generation
-	_, err = c.store.Upsert(item)
+	_, err = c.store.Upsert(ctx, item)
 	return err
 }

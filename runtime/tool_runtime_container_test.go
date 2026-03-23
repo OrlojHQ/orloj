@@ -196,7 +196,7 @@ func TestBuildGovernedToolRuntimeUsesContainerIsolationBackend(t *testing.T) {
 	runner := &captureContainerRunner{stdout: "isolated"}
 	isolated := NewContainerToolRuntimeWithRunner(nil, DefaultContainerToolRuntimeConfig(), runner)
 
-	governed := BuildGovernedToolRuntimeForAgent(base, isolated, lookup, "default", []string{"danger_tool"})
+	governed := BuildGovernedToolRuntimeForAgent(context.Background(), base, isolated, lookup, "default", []string{"danger_tool"})
 	if governed == nil {
 		t.Fatal("expected governed runtime instance")
 	}

@@ -26,7 +26,7 @@ type stubModelEndpointLookup struct {
 	items map[string]resources.ModelEndpoint
 }
 
-func (s *stubModelEndpointLookup) Get(name string) (resources.ModelEndpoint, bool, error) {
+func (s *stubModelEndpointLookup) Get(_ context.Context, name string) (resources.ModelEndpoint, bool, error) {
 	item, ok := s.items[name]
 	return item, ok, nil
 }
@@ -35,7 +35,7 @@ type stubSecretLookup struct {
 	items map[string]resources.Secret
 }
 
-func (s *stubSecretLookup) Get(name string) (resources.Secret, bool, error) {
+func (s *stubSecretLookup) Get(_ context.Context, name string) (resources.Secret, bool, error) {
 	item, ok := s.items[name]
 	return item, ok, nil
 }

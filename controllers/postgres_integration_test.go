@@ -28,7 +28,7 @@ func TestPostgresTaskClaimSingleExecutionAcrossWorkers(t *testing.T) {
 	workerStore := store.NewWorkerStoreWithDB(db)
 	logger := log.New(io.Discard, "", 0)
 
-	if _, err := toolStore.Upsert(resources.Tool{
+	if _, err := toolStore.Upsert(context.Background(), resources.Tool{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Tool",
 		Metadata:   resources.ObjectMeta{Name: "web_search"},
@@ -36,7 +36,7 @@ func TestPostgresTaskClaimSingleExecutionAcrossWorkers(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert tool failed: %v", err)
 	}
-	if _, err := agentStore.Upsert(resources.Agent{
+	if _, err := agentStore.Upsert(context.Background(), resources.Agent{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Agent",
 		Metadata:   resources.ObjectMeta{Name: "research-agent"},
@@ -49,7 +49,7 @@ func TestPostgresTaskClaimSingleExecutionAcrossWorkers(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert agent failed: %v", err)
 	}
-	if _, err := agentSystemStore.Upsert(resources.AgentSystem{
+	if _, err := agentSystemStore.Upsert(context.Background(), resources.AgentSystem{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentSystem",
 		Metadata:   resources.ObjectMeta{Name: "report-system"},
@@ -57,7 +57,7 @@ func TestPostgresTaskClaimSingleExecutionAcrossWorkers(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert system failed: %v", err)
 	}
-	if _, err := taskStore.Upsert(resources.Task{
+	if _, err := taskStore.Upsert(context.Background(), resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
 		Metadata:   resources.ObjectMeta{Name: "postgres-claim-task"},
@@ -68,7 +68,7 @@ func TestPostgresTaskClaimSingleExecutionAcrossWorkers(t *testing.T) {
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	if _, err := workerStore.Upsert(resources.Worker{
+	if _, err := workerStore.Upsert(context.Background(), resources.Worker{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Worker",
 		Metadata:   resources.ObjectMeta{Name: "worker-1"},
@@ -77,7 +77,7 @@ func TestPostgresTaskClaimSingleExecutionAcrossWorkers(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert worker-1 failed: %v", err)
 	}
-	if _, err := workerStore.Upsert(resources.Worker{
+	if _, err := workerStore.Upsert(context.Background(), resources.Worker{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Worker",
 		Metadata:   resources.ObjectMeta{Name: "worker-2"},
@@ -104,7 +104,7 @@ func TestPostgresTaskClaimSingleExecutionAcrossWorkers(t *testing.T) {
 	}()
 	wg.Wait()
 
-	task, ok, err := taskStore.Get("postgres-claim-task")
+	task, ok, err := taskStore.Get(context.Background(), "postgres-claim-task")
 	if err != nil {
 		t.Fatal(err)
 	}

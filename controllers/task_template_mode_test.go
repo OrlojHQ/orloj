@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"context"
 	"io"
 	"log"
 	"testing"
@@ -16,7 +17,7 @@ func TestTaskSchedulerSkipsTemplateTasks(t *testing.T) {
 	workerStore := store.NewWorkerStore()
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 
-	if _, err := workerStore.Upsert(resources.Worker{
+	if _, err := workerStore.Upsert(context.Background(), resources.Worker{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Worker",
 		Metadata:   resources.ObjectMeta{Name: "worker-a"},
@@ -24,7 +25,7 @@ func TestTaskSchedulerSkipsTemplateTasks(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("upsert worker failed: %v", err)
 	}
-	if _, err := taskStore.Upsert(resources.Task{
+	if _, err := taskStore.Upsert(context.Background(), resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
 		Metadata:   resources.ObjectMeta{Name: "template-task"},
@@ -34,11 +35,11 @@ func TestTaskSchedulerSkipsTemplateTasks(t *testing.T) {
 	}
 
 	controller := NewTaskSchedulerController(taskStore, workerStore, logger, 5*time.Millisecond, 30*time.Second)
-	if err := controller.ReconcileOnce(); err != nil {
+	if err := controller.ReconcileOnce(context.Background()); err != nil {
 		t.Fatalf("reconcile failed: %v", err)
 	}
 
-	task, ok, err := taskStore.Get("template-task")
+	task, ok, err := taskStore.Get(context.Background(), "template-task")
 	if err != nil {
 		t.Fatal(err)
 	}

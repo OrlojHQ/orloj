@@ -73,7 +73,8 @@ type AgentSystemStatus struct {
 }
 
 type AgentSystemList struct {
-	Items []AgentSystem `json:"items"`
+	ListMeta `json:",inline"`
+	Items    []AgentSystem `json:"items"`
 }
 
 func (a *AgentSystem) Normalize() error {
@@ -167,7 +168,8 @@ type SecretStatus struct {
 }
 
 type SecretList struct {
-	Items []Secret `json:"items"`
+	ListMeta `json:",inline"`
+	Items    []Secret `json:"items"`
 }
 
 type ToolRuntimePolicy struct {
@@ -190,7 +192,8 @@ type ToolStatus struct {
 }
 
 type ToolList struct {
-	Items []Tool `json:"items"`
+	ListMeta `json:",inline"`
+	Items    []Tool `json:"items"`
 }
 
 func (t *Tool) Normalize() error {
@@ -440,7 +443,8 @@ type MemoryStatus struct {
 }
 
 type MemoryList struct {
-	Items []Memory `json:"items"`
+	ListMeta `json:",inline"`
+	Items    []Memory `json:"items"`
 }
 
 func (m *Memory) Normalize() error {
@@ -488,7 +492,8 @@ type PolicyStatus struct {
 }
 
 type AgentPolicyList struct {
-	Items []AgentPolicy `json:"items"`
+	ListMeta `json:",inline"`
+	Items    []AgentPolicy `json:"items"`
 }
 
 func (p *AgentPolicy) Normalize() error {
@@ -538,7 +543,8 @@ type AgentRoleStatus struct {
 }
 
 type AgentRoleList struct {
-	Items []AgentRole `json:"items"`
+	ListMeta `json:",inline"`
+	Items    []AgentRole `json:"items"`
 }
 
 func (r *AgentRole) Normalize() error {
@@ -605,7 +611,8 @@ type ToolPermissionStatus struct {
 }
 
 type ToolPermissionList struct {
-	Items []ToolPermission `json:"items"`
+	ListMeta `json:",inline"`
+	Items    []ToolPermission `json:"items"`
 }
 
 func (p *ToolPermission) Normalize() error {
@@ -748,7 +755,8 @@ type ToolApprovalStatus struct {
 }
 
 type ToolApprovalList struct {
-	Items []ToolApproval `json:"items"`
+	ListMeta `json:",inline"`
+	Items    []ToolApproval `json:"items"`
 }
 
 func (a *ToolApproval) Normalize() error {
@@ -951,7 +959,8 @@ type TaskStatus struct {
 }
 
 type TaskList struct {
-	Items []Task `json:"items"`
+	ListMeta `json:",inline"`
+	Items    []Task `json:"items"`
 }
 
 func (t *Task) Normalize() error {
@@ -1080,7 +1089,8 @@ type TaskScheduleStatus struct {
 }
 
 type TaskScheduleList struct {
-	Items []TaskSchedule `json:"items"`
+	ListMeta `json:",inline"`
+	Items    []TaskSchedule `json:"items"`
 }
 
 func (t *TaskSchedule) Normalize() error {
@@ -1207,7 +1217,8 @@ type TaskWebhookStatus struct {
 }
 
 type TaskWebhookList struct {
-	Items []TaskWebhook `json:"items"`
+	ListMeta `json:",inline"`
+	Items    []TaskWebhook `json:"items"`
 }
 
 func (t *TaskWebhook) Normalize() error {
@@ -1367,7 +1378,8 @@ type WorkerStatus struct {
 }
 
 type WorkerList struct {
-	Items []Worker `json:"items"`
+	ListMeta `json:",inline"`
+	Items    []Worker `json:"items"`
 }
 
 func (w *Worker) Normalize() error {
@@ -1440,7 +1452,8 @@ type McpServerStatus struct {
 }
 
 type McpServerList struct {
-	Items []McpServer `json:"items"`
+	ListMeta `json:",inline"`
+	Items    []McpServer `json:"items"`
 }
 
 func (m *McpServer) Normalize() error {

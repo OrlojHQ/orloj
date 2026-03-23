@@ -32,7 +32,7 @@ func (c *AgentController) Start(ctx context.Context) {
 	defer ticker.Stop()
 
 	for {
-		c.enqueueAll(queue)
+		c.enqueueAll(ctx, queue)
 
 		select {
 		case <-ctx.Done():
@@ -48,15 +48,15 @@ func (c *AgentController) runWorker(ctx context.Context, queue *keyQueue) {
 		if !ok {
 			return
 		}
-		if err := c.reconcileByName(key); err != nil && c.logger != nil {
+		if err := c.reconcileByName(ctx, key); err != nil && c.logger != nil {
 			c.logger.Printf("agent controller reconcile error: %v", err)
 		}
 		queue.Done(key)
 	}
 }
 
-func (c *AgentController) enqueueAll(queue *keyQueue) {
-	_agentList, err := c.store.List()
+func (c *AgentController) enqueueAll(ctx context.Context, queue *keyQueue) {
+	_agentList, err := c.store.List(ctx)
 	if err != nil {
 		return
 	}
@@ -68,9 +68,9 @@ func (c *AgentController) enqueueAll(queue *keyQueue) {
 	}
 }
 
-func (c *AgentController) ReconcileOnce(_ context.Context) error {
+func (c *AgentController) ReconcileOnce(ctx context.Context) error {
 	desired := make(map[string]struct{})
-	_agentList, err := c.store.List()
+	_agentList, err := c.store.List(ctx)
 	if err != nil {
 		return err
 	}
@@ -87,8 +87,8 @@ func (c *AgentController) ReconcileOnce(_ context.Context) error {
 	return nil
 }
 
-func (c *AgentController) reconcileByName(name string) error {
-	agent, ok, err := c.store.Get(name)
+func (c *AgentController) reconcileByName(ctx context.Context, name string) error {
+	agent, ok, err := c.store.Get(ctx, name)
 	if err != nil {
 		return err
 	}

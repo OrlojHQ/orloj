@@ -25,7 +25,7 @@ func TestTaskRetrySchedulesNextAttemptOnTimeout(t *testing.T) {
 			Limits:   resources.AgentLimits{MaxSteps: 5, Timeout: "1ms"},
 		},
 	}
-	if _, err := stores.agentStore.Upsert(agent); err != nil {
+	if _, err := stores.agentStore.Upsert(context.Background(), agent); err != nil {
 		t.Fatalf("upsert agent: %v", err)
 	}
 
@@ -35,7 +35,7 @@ func TestTaskRetrySchedulesNextAttemptOnTimeout(t *testing.T) {
 		Metadata:   resources.ObjectMeta{Name: "retry-system"},
 		Spec:       resources.AgentSystemSpec{Agents: []string{"retry-agent"}},
 	}
-	if _, err := stores.agentSystemStore.Upsert(system); err != nil {
+	if _, err := stores.agentSystemStore.Upsert(context.Background(), system); err != nil {
 		t.Fatalf("upsert system: %v", err)
 	}
 
@@ -48,7 +48,7 @@ func TestTaskRetrySchedulesNextAttemptOnTimeout(t *testing.T) {
 			Retry:  resources.TaskRetryPolicy{MaxAttempts: 3, Backoff: "1ms"},
 		},
 	}
-	if _, err := stores.taskStore.Upsert(task); err != nil {
+	if _, err := stores.taskStore.Upsert(context.Background(), task); err != nil {
 		t.Fatalf("upsert task: %v", err)
 	}
 
@@ -56,7 +56,7 @@ func TestTaskRetrySchedulesNextAttemptOnTimeout(t *testing.T) {
 		t.Fatalf("first reconcile: %v", err)
 	}
 
-	taskAfterFirst, ok, err := stores.taskStore.Get("retry-task")
+	taskAfterFirst, ok, err := stores.taskStore.Get(context.Background(), "retry-task")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestTaskRetrySchedulesNextAttemptOnTimeout(t *testing.T) {
 		t.Fatalf("second reconcile: %v", err)
 	}
 
-	taskAfterSecond, ok, err := stores.taskStore.Get("retry-task")
+	taskAfterSecond, ok, err := stores.taskStore.Get(context.Background(), "retry-task")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +102,7 @@ func TestTaskRetrySchedulesNextAttemptOnTimeout(t *testing.T) {
 	if err := controller.ReconcileOnce(context.Background()); err != nil {
 		t.Fatalf("third reconcile: %v", err)
 	}
-	finalTask, _, _ := stores.taskStore.Get("retry-task")
+	finalTask, _, _ := stores.taskStore.Get(context.Background(), "retry-task")
 	if finalTask.Status.Phase != "DeadLetter" {
 		t.Fatalf("expected DeadLetter after max retries reached, got %q", finalTask.Status.Phase)
 	}
@@ -124,7 +124,7 @@ func TestTaskNonRetryablePolicyViolationFailsImmediately(t *testing.T) {
 			Limits:   resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
 		},
 	}
-	if _, err := stores.agentStore.Upsert(agent); err != nil {
+	if _, err := stores.agentStore.Upsert(context.Background(), agent); err != nil {
 		t.Fatalf("upsert agent: %v", err)
 	}
 
@@ -134,7 +134,7 @@ func TestTaskNonRetryablePolicyViolationFailsImmediately(t *testing.T) {
 		Metadata:   resources.ObjectMeta{Name: "policy-system"},
 		Spec:       resources.AgentSystemSpec{Agents: []string{"policy-agent"}},
 	}
-	if _, err := stores.agentSystemStore.Upsert(system); err != nil {
+	if _, err := stores.agentSystemStore.Upsert(context.Background(), system); err != nil {
 		t.Fatalf("upsert system: %v", err)
 	}
 
@@ -148,7 +148,7 @@ func TestTaskNonRetryablePolicyViolationFailsImmediately(t *testing.T) {
 			AllowedModels: []string{"claude-3"},
 		},
 	}
-	if _, err := stores.policyStore.Upsert(policy); err != nil {
+	if _, err := stores.policyStore.Upsert(context.Background(), policy); err != nil {
 		t.Fatalf("upsert policy: %v", err)
 	}
 
@@ -161,7 +161,7 @@ func TestTaskNonRetryablePolicyViolationFailsImmediately(t *testing.T) {
 			Retry:  resources.TaskRetryPolicy{MaxAttempts: 3, Backoff: "1ms"},
 		},
 	}
-	if _, err := stores.taskStore.Upsert(task); err != nil {
+	if _, err := stores.taskStore.Upsert(context.Background(), task); err != nil {
 		t.Fatalf("upsert task: %v", err)
 	}
 
@@ -169,7 +169,7 @@ func TestTaskNonRetryablePolicyViolationFailsImmediately(t *testing.T) {
 		t.Fatalf("first reconcile: %v", err)
 	}
 
-	finalTask, ok, err := stores.taskStore.Get("policy-task")
+	finalTask, ok, err := stores.taskStore.Get(context.Background(), "policy-task")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +210,7 @@ func newTaskControllerHarness() (*TaskController, taskControllerHarness) {
 		policyStore:      store.NewAgentPolicyStore(),
 		workerStore:      store.NewWorkerStore(),
 	}
-	if _, err := h.modelEPStore.Upsert(resources.ModelEndpoint{
+	if _, err := h.modelEPStore.Upsert(context.Background(), resources.ModelEndpoint{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "ModelEndpoint",
 		Metadata:   resources.ObjectMeta{Name: "openai-default", Namespace: "default"},
@@ -221,7 +221,7 @@ func newTaskControllerHarness() (*TaskController, taskControllerHarness) {
 	}); err != nil {
 		panic(err)
 	}
-	if _, err := h.workerStore.Upsert(resources.Worker{
+	if _, err := h.workerStore.Upsert(context.Background(), resources.Worker{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Worker",
 		Metadata:   resources.ObjectMeta{Name: "test-worker"},

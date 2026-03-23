@@ -35,6 +35,24 @@ func paginationParams(r *http.Request) (limit, offset int) {
 	return limit, offset
 }
 
+// cursorParam extracts the optional ?after= cursor for keyset pagination.
+func cursorParam(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	return strings.TrimSpace(r.URL.Query().Get("after"))
+}
+
+// listContinue returns the cursor value for the next page. If the returned
+// slice has exactly limit items, the last item's name is used as the continue
+// token; otherwise the empty string signals "no more pages".
+func listContinue(limit, count int, lastName string) string {
+	if limit > 0 && count >= limit {
+		return lastName
+	}
+	return ""
+}
+
 func requestNamespace(r *http.Request) string {
 	if r == nil {
 		return resources.DefaultNamespace

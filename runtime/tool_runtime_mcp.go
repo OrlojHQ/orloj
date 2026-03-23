@@ -21,7 +21,7 @@ type MCPToolRuntime struct {
 
 // McpServerLookup resolves McpServer resources by scoped name.
 type McpServerLookup interface {
-	Get(name string) (resources.McpServer, bool, error)
+	Get(ctx context.Context, name string) (resources.McpServer, bool, error)
 }
 
 func NewMCPToolRuntime(
@@ -89,7 +89,7 @@ func (r *MCPToolRuntime) Call(ctx context.Context, tool string, input string) (s
 		)
 	}
 
-	server, err := r.resolveServer(serverRef)
+	server, err := r.resolveServer(ctx, serverRef)
 	if err != nil {
 		return "", err
 	}
@@ -144,7 +144,7 @@ func (r *MCPToolRuntime) resolveSpec(tool string) (resources.ToolSpec, bool) {
 	return r.registry.Resolve(tool)
 }
 
-func (r *MCPToolRuntime) resolveServer(serverRef string) (resources.McpServer, error) {
+func (r *MCPToolRuntime) resolveServer(ctx context.Context, serverRef string) (resources.McpServer, error) {
 	if r.mcpServerStore == nil {
 		return resources.McpServer{}, NewToolError(
 			ToolStatusError,
@@ -161,9 +161,9 @@ func (r *MCPToolRuntime) resolveServer(serverRef string) (resources.McpServer, e
 	if r.namespace != "" && !strings.Contains(serverRef, "/") {
 		scopedName = r.namespace + "/" + serverRef
 	}
-	server, ok, err := r.mcpServerStore.Get(scopedName)
+	server, ok, err := r.mcpServerStore.Get(ctx, scopedName)
 	if err == nil && !ok && strings.Contains(serverRef, "/") {
-		server, ok, err = r.mcpServerStore.Get(serverRef)
+		server, ok, err = r.mcpServerStore.Get(ctx, serverRef)
 	}
 	if err != nil {
 		return resources.McpServer{}, NewToolError(

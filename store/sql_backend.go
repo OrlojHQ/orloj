@@ -2,7 +2,9 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -41,10 +43,18 @@ func EnsurePostgresSchema(db *sql.DB) error {
 // Generic helpers -- table names are compile-time constants, no injection risk.
 // ---------------------------------------------------------------------------
 
-func getFromTable[T any](db *sql.DB, table, name string) (T, bool, error) {
+// dbExecer abstracts *sql.DB and *sql.Tx so that helpers like getFromTable and
+// the per-type upsert functions can run inside or outside a transaction.
+type dbExecer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}
+
+func getFromTable[T any](ctx context.Context, db dbExecer, table, name string) (T, bool, error) {
 	var zero T
 	var payload []byte
-	err := db.QueryRow(fmt.Sprintf(`SELECT payload FROM %s WHERE name = $1`, table), name).Scan(&payload)
+	err := db.QueryRowContext(ctx, fmt.Sprintf(`SELECT payload FROM %s WHERE name = $1`, table), name).Scan(&payload)
 	if err == sql.ErrNoRows {
 		return zero, false, nil
 	}
@@ -58,20 +68,103 @@ func getFromTable[T any](db *sql.DB, table, name string) (T, bool, error) {
 	return item, true, nil
 }
 
+// getFromTableForUpdate is like getFromTable but acquires a row-level lock
+// within an existing transaction, preventing concurrent upserts from reading
+// stale generation/resourceVersion values.
+func getFromTableForUpdate[T any](ctx context.Context, tx *sql.Tx, table, name string) (T, bool, error) {
+	var zero T
+	var payload []byte
+	err := tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT payload FROM %s WHERE name = $1 FOR UPDATE`, table), name).Scan(&payload)
+	if err == sql.ErrNoRows {
+		return zero, false, nil
+	}
+	if err != nil {
+		return zero, false, err
+	}
+	var item T
+	if err := json.Unmarshal(payload, &item); err != nil {
+		return zero, false, err
+	}
+	return item, true, nil
+}
+
+// upsertMeta holds the minimal metadata needed for the upsert read-modify-write
+// cycle. Fetching only these fields avoids deserializing the full JSONB payload.
+type upsertMeta struct {
+	Generation      int64
+	ResourceVersion string
+	CreatedAt       string
+	SpecHash        string
+}
+
+// getUpsertMetaForUpdate reads only generation, resourceVersion, createdAt, and
+// spec_hash under a FOR UPDATE lock. This is O(1) in the row size because it
+// avoids deserializing the JSONB payload column.
+func getUpsertMetaForUpdate(ctx context.Context, tx *sql.Tx, table, name string) (upsertMeta, bool, error) {
+	var m upsertMeta
+	err := tx.QueryRowContext(ctx,
+		fmt.Sprintf(`SELECT
+			(payload->'metadata'->>'generation')::bigint,
+			COALESCE(payload->'metadata'->>'resourceVersion', '0'),
+			COALESCE(payload->'metadata'->>'createdAt', ''),
+			COALESCE(spec_hash, '')
+		FROM %s WHERE name = $1 FOR UPDATE`, table),
+		name,
+	).Scan(&m.Generation, &m.ResourceVersion, &m.CreatedAt, &m.SpecHash)
+	if err == sql.ErrNoRows {
+		return upsertMeta{}, false, nil
+	}
+	if err != nil {
+		return upsertMeta{}, false, err
+	}
+	return m, true, nil
+}
+
+// specHash computes a SHA-256 hex digest of the JSON-serialized spec.
+// The hash is deterministic for the same Go struct because json.Marshal
+// outputs struct fields in declaration order.
+func specHash(spec any) string {
+	data, err := json.Marshal(spec)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
+}
+
 // defaultListLimit is a safety cap for all list queries. Callers that need
 // more results should implement cursor-based pagination; for now this prevents
 // unbounded full-table scans from a single API call.
 const defaultListLimit = 1000
 
-func listFromTable[T any](db *sql.DB, table string) ([]T, error) {
-	return listFromTablePaged[T](db, table, defaultListLimit, 0)
+func listFromTable[T any](ctx context.Context, db dbExecer, table string) ([]T, error) {
+	return listFromTableFiltered[T](ctx, db, table, defaultListLimit, 0, "")
 }
 
-func listFromTablePaged[T any](db *sql.DB, table string, limit, offset int) ([]T, error) {
+func listFromTablePaged[T any](ctx context.Context, db dbExecer, table string, limit, offset int) ([]T, error) {
+	return listFromTableFiltered[T](ctx, db, table, limit, offset, "")
+}
+
+// listFromTableFiltered is the core list helper. When namespace is non-empty
+// the WHERE clause uses the per-table namespace index so LIMIT/OFFSET operate
+// on the correct subset of rows.
+func listFromTableFiltered[T any](ctx context.Context, db dbExecer, table string, limit, offset int, namespace string) ([]T, error) {
 	if limit <= 0 {
 		limit = defaultListLimit
 	}
-	rows, err := db.Query(fmt.Sprintf(`SELECT payload FROM %s ORDER BY name ASC LIMIT $1 OFFSET $2`, table), limit, offset)
+	var rows *sql.Rows
+	var err error
+	if namespace != "" {
+		rows, err = db.QueryContext(ctx,
+			fmt.Sprintf(`SELECT payload FROM %s WHERE namespace = $1 ORDER BY name ASC LIMIT $2 OFFSET $3`, table),
+			namespace, limit, offset,
+		)
+	} else {
+		rows, err = db.QueryContext(ctx,
+			fmt.Sprintf(`SELECT payload FROM %s ORDER BY name ASC LIMIT $1 OFFSET $2`, table),
+			limit, offset,
+		)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -94,8 +187,64 @@ func listFromTablePaged[T any](db *sql.DB, table string, limit, offset int) ([]T
 	return out, nil
 }
 
-func deleteFromTable(db *sql.DB, table, name string) (bool, error) {
-	result, err := db.Exec(fmt.Sprintf(`DELETE FROM %s WHERE name = $1`, table), name)
+// listFromTableCursor implements keyset/cursor-based pagination. It returns
+// rows with name > afterName (the cursor), ordered by name ASC, limited to
+// `limit` rows. This is O(limit) regardless of depth, unlike OFFSET which is
+// O(offset+limit). When namespace is non-empty, only rows in that namespace
+// are considered.
+func listFromTableCursor[T any](ctx context.Context, db dbExecer, table string, limit int, afterName, namespace string) ([]T, error) {
+	if limit <= 0 {
+		limit = defaultListLimit
+	}
+
+	var rows *sql.Rows
+	var err error
+	switch {
+	case namespace != "" && afterName != "":
+		rows, err = db.QueryContext(ctx,
+			fmt.Sprintf(`SELECT payload FROM %s WHERE namespace = $1 AND name > $2 ORDER BY name ASC LIMIT $3`, table),
+			namespace, afterName, limit,
+		)
+	case namespace != "":
+		rows, err = db.QueryContext(ctx,
+			fmt.Sprintf(`SELECT payload FROM %s WHERE namespace = $1 ORDER BY name ASC LIMIT $2`, table),
+			namespace, limit,
+		)
+	case afterName != "":
+		rows, err = db.QueryContext(ctx,
+			fmt.Sprintf(`SELECT payload FROM %s WHERE name > $1 ORDER BY name ASC LIMIT $2`, table),
+			afterName, limit,
+		)
+	default:
+		rows, err = db.QueryContext(ctx,
+			fmt.Sprintf(`SELECT payload FROM %s ORDER BY name ASC LIMIT $1`, table),
+			limit,
+		)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]T, 0)
+	for rows.Next() {
+		var payload []byte
+		if err := rows.Scan(&payload); err != nil {
+			return nil, err
+		}
+		var item T
+		if err := json.Unmarshal(payload, &item); err != nil {
+			return nil, err
+		}
+		out = append(out, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func deleteFromTable(ctx context.Context, db *sql.DB, table, name string) (bool, error) {
+	result, err := db.ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE name = $1`, table), name)
 	if err != nil {
 		return false, err
 	}
@@ -110,12 +259,12 @@ func deleteFromTable(db *sql.DB, table, name string) (bool, error) {
 // Per-type upsert functions -- extract typed columns for indexing/filtering.
 // ---------------------------------------------------------------------------
 
-func upsertAgentSQL(db *sql.DB, name string, item resources.Agent) error {
+func upsertAgentSQL(ctx context.Context, db dbExecer, name string, item resources.Agent) error {
 	payload, err := json.Marshal(item)
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(
+	_, err = db.ExecContext(ctx,
 		`INSERT INTO agents(name, namespace, status_phase, payload, updated_at)
 		 VALUES($1, $2, $3, $4::jsonb, NOW())
 		 ON CONFLICT(name) DO UPDATE SET
@@ -131,12 +280,12 @@ func upsertAgentSQL(db *sql.DB, name string, item resources.Agent) error {
 	return err
 }
 
-func upsertAgentSystemSQL(db *sql.DB, name string, item resources.AgentSystem) error {
+func upsertAgentSystemSQL(ctx context.Context, db dbExecer, name string, item resources.AgentSystem) error {
 	payload, err := json.Marshal(item)
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(
+	_, err = db.ExecContext(ctx,
 		`INSERT INTO agent_systems(name, namespace, status_phase, payload, updated_at)
 		 VALUES($1, $2, $3, $4::jsonb, NOW())
 		 ON CONFLICT(name) DO UPDATE SET
@@ -152,12 +301,12 @@ func upsertAgentSystemSQL(db *sql.DB, name string, item resources.AgentSystem) e
 	return err
 }
 
-func upsertModelEndpointSQL(db *sql.DB, name string, item resources.ModelEndpoint) error {
+func upsertModelEndpointSQL(ctx context.Context, db dbExecer, name string, item resources.ModelEndpoint) error {
 	payload, err := json.Marshal(item)
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(
+	_, err = db.ExecContext(ctx,
 		`INSERT INTO model_endpoints(name, namespace, provider, status_phase, payload, updated_at)
 		 VALUES($1, $2, $3, $4, $5::jsonb, NOW())
 		 ON CONFLICT(name) DO UPDATE SET
@@ -175,12 +324,12 @@ func upsertModelEndpointSQL(db *sql.DB, name string, item resources.ModelEndpoin
 	return err
 }
 
-func upsertToolSQL(db *sql.DB, name string, item resources.Tool) error {
+func upsertToolSQL(ctx context.Context, db dbExecer, name string, item resources.Tool) error {
 	payload, err := json.Marshal(item)
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(
+	_, err = db.ExecContext(ctx,
 		`INSERT INTO tools(name, namespace, risk_level, isolation_mode, status_phase, payload, updated_at)
 		 VALUES($1, $2, $3, $4, $5, $6::jsonb, NOW())
 		 ON CONFLICT(name) DO UPDATE SET
@@ -200,12 +349,12 @@ func upsertToolSQL(db *sql.DB, name string, item resources.Tool) error {
 	return err
 }
 
-func upsertSecretSQL(db *sql.DB, name string, item resources.Secret) error {
+func upsertSecretSQL(ctx context.Context, db dbExecer, name string, item resources.Secret) error {
 	payload, err := json.Marshal(item)
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(
+	_, err = db.ExecContext(ctx,
 		`INSERT INTO secrets(name, namespace, status_phase, payload, updated_at)
 		 VALUES($1, $2, $3, $4::jsonb, NOW())
 		 ON CONFLICT(name) DO UPDATE SET
@@ -221,12 +370,12 @@ func upsertSecretSQL(db *sql.DB, name string, item resources.Secret) error {
 	return err
 }
 
-func upsertMemorySQL(db *sql.DB, name string, item resources.Memory) error {
+func upsertMemorySQL(ctx context.Context, db dbExecer, name string, item resources.Memory) error {
 	payload, err := json.Marshal(item)
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(
+	_, err = db.ExecContext(ctx,
 		`INSERT INTO memories(name, namespace, status_phase, payload, updated_at)
 		 VALUES($1, $2, $3, $4::jsonb, NOW())
 		 ON CONFLICT(name) DO UPDATE SET
@@ -242,12 +391,12 @@ func upsertMemorySQL(db *sql.DB, name string, item resources.Memory) error {
 	return err
 }
 
-func upsertAgentPolicySQL(db *sql.DB, name string, item resources.AgentPolicy) error {
+func upsertAgentPolicySQL(ctx context.Context, db dbExecer, name string, item resources.AgentPolicy) error {
 	payload, err := json.Marshal(item)
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(
+	_, err = db.ExecContext(ctx,
 		`INSERT INTO agent_policies(name, namespace, apply_mode, status_phase, payload, updated_at)
 		 VALUES($1, $2, $3, $4, $5::jsonb, NOW())
 		 ON CONFLICT(name) DO UPDATE SET
@@ -265,12 +414,12 @@ func upsertAgentPolicySQL(db *sql.DB, name string, item resources.AgentPolicy) e
 	return err
 }
 
-func upsertAgentRoleSQL(db *sql.DB, name string, item resources.AgentRole) error {
+func upsertAgentRoleSQL(ctx context.Context, db dbExecer, name string, item resources.AgentRole) error {
 	payload, err := json.Marshal(item)
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(
+	_, err = db.ExecContext(ctx,
 		`INSERT INTO agent_roles(name, namespace, status_phase, payload, updated_at)
 		 VALUES($1, $2, $3, $4::jsonb, NOW())
 		 ON CONFLICT(name) DO UPDATE SET
@@ -286,12 +435,12 @@ func upsertAgentRoleSQL(db *sql.DB, name string, item resources.AgentRole) error
 	return err
 }
 
-func upsertToolPermissionSQL(db *sql.DB, name string, item resources.ToolPermission) error {
+func upsertToolPermissionSQL(ctx context.Context, db dbExecer, name string, item resources.ToolPermission) error {
 	payload, err := json.Marshal(item)
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(
+	_, err = db.ExecContext(ctx,
 		`INSERT INTO tool_permissions(name, namespace, tool_ref, status_phase, payload, updated_at)
 		 VALUES($1, $2, $3, $4, $5::jsonb, NOW())
 		 ON CONFLICT(name) DO UPDATE SET
@@ -309,12 +458,12 @@ func upsertToolPermissionSQL(db *sql.DB, name string, item resources.ToolPermiss
 	return err
 }
 
-func upsertToolApprovalSQL(db *sql.DB, name string, item resources.ToolApproval) error {
+func upsertToolApprovalSQL(ctx context.Context, db dbExecer, name string, item resources.ToolApproval) error {
 	payload, err := json.Marshal(item)
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(
+	_, err = db.ExecContext(ctx,
 		`INSERT INTO tool_approvals(name, namespace, task_ref, tool, status_phase, payload, updated_at)
 		 VALUES($1, $2, $3, $4, $5, $6::jsonb, NOW())
 		 ON CONFLICT(name) DO UPDATE SET
@@ -334,17 +483,17 @@ func upsertToolApprovalSQL(db *sql.DB, name string, item resources.ToolApproval)
 	return err
 }
 
-func upsertTaskSQL(db *sql.DB, name string, item resources.Task) error {
+func upsertTaskSQL(ctx context.Context, db dbExecer, name string, item resources.Task) error {
 	payload, err := json.Marshal(item)
 	if err != nil {
 		return err
 	}
 	leaseUntil := parseTimestampPtr(item.Status.LeaseUntil)
 	nextAttemptAt := parseTimestampPtr(item.Status.NextAttemptAt)
-	_, err = db.Exec(
+	_, err = db.ExecContext(ctx,
 		`INSERT INTO tasks(name, namespace, system_ref, mode, status_phase, assigned_worker,
-		     claimed_by, lease_until, next_attempt_at, priority, payload, updated_at)
-		 VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, NOW())
+		     claimed_by, lease_until, next_attempt_at, priority, spec_hash, payload, updated_at)
+		 VALUES($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, NOW())
 		 ON CONFLICT(name) DO UPDATE SET
 		     namespace = EXCLUDED.namespace,
 		     system_ref = EXCLUDED.system_ref,
@@ -355,6 +504,7 @@ func upsertTaskSQL(db *sql.DB, name string, item resources.Task) error {
 		     lease_until = EXCLUDED.lease_until,
 		     next_attempt_at = EXCLUDED.next_attempt_at,
 		     priority = EXCLUDED.priority,
+		     spec_hash = EXCLUDED.spec_hash,
 		     payload = EXCLUDED.payload,
 		     updated_at = NOW()`,
 		name,
@@ -367,17 +517,18 @@ func upsertTaskSQL(db *sql.DB, name string, item resources.Task) error {
 		leaseUntil,
 		nextAttemptAt,
 		strings.ToLower(strings.TrimSpace(item.Spec.Priority)),
+		specHash(item.Spec),
 		string(payload),
 	)
 	return err
 }
 
-func upsertTaskScheduleSQL(db *sql.DB, name string, item resources.TaskSchedule) error {
+func upsertTaskScheduleSQL(ctx context.Context, db dbExecer, name string, item resources.TaskSchedule) error {
 	payload, err := json.Marshal(item)
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(
+	_, err = db.ExecContext(ctx,
 		`INSERT INTO task_schedules(name, namespace, task_ref, schedule, suspend, status_phase, payload, updated_at)
 		 VALUES($1, $2, $3, $4, $5, $6, $7::jsonb, NOW())
 		 ON CONFLICT(name) DO UPDATE SET
@@ -399,12 +550,12 @@ func upsertTaskScheduleSQL(db *sql.DB, name string, item resources.TaskSchedule)
 	return err
 }
 
-func upsertTaskWebhookSQL(db *sql.DB, name string, item resources.TaskWebhook) error {
+func upsertTaskWebhookSQL(ctx context.Context, db dbExecer, name string, item resources.TaskWebhook) error {
 	payload, err := json.Marshal(item)
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(
+	_, err = db.ExecContext(ctx,
 		`INSERT INTO task_webhooks(name, namespace, task_ref, status_phase, payload, updated_at)
 		 VALUES($1, $2, $3, $4, $5::jsonb, NOW())
 		 ON CONFLICT(name) DO UPDATE SET
@@ -422,12 +573,12 @@ func upsertTaskWebhookSQL(db *sql.DB, name string, item resources.TaskWebhook) e
 	return err
 }
 
-func upsertWorkerSQL(db *sql.DB, name string, item resources.Worker) error {
+func upsertWorkerSQL(ctx context.Context, db dbExecer, name string, item resources.Worker) error {
 	payload, err := json.Marshal(item)
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(
+	_, err = db.ExecContext(ctx,
 		`INSERT INTO workers(name, namespace, region, status_phase, current_tasks, max_concurrent_tasks, payload, updated_at)
 		 VALUES($1, $2, $3, $4, $5, $6, $7::jsonb, NOW())
 		 ON CONFLICT(name) DO UPDATE SET
@@ -454,12 +605,12 @@ func upsertWorkerSQL(db *sql.DB, name string, item resources.Worker) error {
 // ---------------------------------------------------------------------------
 
 // updateTaskInTx writes both typed columns and payload within an open tx.
-func updateTaskInTx(tx *sql.Tx, name string, task resources.Task) error {
+func updateTaskInTx(ctx context.Context, tx *sql.Tx, name string, task resources.Task) error {
 	payload, err := json.Marshal(task)
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(
+	_, err = tx.ExecContext(ctx,
 		`UPDATE tasks SET
 		     status_phase = $2,
 		     assigned_worker = $3,
@@ -492,7 +643,7 @@ func claimTaskSQL(ctx context.Context, db *sql.DB, name, workerID string, lease 
 	defer tx.Rollback()
 
 	var payload []byte
-	err = tx.QueryRow(`SELECT payload FROM tasks WHERE name = $1 FOR UPDATE`, name).Scan(&payload)
+	err = tx.QueryRowContext(ctx, `SELECT payload FROM tasks WHERE name = $1 FOR UPDATE`, name).Scan(&payload)
 	if err == sql.ErrNoRows {
 		return resources.Task{}, false, nil
 	}
@@ -515,7 +666,7 @@ func claimTaskSQL(ctx context.Context, db *sql.DB, name, workerID string, lease 
 	if err != nil {
 		return resources.Task{}, false, err
 	}
-	if err := updateTaskInTx(tx, name, task); err != nil {
+	if err := updateTaskInTx(ctx, tx, name, task); err != nil {
 		return resources.Task{}, false, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -586,7 +737,7 @@ func claimNextDueTaskSQL(ctx context.Context, db *sql.DB, workerID string, lease
 		 FOR UPDATE SKIP LOCKED
 		 LIMIT 64`, extraWhere)
 
-	rows, err := tx.Query(query, args...)
+	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		return resources.Task{}, false, err
 	}
@@ -637,7 +788,7 @@ func claimNextDueTaskSQL(ctx context.Context, db *sql.DB, workerID string, lease
 	if err != nil {
 		return resources.Task{}, false, err
 	}
-	if err := updateTaskInTx(tx, selectedName, task); err != nil {
+	if err := updateTaskInTx(ctx, tx, selectedName, task); err != nil {
 		return resources.Task{}, false, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -646,62 +797,78 @@ func claimNextDueTaskSQL(ctx context.Context, db *sql.DB, workerID string, lease
 	return task, true, nil
 }
 
+// renewTaskLeaseSQL updates only the lease and heartbeat fields without
+// re-serializing the entire JSONB payload. This avoids write amplification on
+// the hot heartbeat path (called every ~15-30s per running task).
 func renewTaskLeaseSQL(ctx context.Context, db *sql.DB, name, workerID string, lease time.Duration) error {
 	if lease <= 0 {
 		lease = 30 * time.Second
 	}
 	now := time.Now().UTC()
-	tx, err := db.BeginTx(ctx, nil)
+	leaseUntilTS := now.Add(lease)
+	leaseUntilStr := leaseUntilTS.Format(time.RFC3339Nano)
+	heartbeatStr := now.Format(time.RFC3339Nano)
+
+	result, err := db.ExecContext(ctx,
+		`UPDATE tasks SET
+		     lease_until = $2,
+		     payload = jsonb_set(
+		         jsonb_set(
+		             jsonb_set(
+		                 jsonb_set(
+		                     payload,
+		                     '{status,leaseUntil}', to_jsonb($3::text)
+		                 ),
+		                 '{status,lastHeartbeat}', to_jsonb($4::text)
+		             ),
+		             '{status,observedGeneration}',
+		             to_jsonb((payload->'metadata'->>'generation')::bigint)
+		         ),
+		         '{metadata,resourceVersion}',
+		         to_jsonb(((payload->'metadata'->>'resourceVersion')::bigint + 1)::text)
+		     ),
+		     updated_at = NOW()
+		 WHERE name = $1
+		   AND status_phase = 'running'
+		   AND LOWER(TRIM(claimed_by)) = LOWER(TRIM($5))`,
+		name, &leaseUntilTS, leaseUntilStr, heartbeatStr, workerID,
+	)
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
-
-	var payload []byte
-	err = tx.QueryRow(`SELECT payload FROM tasks WHERE name = $1 FOR UPDATE`, name).Scan(&payload)
-	if err == sql.ErrNoRows {
-		return fmt.Errorf("task %q not found", name)
-	}
+	affected, err := result.RowsAffected()
 	if err != nil {
 		return err
 	}
-
-	var task resources.Task
-	if err := json.Unmarshal(payload, &task); err != nil {
-		return err
+	if affected == 0 {
+		var phase, claimedBy string
+		scanErr := db.QueryRowContext(ctx,
+			`SELECT status_phase, claimed_by FROM tasks WHERE name = $1`, name,
+		).Scan(&phase, &claimedBy)
+		if scanErr == sql.ErrNoRows {
+			return fmt.Errorf("task %q not found", name)
+		}
+		if !strings.EqualFold(strings.TrimSpace(phase), "running") {
+			return fmt.Errorf("task %q is not running", name)
+		}
+		return fmt.Errorf("task %q is claimed by %q, not %q", name, claimedBy, workerID)
 	}
-	if !strings.EqualFold(strings.TrimSpace(task.Status.ClaimedBy), strings.TrimSpace(workerID)) {
-		return fmt.Errorf("task %q is claimed by %q, not %q", name, task.Status.ClaimedBy, workerID)
-	}
-	if !strings.EqualFold(strings.TrimSpace(task.Status.Phase), "running") {
-		return fmt.Errorf("task %q is not running", name)
-	}
-
-	currentMeta := task.Metadata
-	task.Status.LeaseUntil = now.Add(lease).Format(time.RFC3339Nano)
-	task.Status.LastHeartbeat = now.Format(time.RFC3339Nano)
-	task.Status.ObservedGeneration = task.Metadata.Generation
-	if err := initializeUpdateMetadata("Task", &task.Metadata, currentMeta, false); err != nil {
-		return err
-	}
-
-	if err := updateTaskInTx(tx, name, task); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return nil
 }
 
 // ---------------------------------------------------------------------------
 // Task logs
 // ---------------------------------------------------------------------------
 
-func appendTaskLogSQL(db *sql.DB, taskName, entry string) error {
-	_, err := db.Exec(`INSERT INTO task_logs(task_name, entry, created_at) VALUES($1, $2, NOW())`, taskName, entry)
+func appendTaskLogSQL(ctx context.Context, db *sql.DB, taskName, entry string) error {
+	_, err := db.ExecContext(ctx, `INSERT INTO task_logs(task_name, entry, created_at) VALUES($1, $2, NOW())`, taskName, entry)
 	return err
 }
 
-func listTaskLogsSQL(db *sql.DB, taskName string) ([]string, error) {
-	rows, err := db.Query(`SELECT entry FROM task_logs WHERE task_name = $1 ORDER BY created_at ASC, id ASC`, taskName)
+const maxTaskLogEntries = 500
+
+func listTaskLogsSQL(ctx context.Context, db *sql.DB, taskName string) ([]string, error) {
+	rows, err := db.QueryContext(ctx, `SELECT entry FROM task_logs WHERE task_name = $1 ORDER BY created_at ASC, id ASC LIMIT $2`, taskName, maxTaskLogEntries)
 	if err != nil {
 		return nil, err
 	}
@@ -721,8 +888,8 @@ func listTaskLogsSQL(db *sql.DB, taskName string) ([]string, error) {
 	return out, nil
 }
 
-func deleteTaskLogsSQL(db *sql.DB, taskName string) error {
-	_, err := db.Exec(`DELETE FROM task_logs WHERE task_name = $1`, taskName)
+func deleteTaskLogsSQL(ctx context.Context, db *sql.DB, taskName string) error {
+	_, err := db.ExecContext(ctx, `DELETE FROM task_logs WHERE task_name = $1`, taskName)
 	return err
 }
 
@@ -730,12 +897,12 @@ func deleteTaskLogsSQL(db *sql.DB, taskName string) error {
 // Worker slot management
 // ---------------------------------------------------------------------------
 
-func updateWorkerInTx(tx *sql.Tx, name string, worker resources.Worker) error {
+func updateWorkerInTx(ctx context.Context, tx *sql.Tx, name string, worker resources.Worker) error {
 	payload, err := json.Marshal(worker)
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec(
+	_, err = tx.ExecContext(ctx,
 		`UPDATE workers SET
 		     status_phase = $2,
 		     current_tasks = $3,
@@ -760,7 +927,7 @@ func tryAcquireWorkerSlotSQL(ctx context.Context, db *sql.DB, name string) (reso
 	defer tx.Rollback()
 
 	var payload []byte
-	err = tx.QueryRow(`SELECT payload FROM workers WHERE name = $1 FOR UPDATE`, name).Scan(&payload)
+	err = tx.QueryRowContext(ctx, `SELECT payload FROM workers WHERE name = $1 FOR UPDATE`, name).Scan(&payload)
 	if err == sql.ErrNoRows {
 		return resources.Worker{}, false, nil
 	}
@@ -798,7 +965,7 @@ func tryAcquireWorkerSlotSQL(ctx context.Context, db *sql.DB, name string) (reso
 		return resources.Worker{}, false, err
 	}
 
-	if err := updateWorkerInTx(tx, name, worker); err != nil {
+	if err := updateWorkerInTx(ctx, tx, name, worker); err != nil {
 		return resources.Worker{}, false, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -815,7 +982,7 @@ func releaseWorkerSlotSQL(ctx context.Context, db *sql.DB, name string) error {
 	defer tx.Rollback()
 
 	var payload []byte
-	err = tx.QueryRow(`SELECT payload FROM workers WHERE name = $1 FOR UPDATE`, name).Scan(&payload)
+	err = tx.QueryRowContext(ctx, `SELECT payload FROM workers WHERE name = $1 FOR UPDATE`, name).Scan(&payload)
 	if err == sql.ErrNoRows {
 		return nil
 	}
@@ -841,7 +1008,7 @@ func releaseWorkerSlotSQL(ctx context.Context, db *sql.DB, name string) error {
 		return err
 	}
 
-	if err := updateWorkerInTx(tx, name, worker); err != nil {
+	if err := updateWorkerInTx(ctx, tx, name, worker); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -851,8 +1018,8 @@ func releaseWorkerSlotSQL(ctx context.Context, db *sql.DB, name string) error {
 // Webhook deduplication
 // ---------------------------------------------------------------------------
 
-func upsertWebhookDedupeSQL(db *sql.DB, endpointID, eventID, taskName string, expiresAt time.Time) error {
-	_, err := db.Exec(
+func upsertWebhookDedupeSQL(ctx context.Context, db *sql.DB, endpointID, eventID, taskName string, expiresAt time.Time) error {
+	_, err := db.ExecContext(ctx,
 		`INSERT INTO webhook_dedupe(endpoint_id, event_id, task_name, expires_at, created_at)
 		 VALUES($1, $2, $3, $4, NOW())
 		 ON CONFLICT(endpoint_id, event_id)
@@ -868,9 +1035,9 @@ func upsertWebhookDedupeSQL(db *sql.DB, endpointID, eventID, taskName string, ex
 // tryInsertWebhookDedupeSQL atomically inserts a dedup entry only if one
 // does not already exist (or has expired). Returns (taskName, true) if a
 // live duplicate was found, or ("", false) if the insert succeeded.
-func tryInsertWebhookDedupeSQL(db *sql.DB, endpointID, eventID, taskName string, expiresAt, now time.Time) (string, bool, error) {
+func tryInsertWebhookDedupeSQL(ctx context.Context, db *sql.DB, endpointID, eventID, taskName string, expiresAt, now time.Time) (string, bool, error) {
 	var existingTask string
-	err := db.QueryRow(
+	err := db.QueryRowContext(ctx,
 		`WITH pruned AS (
 			DELETE FROM webhook_dedupe WHERE endpoint_id = $1 AND event_id = $2 AND expires_at <= $5
 		), ins AS (
@@ -897,9 +1064,9 @@ func tryInsertWebhookDedupeSQL(db *sql.DB, endpointID, eventID, taskName string,
 	return existingTask, true, nil
 }
 
-func getWebhookDedupeSQL(db *sql.DB, endpointID, eventID string, now time.Time) (string, bool, error) {
+func getWebhookDedupeSQL(ctx context.Context, db *sql.DB, endpointID, eventID string, now time.Time) (string, bool, error) {
 	var taskName string
-	err := db.QueryRow(
+	err := db.QueryRowContext(ctx,
 		`SELECT task_name
 		 FROM webhook_dedupe
 		 WHERE endpoint_id = $1 AND event_id = $2 AND expires_at > $3`,
@@ -916,17 +1083,17 @@ func getWebhookDedupeSQL(db *sql.DB, endpointID, eventID string, now time.Time) 
 	return taskName, true, nil
 }
 
-func pruneWebhookDedupeSQL(db *sql.DB, now time.Time) error {
-	_, err := db.Exec(`DELETE FROM webhook_dedupe WHERE expires_at <= $1`, now.UTC())
+func pruneWebhookDedupeSQL(ctx context.Context, db *sql.DB, now time.Time) error {
+	_, err := db.ExecContext(ctx, `DELETE FROM webhook_dedupe WHERE expires_at <= $1`, now.UTC())
 	return err
 }
 
-func upsertMcpServerSQL(db *sql.DB, name string, item resources.McpServer) error {
+func upsertMcpServerSQL(ctx context.Context, db dbExecer, name string, item resources.McpServer) error {
 	payload, err := json.Marshal(item)
 	if err != nil {
 		return err
 	}
-	_, err = db.Exec(
+	_, err = db.ExecContext(ctx,
 		`INSERT INTO mcp_servers(name, namespace, status_phase, payload, updated_at)
 		 VALUES($1, $2, $3, $4::jsonb, NOW())
 		 ON CONFLICT(name) DO UPDATE SET
