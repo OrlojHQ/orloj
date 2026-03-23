@@ -36,7 +36,7 @@ coverage.out
 !/frontend/dist/placeholder.txt
 
 # Docs site dependencies and build outputs
-/node_modules/
+/docs/node_modules/
 /docs/dist/
 
 # Testing artifacts

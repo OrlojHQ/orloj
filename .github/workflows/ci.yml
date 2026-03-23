@@ -5,14 +5,12 @@ on:
     paths-ignore:
       - "docs/**"
       - "*.md"
-      - "vocs.config.ts"
   push:
     branches:
       - main
     paths-ignore:
       - "docs/**"
       - "*.md"
-      - "vocs.config.ts"
 
 jobs:
   build-and-test:

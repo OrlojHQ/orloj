@@ -1,6 +1,7 @@
 # Documentation Workspace
 
 This directory is the canonical source for the Vocs documentation site.
+It is fully self-contained: `package.json`, `vocs.config.ts`, and `vercel.json` all live here.
 
 ## Structure
 
@@ -15,29 +16,26 @@ This directory is the canonical source for the Vocs documentation site.
 ## Site Framework
 
 - Framework: [Vocs](https://vocs.dev/docs).
-- Config: `vocs.config.ts` (repo root), with `rootDir: docs`.
+- Config: `vocs.config.ts` in this directory, with `rootDir: '.'`.
 
 ## Local Preview
 
-From repository root:
+From the `docs/` directory:
 
 ```bash
 bun install
-bun run docs:dev
+bun run dev
 ```
 
 Build static docs:
 
 ```bash
-bun run docs:build
+bun run build
 ```
 
 ## Vercel
 
-Use **Root Directory** `docs` so the repo’s top-level Go `api/` package is not treated as Vercel serverless routes.
-
-- **Output Directory:** set to **`dist`** in Project Settings (Vocs writes `docs/dist`). With Framework Preset **Other**, leaving this empty makes Vercel look for **`public`**, which this site does not produce.
-- **`vercel.json`** in this directory pins install/build/output; commit it so Git deployments pick it up.
+Vercel Root Directory is set to `docs/` so the repo's top-level Go `api/` package is not treated as Vercel serverless routes. All install, build, and output settings are in `vercel.json`.
 
 ## Authoring Guidelines
 

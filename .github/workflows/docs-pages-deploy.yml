@@ -1,7 +1,7 @@
 # Manually publish the Vocs site to GitHub Pages (on demand).
 #
 # Prerequisite: Repo → Settings → Pages → Build and deployment → Source: GitHub Actions.
-# Custom domain: Settings → Pages → Custom domain (DNS per GitHub’s instructions). Use a
+# Custom domain: Settings → Pages → Custom domain (DNS per GitHub's instructions). Use a
 # public URL with no path prefix, then leave "base_path" empty and set "base_url" to that URL.
 
 name: docs-pages-deploy
@@ -31,6 +31,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: docs
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -52,7 +55,7 @@ jobs:
         env:
           VOCS_BASE_URL: ${{ inputs.base_url }}
           VOCS_BASE_PATH: ${{ inputs.base_path }}
-        run: bun run docs:build
+        run: bun run build
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

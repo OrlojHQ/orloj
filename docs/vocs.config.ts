@@ -12,14 +12,7 @@ export default defineConfig({
   ...(vocsBaseUrl ? { baseUrl: vocsBaseUrl } : {}),
   title: 'orloj Docs',
   description: 'Lightweight orchestration plane for agents, tools, policies, and task execution.',
-  rootDir: 'docs',
-  vite: {
-    server: {
-      fs: {
-        allow: ['..'],
-      },
-    },
-  },
+  rootDir: '.',
   topNav: [
     { text: 'Getting Started', link: '/getting-started/' },
     { text: 'Deployment', link: '/deployment/' },
