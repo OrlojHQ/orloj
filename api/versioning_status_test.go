@@ -4,15 +4,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"log"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
-	"github.com/OrlojHQ/orloj/api"
 	"github.com/OrlojHQ/orloj/resources"
-	"github.com/OrlojHQ/orloj/runtime"
-	"github.com/OrlojHQ/orloj/store"
 )
 
 func TestPutRequiresResourceVersionPrecondition(t *testing.T) {
@@ -116,22 +111,6 @@ func TestToolStatusSubresourceAndConflict(t *testing.T) {
 		b, _ := io.ReadAll(resp2.Body)
 		t.Fatalf("expected 409 for stale status update, got %d body=%s", resp2.StatusCode, string(b))
 	}
-}
-
-func newTestServer(t *testing.T) *httptest.Server {
-	t.Helper()
-	logger := log.New(io.Discard, "", 0)
-	runtimeMgr := agentruntime.NewManager(logger)
-	server := api.NewServer(api.Stores{
-		Agents:       store.NewAgentStore(),
-		AgentSystems: store.NewAgentSystemStore(),
-		Tools:        store.NewToolStore(),
-		Memories:     store.NewMemoryStore(),
-		Policies:     store.NewAgentPolicyStore(),
-		Tasks:        store.NewTaskStore(),
-		Workers:      store.NewWorkerStore(),
-	}, runtimeMgr, logger)
-	return httptest.NewServer(server.Handler())
 }
 
 func getTool(t *testing.T, url string) resources.Tool {
