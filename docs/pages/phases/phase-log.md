@@ -490,7 +490,7 @@ Deliverables:
 - **Dashboard improvements**:
   - added health summary row: API health status, worker online count, model endpoint ready count
   - added attention cards: task failures card (with count, links to /tasks) and pending approvals card (with count, links to /approvals) — only shown when non-zero
-  - success rate text now color-coded (green >=95%, yellow >=80%, red <80%)
+  - success rate text now color-coded (green >=95%, yellow >=80%, red &lt;80%)
   - worker list items now link to individual worker detail pages
 - **LogViewer overhaul** (30 lines to 130 lines):
   - search with match highlighting, match count, and prev/next navigation
