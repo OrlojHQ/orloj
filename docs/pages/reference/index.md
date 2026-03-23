@@ -17,4 +17,3 @@ Detailed contracts and schemas for API consumers, runtime integrators, and platf
 ## Related Operator Guidance
 
 - [Tool Runtime Conformance](../operations/tool-runtime-conformance.md)
-- [Versioning and Deprecation](../project/versioning-and-deprecation.md)

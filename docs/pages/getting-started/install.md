@@ -55,7 +55,7 @@ Download the server, worker, and CLI for your platform from [GitHub Releases](ht
 ./orlojd --storage-backend=memory --task-execution-mode=sequential --embedded-worker --model-gateway-provider=mock
 ```
 
-Use a specific version tag (e.g. `v0.1.0`) for production; see [Release Process](../project/release-process.md) for versioning and artifact details.
+Use a specific version tag (e.g. `v0.1.0`) for production.
 
 ### CLI only for hosted deployments
 

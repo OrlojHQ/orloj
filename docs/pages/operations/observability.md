@@ -231,4 +231,3 @@ This is useful for quick debugging without opening the web console or an externa
 - [Troubleshooting](./troubleshooting.md) -- diagnosis workflows
 - [Runbook](./runbook.md) -- production operations
 - [Extension Contracts](../reference/extensions.md) -- `MeteringSink` and `AuditSink` for custom integrations
-- [Enterprise Observability Boundary](../boundaries/observability-enterprise.BOUNDARY.md) -- commercial features roadmap

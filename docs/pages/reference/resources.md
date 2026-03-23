@@ -1,6 +1,6 @@
 # Resource Reference
 
-> **Stability: beta** -- All resource kinds under `orloj.dev/v1` are suitable for production use, but their schemas may evolve with migration guidance in future minor releases. See [Versioning and Deprecation](../project/versioning-and-deprecation.md).
+> **Stability: beta** -- All resource kinds under `orloj.dev/v1` are suitable for production use, but their schemas may evolve with migration guidance in future minor releases.
 
 This document describes the current resource schemas in `orloj.dev/v1`, based on the runtime types and normalization logic in:
 
@@ -640,4 +640,3 @@ Example: `examples/resources/workers/worker_a.yaml`
 - [Tool Contract v1](./tool-contract-v1.md)
 - [WASM Tool Module Contract v1](./wasm-tool-module-contract-v1.md)
 - [Tool Runtime Conformance](../operations/tool-runtime-conformance.md)
-- [Versioning and Deprecation](../project/versioning-and-deprecation.md)

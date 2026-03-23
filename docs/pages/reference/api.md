@@ -1,6 +1,6 @@
 # API Reference
 
-> **Stability: beta** -- This API surface ships with `orloj.dev/v1` and is suitable for production use, but may evolve with migration guidance in future minor releases. See [Versioning and Deprecation](../project/versioning-and-deprecation.md).
+> **Stability: beta** -- This API surface ships with `orloj.dev/v1` and is suitable for production use, but may evolve with migration guidance in future minor releases.
 
 This page summarizes key HTTP endpoints and behavior contracts.
 

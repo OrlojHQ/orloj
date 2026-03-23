@@ -272,6 +272,5 @@ All approval-related outcomes are non-retryable and do not consume retry budget.
 
 ## Related Docs
 
-- [Security Policy](../project/security-policy.md)
 - [Tool Contract v1](../reference/tool-contract-v1.md)
 - [Tool Runtime Conformance](./tool-runtime-conformance.md)

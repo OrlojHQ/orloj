@@ -20,7 +20,6 @@ export default defineConfig({
     { text: 'Guides', link: '/guides/' },
     { text: 'Operations', link: '/operations/' },
     { text: 'Reference', link: '/reference/' },
-    { text: 'Project', link: '/project/' },
   ],
   sidebar: [
     { text: 'What is Orloj?', link: '/' },
@@ -40,7 +39,6 @@ export default defineConfig({
         { text: 'VPS Deployment', link: '/deployment/vps' },
         { text: 'Kubernetes Deployment', link: '/deployment/kubernetes' },
         { text: 'Remote CLI and API access', link: '/deployment/remote-cli-access' },
-        { text: 'GitHub Pages (docs site)', link: '/deployment/github-pages' },
       ],
     },
     {
@@ -146,37 +144,6 @@ export default defineConfig({
           ],
         },
         { text: 'Glossary', link: '/reference/glossary' },
-      ],
-    },
-    {
-      text: 'Project',
-      items: [
-        { text: 'Overview', link: '/project/' },
-        {
-          text: 'Community',
-          items: [
-            { text: 'Support', link: '/project/support' },
-            { text: 'Project governance', link: '/project/governance' },
-            { text: 'Security Policy', link: '/project/security-policy' },
-          ],
-        },
-        {
-          text: 'Development',
-          items: [
-            { text: 'Versioning and Deprecation', link: '/project/versioning-and-deprecation' },
-            { text: 'Release Process', link: '/project/release-process' },
-            { text: 'Roadmap', link: '/phases/roadmap' },
-            { text: 'Phase log', link: '/phases/phase-log' },
-          ],
-        },
-        {
-          text: 'Boundaries',
-          items: [
-            { text: 'Cloud Boundary', link: '/boundaries/agentops-cloud.BOUNDARY' },
-            { text: 'Enterprise Boundary', link: '/boundaries/agentops-enterprise.BOUNDARY' },
-            { text: 'Plugins Boundary', link: '/boundaries/agentops-plugins.BOUNDARY' },
-          ],
-        },
       ],
     },
   ],

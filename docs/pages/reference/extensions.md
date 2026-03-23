@@ -1,6 +1,6 @@
 # Extension Contracts
 
-> **Stability: beta** -- Extension interfaces are functional and in use, but may evolve additively in future releases. See [Versioning and Deprecation](../project/versioning-and-deprecation.md).
+> **Stability: beta** -- Extension interfaces are functional and in use, but may evolve additively in future releases.
 
 Orloj core exposes optional extension hooks for additive cloud and enterprise integrations. Extensions allow commercial or custom features to plug into the runtime without modifying the open-source core.
 
@@ -92,8 +92,3 @@ Extensions run in-process with the server or worker. They should be fast and non
 ## Related Docs
 
 - [Observability](../operations/observability.md) -- OSS tracing, metrics, and logging
-- [Enterprise Observability Boundary](../boundaries/observability-enterprise.BOUNDARY.md) -- commercial observability roadmap
-- [Versioning and Deprecation](../project/versioning-and-deprecation.md)
-- [Cloud Boundary](../boundaries/agentops-cloud.BOUNDARY.md)
-- [Enterprise Boundary](../boundaries/agentops-enterprise.BOUNDARY.md)
-- [Plugins Boundary](../boundaries/agentops-plugins.BOUNDARY.md)
