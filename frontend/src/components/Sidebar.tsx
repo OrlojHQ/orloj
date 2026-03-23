@@ -18,6 +18,8 @@ import {
   KeyRound,
   Lock,
   Webhook,
+  Plug,
+  Sparkles,
   PanelLeftClose,
   PanelLeftOpen,
   CircleUserRound,
@@ -41,12 +43,14 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/workers", icon: <Cpu size={18} />, label: "Workers", group: "Infra" },
   { to: "/models", icon: <Database size={18} />, label: "Model Endpoints", group: "Infra" },
   { to: "/tools", icon: <Wrench size={18} />, label: "Tools", group: "Infra" },
+  { to: "/mcp-servers", icon: <Plug size={18} />, label: "MCP Servers", group: "Infra" },
   { to: "/memories", icon: <Brain size={18} />, label: "Memories", group: "Infra" },
   { to: "/secrets", icon: <Lock size={18} />, label: "Secrets", group: "Infra" },
   { to: "/policies", icon: <Shield size={18} />, label: "Policies", group: "Governance" },
   { to: "/roles", icon: <KeyRound size={18} />, label: "Roles", group: "Governance" },
   { to: "/permissions", icon: <KeyRound size={18} />, label: "Permissions", group: "Governance" },
   { to: "/approvals", icon: <ShieldCheck size={18} />, label: "Approvals", group: "Governance" },
+  { to: "/capabilities", icon: <Sparkles size={18} />, label: "Capabilities", group: "System" },
 ];
 
 interface SidebarProps {

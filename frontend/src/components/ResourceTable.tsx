@@ -14,6 +14,10 @@ interface ResourceTableProps<T> {
   onRowClick?: (row: T) => void;
   emptyMessage?: string;
   loading?: boolean;
+  /** Server-backed list: more pages available (cursor pagination). */
+  hasMore?: boolean;
+  onLoadMore?: () => void;
+  loadingMore?: boolean;
 }
 
 export function ResourceTable<T>({
@@ -23,6 +27,9 @@ export function ResourceTable<T>({
   onRowClick,
   emptyMessage = "No resources found",
   loading,
+  hasMore,
+  onLoadMore,
+  loadingMore,
 }: ResourceTableProps<T>) {
   if (loading) {
     return (
@@ -68,6 +75,18 @@ export function ResourceTable<T>({
           ))}
         </tbody>
       </table>
+      {hasMore && onLoadMore && (
+        <div className="table-load-more">
+          <button
+            type="button"
+            className="btn-secondary"
+            onClick={onLoadMore}
+            disabled={loadingMore}
+          >
+            {loadingMore ? "Loading…" : "Load more"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

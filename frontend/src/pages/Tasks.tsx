@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { useTasks } from "../api/hooks";
+import { useTaskList } from "../api/hooks";
 import { ResourceTable, type Column } from "../components/ResourceTable";
 import { StatusBadge } from "../components/StatusBadge";
 import { FilterPills } from "../components/FilterPills";
@@ -12,7 +12,19 @@ import { CreateResourceDialog } from "../components/CreateResourceDialog";
 const PHASES = ["All", "Pending", "Running", "WaitingApproval", "Succeeded", "Failed", "DeadLetter"];
 
 export function Tasks() {
-  const { data, isLoading } = useTasks();
+  const [labelDraft, setLabelDraft] = useState("");
+  const [labelApplied, setLabelApplied] = useState("");
+  const taskListOpts = useMemo(
+    () => (labelApplied.trim() ? { labelSelector: labelApplied.trim() } : undefined),
+    [labelApplied],
+  );
+  const {
+    data,
+    isLoading,
+    hasNextPage,
+    fetchNextPage,
+    isFetchingNextPage,
+  } = useTaskList(taskListOpts);
   const navigate = useNavigate();
   const [phaseFilter, setPhaseFilter] = useState("All");
   const [showTemplateTasks, setShowTemplateTasks] = useState(false);
@@ -61,6 +73,35 @@ export function Tasks() {
           <p className="page__subtitle">{visibleTasks.length} tasks</p>
         </div>
         <div className="page__header-actions">
+          <label className="label-selector-field">
+            <span className="text-muted text-xs">labelSelector</span>
+            <input
+              type="text"
+              className="input-inline"
+              placeholder="key=value"
+              value={labelDraft}
+              onChange={(e) => setLabelDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") setLabelApplied(labelDraft.trim());
+              }}
+              aria-label="Label selector filter for task list"
+            />
+            <button type="button" className="btn-secondary" onClick={() => setLabelApplied(labelDraft.trim())}>
+              Apply
+            </button>
+            {labelApplied && (
+              <button
+                type="button"
+                className="btn-ghost text-xs"
+                onClick={() => {
+                  setLabelDraft("");
+                  setLabelApplied("");
+                }}
+              >
+                Clear
+              </button>
+            )}
+          </label>
           <label className="checkbox-inline">
             <input
               type="checkbox"
@@ -101,6 +142,9 @@ export function Tasks() {
           rowKey={(r) => r.metadata.name}
           onRowClick={(r) => navigate(`/tasks/${r.metadata.name}`)}
           loading={isLoading}
+          hasMore={hasNextPage}
+          onLoadMore={() => void fetchNextPage()}
+          loadingMore={isFetchingNextPage}
         />
       )}
       <CreateResourceDialog kind="Task" open={showCreate} onClose={() => setShowCreate(false)} />

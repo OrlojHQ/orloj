@@ -1,4 +1,11 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo } from "react";
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  useInfiniteQuery,
+  type UseQueryResult,
+} from "@tanstack/react-query";
 import * as client from "./client";
 import type {
   Agent,
@@ -16,13 +23,19 @@ import type {
   TaskSchedule,
   TaskWebhook,
   Worker,
+  McpServer,
   TaskMetrics,
   TaskMessage,
+  CapabilitySnapshot,
 } from "./types";
 import { RESOURCE_ENDPOINTS } from "./types";
 import { useAppStore } from "../store";
 
 const REFETCH_INTERVAL = 8000;
+/** Page size for resource lists that auto-fetch all pages via cursor. */
+const RESOURCE_LIST_PAGE_LIMIT = 200;
+/** Page size for the Tasks index (explicit “Load more”). */
+const TASK_LIST_PAGE_LIMIT = 50;
 
 function useNamespace() {
   return useAppStore((s) => s.namespace);
@@ -32,13 +45,49 @@ function resourceKey(kind: string, ns: string, name?: string) {
   return name ? [kind, ns, name] : [kind, ns];
 }
 
-function useResourceList<T>(kind: string, path: string) {
+export type ResourceListOptions = {
+  allNamespaces?: boolean;
+  labelSelector?: string;
+};
+
+function useResourceList<T>(kind: string, path: string, options?: ResourceListOptions) {
   const ns = useNamespace();
-  return useQuery<T[]>({
-    queryKey: resourceKey(kind, ns),
-    queryFn: () => client.list<T>(path),
+  const labelKey = options?.labelSelector?.trim() ?? "";
+  const queryKey = options?.allNamespaces
+    ? [kind, "list", labelKey]
+    : [...resourceKey(kind, ns), labelKey];
+
+  const infinite = useInfiniteQuery({
+    queryKey,
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) =>
+      client.list<T>(path, {
+        limit: RESOURCE_LIST_PAGE_LIMIT,
+        after: pageParam,
+        allNamespaces: options?.allNamespaces,
+        labelSelector: options?.labelSelector?.trim() || undefined,
+      }),
+    getNextPageParam: (lastPage) => {
+      const c = lastPage.continue?.trim();
+      return c || undefined;
+    },
     refetchInterval: REFETCH_INTERVAL,
   });
+
+  useEffect(() => {
+    if (!infinite.hasNextPage || infinite.isFetchingNextPage) return;
+    void infinite.fetchNextPage();
+  }, [infinite.hasNextPage, infinite.isFetchingNextPage, infinite.fetchNextPage]);
+
+  const flatData = useMemo(
+    () => infinite.data?.pages.flatMap((p) => p.items ?? []),
+    [infinite.data],
+  );
+
+  return {
+    ...infinite,
+    data: flatData,
+  } as unknown as UseQueryResult<T[], Error>;
 }
 
 function useResourceGet<T>(kind: string, path: string, name: string) {
@@ -72,8 +121,10 @@ export function useModelEndpoint(name: string) {
   return useResourceGet<ModelEndpoint>("ModelEndpoint", RESOURCE_ENDPOINTS.ModelEndpoint, name);
 }
 
-export function useTools() {
-  return useResourceList<Tool>("Tool", RESOURCE_ENDPOINTS.Tool);
+export function useTools(listOpts?: Pick<ResourceListOptions, "labelSelector">) {
+  return useResourceList<Tool>("Tool", RESOURCE_ENDPOINTS.Tool, {
+    labelSelector: listOpts?.labelSelector,
+  });
 }
 export function useTool(name: string) {
   return useResourceGet<Tool>("Tool", RESOURCE_ENDPOINTS.Tool, name);
@@ -151,9 +202,46 @@ export function useDenyToolApproval() {
   });
 }
 
+/** Full task list for dashboard, search, and dropdowns (auto-paginates all pages). */
 export function useTasks() {
   return useResourceList<Task>("Task", RESOURCE_ENDPOINTS.Task);
 }
+
+/** Paged task list for the Tasks index (`limit` / cursor, explicit “Load more”). */
+export function useTaskList(listOpts?: Pick<ResourceListOptions, "labelSelector">) {
+  const ns = useNamespace();
+  const labelKey = listOpts?.labelSelector?.trim() ?? "";
+  const infinite = useInfiniteQuery({
+    queryKey: [...resourceKey("Task", ns), "paged", labelKey],
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) =>
+      client.list<Task>(RESOURCE_ENDPOINTS.Task, {
+        limit: TASK_LIST_PAGE_LIMIT,
+        after: pageParam,
+        labelSelector: listOpts?.labelSelector?.trim() || undefined,
+      }),
+    getNextPageParam: (lastPage) => lastPage.continue?.trim() || undefined,
+    refetchInterval: REFETCH_INTERVAL,
+  });
+
+  const data = useMemo(
+    () => infinite.data?.pages.flatMap((p) => p.items ?? []),
+    [infinite.data],
+  );
+
+  return {
+    data,
+    isLoading: infinite.isPending && infinite.isFetching,
+    isError: infinite.isError,
+    error: infinite.error,
+    refetch: infinite.refetch,
+    hasNextPage: infinite.hasNextPage,
+    fetchNextPage: infinite.fetchNextPage,
+    isFetchingNextPage: infinite.isFetchingNextPage,
+    isFetching: infinite.isFetching,
+  };
+}
+
 export function useTask(name: string) {
   return useResourceGet<Task>("Task", RESOURCE_ENDPOINTS.Task, name);
 }
@@ -213,18 +301,25 @@ export function useAgentLogs(name: string) {
 }
 
 export function useWorkers() {
-  return useQuery<Worker[]>({
-    queryKey: ["Worker", "list"],
-    queryFn: () => client.list<Worker>(RESOURCE_ENDPOINTS.Worker, { allNamespaces: true }),
-    refetchInterval: REFETCH_INTERVAL,
-  });
+  return useResourceList<Worker>("Worker", RESOURCE_ENDPOINTS.Worker, { allNamespaces: true });
 }
 
+export function useMcpServers() {
+  return useResourceList<McpServer>("McpServer", RESOURCE_ENDPOINTS.McpServer);
+}
+export function useMcpServer(name: string) {
+  return useResourceGet<McpServer>("McpServer", RESOURCE_ENDPOINTS.McpServer, name);
+}
+
+/**
+ * Resolves a worker by short name across namespaces (list is cluster-wide; GET is namespace-scoped).
+ * Uses cursor-paginated `listAll` so large worker sets stay bounded per request.
+ */
 export function useWorker(name: string) {
   return useQuery<Worker>({
     queryKey: ["Worker", "detail", name],
     queryFn: async () => {
-      const items = await client.list<Worker>(RESOURCE_ENDPOINTS.Worker, { allNamespaces: true });
+      const items = await client.listAll<Worker>(RESOURCE_ENDPOINTS.Worker, { allNamespaces: true });
       const hit = items.find((w) => w.metadata.name === name);
       if (!hit) {
         throw new Error(`Worker "${name}" not found`);
@@ -252,13 +347,27 @@ export function useHealthCheck() {
   });
 }
 
+export function useCapabilities() {
+  return useQuery<CapabilitySnapshot>({
+    queryKey: ["capabilities"],
+    queryFn: () => client.getCapabilities<CapabilitySnapshot>(),
+    staleTime: 60_000,
+  });
+}
+
 export function useCreateResource(kind: string) {
   const qc = useQueryClient();
   const ns = useNamespace();
   const path = RESOURCE_ENDPOINTS[kind as keyof typeof RESOURCE_ENDPOINTS];
   return useMutation({
     mutationFn: (body: unknown) => client.create(path, body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: [kind, ns] }),
+    onSuccess: () => {
+      if (kind === "Worker") {
+        qc.invalidateQueries({ queryKey: ["Worker"] });
+      } else {
+        qc.invalidateQueries({ queryKey: [kind, ns] });
+      }
+    },
   });
 }
 

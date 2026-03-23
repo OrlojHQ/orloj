@@ -1,6 +1,9 @@
 import { useAppStore } from "../store";
 import type { ListResponse, MemoryEntriesResponse } from "./types";
 
+const GET_HEAD_TIMEOUT_MS = 30_000;
+const MUTATE_TIMEOUT_MS = 60_000;
+
 function getConnection() {
   const { apiBase, namespace, token } = useAppStore.getState();
   return { apiBase, namespace, token };
@@ -12,6 +15,51 @@ function buildHeaders(token: string): HeadersInit {
     headers.Authorization = `Bearer ${token.trim()}`;
   }
   return headers;
+}
+
+function timeoutMsForMethod(method: string): number {
+  const m = method.toUpperCase();
+  return m === "GET" || m === "HEAD" ? GET_HEAD_TIMEOUT_MS : MUTATE_TIMEOUT_MS;
+}
+
+/** Fetch with deadline (aligned with server: ~30s GET/HEAD, ~60s mutating). */
+async function fetchOrThrow(url: string, init: RequestInit = {}): Promise<Response> {
+  const { token } = getConnection();
+  const method = (init.method ?? "GET").toUpperCase();
+  const timeoutMs = timeoutMsForMethod(method);
+  const timeoutCtrl = new AbortController();
+  const tid = setTimeout(() => timeoutCtrl.abort(), timeoutMs);
+  const { signal: userSignal, ...rest } = init;
+  if (userSignal) {
+    if (userSignal.aborted) {
+      clearTimeout(tid);
+      throw new Error("Request aborted");
+    }
+    userSignal.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(tid);
+        timeoutCtrl.abort();
+      },
+      { once: true },
+    );
+  }
+  try {
+    const resp = await fetch(url, {
+      ...rest,
+      signal: timeoutCtrl.signal,
+      credentials: rest.credentials ?? "same-origin",
+      headers: { ...buildHeaders(token), ...rest.headers },
+    });
+    return resp;
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      throw new Error("Request timed out or was cancelled");
+    }
+    throw err;
+  } finally {
+    clearTimeout(tid);
+  }
 }
 
 function buildUrl(
@@ -35,12 +83,7 @@ async function request<T>(
   url: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const { token } = getConnection();
-  const resp = await fetch(url, {
-    ...options,
-    credentials: "same-origin",
-    headers: { ...buildHeaders(token), ...options.headers },
-  });
+  const resp = await fetchOrThrow(url, options);
   if (!resp.ok) {
     const body = await resp.text();
     throw new Error(
@@ -53,19 +96,56 @@ async function request<T>(
 export type ListOptions = {
   /** Omit namespace query so the server returns workers (and any other types) from all namespaces. */
   allNamespaces?: boolean;
+  /** Server list page size (keyset pagination). */
+  limit?: number;
+  /** Cursor from the previous response's `continue` field. */
+  after?: string;
+  /**
+   * Kubernetes-style label selector: comma-separated `key=value` pairs.
+   * Server also accepts `labels` as an alias.
+   */
+  labelSelector?: string;
 };
 
-export async function list<T>(resourcePath: string, opts?: ListOptions): Promise<T[]> {
+export async function list<T>(resourcePath: string, opts?: ListOptions): Promise<ListResponse<T>> {
   const { namespace, apiBase } = getConnection();
+  const path = resourcePath.replace(/^\/+/, "");
   let url: string;
   if (opts?.allNamespaces) {
     const base = apiBase.replace(/\/$/, "");
-    url = new URL(`/v1/${resourcePath.replace(/^\/+/, "")}`, base).toString();
+    const u = new URL(`/v1/${path}`, base);
+    if (opts?.limit != null) u.searchParams.set("limit", String(opts.limit));
+    if (opts?.after) u.searchParams.set("after", opts.after);
+    if (opts?.labelSelector?.trim()) u.searchParams.set("labelSelector", opts.labelSelector.trim());
+    url = u.toString();
   } else {
-    url = buildUrl(resourcePath, namespace);
+    const qp: Record<string, string> = {};
+    if (opts?.limit != null) qp.limit = String(opts.limit);
+    if (opts?.after) qp.after = opts.after;
+    if (opts?.labelSelector?.trim()) qp.labelSelector = opts.labelSelector.trim();
+    url = buildUrl(path, namespace, qp);
   }
-  const data = await request<ListResponse<T>>(url);
-  return data.items ?? [];
+  return request<ListResponse<T>>(url);
+}
+
+/**
+ * Follows `continue` cursors until all items are loaded. Uses cursor pagination on each request.
+ */
+export async function listAll<T>(
+  resourcePath: string,
+  opts?: Omit<ListOptions, "after" | "limit"> & { pageLimit?: number },
+): Promise<T[]> {
+  const pageLimit = opts?.pageLimit ?? 200;
+  const all: T[] = [];
+  let after: string | undefined;
+  for (;;) {
+    const page = await list<T>(resourcePath, { ...opts, limit: pageLimit, after });
+    all.push(...(page.items ?? []));
+    const c = page.continue?.trim();
+    if (!c) break;
+    after = c;
+  }
+  return all;
 }
 
 export type ScopedRequestOptions = {
@@ -107,12 +187,7 @@ export async function update<T>(
 export async function del(resourcePath: string, name: string, opts?: ScopedRequestOptions): Promise<void> {
   const ns = opts?.namespace ?? getConnection().namespace;
   const url = buildUrl(`${resourcePath}/${name}`, ns);
-  const { token } = getConnection();
-  const resp = await fetch(url, {
-    method: "DELETE",
-    credentials: "same-origin",
-    headers: buildHeaders(token),
-  });
+  const resp = await fetchOrThrow(url, { method: "DELETE" });
   if (!resp.ok) {
     const body = await resp.text();
     throw new Error(`${resp.status} ${resp.statusText}${body ? `: ${body}` : ""}`);
@@ -136,9 +211,9 @@ export async function getStatus<T>(resourcePath: string, name: string): Promise<
 }
 
 export async function getLogs(resourcePath: string, name: string): Promise<string> {
-  const { namespace, token } = getConnection();
+  const { namespace } = getConnection();
   const url = buildUrl(`${resourcePath}/${name}/logs`, namespace);
-  const resp = await fetch(url, { headers: buildHeaders(token), credentials: "same-origin" });
+  const resp = await fetchOrThrow(url);
   if (!resp.ok) {
     const body = await resp.text();
     throw new Error(`${resp.status} ${resp.statusText}${body ? `: ${body}` : ""}`);
@@ -185,12 +260,9 @@ export async function listMemoryEntries(
 }
 
 export async function listNamespaces(): Promise<string[]> {
-  const { apiBase, token } = getConnection();
+  const { apiBase } = getConnection();
   const base = apiBase.replace(/\/$/, "");
-  const resp = await fetch(`${base}/v1/namespaces`, {
-    headers: buildHeaders(token),
-    credentials: "same-origin",
-  });
+  const resp = await fetchOrThrow(`${base}/v1/namespaces`);
   if (!resp.ok) return ["default"];
   const data = (await resp.json()) as { namespaces: string[] };
   return data.namespaces ?? ["default"];
@@ -204,12 +276,9 @@ export async function getCapabilities<T>(): Promise<T> {
 
 export async function healthCheck(): Promise<boolean> {
   try {
-    const { apiBase, token } = getConnection();
+    const { apiBase } = getConnection();
     const base = apiBase.replace(/\/$/, "");
-    const resp = await fetch(`${base}/healthz`, {
-      headers: buildHeaders(token),
-      credentials: "same-origin",
-    });
+    const resp = await fetchOrThrow(`${base}/healthz`);
     return resp.ok;
   } catch {
     return false;
@@ -238,12 +307,9 @@ export interface AuthChangePasswordResponse {
 }
 
 export async function getAuthConfig(): Promise<AuthConfigResponse> {
-  const { apiBase, token } = getConnection();
+  const { apiBase } = getConnection();
   const base = apiBase.replace(/\/$/, "");
-  const resp = await fetch(`${base}/v1/auth/config`, {
-    headers: buildHeaders(token),
-    credentials: "same-origin",
-  });
+  const resp = await fetchOrThrow(`${base}/v1/auth/config`);
   if (!resp.ok) {
     const body = await resp.text();
     throw new Error(`${resp.status} ${resp.statusText}${body ? `: ${body}` : ""}`);
@@ -252,12 +318,9 @@ export async function getAuthConfig(): Promise<AuthConfigResponse> {
 }
 
 export async function getAuthMe(): Promise<AuthMeResponse> {
-  const { apiBase, token } = getConnection();
+  const { apiBase } = getConnection();
   const base = apiBase.replace(/\/$/, "");
-  const resp = await fetch(`${base}/v1/auth/me`, {
-    headers: buildHeaders(token),
-    credentials: "same-origin",
-  });
+  const resp = await fetchOrThrow(`${base}/v1/auth/me`);
   if (!resp.ok) {
     return { authenticated: false };
   }
@@ -267,9 +330,8 @@ export async function getAuthMe(): Promise<AuthMeResponse> {
 export async function setupLocalAuth(username: string, password: string): Promise<AuthMeResponse> {
   const { apiBase } = getConnection();
   const base = apiBase.replace(/\/$/, "");
-  const resp = await fetch(`${base}/v1/auth/setup`, {
+  const resp = await fetchOrThrow(`${base}/v1/auth/setup`, {
     method: "POST",
-    credentials: "same-origin",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({ username, password }),
   });
@@ -283,9 +345,8 @@ export async function setupLocalAuth(username: string, password: string): Promis
 export async function loginLocalAuth(username: string, password: string): Promise<AuthMeResponse> {
   const { apiBase } = getConnection();
   const base = apiBase.replace(/\/$/, "");
-  const resp = await fetch(`${base}/v1/auth/login`, {
+  const resp = await fetchOrThrow(`${base}/v1/auth/login`, {
     method: "POST",
-    credentials: "same-origin",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({ username, password }),
   });
@@ -297,12 +358,10 @@ export async function loginLocalAuth(username: string, password: string): Promis
 }
 
 export async function logoutLocalAuth(): Promise<void> {
-  const { apiBase, token } = getConnection();
+  const { apiBase } = getConnection();
   const base = apiBase.replace(/\/$/, "");
-  const resp = await fetch(`${base}/v1/auth/logout`, {
+  const resp = await fetchOrThrow(`${base}/v1/auth/logout`, {
     method: "POST",
-    credentials: "same-origin",
-    headers: buildHeaders(token),
   });
   if (!resp.ok) {
     const body = await resp.text();
@@ -314,13 +373,11 @@ export async function changeLocalAuthPassword(
   currentPassword: string,
   newPassword: string,
 ): Promise<AuthChangePasswordResponse> {
-  const { apiBase, token } = getConnection();
+  const { apiBase } = getConnection();
   const base = apiBase.replace(/\/$/, "");
-  const resp = await fetch(`${base}/v1/auth/change-password`, {
+  const resp = await fetchOrThrow(`${base}/v1/auth/change-password`, {
     method: "POST",
-    credentials: "same-origin",
     headers: {
-      ...buildHeaders(token),
       "Content-Type": "application/json",
       Accept: "application/json",
     },

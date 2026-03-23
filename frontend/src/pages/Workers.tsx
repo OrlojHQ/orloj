@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ContextBackButton } from "../components/ContextBackButton";
 import { detailListNavState } from "../hooks/useDetailReturnNav";
@@ -5,12 +6,14 @@ import { useWorkers } from "../api/hooks";
 import { ResourceTable, type Column } from "../components/ResourceTable";
 import { StatusBadge } from "../components/StatusBadge";
 import { EmptyState } from "../components/EmptyState";
-import { Cpu } from "lucide-react";
+import { Cpu, Plus } from "lucide-react";
 import type { Worker } from "../api/types";
+import { CreateResourceDialog } from "../components/CreateResourceDialog";
 
 export function Workers() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [showCreate, setShowCreate] = useState(false);
   const { data, isLoading } = useWorkers();
   const workers = data ?? [];
 
@@ -47,6 +50,11 @@ export function Workers() {
             <p className="page__subtitle">{workers.length} workers</p>
           </div>
         </div>
+        <div className="page__header-actions">
+          <button className="btn-primary" onClick={() => setShowCreate(true)}>
+            <Plus size={14} /> New Worker
+          </button>
+        </div>
       </div>
       {workers.length === 0 && !isLoading ? (
         <EmptyState icon={<Cpu size={40} />} title="No Workers" description="Workers claim and execute tasks from the queue." />
@@ -59,6 +67,7 @@ export function Workers() {
           loading={isLoading}
         />
       )}
+      <CreateResourceDialog kind="Worker" open={showCreate} onClose={() => setShowCreate(false)} />
     </div>
   );
 }

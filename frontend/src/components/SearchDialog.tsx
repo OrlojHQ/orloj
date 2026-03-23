@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, X, Network, Bot, ListTodo, Cpu, Database, Wrench, CalendarClock, Webhook, Lock, Brain, Shield, KeyRound, ShieldCheck } from "lucide-react";
-import { useAgentSystems, useAgents, useTasks, useTaskSchedules, useTaskWebhooks, useWorkers, useModelEndpoints, useTools, useSecrets, useMemories, useAgentPolicies, useAgentRoles, useToolPermissions, useToolApprovals } from "../api/hooks";
+import { Search, X, Network, Bot, ListTodo, Cpu, Database, Wrench, CalendarClock, Webhook, Lock, Brain, Shield, KeyRound, ShieldCheck, Plug } from "lucide-react";
+import { useAgentSystems, useAgents, useTasks, useTaskSchedules, useTaskWebhooks, useWorkers, useModelEndpoints, useTools, useSecrets, useMemories, useAgentPolicies, useAgentRoles, useToolPermissions, useToolApprovals, useMcpServers } from "../api/hooks";
 
 interface SearchResult {
   kind: string;
@@ -29,6 +29,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
   const roles = useAgentRoles();
   const permissions = useToolPermissions();
   const approvals = useToolApprovals();
+  const mcpServers = useMcpServers();
 
   useEffect(() => {
     if (open) {
@@ -81,8 +82,16 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
     for (const a of approvals.data ?? []) {
       results.push({ kind: "Approval", name: a.metadata.name, path: `/approvals/${a.metadata.name}`, icon: <ShieldCheck size={14} /> });
     }
+    for (const m of mcpServers.data ?? []) {
+      results.push({
+        kind: "MCP",
+        name: m.metadata.name,
+        path: `/mcp-servers/${m.metadata.name}`,
+        icon: <Plug size={14} />,
+      });
+    }
     return results;
-  }, [systems.data, agents.data, tasks.data, taskSchedules.data, taskWebhooks.data, workers.data, models.data, tools.data, secrets.data, memories.data, policies.data, roles.data, permissions.data, approvals.data]);
+  }, [systems.data, agents.data, tasks.data, taskSchedules.data, taskWebhooks.data, workers.data, models.data, tools.data, secrets.data, memories.data, policies.data, roles.data, permissions.data, approvals.data, mcpServers.data]);
 
   const filtered = useMemo(() => {
     if (!query.trim()) return allResults.slice(0, 20);

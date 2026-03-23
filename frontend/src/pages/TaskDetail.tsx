@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useDetailReturnNav } from "../hooks/useDetailReturnNav";
 import { useTask, useTaskMessages, useTaskMetrics, useTaskLogs, useAgentSystem, useDeleteResource, useUpdateResource } from "../api/hooks";
@@ -19,7 +19,29 @@ export function TaskDetail() {
   const navigate = useNavigate();
   const { goBack } = useDetailReturnNav("/tasks");
   const { data: task, isLoading } = useTask(name ?? "");
-  const messages = useTaskMessages(name ?? "");
+  const [msgPhase, setMsgPhase] = useState("");
+  const [msgFrom, setMsgFrom] = useState("");
+  const [msgTo, setMsgTo] = useState("");
+  const [msgBranch, setMsgBranch] = useState("");
+  const [msgTrace, setMsgTrace] = useState("");
+  const [msgLimit, setMsgLimit] = useState("");
+  const [msgFiltersApplied, setMsgFiltersApplied] = useState<Record<string, string>>({});
+
+  const buildMessageFilters = useCallback(() => {
+    const q: Record<string, string> = {};
+    if (msgPhase.trim()) q.phase = msgPhase.trim();
+    if (msgFrom.trim()) q.from_agent = msgFrom.trim();
+    if (msgTo.trim()) q.to_agent = msgTo.trim();
+    if (msgBranch.trim()) q.branch_id = msgBranch.trim();
+    if (msgTrace.trim()) q.trace_id = msgTrace.trim();
+    if (msgLimit.trim()) q.limit = msgLimit.trim();
+    return q;
+  }, [msgPhase, msgFrom, msgTo, msgBranch, msgTrace, msgLimit]);
+
+  const messages = useTaskMessages(
+    name ?? "",
+    Object.keys(msgFiltersApplied).length > 0 ? msgFiltersApplied : undefined,
+  );
   const metrics = useTaskMetrics(name ?? "");
   const logs = useTaskLogs(name ?? "");
   const system = useAgentSystem(task?.spec.system ?? "");
@@ -149,7 +171,63 @@ export function TaskDetail() {
 
         {tab === "messages" && (
           <div className="messages-list">
-            {(messages.data ?? []).length === 0 && <p className="text-muted">No messages yet</p>}
+            <div className="message-filters">
+              <div className="message-filters__field">
+                <label htmlFor="msg-filter-phase">phase</label>
+                <input
+                  id="msg-filter-phase"
+                  placeholder="queued,running,…"
+                  value={msgPhase}
+                  onChange={(e) => setMsgPhase(e.target.value)}
+                />
+              </div>
+              <div className="message-filters__field">
+                <label htmlFor="msg-filter-from">from_agent</label>
+                <input id="msg-filter-from" value={msgFrom} onChange={(e) => setMsgFrom(e.target.value)} />
+              </div>
+              <div className="message-filters__field">
+                <label htmlFor="msg-filter-to">to_agent</label>
+                <input id="msg-filter-to" value={msgTo} onChange={(e) => setMsgTo(e.target.value)} />
+              </div>
+              <div className="message-filters__field">
+                <label htmlFor="msg-filter-branch">branch_id</label>
+                <input id="msg-filter-branch" value={msgBranch} onChange={(e) => setMsgBranch(e.target.value)} />
+              </div>
+              <div className="message-filters__field">
+                <label htmlFor="msg-filter-trace">trace_id</label>
+                <input id="msg-filter-trace" value={msgTrace} onChange={(e) => setMsgTrace(e.target.value)} />
+              </div>
+              <div className="message-filters__field">
+                <label htmlFor="msg-filter-limit">limit</label>
+                <input id="msg-filter-limit" type="number" min={0} placeholder="50" value={msgLimit} onChange={(e) => setMsgLimit(e.target.value)} />
+              </div>
+              <button type="button" className="btn-primary" onClick={() => setMsgFiltersApplied(buildMessageFilters())}>
+                Apply filters
+              </button>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => {
+                  setMsgPhase("");
+                  setMsgFrom("");
+                  setMsgTo("");
+                  setMsgBranch("");
+                  setMsgTrace("");
+                  setMsgLimit("");
+                  setMsgFiltersApplied({});
+                }}
+              >
+                Clear
+              </button>
+            </div>
+            {messages.isLoading && <p className="text-muted">Loading messages…</p>}
+            {(messages.data ?? []).length === 0 && !messages.isLoading && (
+              <p className="text-muted">
+                {Object.keys(msgFiltersApplied).length > 0
+                  ? "No messages match the current filters"
+                  : "No messages yet"}
+              </p>
+            )}
             {(messages.data ?? []).map((msg, i) => (
               <div key={msg.message_id ?? i} className="message-item">
                 <div className="message-item__header">

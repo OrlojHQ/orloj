@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ContextBackButton } from "../components/ContextBackButton";
 import { detailListNavState } from "../hooks/useDetailReturnNav";
@@ -21,7 +21,13 @@ const RISK_COLORS: Record<string, string> = {
 export function Tools() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { data, isLoading } = useTools();
+  const [labelDraft, setLabelDraft] = useState("");
+  const [labelApplied, setLabelApplied] = useState("");
+  const listOpts = useMemo(
+    () => (labelApplied.trim() ? { labelSelector: labelApplied.trim() } : undefined),
+    [labelApplied],
+  );
+  const { data, isLoading } = useTools(listOpts);
   const [showCreate, setShowCreate] = useState(false);
   const tools = data ?? [];
 
@@ -51,6 +57,28 @@ export function Tools() {
           </div>
         </div>
         <div className="page__header-actions">
+          <label className="label-selector-field">
+            <span className="text-muted text-xs">labelSelector</span>
+            <input
+              type="text"
+              className="input-inline"
+              placeholder="key=value,key2=value2"
+              value={labelDraft}
+              onChange={(e) => setLabelDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") setLabelApplied(labelDraft.trim());
+              }}
+              aria-label="Label selector filter"
+            />
+            <button type="button" className="btn-secondary" onClick={() => setLabelApplied(labelDraft.trim())}>
+              Apply
+            </button>
+            {labelApplied && (
+              <button type="button" className="btn-ghost text-xs" onClick={() => { setLabelDraft(""); setLabelApplied(""); }}>
+                Clear
+              </button>
+            )}
+          </label>
           <button className="btn-primary" onClick={() => setShowCreate(true)}>
             <Plus size={14} /> New Tool
           </button>

@@ -85,6 +85,12 @@ export function ToolDetail() {
               <span className="detail-field__label">Type</span>
               <span className="detail-field__value">{tool.spec.type ?? "http"}</span>
             </div>
+            {tool.spec.mcp_server_ref && (
+              <div className="detail-field">
+                <span className="detail-field__label">MCP server</span>
+                <span className="detail-field__value mono">{tool.spec.mcp_server_ref}</span>
+              </div>
+            )}
             <div className="detail-field">
               <span className="detail-field__label">Endpoint</span>
               <span className="detail-field__value mono">{tool.spec.endpoint ?? "-"}</span>

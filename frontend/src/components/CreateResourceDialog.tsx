@@ -118,6 +118,27 @@ const TEMPLATES: Record<string, string> = {
       failed_history_limit: 3,
     },
   }, null, 2),
+  McpServer: JSON.stringify({
+    apiVersion: "orloj.dev/v1",
+    kind: "McpServer",
+    metadata: { name: "my-mcp-server", namespace: "default" },
+    spec: {
+      transport: "stdio",
+      command: "npx",
+      args: ["-y", "@modelcontextprotocol/server-filesystem", "/tmp"],
+      reconnect: { max_attempts: 3, backoff: "2s" },
+    },
+  }, null, 2),
+  Worker: JSON.stringify({
+    apiVersion: "orloj.dev/v1",
+    kind: "Worker",
+    metadata: { name: "worker-1", namespace: "default" },
+    spec: {
+      region: "us-east-1",
+      capabilities: { gpu: false, supported_models: [] },
+      max_concurrent_tasks: 4,
+    },
+  }, null, 2),
   TaskWebhook: JSON.stringify({
     apiVersion: "orloj.dev/v1",
     kind: "TaskWebhook",

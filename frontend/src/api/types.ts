@@ -112,6 +112,8 @@ export interface Tool {
 export interface ToolSpec {
   type?: string;
   endpoint?: string;
+  /** Reference to an McpServer resource when tools are sourced from MCP. */
+  mcp_server_ref?: string;
   capabilities?: string[];
   operation_classes?: string[];
   risk_level?: string;
@@ -534,8 +536,53 @@ export interface WorkerStatus {
   currentTasks?: number;
 }
 
+export interface McpServerEnvVar {
+  name?: string;
+  value?: string;
+  secretRef?: string;
+}
+
+export interface McpToolFilter {
+  include?: string[];
+}
+
+export interface McpReconnectPolicy {
+  max_attempts?: number;
+  backoff?: string;
+}
+
+export interface McpServerSpec {
+  transport?: string;
+  command?: string;
+  args?: string[];
+  env?: McpServerEnvVar[];
+  endpoint?: string;
+  auth?: ToolAuth;
+  tool_filter?: McpToolFilter;
+  reconnect?: McpReconnectPolicy;
+}
+
+export interface McpServerStatus {
+  phase?: string;
+  discoveredTools?: string[];
+  generatedTools?: string[];
+  lastSyncedAt?: string;
+  lastError?: string;
+  observedGeneration?: number;
+}
+
+export interface McpServer {
+  apiVersion: string;
+  kind: string;
+  metadata: ObjectMeta;
+  spec: McpServerSpec;
+  status?: McpServerStatus;
+}
+
 export interface ListResponse<T> {
   items: T[];
+  /** Cursor for the next page; pass as `after` query param. Omitted when there is no next page. */
+  continue?: string;
 }
 
 export interface Capability {
@@ -594,7 +641,8 @@ export type ResourceKind =
   | "Task"
   | "TaskSchedule"
   | "TaskWebhook"
-  | "Worker";
+  | "Worker"
+  | "McpServer";
 
 export const RESOURCE_ENDPOINTS: Record<ResourceKind, string> = {
   Agent: "agents",
@@ -611,4 +659,5 @@ export const RESOURCE_ENDPOINTS: Record<ResourceKind, string> = {
   TaskSchedule: "task-schedules",
   TaskWebhook: "task-webhooks",
   Worker: "workers",
+  McpServer: "mcp-servers",
 };

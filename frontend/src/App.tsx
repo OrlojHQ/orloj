@@ -43,6 +43,9 @@ import { Permissions } from "./pages/Permissions";
 import { ToolPermissionDetail } from "./pages/ToolPermissionDetail";
 import { ToolApprovals } from "./pages/ToolApprovals";
 import { ToolApprovalDetail } from "./pages/ToolApprovalDetail";
+import { McpServers } from "./pages/McpServers";
+import { McpServerDetail } from "./pages/McpServerDetail";
+import { Capabilities } from "./pages/Capabilities";
 import { NotFound } from "./pages/NotFound";
 import { Login } from "./pages/Login";
 import { Setup } from "./pages/Setup";
@@ -156,6 +159,9 @@ function AppLayout({
               <Route path="/models/:name" element={<ModelEndpointDetail />} />
               <Route path="/tools" element={<Tools />} />
               <Route path="/tools/:name" element={<ToolDetail />} />
+              <Route path="/mcp-servers" element={<McpServers />} />
+              <Route path="/mcp-servers/:name" element={<McpServerDetail />} />
+              <Route path="/capabilities" element={<Capabilities />} />
               <Route path="/memories" element={<Memories />} />
               <Route path="/memories/:name" element={<MemoryDetail />} />
               <Route path="/secrets" element={<Secrets />} />
