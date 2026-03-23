@@ -32,6 +32,13 @@ Build static docs:
 bun run docs:build
 ```
 
+## Vercel
+
+Use **Root Directory** `docs` so the repo’s top-level Go `api/` package is not treated as Vercel serverless routes.
+
+- **Output Directory:** set to **`dist`** in Project Settings (Vocs writes `docs/dist`). With Framework Preset **Other**, leaving this empty makes Vercel look for **`public`**, which this site does not produce.
+- **`vercel.json`** in this directory pins install/build/output; commit it so Git deployments pick it up.
+
 ## Authoring Guidelines
 
 - Keep pages in Markdown (`.md`) with stable headings.
