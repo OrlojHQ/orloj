@@ -46,8 +46,6 @@ You interact with Orloj through `orlojctl` (the CLI), the REST API, or the built
 
 Orloj focuses on production orchestration for multi-agent systems. It assumes you have already chosen your models, prompts, and tools -- Orloj's job is to run them reliably at scale with governance enforced.
 
-Orloj does not train or fine-tune models, provide prompt authoring workflows, or serve as a user-facing chatbot framework. While it uses a Kubernetes-style resource model (`apiVersion`, `kind`, `spec`, `status`), it is a standalone system and does not require a Kubernetes cluster.
-
 ## Get Started
 
 1. [Install Orloj](./getting-started/install.md) -- run from source, build binaries, or use Docker Compose.

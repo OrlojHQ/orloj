@@ -10,6 +10,7 @@ const vocsBaseUrl = process.env.VOCS_BASE_URL?.trim()
 export default defineConfig({
   ...(vocsBasePath ? { basePath: vocsBasePath } : {}),
   ...(vocsBaseUrl ? { baseUrl: vocsBaseUrl } : {}),
+  iconUrl: '/favicon.png',
   title: 'orloj Docs',
   description: 'Lightweight orchestration plane for agents, tools, policies, and task execution.',
   rootDir: '.',
