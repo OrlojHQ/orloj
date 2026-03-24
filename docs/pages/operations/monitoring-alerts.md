@@ -2,11 +2,11 @@
 
 Use `orloj-alertcheck` and dashboard contracts to validate runtime reliability signals.
 
-> For Prometheus metrics, OpenTelemetry tracing, structured logging, and the trace visualization UI, see [Observability](./observability.md).
+> For Prometheus metrics, OpenTelemetry tracing, structured logging, and trace visualization, see [Observability](./observability.md).
 
 ## Purpose
 
-This guide defines repeatable operational checks for retry storms, dead-letter growth, and latency saturation.
+This guide defines repeatable checks for retry storms, dead-letter growth, and latency saturation.
 
 ## Artifacts
 
@@ -27,14 +27,49 @@ go run ./cmd/orloj-alertcheck \
   --json=true
 ```
 
-Optional filters:
+### `orloj-alertcheck` Flags
 
-- `--task-name-prefix`
-- `--task-system`
+| Flag | Default | Description |
+|---|---|---|
+| `--base-url` | `http://127.0.0.1:8080` | Orloj API base URL. |
+| `--namespace` | `default` | Target namespace for task queries. |
+| `--api-token` | empty | Optional bearer token for API auth (env fallback: `ORLOJ_API_TOKEN`). |
+| `--profile` | `monitoring/alerts/retry-deadletter-default.json` | Alert threshold profile JSON file. |
+| `--task-name-prefix` | empty | Optional filter by task name prefix. |
+| `--task-system` | empty | Optional filter by `Task.spec.system`. |
+| `--poll-concurrency` | `20` | Concurrent task metrics fetch workers. |
+| `--timeout` | `2m` | Global command timeout. |
+| `--json` | `true` | Emit machine-readable JSON output. |
+| `--verbose` | `false` | Emit verbose progress logs. |
 
-Auth:
+For authoritative defaults and full CLI context, see [CLI reference](../reference/cli.md#orloj-alertcheck).
 
-- `--api-token=<token>` or `ORLOJ_API_TOKEN=<token>`
+## Loadtest Reliability Gates and Injection Controls
+
+Use `orloj-loadtest` to validate system behavior under expected and fault-injected load patterns.
+
+Key reliability gate controls:
+
+- `--quality-profile`
+- `--min-success-rate`
+- `--max-deadletter-rate`
+- `--max-failed-rate`
+- `--max-timed-out`
+- `--min-retry-total`
+- `--min-takeover-events`
+
+Key injection controls:
+
+- `--inject-invalid-system-rate`, `--invalid-system-name`
+- `--inject-timeout-system-rate`, `--timeout-system-name`, `--timeout-agent-name`, `--timeout-agent-duration`
+- `--inject-expired-lease-rate`, `--expired-lease-owner`
+
+Worker readiness and pacing controls:
+
+- `--min-ready-workers`, `--worker-ready-timeout`
+- `--poll-concurrency`, `--poll-interval`, `--run-timeout`
+
+For exhaustive loadtest flags and defaults, see [CLI reference](../reference/cli.md#orloj-loadtest).
 
 ## Exit Behavior
 

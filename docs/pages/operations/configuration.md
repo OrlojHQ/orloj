@@ -1,6 +1,8 @@
 # Configuration
 
-This page defines runtime configuration for `orlojd`, `orlojworker`, and client-side defaults for `orlojctl` (see also [CLI reference](../reference/cli.md)).
+This page is the canonical reference for runtime environment variables and flag-to-env precedence for `orlojd`, `orlojworker`, and `orlojctl`.
+
+See also [CLI reference](../reference/cli.md) for exhaustive flag definitions.
 
 ## Precedence
 
@@ -11,77 +13,89 @@ This page defines runtime configuration for `orlojd`, `orlojworker`, and client-
 Example:
 
 - `--model-gateway-provider` overrides `ORLOJ_MODEL_GATEWAY_PROVIDER`.
-- If neither is set, default is `mock`.
+- If neither is set, the default provider is `mock`.
 
-## Core Environment Variables
+## Runtime Environment Matrix
 
-| Variable | Used By | Purpose |
-|---|---|---|
-| `ORLOJ_POSTGRES_DSN` | `orlojd`, `orlojworker` | Postgres DSN when `--storage-backend=postgres`. |
-| `ORLOJ_TASK_EXECUTION_MODE` | `orlojd`, `orlojworker` | `sequential` or `message-driven`. |
-| `ORLOJ_EMBEDDED_WORKER_MAX_CONCURRENT_TASKS` | `orlojd` | Default for `--embedded-worker-max-concurrent-tasks` when the embedded worker is enabled (`<= 0` normalized to `1` on upsert). |
-| `ORLOJ_MODEL_GATEWAY_PROVIDER` | `orlojd`, `orlojworker` | `mock`, `openai`, `anthropic`, `azure-openai`, `ollama`. |
-| `ORLOJ_MODEL_GATEWAY_API_KEY` | `orlojd`, `orlojworker` | Explicit model API key. |
-| `OPENAI_API_KEY` | `orlojd`, `orlojworker` | Fallback key for OpenAI. |
-| `ANTHROPIC_API_KEY` | `orlojd`, `orlojworker` | Fallback key for Anthropic. |
-| `AZURE_OPENAI_API_KEY` | `orlojd`, `orlojworker` | Fallback key for Azure OpenAI. |
-| `ORLOJ_EVENT_BUS_BACKEND` | `orlojd` | Server event bus (`memory|nats`). |
-| `ORLOJ_NATS_URL` | `orlojd`, `orlojworker` | NATS URL and fallback for runtime message bus URL. |
-| `ORLOJ_AGENT_MESSAGE_BUS_BACKEND` | `orlojd`, `orlojworker` | Runtime message bus (`none|memory|nats-jetstream`). |
-| `ORLOJ_AUTH_MODE` | `orlojd` | API auth mode (`off|native|sso`). `sso` is not available in this distribution. |
-| `ORLOJ_AUTH_SESSION_TTL` | `orlojd` | Session TTL for native auth mode (example: `24h`). |
-| `ORLOJ_SETUP_TOKEN` | `orlojd` | When set, `/v1/auth/setup` requires a matching `setup_token` in the request body. Prevents unauthorized admin account creation on exposed instances. |
-| `ORLOJ_SECRET_ENCRYPTION_KEY` | `orlojd`, `orlojworker` | 256-bit AES key (hex or base64) for encrypting Secret resource data at rest. |
-| `ORLOJ_TOOL_ISOLATION_BACKEND` | `orlojd`, `orlojworker` | Tool isolation (`none|container|wasm`). |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `orlojd`, `orlojworker` | OTLP gRPC endpoint for OpenTelemetry trace export. Empty disables export. |
-| `OTEL_EXPORTER_OTLP_INSECURE` | `orlojd`, `orlojworker` | Set to `true` for non-TLS OTLP connections (development). |
-| `ORLOJ_LOG_FORMAT` | `orlojd`, `orlojworker` | Log output format: `json` (default) or `text`. |
-| `ORLOJ_SERVER` | `orlojctl` | Default API base URL when `--server` is omitted (after `ORLOJCTL_SERVER`). |
-| `ORLOJCTL_SERVER` | `orlojctl` | Default API base URL when `--server` is omitted (highest precedence among env defaults). |
-| `ORLOJCTL_API_TOKEN` | `orlojctl` | Bearer token for API calls (same semantics as `ORLOJ_API_TOKEN` for the client). |
+| Variable | Used By | Flag Overrides | Purpose / Conditions |
+|---|---|---|---|
+| `ORLOJ_POSTGRES_DSN` | `orlojd`, `orlojworker` | `--postgres-dsn` | Postgres DSN when `--storage-backend=postgres`. |
+| `ORLOJ_TASK_EXECUTION_MODE` | `orlojd`, `orlojworker` | `--task-execution-mode` | Task execution mode: `sequential` or `message-driven`. |
+| `ORLOJ_EMBEDDED_WORKER_MAX_CONCURRENT_TASKS` | `orlojd` | `--embedded-worker-max-concurrent-tasks` | Embedded worker default concurrency. |
+| `ORLOJ_TASK_WORKER_REGION` | `orlojd` | `--task-worker-region` | Region for embedded worker registration. |
+| `ORLOJ_WORKER_HEALTHZ_ADDR` | `orlojworker` | `--healthz-addr` | Optional worker liveness endpoint bind address. |
+| `ORLOJ_MODEL_GATEWAY_PROVIDER` | `orlojd`, `orlojworker` | `--model-gateway-provider` | Model provider: `mock`, `openai`, `anthropic`, `azure-openai`, `ollama`. |
+| `ORLOJ_MODEL_GATEWAY_API_KEY` | `orlojd`, `orlojworker` | `--model-gateway-api-key` | Explicit model provider API key. |
+| `ORLOJ_MODEL_GATEWAY_BASE_URL` | `orlojd`, `orlojworker` | `--model-gateway-base-url` | Provider base URL override. |
+| `ORLOJ_MODEL_GATEWAY_TIMEOUT` | `orlojd`, `orlojworker` | `--model-gateway-timeout` | HTTP timeout for model gateway requests. |
+| `ORLOJ_MODEL_GATEWAY_DEFAULT_MODEL` | `orlojd`, `orlojworker` | `--model-gateway-default-model` | Fallback default model when endpoint/default values are not set. |
+| `ORLOJ_MODEL_SECRET_ENV_PREFIX` | `orlojd`, `orlojworker` | `--model-secret-env-prefix` | Env prefix for model endpoint `secretRef` lookups. |
+| `OPENAI_API_KEY` | `orlojd`, `orlojworker` | none | Fallback key for OpenAI provider integrations. |
+| `ANTHROPIC_API_KEY` | `orlojd`, `orlojworker` | none | Fallback key for Anthropic provider integrations. |
+| `AZURE_OPENAI_API_KEY` | `orlojd`, `orlojworker` | none | Fallback key for Azure OpenAI provider integrations. |
+| `ORLOJ_TOOL_ISOLATION_BACKEND` | `orlojd`, `orlojworker` | `--tool-isolation-backend` | Tool runtime backend: `none`, `container`, or `wasm`. |
+| `ORLOJ_TOOL_CONTAINER_RUNTIME` | `orlojd`, `orlojworker` | `--tool-container-runtime` | Container runtime binary for tool isolation. |
+| `ORLOJ_TOOL_CONTAINER_IMAGE` | `orlojd`, `orlojworker` | `--tool-container-image` | Container image used by isolated tool execution. |
+| `ORLOJ_TOOL_CONTAINER_NETWORK` | `orlojd`, `orlojworker` | `--tool-container-network` | Container network mode for isolated tools. |
+| `ORLOJ_TOOL_CONTAINER_MEMORY` | `orlojd`, `orlojworker` | `--tool-container-memory` | Container memory limit for isolated tools. |
+| `ORLOJ_TOOL_CONTAINER_CPUS` | `orlojd`, `orlojworker` | `--tool-container-cpus` | Container CPU limit for isolated tools. |
+| `ORLOJ_TOOL_CONTAINER_PIDS_LIMIT` | `orlojworker` | `--tool-container-pids-limit` | Container PID limit for isolated tools. |
+| `ORLOJ_TOOL_CONTAINER_USER` | `orlojd`, `orlojworker` | `--tool-container-user` | Container user/group for isolated tools. |
+| `ORLOJ_TOOL_SECRET_ENV_PREFIX` | `orlojd`, `orlojworker` | `--tool-secret-env-prefix` | Env prefix for tool `secretRef` lookups. |
+| `ORLOJ_TOOL_WASM_MODULE` | `orlojd`, `orlojworker` | `--tool-wasm-module` | WASM module path/identifier for WASM tool backend. |
+| `ORLOJ_TOOL_WASM_ENTRYPOINT` | `orlojd`, `orlojworker` | `--tool-wasm-entrypoint` | WASM entrypoint function name. |
+| `ORLOJ_TOOL_WASM_RUNTIME_BINARY` | `orlojd`, `orlojworker` | `--tool-wasm-runtime-binary` | WASM runtime binary used for command-backed WASM execution. |
+| `ORLOJ_TOOL_WASM_RUNTIME_ARGS` | `orlojd`, `orlojworker` | `--tool-wasm-runtime-args` | Comma-separated extra args passed to WASM runtime. |
+| `ORLOJ_TOOL_WASM_MEMORY_BYTES` | `orlojd`, `orlojworker` | `--tool-wasm-memory-bytes` | Max memory bytes for WASM runtime. |
+| `ORLOJ_TOOL_WASM_FUEL` | `orlojd`, `orlojworker` | `--tool-wasm-fuel` | Optional WASM execution fuel limit (`0` disables fuel limiting). |
+| `ORLOJ_TOOL_WASM_WASI` | `orlojd`, `orlojworker` | `--tool-wasm-wasi` | Enable WASI host functions for WASM runtime. |
+| `ORLOJ_EVENT_BUS_BACKEND` | `orlojd` | `--event-bus-backend` | Control-plane event bus backend: `memory` or `nats`. |
+| `ORLOJ_NATS_URL` | `orlojd`, `orlojworker` | `--nats-url` (server), `--agent-message-nats-url` (runtime bus) | Base NATS URL; also fallback for runtime message bus URL. |
+| `ORLOJ_NATS_SUBJECT_PREFIX` | `orlojd` | `--nats-subject-prefix` | Subject prefix used for control-plane NATS event bus. |
+| `ORLOJ_AGENT_MESSAGE_BUS_BACKEND` | `orlojd`, `orlojworker` | `--agent-message-bus-backend` | Runtime message bus backend: `none`, `memory`, `nats-jetstream`. |
+| `ORLOJ_AGENT_MESSAGE_NATS_URL` | `orlojd`, `orlojworker` | `--agent-message-nats-url` | NATS URL used when runtime bus backend is `nats-jetstream`. |
+| `ORLOJ_AGENT_MESSAGE_SUBJECT_PREFIX` | `orlojd`, `orlojworker` | `--agent-message-subject-prefix` | Subject prefix for runtime agent messages. |
+| `ORLOJ_AGENT_MESSAGE_STREAM` | `orlojd`, `orlojworker` | `--agent-message-stream-name` | JetStream stream name for runtime agent messages. |
+| `ORLOJ_AGENT_MESSAGE_CONSUME` | `orlojworker` | `--agent-message-consume` | Enables worker-side runtime inbox consumers. |
+| `ORLOJ_AGENT_MESSAGE_CONSUMER_NAMESPACE` | `orlojworker` | `--agent-message-consumer-namespace` | Optional namespace filter for runtime inbox consumers. |
+| `ORLOJ_API_TOKEN` | `orlojd`, `orlojctl`, `orloj-alertcheck` | `--api-key` (server), `--api-token` (client/checker) | Bearer token fallback for API auth. |
+| `ORLOJ_API_TOKENS` | `orlojd` | none | Multi-token auth map (`token:role` comma-separated list). |
+| `ORLOJ_AUTH_MODE` | `orlojd` | `--auth-mode` | API auth mode (`off`, `native`, `sso`; `sso` unavailable in this distribution). |
+| `ORLOJ_AUTH_SESSION_TTL` | `orlojd` | `--auth-session-ttl` | Session TTL for native auth mode. |
+| `ORLOJ_AUTH_RESET_ADMIN_USERNAME` | `orlojd` | `--auth-reset-admin-username` | One-shot local admin reset username. |
+| `ORLOJ_AUTH_RESET_ADMIN_PASSWORD` | `orlojd` | `--auth-reset-admin-password` | One-shot local admin reset password and exit. |
+| `ORLOJ_SETUP_TOKEN` | `orlojd` | none | Protects `/v1/auth/setup`; required request value for initial setup when set. |
+| `ORLOJ_SECRET_ENCRYPTION_KEY` | `orlojd`, `orlojworker` | `--secret-encryption-key` | AES key for encrypting Secret resource data at rest. |
+| `ORLOJ_SECRET_<name>` | `orlojd`, `orlojworker` | `--model-secret-env-prefix`, `--tool-secret-env-prefix` | Dynamic secret lookup fallback for `secretRef` resolution. |
+| `ORLOJ_SERVER` | `orlojctl` | `--server` | Default API base URL after `ORLOJCTL_SERVER`. |
+| `ORLOJCTL_SERVER` | `orlojctl` | `--server` | Highest-precedence env default API base URL. |
+| `ORLOJCTL_API_TOKEN` | `orlojctl` | `--api-token` | Bearer token for CLI API calls. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `orlojd`, `orlojworker` | none | OTLP gRPC endpoint for OpenTelemetry traces. Empty disables export. |
+| `OTEL_EXPORTER_OTLP_INSECURE` | `orlojd`, `orlojworker` | none | Set `true` for non-TLS OTLP in development. |
+| `ORLOJ_LOG_FORMAT` | `orlojd`, `orlojworker` | none | Log format: `json` (default) or `text`. |
 
-## Server Flags
+## Server and Worker Flags
 
-Print full options:
+Use [CLI reference](../reference/cli.md) as the exhaustive list for all flags and defaults.
 
-```bash
-go run ./cmd/orlojd -h
-```
+Quick grouping:
 
-High-impact groups:
-
-- API/server: `--addr`
-- storage: `--storage-backend`, `--postgres-dsn`, pool sizing flags
-- execution: `--task-execution-mode`, embedded worker/lease controls, `--embedded-worker-max-concurrent-tasks`
-- model gateway: provider, API key, timeout, base URL, default model
-- tool runtime: isolation mode, container and wasm controls
-- buses: server event bus and runtime message bus flags
-
-## Worker Flags
-
-Print full options:
-
-```bash
-go run ./cmd/orlojworker -h
-```
-
-High-impact groups:
-
-- identity/capacity: `--worker-id`, `--region`, `--gpu`, `--supported-models`, `--max-concurrent-tasks`
-- storage: same postgres flags as server
-- execution: `--task-execution-mode`, `--agent-message-consume`, runtime consumer controls
-- model/tool runtime: provider and isolation flags
+- Server (`orlojd`): auth, storage, embedded worker, control-plane event bus, runtime message bus, model gateway, tool isolation.
+- Worker (`orlojworker`): identity/capacity, storage, runtime inbox consumers, model gateway, tool isolation.
 
 ## Secret Resolution
 
-Model endpoints and tools reference secrets via `secretRef` fields. The runtime resolves secrets using a chain of resolvers:
+Model endpoints and tools resolve `secretRef` values in this order:
 
-1. **Resource store** -- looks up a `Secret` resource by name.
-2. **Environment variables** -- looks up `ORLOJ_SECRET_<name>` (prefix is configurable with `--model-secret-env-prefix` and `--tool-secret-env-prefix`).
+1. Secret resources in the control-plane store.
+2. Environment variables with configurable prefixes (`ORLOJ_SECRET_<name>` by default).
 
 ### Encryption at Rest
 
-Pass `--secret-encryption-key` (or set `ORLOJ_SECRET_ENCRYPTION_KEY`) on both `orlojd` and `orlojworker` to encrypt `Secret.spec.data` values in the database using AES-256-GCM. The same key must be used by all processes sharing the database. See [Security and Isolation -- Encryption at Rest](./security.md#encryption-at-rest) for key generation and usage.
+Set `--secret-encryption-key` (or `ORLOJ_SECRET_ENCRYPTION_KEY`) on every process sharing the same backing store.
+
+- Use one consistent key for all `orlojd`/`orlojworker` processes against the same database.
+- Rotating keys requires a migration procedure (see security/upgrade runbooks).
 
 ## Postgres Tuning
 
@@ -95,13 +109,13 @@ The main Postgres pool is configured via CLI flags:
 | `--postgres-max-idle-conns` | 10 | Maximum idle connections kept warm |
 | `--postgres-conn-max-lifetime` | 30m | Maximum lifetime of a connection before recycling |
 
-Idle connections are evicted after 5 minutes to avoid stale TCP connections behind firewalls or load balancers.
+Idle connections are evicted after 5 minutes to reduce stale TCP connection risk behind firewalls/load balancers.
 
 ### Connection Pool (pgvector memory backend)
 
-The pgvector memory backend uses a separate `pgxpool` connection pool created from the Memory resource's `spec.endpoint` DSN. Pool behavior can be tuned by appending query parameters to the endpoint URL:
+The pgvector backend uses a separate `pgxpool` created from the Memory resource `spec.endpoint` DSN. Tune it with DSN params:
 
-```
+```text
 postgres://user:pass@host:5432/db?pool_max_conns=10&pool_min_conns=2&pool_max_conn_idle_time=5m&pool_health_check_period=1m
 ```
 
@@ -115,26 +129,24 @@ postgres://user:pass@host:5432/db?pool_max_conns=10&pool_min_conns=2&pool_max_co
 
 ### Statement Timeout
 
-Neither the main store nor the pgvector backend sets a `statement_timeout` by default. To protect against runaway queries, add it to the DSN:
+Neither the main store nor pgvector backend sets `statement_timeout` by default. Add it via DSN `options`:
 
 ```bash
 # Main store (30-second statement timeout)
 --postgres-dsn="postgres://user:pass@host:5432/db?options=-c%20statement_timeout%3D30000"
 
-# pgvector memory endpoint (in the Memory resource spec.endpoint)
+# pgvector memory endpoint
 postgres://user:pass@host:5432/db?options=-c%20statement_timeout%3D30000&pool_max_conns=10
 ```
-
-The `statement_timeout` value is in milliseconds. Postgres cancels any single statement that exceeds this limit.
 
 ## Recommended Production Baseline
 
 - `orlojd`: `--storage-backend=postgres`, `--task-execution-mode=message-driven`, `--agent-message-bus-backend=nats-jetstream`
 - `orlojworker`: `--storage-backend=postgres`, `--task-execution-mode=message-driven`, `--agent-message-consume`
-- Enable `--secret-encryption-key` on all processes if using `Secret` resources
-- Set provider keys via `ORLOJ_SECRET_*` environment variables or an external secret manager
-- Set `OTEL_EXPORTER_OTLP_ENDPOINT` to your tracing backend (Jaeger, Tempo, etc.) for distributed trace collection
-- See [Observability](./observability.md) for the full tracing, metrics, and logging setup
+- Enable `--secret-encryption-key` on all processes when using Secret resources
+- Configure model/tool credentials via `ORLOJ_SECRET_<name>` or external secret management
+- Set `OTEL_EXPORTER_OTLP_ENDPOINT` for distributed tracing
+- See [Observability](./observability.md) for tracing, metrics, and logs setup
 
 ## Verification
 

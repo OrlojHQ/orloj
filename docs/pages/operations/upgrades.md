@@ -61,3 +61,9 @@ go run ./cmd/orlojctl get tasks
 go run ./cmd/orloj-loadtest --quality-profile=monitoring/loadtest/quality-default.json --tasks=50
 go run ./cmd/orloj-alertcheck --profile=monitoring/alerts/retry-deadletter-default.json
 ```
+
+For complete reliability and alert flag coverage (including gate/injection controls and verbose/debug options), see:
+
+- [CLI reference](../reference/cli.md#orloj-loadtest)
+- [CLI reference](../reference/cli.md#orloj-alertcheck)
+- [Monitoring and Alerts](./monitoring-alerts.md)
