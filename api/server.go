@@ -47,7 +47,7 @@ type Stores struct {
 // ServerOptions configures optional extension points.
 type ServerOptions struct {
 	Authorizer         RequestAuthorizer
-	ResourceAuthorizer ResourceAuthorizer // optional; enterprise RBAC hook
+	ResourceAuthorizer ResourceAuthorizer // optional authorization hook
 	Extensions         agentruntime.Extensions
 	AuthMode           AuthMode
 	SessionTTL         time.Duration
@@ -60,7 +60,7 @@ type Server struct {
 	logger             *log.Logger
 	mux                *http.ServeMux
 	authorizer         RequestAuthorizer
-	resourceAuthorizer ResourceAuthorizer // nil in OSS; enterprise RBAC hook
+	resourceAuthorizer ResourceAuthorizer // optional authorization hook
 	authMode           AuthMode
 	sessionTTL         time.Duration
 	bus                eventbus.Bus

@@ -33,7 +33,7 @@ func TestParseAuthModeRejectsSSOInOSS(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected sso mode to be rejected in OSS")
 	}
-	if !strings.Contains(err.Error(), "requires enterprise build/adapter") {
+	if !strings.Contains(err.Error(), "is not available in this distribution") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

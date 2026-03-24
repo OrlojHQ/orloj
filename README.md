@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/public/logo.png" alt="Orloj" width="200" />
+</p>
+
 # Orloj
 
 *Named after the [Prague Orloj](https://en.wikipedia.org/wiki/Prague_astronomical_clock), an astronomical clock that has coordinated complex mechanisms for over 600 years.*
@@ -109,18 +113,17 @@ Orloj manages 15 resource types, all defined as declarative YAML with `apiVersio
 Full documentation is available at the [docs site](docs/pages/index.md) or locally:
 
 ```bash
-bun install && bun run docs:dev
+cd docs && bun install && bun run dev
 ```
 
 Key pages:
 
-- [Getting Started](docs/pages/getting-started/index.md) -- install, quickstart
-- [Architecture Overview](docs/pages/architecture/overview.md) -- server, workers, governance, execution modes
-- [Concepts](docs/pages/concepts/index.md) -- agents, tasks, tools, model routing, governance
+- [Getting Started](docs/pages/getting-started/install.md) -- install, quickstart
+- [Concepts](docs/pages/concepts/architecture.md) -- architecture, agents, tasks, tools, model routing, governance
 - [Guides](docs/pages/guides/index.md) -- deploy a pipeline, configure routing, build tools, set up governance
-- [Reference](docs/pages/reference/index.md) -- CLI, API, resource schemas, contracts
-- [Deployment](docs/pages/deployment/index.md) -- local, VPS, Kubernetes, [remote CLI access](docs/pages/deployment/remote-cli-access.md)
-- [Security and Isolation](docs/pages/operations/security.md) -- control plane API tokens (`openssl rand`), secrets, tool isolation
+- [Deploy & Operate](docs/pages/deploy/index.md) -- local, VPS, Kubernetes, [remote CLI access](docs/pages/deploy/remote-cli-access.md)
+- [Reference](docs/pages/reference/cli.md) -- CLI, API, resource schemas
+- [Security](docs/pages/operations/security.md) -- control plane API tokens, secrets, tool isolation
 - [Examples](examples/README.md) -- per-kind YAML under `examples/resources/`, starter `blueprints/`, and `use-cases/`
 
 ## Docker Compose
@@ -132,7 +135,7 @@ docker compose up --build -d
 docker compose ps
 ```
 
-The Compose images include the server and workers only. To drive the API from your machine, install **`orlojctl`** from [GitHub Releases](https://github.com/OrlojHQ/orloj/releases) (CLI-only tarball) or build from this repo; see [docs: hosted stack, local CLI](docs/pages/deployment/index.md#hosted-stack-local-cli).
+The Compose images include the server and workers only. To drive the API from your machine, install **`orlojctl`** from [GitHub Releases](https://github.com/OrlojHQ/orloj/releases) (CLI-only tarball) or build from this repo; see [Deploy & Operate](docs/pages/deploy/index.md).
 
 ## Kubernetes (Helm)
 
@@ -153,7 +156,7 @@ helm upgrade --install orloj ./charts/orloj \
   --set runtimeSecret.modelGatewayApiKey='<model-provider-api-key>'
 ```
 
-See the Kubernetes runbook for full operations and troubleshooting: [docs/pages/deployment/kubernetes.md](docs/pages/deployment/kubernetes.md).
+See the Kubernetes deployment guide for full operations and troubleshooting: [docs/pages/deploy/kubernetes.md](docs/pages/deploy/kubernetes.md).
 
 ## Contributing
 

@@ -67,7 +67,7 @@ type CapabilityProvider interface {
 	Capabilities(ctx context.Context) CapabilitySnapshot
 }
 
-// Extensions groups optional runtime hooks for commercial/add-on integrations.
+// Extensions groups optional runtime hooks for add-on integrations.
 type Extensions struct {
 	Metering     MeteringSink
 	Audit        AuditSink

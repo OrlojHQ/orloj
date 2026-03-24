@@ -26,10 +26,10 @@ func AuthIdentityFromRequest(r *http.Request) (AuthIdentity, bool) {
 }
 
 // ResourceAuthorizer is an optional extension point for fine-grained access
-// control beyond the built-in role check. An enterprise RBAC layer can
+// control beyond the built-in role check. A custom authorization layer can
 // implement this interface to enforce per-namespace, per-resource-type, or
-// per-user policies. In the OSS build this is nil (all access permitted
-// after the role check passes).
+// per-user policies. Nil by default (all access permitted after the role
+// check passes).
 //
 // The method, resourceType, namespace, and name describe the operation.
 // resourceType is the API resource kind (e.g. "Agent", "Secret", "Task").

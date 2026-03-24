@@ -134,8 +134,8 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 			http.Error(w, strings.TrimSpace(message), statusCode)
 			return
 		}
-		// Extension point: enterprise RBAC can enforce per-namespace,
-		// per-resource, or per-user policies here. In OSS this is nil.
+		// Extension point: a custom authorizer can enforce per-namespace,
+		// per-resource, or per-user policies here. Nil by default.
 		if s.resourceAuthorizer != nil {
 			ns := requestNamespace(r)
 			resType, resName := resourceInfoFromPath(r.URL.Path)

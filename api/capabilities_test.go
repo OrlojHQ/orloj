@@ -79,7 +79,7 @@ func TestCapabilitiesEndpointSupportsCustomProvider(t *testing.T) {
 				snapshot: agentruntime.CapabilitySnapshot{
 					GeneratedAt: "2026-03-14T00:00:00Z",
 					Capabilities: []agentruntime.Capability{
-						{ID: "enterprise.sso", Enabled: true, Source: "extension"},
+						{ID: "custom.sso", Enabled: true, Source: "extension"},
 					},
 				},
 			},
@@ -100,7 +100,7 @@ func TestCapabilitiesEndpointSupportsCustomProvider(t *testing.T) {
 	if payload.GeneratedAt != "2026-03-14T00:00:00Z" {
 		t.Fatalf("expected fixed generated_at, got %q", payload.GeneratedAt)
 	}
-	if len(payload.Capabilities) != 1 || payload.Capabilities[0].ID != "enterprise.sso" {
+	if len(payload.Capabilities) != 1 || payload.Capabilities[0].ID != "custom.sso" {
 		t.Fatalf("unexpected custom capabilities payload: %+v", payload.Capabilities)
 	}
 }
