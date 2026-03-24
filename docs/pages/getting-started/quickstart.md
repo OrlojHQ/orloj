@@ -63,7 +63,7 @@ go run ./cmd/orlojworker \
   --model-gateway-provider=openai
 ```
 
-See [Execution and Messaging](../architecture/execution-model.md) for details on the message lifecycle, ownership guarantees, and retry behavior.
+See [Execution and Messaging](../concepts/execution-model.md) for details on the message lifecycle, ownership guarantees, and retry behavior.
 
 ## Try with a Real Model
 
@@ -71,5 +71,5 @@ The quickstart above uses the mock gateway, which returns placeholder output. To
 
 ## Next Steps
 
-- [Starter Blueprints](../architecture/starter-blueprints.md) -- pipeline, hierarchical, and swarm-loop topologies
+- [Starter Blueprints](../guides/starter-blueprints.md) -- pipeline, hierarchical, and swarm-loop topologies
 - [Configuration](../operations/configuration.md) -- all flags and environment variables

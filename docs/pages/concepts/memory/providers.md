@@ -16,18 +16,6 @@ Both paths use the same CRD fields: `spec.endpoint` for the database URL and `sp
 | `pgvector` | PostgreSQL with the pgvector extension. Full vector-similarity search via embeddings. Requires `endpoint` (Postgres DSN), `embedding_model` (ModelEndpoint reference), and optionally `auth.secretRef` (Postgres password). See [pgvector](#pgvector). |
 | `http` | Delegates to an external HTTP service at `spec.endpoint`. See [HTTP Adapter](#http-adapter). |
 
-## Coming Soon
-
-The following built-in providers are planned. Each will connect directly to the database using `spec.endpoint` and `spec.auth.secretRef` -- no adapter service required. In the meantime, any of these can be used today via the `http` adapter.
-
-| Provider | Status |
-|---|---|
-| Qdrant | Planned |
-| Pinecone | Planned |
-| Weaviate | Planned |
-| Chroma | Planned |
-| Milvus | Planned |
-
 ## pgvector
 
 The `pgvector` provider stores memory entries in PostgreSQL using the [pgvector](https://github.com/pgvector/pgvector) extension. Every write generates a vector embedding, enabling true cosine-similarity search via `memory.search`.
@@ -199,7 +187,7 @@ The `MemoryProviderConfig` passed to the factory contains:
 | `EmbeddingModel` | The raw `spec.embedding_model` string from the Memory CRD. |
 | `Endpoint` | The `spec.endpoint` URL or connection string. |
 | `AuthToken` | Resolved bearer token from `spec.auth.secretRef`. |
-| `Options` | Reserved for future provider-specific configuration. |
+| `Options` | Provider-specific configuration (currently unused). |
 | `Embedder` | An `EmbeddingProvider` interface (with `Embed` and `Dimensions` methods). Non-nil when `spec.embedding_model` references a valid ModelEndpoint. Vector providers should use this for generating embeddings. |
 
 The Memory controller calls the factory, runs `Ping` to verify connectivity, and moves the resource to `Ready` if successful.

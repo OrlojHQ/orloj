@@ -2,7 +2,7 @@
 
 Step-by-step tutorials for common Orloj workflows. Each guide walks through a complete use case from start to finish, using real manifests from the `examples/` directory.
 
-For **ready-made scenario folders** (full YAML sets you can copy into your environment), see [examples/use-cases/](../../../examples/use-cases/README.md).
+For **ready-made scenario folders** (full YAML sets you can copy into your environment), see [examples/use-cases/](https://github.com/OrlojHQ/orloj/tree/main/examples/use-cases).
 
 If you have not installed Orloj yet, start with the [Install](../getting-started/install.md) and [Quickstart](../getting-started/quickstart.md) pages first.
 

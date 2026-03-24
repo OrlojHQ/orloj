@@ -6,7 +6,7 @@ This guide is for developers who need to extend agent capabilities by implementi
 
 - Orloj server (`orlojd`) and at least one worker running
 - `orlojctl` available
-- Familiarity with the [Tools and Isolation](../concepts/tools-and-isolation.md) concepts
+- Familiarity with the [Tools and Isolation](../concepts/tools/tool.md) concepts
 
 ## What You Will Build
 
@@ -14,7 +14,7 @@ A custom HTTP tool that agents can invoke during execution, registered with Orlo
 
 ## Step 1: Implement the Tool Contract
 
-Every tool must accept a JSON request envelope and return a JSON response envelope. This is the [Tool Contract v1](../reference/tool-contract-v1.md).
+Every tool must accept a JSON request envelope and return a JSON response envelope.
 
 **Request** (sent by the Orloj runtime to your tool):
 ```json
@@ -293,7 +293,7 @@ spec:
     timeout: 5s
 ```
 
-WASM tools communicate over stdin/stdout using the same JSON envelope. See the [WASM Tool Module Contract v1](../reference/wasm-tool-module-contract-v1.md) for the host-guest communication specification.
+WASM tools communicate over stdin/stdout using the same JSON envelope.
 
 **Sandboxed isolation** (secure-by-default container):
 ```yaml
@@ -318,12 +318,8 @@ Orloj provides a tool runtime conformance harness that tests your tool against t
 7. **Observability** -- trace metadata is propagated
 8. **Determinism** -- identical inputs produce consistent outputs
 
-See [Tool Runtime Conformance](../operations/tool-runtime-conformance.md) for detailed instructions on running the harness.
-
 ## Next Steps
 
-- [Tool Contract v1](../reference/tool-contract-v1.md) -- full contract specification
-- [WASM Tool Module Contract v1](../reference/wasm-tool-module-contract-v1.md) -- WASM-specific contract
-- [Tools and Isolation](../concepts/tools-and-isolation.md) -- concept deep-dive
-- [Tool Runtime Conformance](../operations/tool-runtime-conformance.md) -- running the test harness
+- [Tool](../concepts/tools/tool.md) -- tool types, isolation, and contract details
+- [Tools and Isolation](../concepts/tools/tool.md) -- concept deep-dive
 - [Connect an MCP Server](./connect-mcp-server.md) -- for MCP-compatible tool servers instead of custom implementations

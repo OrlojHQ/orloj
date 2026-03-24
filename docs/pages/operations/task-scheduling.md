@@ -27,7 +27,7 @@ Template reference used by schedules:
 
 Example schedule resource:
 
-- [`examples/resources/task-schedules/weekly_report_schedule.yaml`](../../../examples/resources/task-schedules/weekly_report_schedule.yaml)
+- [`examples/resources/task-schedules/weekly_report_schedule.yaml`](https://github.com/OrlojHQ/orloj/tree/main/examples/resources/task-schedules/weekly_report_schedule.yaml)
 
 Apply it:
 
@@ -90,6 +90,6 @@ Generated run tasks are labeled with schedule metadata:
 
 ## Related Docs
 
-- [Resource Reference (`TaskSchedule`)](../reference/resources.md)
+- [Resource Reference (`TaskSchedule`)](../reference/resources/task-schedule.md)
 - [API Reference](../reference/api.md)
 - [Troubleshooting](./troubleshooting.md)

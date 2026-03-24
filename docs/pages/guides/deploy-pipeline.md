@@ -184,6 +184,6 @@ orlojctl apply -f examples/blueprints/pipeline/task.yaml
 
 ## Next Steps
 
-- [Starter Blueprints](../architecture/starter-blueprints.md) -- explore hierarchical and swarm-loop topologies
+- [Starter Blueprints](./starter-blueprints.md) -- explore hierarchical and swarm-loop topologies
 - [Set Up Multi-Agent Governance](./setup-governance.md) -- add policies and permissions to your pipeline
-- [Tasks and Scheduling](../concepts/tasks-and-scheduling.md) -- understand the full task lifecycle
+- [Tasks and Scheduling](../concepts/tasks/task.md) -- understand the full task lifecycle

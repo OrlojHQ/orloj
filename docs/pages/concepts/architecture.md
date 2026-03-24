@@ -107,7 +107,9 @@ Orloj's runtime provides several reliability guarantees:
 ## Related Docs
 
 - [Execution and Messaging](./execution-model.md)
-- [Concepts](../concepts/)
+- [Agents](./agents/agent.md)
+- [Tasks](./tasks/task.md)
+- [Tools](./tools/tool.md)
+- [Governance](./governance/)
 - [Runbook](../operations/runbook.md)
 - [Configuration](../operations/configuration.md)
-- [Resource Reference](../reference/resources.md)

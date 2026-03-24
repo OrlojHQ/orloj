@@ -31,7 +31,7 @@ orlojctl config path|get|use <name>|set-profile <name> [--server URL] [--token v
 
 ### Remote API and authentication
 
-For **hosted / remote** control planes: operator-generated bearer tokens, env defaults, `orlojctl config` profiles, when `config.json` is created, and full precedence rules—see **[Remote CLI and API access](../deployment/remote-cli-access.md)**.
+For **hosted / remote** control planes: operator-generated bearer tokens, env defaults, `orlojctl config` profiles, when `config.json` is created, and full precedence rules—see **[Remote CLI and API access](../deploy/remote-cli-access.md)**.
 
 Quick reference:
 
@@ -65,7 +65,7 @@ Flags:
 
 - `--from-literal` (required, repeatable): `key=value` pair to include in the secret.
 - `--namespace` (default `default`): namespace for the secret.
-- `--server` (same default resolution as [Remote CLI and API access](../deployment/remote-cli-access.md#precedence)): Orloj server URL.
+- `--server` (same default resolution as [Remote CLI and API access](../deploy/remote-cli-access.md#precedence)): Orloj server URL.
 
 Values are automatically base64-encoded via `stringData` semantics. The plaintext never touches disk.
 
@@ -141,7 +141,7 @@ go run ./cmd/orlojd -h
 Critical flags:
 
 - `--addr`
-- `--auth-mode` (`off|native|sso`; OSS supports `off` and `native`)
+- `--auth-mode` (`off|native|sso`; `sso` is not available in this distribution)
 - `--auth-session-ttl`
 - `--api-key` (enable bearer token auth; env fallback: `ORLOJ_API_TOKEN`)
 - `--auth-reset-admin-username`, `--auth-reset-admin-password` (one-shot local admin password reset and exit)

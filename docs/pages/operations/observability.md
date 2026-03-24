@@ -230,4 +230,4 @@ This is useful for quick debugging without opening the web console or an externa
 - [Configuration](./configuration.md) -- all environment variables and CLI flags
 - [Troubleshooting](./troubleshooting.md) -- diagnosis workflows
 - [Runbook](./runbook.md) -- production operations
-- [Extension Contracts](../reference/extensions.md) -- `MeteringSink` and `AuditSink` for custom integrations
+- [API Reference](../reference/api.md)

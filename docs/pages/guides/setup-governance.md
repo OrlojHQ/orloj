@@ -6,7 +6,7 @@ This guide is for platform engineers who need to enforce tool authorization and 
 
 - Orloj server (`orlojd`) and at least one worker running
 - `orlojctl` available
-- Familiarity with the [Governance and Policies](../concepts/governance.md) concepts
+- Familiarity with the [Governance and Policies](../concepts/governance/) concepts
 
 ## What You Will Build
 
@@ -223,6 +223,6 @@ The pre-built example for this is `examples/resources/agents/research_agent_gove
 
 ## Next Steps
 
-- [Governance and Policies](../concepts/governance.md) -- deeper dive into the authorization model
+- [Governance and Policies](../concepts/governance/) -- deeper dive into the authorization model
 - [Security and Isolation](../operations/security.md) -- operational security controls
 - [Configure Model Routing](./configure-model-routing.md) -- set up provider-specific model endpoints

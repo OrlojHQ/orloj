@@ -57,9 +57,9 @@ Expected result:
 ## Related Docs
 
 - [Observability](./observability.md)
-- [Deployment Overview](../deployment/index.md)
-- [VPS Deployment](../deployment/vps.md)
-- [Kubernetes Deployment](../deployment/kubernetes.md)
+- [Deployment Overview](../deploy/)
+- [VPS Deployment](../deploy/vps.md)
+- [Kubernetes Deployment](../deploy/kubernetes.md)
 - [Configuration](./configuration.md)
 - [Troubleshooting](./troubleshooting.md)
 - [Upgrades and Rollbacks](./upgrades.md)

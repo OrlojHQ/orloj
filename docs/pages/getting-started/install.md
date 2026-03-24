@@ -61,7 +61,7 @@ Use a specific version tag (e.g. `v0.1.0`) for production.
 
 If `orlojd` and workers run elsewhere—Docker Compose on a VPS, Kubernetes, GHCR images, or a managed host—you **do not** need the full repo on your laptop. Download only the **`orlojctl_*_<os>_<arch>`** archive for your platform from the same [GitHub Releases](https://github.com/OrlojHQ/orloj/releases) page, verify it with `checksums.txt`, extract the binary, and put it on your `PATH` (or run it by full path). Container images ship the server and worker binaries only, not the CLI.
 
-Point `orlojctl` at your API with `--server` and authenticate with a bearer token; see [Remote CLI and API access](../deployment/remote-cli-access.md). Prefer a **CLI version that matches your server’s release tag** when possible.
+Point `orlojctl` at your API with `--server` and authenticate with a bearer token; see [Remote CLI and API access](../deploy/remote-cli-access.md). Prefer a **CLI version that matches your server’s release tag** when possible.
 
 ---
 
@@ -74,7 +74,7 @@ docker pull ghcr.io/orlojhq/orloj-orlojd:latest
 docker pull ghcr.io/orlojhq/orloj-orlojworker:latest
 ```
 
-Use a version tag instead of `latest` for production (e.g. `ghcr.io/orlojhq/orloj-orlojd:v0.1.0`). You still need Postgres and optionally NATS for persistence and message-driven mode; see [Deployment](../deployment/index.md) for full-stack options. Example, server only with in-memory storage:
+Use a version tag instead of `latest` for production (e.g. `ghcr.io/orlojhq/orloj-orlojd:v0.1.0`). You still need Postgres and optionally NATS for persistence and message-driven mode; see [Deployment](../deploy/) for full-stack options. Example, server only with in-memory storage:
 
 ```bash
 docker run --rm -p 8080:8080 ghcr.io/orlojhq/orloj-orlojd:latest \
@@ -85,7 +85,7 @@ docker run --rm -p 8080:8080 ghcr.io/orlojhq/orloj-orlojd:latest \
   --model-gateway-provider=mock
 ```
 
-For a full stack (Postgres, NATS, server, workers), use the [VPS](../deployment/vps.md) or [Kubernetes](../deployment/kubernetes.md) deployment guides with `image: ghcr.io/orlojhq/orloj-orlojd:<tag>` (and the worker image) instead of building from the repo.
+For a full stack (Postgres, NATS, server, workers), use the [VPS](../deploy/vps.md) or [Kubernetes](../deploy/kubernetes.md) deployment guides with `image: ghcr.io/orlojhq/orloj-orlojd:<tag>` (and the worker image) instead of building from the repo.
 
 ---
 
@@ -98,7 +98,7 @@ git clone https://github.com/OrlojHQ/orloj.git && cd orloj
 docker compose up --build
 ```
 
-This builds the server and worker images from the Dockerfile. To use release images instead, override the service images to `ghcr.io/orlojhq/orloj-orlojd:<tag>` and `ghcr.io/orlojhq/orloj-orlojworker:<tag>` (see [Deployment](../deployment/index.md)).
+This builds the server and worker images from the Dockerfile. To use release images instead, override the service images to `ghcr.io/orlojhq/orloj-orlojd:<tag>` and `ghcr.io/orlojhq/orloj-orlojworker:<tag>` (see [Deployment](../deploy/)).
 
 ## Verify Installation
 
@@ -114,9 +114,9 @@ Expected result:
 
 ## Next Steps
 
-- [Deployment Overview](../deployment/index.md)
-- [Local Deployment](../deployment/local.md)
-- [VPS Deployment](../deployment/vps.md)
-- [Kubernetes Deployment](../deployment/kubernetes.md)
+- [Deployment Overview](../deploy/)
+- [Local Deployment](../deploy/local.md)
+- [VPS Deployment](../deploy/vps.md)
+- [Kubernetes Deployment](../deploy/kubernetes.md)
 - [Quickstart](./quickstart.md)
 - [Configuration](../operations/configuration.md)

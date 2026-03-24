@@ -247,7 +247,7 @@ Key implementation details:
 
 ## Next Steps
 
-- [Tools and Isolation](../concepts/tools-and-isolation.md) -- concept deep-dive on tool types and isolation modes
+- [Tools and Isolation](../concepts/tools/tool.md) -- concept deep-dive on tool types and isolation modes
 - [Build a Custom Tool](./build-custom-tool.md) -- for non-MCP tools that need custom implementation
 - [Set Up Multi-Agent Governance](./setup-governance.md) -- enforce authorization on MCP tools
-- [Resource Reference](../reference/resources.md) -- full spec for all resource kinds
+- [Resource Reference](../reference/resources/) -- full spec for all resource kinds

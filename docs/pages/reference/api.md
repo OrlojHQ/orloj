@@ -224,7 +224,7 @@ Returns a server-sent event stream of resource changes. Events include the resou
 
 ## Related Docs
 
-- [Resource Reference](./resources.md)
+- [Resource Reference](./resources/)
 - [CLI Reference](./cli.md)
-- [Tool Contract v1](./tool-contract-v1.md)
+- [Tool](../concepts/tools/tool.md)
 - [Glossary](./glossary.md)

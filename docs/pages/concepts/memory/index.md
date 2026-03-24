@@ -200,7 +200,7 @@ The Memory detail page in the UI includes an **Entries** tab that displays store
 ## Related Resources
 
 - [Memory Providers](./providers.md)
-- [Resource Reference: Memory](../../reference/resources.md#memory)
-- [Agents and Agent Systems](../agents-and-systems.md)
-- [Architecture Overview](../../architecture/overview.md)
+- [Resource Reference: Memory](../../reference/resources/memory.md)
+- [Agents](../agents/agent.md)
+- [Architecture](../architecture.md)
 - [API Reference](../../reference/api.md)

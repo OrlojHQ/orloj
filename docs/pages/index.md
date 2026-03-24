@@ -42,13 +42,9 @@ You interact with Orloj through `orlojctl` (the CLI), the REST API, or the built
 | **Observability**           | Task trace, message lifecycle, per-agent/per-edge metrics, and live event streaming           |
 | **Web console**             | Built-in UI with topology views, task inspection, and command palette                         |
 
-## Scope
-
-Orloj focuses on production orchestration for multi-agent systems. It assumes you have already chosen your models, prompts, and tools -- Orloj's job is to run them reliably at scale with governance enforced.
-
 ## Get Started
 
 1. [Install Orloj](./getting-started/install.md) -- run from source, build binaries, or use Docker Compose.
 2. [Quickstart](./getting-started/quickstart.md) -- deploy a multi-agent pipeline in under five minutes.
-3. [Explore Concepts](./concepts/) -- understand agents, tasks, tools, governance, and the execution model.
+3. [Explore Concepts](./concepts/agents/agent.md) -- understand agents, tasks, tools, governance, and the execution model.
 4. [Follow a Guide](./guides/) -- step-by-step tutorials for common workflows.

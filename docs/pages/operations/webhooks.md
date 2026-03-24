@@ -30,11 +30,11 @@ go run ./cmd/orlojctl apply -f examples/resources/secrets/webhook_shared_secret.
 
 Generic profile example:
 
-- [`examples/resources/task-webhooks/generic_webhook.yaml`](../../../examples/resources/task-webhooks/generic_webhook.yaml)
+- [`examples/resources/task-webhooks/generic_webhook.yaml`](https://github.com/OrlojHQ/orloj/tree/main/examples/resources/task-webhooks/generic_webhook.yaml)
 
 GitHub profile example:
 
-- [`examples/resources/task-webhooks/github_push_webhook.yaml`](../../../examples/resources/task-webhooks/github_push_webhook.yaml)
+- [`examples/resources/task-webhooks/github_push_webhook.yaml`](https://github.com/OrlojHQ/orloj/tree/main/examples/resources/task-webhooks/github_push_webhook.yaml)
 
 Apply one:
 
@@ -121,6 +121,6 @@ Webhook-triggered run tasks include:
 
 ## Related Docs
 
-- [Task Webhook Examples](../../../examples/resources/task-webhooks/README.md)
-- [Resource Reference (`TaskWebhook`)](../reference/resources.md)
+- [Task Webhook Examples](https://github.com/OrlojHQ/orloj/tree/main/examples/resources/task-webhooks)
+- [Resource Reference (`TaskWebhook`)](../reference/resources/task-webhook.md)
 - [API Reference (Webhook Delivery)](../reference/api.md)

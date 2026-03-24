@@ -1,10 +1,8 @@
-# Model Routing
+# ModelEndpoint
 
 Orloj decouples agents from specific model providers through **ModelEndpoint** resources. A ModelEndpoint declares a provider, base URL, default model, and authentication -- and agents reference it by name. This lets you swap providers, manage credentials centrally, and route different agents to different models without modifying agent manifests.
 
-## Model Endpoints
-
-A ModelEndpoint resource configures a connection to a model provider.
+## Defining a ModelEndpoint
 
 ```yaml
 apiVersion: orloj.dev/v1
@@ -93,7 +91,7 @@ ModelEndpoint references are resolved by name within the same namespace, or by `
 
 ## Authentication
 
-Model authentication is managed through Secret resources referenced by `auth.secretRef`. The simplest way to create one is the imperative CLI command:
+Model authentication is managed through [Secret](./secret.md) resources referenced by `auth.secretRef`. The simplest way to create one is the imperative CLI command:
 
 ```bash
 orlojctl create secret openai-api-key --from-literal value=sk-your-api-key-here
@@ -111,9 +109,7 @@ spec:
     value: sk-your-api-key-here
 ```
 
-`stringData` values are base64-encoded into `data` during normalization and then cleared (write-only semantics). The runtime reads from `data` at execution time.
-
-In production, you can also skip `Secret` resources entirely and inject values via environment variables (`ORLOJ_SECRET_<name>`). See [Secret Handling](../operations/security.md#secret-handling) for details.
+In production, you can also skip `Secret` resources entirely and inject values via environment variables (`ORLOJ_SECRET_<name>`). See [Secret Handling](../../operations/security.md#secret-handling) for details.
 
 ## Governance Integration
 
@@ -132,8 +128,10 @@ spec:
 
 If an agent's resolved endpoint `default_model` is not in the policy's `allowed_models` list, execution is denied.
 
-## Related Resources
+## Related
 
-- [Resource Reference: ModelEndpoint, Secret](../reference/resources.md)
-- [Configuration](../operations/configuration.md)
-- [Guide: Configure Model Routing](../guides/configure-model-routing.md)
+- [Secret](./secret.md) -- credential storage for model auth
+- [Agent](../agents/agent.md) -- agents that reference ModelEndpoints
+- [Resource Reference: ModelEndpoint](../../reference/resources/model-endpoint.md)
+- [Configuration](../../operations/configuration.md)
+- [Guide: Configure Model Routing](../../guides/configure-model-routing.md)

@@ -55,5 +55,5 @@ See [Configuration](../operations/configuration.md) for the full set of flags.
 
 ## Related Docs
 
-- [Tool Contract v1](../reference/tool-contract-v1.md)
-- [Tool Runtime Conformance](../operations/tool-runtime-conformance.md)
+- [Architecture Overview](./architecture.md)
+- [Configuration](../operations/configuration.md)

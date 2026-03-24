@@ -192,6 +192,6 @@ Agents configured with models not on this list will be denied at execution time.
 
 ## Next Steps
 
-- [Model Routing](../concepts/model-routing.md) -- deeper dive into ModelEndpoint configuration
+- [Model Routing](../concepts/tools/model-endpoint.md) -- deeper dive into ModelEndpoint configuration
 - [Configuration](../operations/configuration.md) -- environment variables and flags for model gateway setup
 - [Build a Custom Tool](./build-custom-tool.md) -- extend agent capabilities with external tools

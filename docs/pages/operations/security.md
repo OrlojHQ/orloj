@@ -12,15 +12,15 @@ This page describes current runtime security controls and expected operator prac
 
 ## Namespace Isolation
 
-Namespaces are an **organizational boundary**, not a security boundary. Any authenticated user with the correct role (e.g., `reader`, `writer`, `admin`) can access resources in any namespace. There is no per-namespace access control in the OSS build.
+Namespaces are an **organizational boundary**, not a security boundary. Any authenticated user with the correct role (e.g., `reader`, `writer`, `admin`) can access resources in any namespace. There is no per-namespace access control by default.
 
-For deployments that require per-namespace or per-resource authorization, the server exposes a `ResourceAuthorizer` extension point (see `ServerOptions.ResourceAuthorizer` in `api/auth_context.go`). An enterprise RBAC layer can implement this interface to enforce fine-grained policies based on the caller's identity, the target namespace, resource type, and HTTP method. In the OSS build this hook is nil and all requests that pass the role check are permitted.
+For deployments that require per-namespace or per-resource authorization, the server exposes a `ResourceAuthorizer` extension point (see `ServerOptions.ResourceAuthorizer` in `api/auth_context.go`). A custom authorization layer can implement this interface to enforce fine-grained policies based on the caller's identity, the target namespace, resource type, and HTTP method. This hook is nil by default and all requests that pass the role check are permitted.
 
 ## Control plane API tokens
 
 The HTTP API (including `orlojctl`) authenticates automation with **`Authorization: Bearer <token>`** when you enable token validation on the server. Orloj **does not** mint or email API keys: the **operator** chooses a secret string, configures it on `orlojd`, and distributes the **same** value to people and CI that need API access.
 
-**See also:** [Remote CLI and API access](../deployment/remote-cli-access.md) — end-to-end flow for self-hosters (env vars, `orlojctl config`, `config.json` lifecycle).
+**See also:** [Remote CLI and API access](../deploy/remote-cli-access.md) — end-to-end flow for self-hosters (env vars, `orlojctl config`, `config.json` lifecycle).
 
 This is separate from **native UI sign-in** (`--auth-mode=native`), which uses an admin username/password and **session cookies** in the browser. The CLI does not use that password for API calls; use a bearer token as below (or run with auth disabled in trusted dev environments only).
 
@@ -61,7 +61,7 @@ Use the **same** token the server expects:
 - **Flag:** `orlojctl --api-token '<token>' ...`
 - **Profile:** `orlojctl config set-profile ... --token-env VAR` so the token stays in the environment, not on disk
 
-See [Remote CLI and API access](../deployment/remote-cli-access.md) for client precedence, default `--server` resolution, and profiles.
+See [Remote CLI and API access](../deploy/remote-cli-access.md) for client precedence, default `--server` resolution, and profiles.
 
 ### 4. Native auth mode and APIs
 
@@ -87,7 +87,7 @@ Authentication endpoints (`/v1/auth/login`, `/v1/auth/setup`, `/v1/auth/change-p
 
 ## Tool Types
 
-All tool types (`http`, `external`, `grpc`, `webhook-callback`) flow through the governed runtime pipeline, so policy enforcement, retry, auth injection, and error handling behave identically regardless of transport. See [Tools and Isolation](../concepts/tools-and-isolation.md) for type details.
+All tool types (`http`, `external`, `grpc`, `webhook-callback`) flow through the governed runtime pipeline, so policy enforcement, retry, auth injection, and error handling behave identically regardless of transport. See [Tools](../concepts/tools/tool.md) for type details.
 
 ### gRPC TLS
 
@@ -272,5 +272,4 @@ All approval-related outcomes are non-retryable and do not consume retry budget.
 
 ## Related Docs
 
-- [Tool Contract v1](../reference/tool-contract-v1.md)
-- [Tool Runtime Conformance](./tool-runtime-conformance.md)
+- [Tool](../concepts/tools/tool.md)

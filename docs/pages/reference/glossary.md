@@ -5,29 +5,29 @@ Canonical definitions for terms used throughout Orloj documentation.
 ## A
 
 **Agent**
-A declarative unit of work backed by a language model. Defined as a resource with a prompt, model configuration, tool bindings, role assignments, and execution limits. See [Agents and Agent Systems](../concepts/agents-and-systems.md).
+A declarative unit of work backed by a language model. Defined as a resource with a prompt, model configuration, tool bindings, role assignments, and execution limits. See [Agents and Agent Systems](../concepts/agents/agent.md).
 
 **Agent System**
-A composition of multiple agents wired into a directed graph. The graph defines how messages flow between agents during task execution. Supports pipeline, hierarchical, and swarm-loop topologies. See [Agents and Agent Systems](../concepts/agents-and-systems.md).
+A composition of multiple agents wired into a directed graph. The graph defines how messages flow between agents during task execution. Supports pipeline, hierarchical, and swarm-loop topologies. See [Agents and Agent Systems](../concepts/agents/agent-system.md).
 
 **Agent Policy**
-A governance resource that constrains agent execution. Can restrict allowed models, block specific tools, and cap token usage. Policies may be scoped to specific systems/tasks or applied globally. See [Governance and Policies](../concepts/governance.md).
+A governance resource that constrains agent execution. Can restrict allowed models, block specific tools, and cap token usage. Policies may be scoped to specific systems/tasks or applied globally. See [Governance and Policies](../concepts/governance/agent-policy.md).
 
 **Agent Role**
-A named set of permission strings that can be bound to agents. Agents accumulate the union of permissions from all bound roles. See [Governance and Policies](../concepts/governance.md).
+A named set of permission strings that can be bound to agents. Agents accumulate the union of permissions from all bound roles. See [Governance and Policies](../concepts/governance/agent-role.md).
 
 ## B
 
 **Blueprint**
-A ready-to-use template combining agents, an agent system, and a task for a specific orchestration pattern (pipeline, hierarchical, or swarm-loop). Available in `examples/blueprints/`. See [Starter Blueprints](../architecture/starter-blueprints.md).
+A ready-to-use template combining agents, an agent system, and a task for a specific orchestration pattern (pipeline, hierarchical, or swarm-loop). Available in `examples/blueprints/`. See [Starter Blueprints](../guides/starter-blueprints.md).
 
 ## C
 
 **Server**
-The management layer of Orloj, running as `orlojd`. Includes the API server, resource store, background services, and task scheduler. See [Architecture Overview](../architecture/overview.md).
+The management layer of Orloj, running as `orlojd`. Includes the API server, resource store, background services, and task scheduler. See [Architecture Overview](../concepts/architecture.md).
 
 **Resource Definition**
-A typed, declarative schema. Orloj defines 13 resource types with standard `apiVersion`, `kind`, `metadata`, `spec`, and `status` fields. See [Resource Reference](./resources.md).
+A typed, declarative schema. Orloj defines 13 resource types with standard `apiVersion`, `kind`, `metadata`, `spec`, and `status` fields. See [Resource Reference](./resources/).
 
 ## D
 
@@ -42,7 +42,7 @@ A directional connection between two agents in an AgentSystem graph. Edges defin
 ## F
 
 **Fan-in**
-A graph pattern where multiple upstream branches converge on a single downstream node. Controlled by join gates with `wait_for_all` or `quorum` modes. See [Execution and Messaging](../architecture/execution-model.md).
+A graph pattern where multiple upstream branches converge on a single downstream node. Controlled by join gates with `wait_for_all` or `quorum` modes. See [Execution and Messaging](../concepts/execution-model.md).
 
 **Fan-out**
 A graph pattern where a single node routes messages to multiple downstream targets simultaneously.
@@ -50,7 +50,7 @@ A graph pattern where a single node routes messages to multiple downstream targe
 ## G
 
 **Governance**
-The authorization and policy enforcement layer. Composed of AgentPolicy, AgentRole, and ToolPermission resources. Governance is fail-closed: unauthorized actions are denied, not silently ignored. See [Governance and Policies](../concepts/governance.md).
+The authorization and policy enforcement layer. Composed of AgentPolicy, AgentRole, and ToolPermission resources. Governance is fail-closed: unauthorized actions are denied, not silently ignored. See [Governance and Policies](../concepts/governance/).
 
 ## J
 
@@ -74,7 +74,7 @@ One of five built-in runtime tools that can be exposed when an agent both refere
 The transport layer for agent-to-agent communication within a task. Implementations: `memory` (in-process) and `nats-jetstream` (durable). Messages carry lifecycle phase, retry state, and routing metadata.
 
 **Model Endpoint**
-A resource that configures a connection to a model provider. Declares the provider type, base URL, default model, provider-specific options, and auth credentials. Agents reference endpoints by name via `model_ref`. See [Model Routing](../concepts/model-routing.md).
+A resource that configures a connection to a model provider. Declares the provider type, base URL, default model, provider-specific options, and auth credentials. Agents reference endpoints by name via `model_ref`. See [Model Routing](../concepts/tools/model-endpoint.md).
 
 **Model Gateway**
 The worker component that routes model requests to the appropriate provider based on agent configuration. Handles provider-specific request formatting and response parsing.
@@ -97,24 +97,24 @@ A resource for storing sensitive values (API keys, tokens). `stringData` values 
 ## T
 
 **Task**
-A request to execute an AgentSystem with specific input. Tasks move through phases: `Pending -> Running -> Succeeded | Failed | DeadLetter`. See [Tasks and Scheduling](../concepts/tasks-and-scheduling.md).
+A request to execute an AgentSystem with specific input. Tasks move through phases: `Pending -> Running -> Succeeded | Failed | DeadLetter`. See [Tasks and Scheduling](../concepts/tasks/task.md).
 
 **Task Schedule**
-A resource that creates tasks on a cron-based schedule from a template task. Supports timezone configuration, concurrency policy, and history limits. See [Tasks and Scheduling](../concepts/tasks-and-scheduling.md).
+A resource that creates tasks on a cron-based schedule from a template task. Supports timezone configuration, concurrency policy, and history limits. See [Tasks and Scheduling](../concepts/tasks/task-schedule.md).
 
 **Task Webhook**
-A resource that creates tasks in response to external HTTP events. Supports signature verification (generic and GitHub profiles) and idempotency-based deduplication. See [Tasks and Scheduling](../concepts/tasks-and-scheduling.md).
+A resource that creates tasks in response to external HTTP events. Supports signature verification (generic and GitHub profiles) and idempotency-based deduplication. See [Tasks and Scheduling](../concepts/tasks/task-webhook.md).
 
 **Tool**
-An external capability that agents can invoke during execution. Defined as a resource with endpoint, auth, risk level, and runtime configuration (isolation, timeout, retry). See [Tools and Isolation](../concepts/tools-and-isolation.md).
+An external capability that agents can invoke during execution. Defined as a resource with endpoint, auth, risk level, and runtime configuration (isolation, timeout, retry). See [Tools and Isolation](../concepts/tools/tool.md).
 
 **Tool Contract v1**
-The standardized JSON request/response envelope that all tools must implement. Defines the error taxonomy (`tool_code`, `tool_reason`, `retryable`) used by the runtime for retry decisions. See [Tool Contract v1](./tool-contract-v1.md).
+The standardized JSON request/response envelope that all tools must implement. Defines the error taxonomy (`tool_code`, `tool_reason`, `retryable`) used by the runtime for retry decisions. See [Tool](../concepts/tools/tool.md).
 
 **Tool Permission**
-A governance resource that defines what permissions are required to invoke a specific tool. Checked against the agent's accumulated role permissions at execution time. See [Governance and Policies](../concepts/governance.md).
+A governance resource that defines what permissions are required to invoke a specific tool. Checked against the agent's accumulated role permissions at execution time. See [Governance and Policies](../concepts/governance/tool-permission.md).
 
 ## W
 
 **Worker**
-An execution unit that claims and runs tasks. Workers register capabilities (region, GPU, supported models) and the scheduler uses these for task matching. Runs as `orlojworker`. See [Tasks and Scheduling](../concepts/tasks-and-scheduling.md) and [Architecture Overview](../architecture/overview.md).
+An execution unit that claims and runs tasks. Workers register capabilities (region, GPU, supported models) and the scheduler uses these for task matching. Runs as `orlojworker`. See [Tasks and Scheduling](../concepts/infrastructure/worker.md) and [Architecture Overview](../concepts/architecture.md).
