@@ -147,7 +147,7 @@ spec:
     spec:
       containers:
         - name: orlojd
-          image: ghcr.io/example/orloj-orlojd:latest
+          image: ghcr.io/orlojhq/orloj-orlojd:latest
           args:
             - --addr=:8080
             - --storage-backend=postgres
@@ -210,12 +210,14 @@ spec:
     spec:
       containers:
         - name: orlojworker
-          image: ghcr.io/example/orloj-orlojworker:latest
+          image: ghcr.io/orlojhq/orloj-orlojworker:latest
           command:
             - /bin/sh
             - -c
           args:
-            - exec /usr/local/bin/app --storage-backend=postgres --worker-id="${POD_NAME}" --region=default --max-concurrent-tasks=4
+            - exec /usr/local/bin/app --storage-backend=postgres --worker-id="${POD_NAME}" --region=default --max-concurrent-tasks=4 --healthz-addr=:8081
+          ports:
+            - containerPort: 8081
           env:
             - name: POD_NAME
               valueFrom:
@@ -231,6 +233,18 @@ spec:
           envFrom:
             - configMapRef:
                 name: orloj-runtime-config
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 10
+            periodSeconds: 10
           securityContext:
             runAsNonRoot: true
             allowPrivilegeEscalation: false

@@ -33,8 +33,11 @@ services:
     command:
       - --addr=:8080
       - --storage-backend=postgres
+      - --task-execution-mode=message-driven
       - --event-bus-backend=nats
       - --nats-url=nats://nats:4222
+      - --agent-message-bus-backend=nats-jetstream
+      - --agent-message-nats-url=nats://nats:4222
     ports:
       - "${ORLOJ_PORT:-8080}:8080"
     depends_on:
@@ -63,7 +66,11 @@ services:
       - --lease-duration=30s
       - --heartbeat-interval=10s
       - --region=default
-      - --supported-models=gpt-4o,gpt-4o-mini
+      - --task-execution-mode=message-driven
+      - --agent-message-bus-backend=nats-jetstream
+      - --agent-message-nats-url=nats://nats:4222
+      - --agent-message-consume
+      - --healthz-addr=:8081
     depends_on:
       postgres:
         condition: service_healthy
@@ -71,6 +78,11 @@ services:
         condition: service_healthy
       nats:
         condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8081/healthz >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
     restart: unless-stopped
 
   orlojworker-b:
@@ -87,7 +99,11 @@ services:
       - --lease-duration=30s
       - --heartbeat-interval=10s
       - --region=default
-      - --supported-models=gpt-4o,gpt-4o-mini
+      - --task-execution-mode=message-driven
+      - --agent-message-bus-backend=nats-jetstream
+      - --agent-message-nats-url=nats://nats:4222
+      - --agent-message-consume
+      - --healthz-addr=:8081
     depends_on:
       postgres:
         condition: service_healthy
@@ -95,6 +111,11 @@ services:
         condition: service_healthy
       nats:
         condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8081/healthz >/dev/null 2>&1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
     restart: unless-stopped
 
 volumes:

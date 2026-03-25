@@ -6,7 +6,7 @@ Run Orloj locally for development and deterministic feature validation.
 
 ## Prerequisites
 
-- Go `1.24+`
+- Go `1.25+`
 - Docker
 - `curl` and `jq`
 - repository checked out locally

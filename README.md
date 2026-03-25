@@ -4,7 +4,7 @@
 
 # Orloj
 
-*Named after the [Prague Orloj](https://en.wikipedia.org/wiki/Prague_astronomical_clock), an astronomical clock that has coordinated complex mechanisms for over 600 years.*
+_Named after the [Prague Orloj](https://en.wikipedia.org/wiki/Prague_astronomical_clock), an astronomical clock that has coordinated complex mechanisms for over 600 years._
 
 [![Release](https://img.shields.io/github/v/release/OrlojHQ/orloj?display_name=tag&sort=semver)](https://github.com/OrlojHQ/orloj/releases)
 [![CI](https://img.shields.io/github/actions/workflow/status/OrlojHQ/orloj/ci.yml?branch=main&label=ci)](https://github.com/OrlojHQ/orloj/actions/workflows/ci.yml)
@@ -45,7 +45,7 @@ go build -o orlojctl ./cmd/orlojctl
 ./orlojctl get task bp-pipeline-task
 ```
 
-When you are ready to scale, switch to message-driven mode with distributed workers and Postgres persistence. See the [Quickstart guide](docs/pages/getting-started/quickstart.md#scaling-to-production) for details.
+When you are ready to scale, switch to message-driven mode with distributed workers and Postgres persistence. See the [Quickstart guide](https://docs.orloj.dev/getting-started/quickstart#scaling-to-production) for details.
 
 ## Architecture
 
@@ -90,41 +90,41 @@ When you are ready to scale, switch to message-driven mode with distributed work
 
 Orloj manages 15 resource types, all defined as declarative YAML with `apiVersion`, `kind`, `metadata`, `spec`, and `status` fields:
 
-| Resource | Purpose |
-|---|---|
-| Agent | Unit of work backed by a language model |
-| AgentSystem | Directed graph composing multiple agents |
-| ModelEndpoint | Connection to a model provider |
-| Tool | External capability with isolation and retry |
-| Secret | Credential storage (dev use; env vars for production) |
-| Memory | Vector-backed retrieval for agents |
-| AgentPolicy | Token, model, and tool constraints |
-| AgentRole | Named permission set bound to agents |
-| ToolPermission | Required permissions for tool invocation |
-| ToolApproval | Approval record for gated tool invocations |
-| Task | Request to execute an AgentSystem |
-| TaskSchedule | Cron-based task creation |
-| TaskWebhook | Event-triggered task creation |
-| Worker | Execution unit with capability declaration |
-| McpServer | MCP server connection that discovers/syncs MCP tools |
+| Resource       | Purpose                                               |
+| -------------- | ----------------------------------------------------- |
+| Agent          | Unit of work backed by a language model               |
+| AgentSystem    | Directed graph composing multiple agents              |
+| ModelEndpoint  | Connection to a model provider                        |
+| Tool           | External capability with isolation and retry          |
+| Secret         | Credential storage (dev use; env vars for production) |
+| Memory         | Vector-backed retrieval for agents                    |
+| AgentPolicy    | Token, model, and tool constraints                    |
+| AgentRole      | Named permission set bound to agents                  |
+| ToolPermission | Required permissions for tool invocation              |
+| ToolApproval   | Approval record for gated tool invocations            |
+| Task           | Request to execute an AgentSystem                     |
+| TaskSchedule   | Cron-based task creation                              |
+| TaskWebhook    | Event-triggered task creation                         |
+| Worker         | Execution unit with capability declaration            |
+| McpServer      | MCP server connection that discovers/syncs MCP tools  |
 
 ## Documentation
 
-Full documentation is available at the [docs site](docs/pages/index.md) or locally:
+Browse **[docs.orloj.dev](https://docs.orloj.dev)**, or build the same site locally:
 
 ```bash
 cd docs && bun install && bun run dev
 ```
 
-Key pages:
+Key pages (sources in `docs/pages/`):
 
-- [Getting Started](docs/pages/getting-started/install.md) -- install, quickstart
-- [Concepts](docs/pages/concepts/architecture.md) -- architecture, agents, tasks, tools, model routing, governance
-- [Guides](docs/pages/guides/index.md) -- deploy a pipeline, configure routing, build tools, set up governance
-- [Deploy & Operate](docs/pages/deploy/index.md) -- local, VPS, Kubernetes, [remote CLI access](docs/pages/deploy/remote-cli-access.md)
-- [Reference](docs/pages/reference/cli.md) -- CLI, API, resource schemas
-- [Security](docs/pages/operations/security.md) -- control plane API tokens, secrets, tool isolation
-- [Examples](examples/README.md) -- per-kind YAML under `examples/resources/`, starter `blueprints/`, and `use-cases/`
+- [Getting Started](https://docs.orloj.dev/getting-started/install) -- install, quickstart
+- [Concepts](https://docs.orloj.dev/concepts/architecture) -- architecture, agents, tasks, tools, model routing, governance
+- [Guides](https://docs.orloj.dev/guides/) -- deploy a pipeline, configure routing, build tools, set up governance
+- [Deploy & Operate](https://docs.orloj.dev/deploy/) -- local, VPS, Kubernetes, [remote CLI access](https://docs.orloj.dev/deploy/remote-cli-access)
+- [Reference](https://docs.orloj.dev/reference/cli) -- CLI, API, resource schemas
+- [Security](https://docs.orloj.dev/operations/security) -- control plane API tokens, secrets, tool isolation
+- [Examples](examples/README.md) -- per-kind YAML under `examples/resources/`, starter `blueprints/`, and `use-cases/` (in this repo)
 
 ## Docker Compose
 
@@ -135,27 +135,7 @@ docker compose up --build -d
 docker compose ps
 ```
 
-The Compose images include the server and workers only. To drive the API from your machine, install **`orlojctl`** from [GitHub Releases](https://github.com/OrlojHQ/orloj/releases) (CLI-only tarball) or build from this repo; see [Deploy & Operate](docs/pages/deploy/index.md).
-
-## Kubernetes (Helm)
-
-Deploy with the Helm chart in `charts/orloj`:
-
-```bash
-export REGISTRY=ghcr.io/<your-org-or-user>
-export TAG=v0.1.0
-
-helm upgrade --install orloj ./charts/orloj \
-  --namespace orloj \
-  --create-namespace \
-  --set orlojd.image.repository="${REGISTRY}/orloj-orlojd" \
-  --set orlojd.image.tag="${TAG}" \
-  --set orlojworker.image.repository="${REGISTRY}/orloj-orlojworker" \
-  --set orlojworker.image.tag="${TAG}" \
-  --set postgres.auth.password='<strong-password>'
-```
-
-See the Kubernetes deployment guide for full operations and troubleshooting: [docs/pages/deploy/kubernetes.md](docs/pages/deploy/kubernetes.md).
+The Compose images include the server and workers only. To drive the API from your machine, install **`orlojctl`** from [GitHub Releases](https://github.com/OrlojHQ/orloj/releases) (CLI-only tarball) or build from this repo; see [Deploy & Operate](https://docs.orloj.dev/deploy/).
 
 ## Contributing
 
