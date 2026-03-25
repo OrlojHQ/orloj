@@ -1,7 +1,15 @@
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import Editor from "@monaco-editor/react";
 import { useAppStore } from "../store";
 import { Pencil, Save, X } from "lucide-react";
+
+const mqMobile = typeof window !== "undefined" ? window.matchMedia("(max-width: 768px)") : null;
+function useIsMobile() {
+  return useSyncExternalStore(
+    (cb) => { mqMobile?.addEventListener("change", cb); return () => mqMobile?.removeEventListener("change", cb); },
+    () => mqMobile?.matches ?? false,
+  );
+}
 
 interface YamlEditorProps {
   value: string;
@@ -14,6 +22,7 @@ interface YamlEditorProps {
 
 export function YamlEditor({ value, onChange, readOnly = true, height = "400px", editable, onSave }: YamlEditorProps) {
   const theme = useAppStore((s) => s.theme);
+  const isMobile = useIsMobile();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const [saving, setSaving] = useState(false);
@@ -81,9 +90,9 @@ export function YamlEditor({ value, onChange, readOnly = true, height = "400px",
         options={{
           readOnly: isReadOnly,
           minimap: { enabled: false },
-          fontSize: 13,
+          fontSize: isMobile ? 15 : 13,
           fontFamily: "'JetBrains Mono', 'SF Mono', monospace",
-          lineNumbers: "on",
+          lineNumbers: isMobile ? "off" : "on",
           scrollBeyondLastLine: false,
           wordWrap: "on",
           padding: { top: 12 },

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
 import {
   ReactFlow,
   Background,
@@ -12,6 +12,14 @@ import {
   type Node,
   type Edge,
 } from "@xyflow/react";
+
+const mqMobile = typeof window !== "undefined" ? window.matchMedia("(max-width: 768px)") : null;
+function useIsMobile() {
+  return useSyncExternalStore(
+    (cb) => { mqMobile?.addEventListener("change", cb); return () => mqMobile?.removeEventListener("change", cb); },
+    () => mqMobile?.matches ?? false,
+  );
+}
 import "@xyflow/react/dist/style.css";
 import Dagre from "@dagrejs/dagre";
 import type {
@@ -587,6 +595,7 @@ interface GraphViewProps {
 }
 
 export function GraphView({ system, related, onNodeClick, animated, runningAgents }: GraphViewProps) {
+  const isMobile = useIsMobile();
   const agentNames = system.spec.agents ?? [];
   const graph = system.spec.graph ?? {};
   const blueprint = useMemo(() => detectBlueprint(agentNames, graph), [agentNames, graph]);
@@ -643,11 +652,13 @@ export function GraphView({ system, related, onNodeClick, animated, runningAgent
       >
         <Background gap={24} size={1} color="var(--graph-grid)" />
         <Controls position="bottom-right" showInteractive={false} />
-        <MiniMap
-          nodeColor="var(--accent)"
-          maskColor="var(--bg-overlay)"
-          style={{ background: "var(--bg-secondary)", borderRadius: 8, border: "1px solid var(--card-border)" }}
-        />
+        {!isMobile && (
+          <MiniMap
+            nodeColor="var(--accent)"
+            maskColor="var(--bg-overlay)"
+            style={{ background: "var(--bg-secondary)", borderRadius: 8, border: "1px solid var(--card-border)" }}
+          />
+        )}
       </ReactFlow>
     </div>
   );

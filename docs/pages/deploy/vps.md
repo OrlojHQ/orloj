@@ -114,7 +114,7 @@ Upgrade flow:
 
 - This is a single-node baseline, not HA.
 - Bind or firewall `8080` to trusted networks only.
-- API auth defaults to `ORLOJ_AUTH_MODE=native`; complete `/ui/setup` on first boot.
+- API auth defaults to `ORLOJ_AUTH_MODE=native`; complete `/setup` on first boot.
 - Generate and rotate an API token (`openssl rand -hex 32`), set `ORLOJ_API_TOKEN` on the server, and reuse the same value for CLI/automation—see [Control plane API tokens](../operations/security.md#control-plane-api-tokens).
 
 ## Related Docs

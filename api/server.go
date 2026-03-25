@@ -51,6 +51,7 @@ type ServerOptions struct {
 	Extensions         agentruntime.Extensions
 	AuthMode           AuthMode
 	SessionTTL         time.Duration
+	UIBasePath         string // URL path prefix for the web console (default "/")
 }
 
 // Server exposes CRUD endpoints for control plane resources.
@@ -67,6 +68,7 @@ type Server struct {
 	extensions         agentruntime.Extensions
 	memoryBackends     *agentruntime.PersistentMemoryBackendRegistry
 	authRateLimiter    *authRateLimiter
+	uiBasePath         string
 }
 
 func NewServer(stores Stores, runtime *agentruntime.Manager, logger *log.Logger) *Server {
@@ -121,6 +123,7 @@ func NewServerWithOptions(stores Stores, runtime *agentruntime.Manager, logger *
 	if authMode == AuthModeNative {
 		authorizer = newNativeModeAuthorizer(authorizer, stores.LocalAdmins, stores.AuthSessions, sessionTTL)
 	}
+	uiBase := normalizeUIBasePath(opts.UIBasePath)
 	s := &Server{
 		stores:             stores,
 		runtime:            runtime,
@@ -133,6 +136,7 @@ func NewServerWithOptions(stores Stores, runtime *agentruntime.Manager, logger *
 		bus:                eventbus.NewMemoryBus(4096),
 		extensions:         extensions,
 		authRateLimiter:    newAuthRateLimiter(),
+		uiBasePath:         uiBase,
 	}
 	s.routes()
 	return s
@@ -184,8 +188,27 @@ func withRateLimit(next http.Handler) http.Handler {
 	})
 }
 
+// UIBasePath returns the normalized base path for the web console.
+func (s *Server) UIBasePath() string { return s.uiBasePath }
+
 func (s *Server) Handler() http.Handler {
 	return withRequestTimeout(withRateLimit(s.withBodyLimit(s.withAuth(s.mux))))
+}
+
+// normalizeUIBasePath ensures the path has a leading and trailing slash.
+// An empty input defaults to "/".
+func normalizeUIBasePath(raw string) string {
+	p := strings.TrimSpace(raw)
+	if p == "" {
+		return "/"
+	}
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	if !strings.HasSuffix(p, "/") {
+		p = p + "/"
+	}
+	return p
 }
 
 const (
@@ -218,10 +241,13 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/v1/auth/me", s.handleAuthMe)
 	s.mux.HandleFunc("/v1/auth/change-password", s.handleAuthChangePassword)
 	s.mux.HandleFunc("/v1/auth/admin/reset-password", s.handleAuthAdminResetPassword)
-	s.mux.HandleFunc("/ui", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/ui/", http.StatusTemporaryRedirect)
-	})
-	s.mux.Handle("/ui/", http.StripPrefix("/ui/", frontend.Handler()))
+	if s.uiBasePath != "/" {
+		trimmed := strings.TrimSuffix(s.uiBasePath, "/")
+		s.mux.HandleFunc(trimmed, func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, s.uiBasePath, http.StatusTemporaryRedirect)
+		})
+	}
+	s.mux.Handle(s.uiBasePath, http.StripPrefix(s.uiBasePath, frontend.Handler(s.uiBasePath)))
 
 	s.mux.HandleFunc("/v1/agents", s.handleAgents)
 	s.mux.HandleFunc("/v1/agents/watch", s.watchAgents)

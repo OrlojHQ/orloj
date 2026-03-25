@@ -117,7 +117,7 @@ func (a tokenAuthorizer) Authorize(r *http.Request, requiredRole string) (bool, 
 
 func (s *Server) withAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		required := requiredRoleForRequest(r)
+		required := requiredRoleForRequest(r, s.uiBasePath)
 		if required == "" {
 			next.ServeHTTP(w, r)
 			return
@@ -172,7 +172,7 @@ func resourceInfoFromPath(path string) (resourceType, name string) {
 	return resourceType, name
 }
 
-func requiredRoleForRequest(r *http.Request) string {
+func requiredRoleForRequest(r *http.Request, uiBasePath string) string {
 	path := strings.TrimSpace(r.URL.Path)
 	method := strings.ToUpper(strings.TrimSpace(r.Method))
 	if path == "/healthz" {
@@ -181,7 +181,7 @@ func requiredRoleForRequest(r *http.Request) string {
 	if path == "/metrics" {
 		return "reader"
 	}
-	if path == "/ui" || strings.HasPrefix(path, "/ui/") {
+	if isUIPath(path, uiBasePath) {
 		return ""
 	}
 	if path == "/v1/auth" || strings.HasPrefix(path, "/v1/auth/") {
@@ -219,6 +219,18 @@ func roleAllows(actual, required string) bool {
 	default:
 		return false
 	}
+}
+
+// isUIPath returns true when the request path falls under the configured
+// web console base path (e.g. "/" or "/console/").
+// When the console is at "/", every path outside the /v1 API prefix is a
+// console path (/healthz and /metrics are checked before this is called).
+func isUIPath(reqPath, uiBasePath string) bool {
+	if uiBasePath == "/" {
+		return !strings.HasPrefix(reqPath, "/v1")
+	}
+	base := strings.TrimSuffix(uiBasePath, "/")
+	return reqPath == base || strings.HasPrefix(reqPath, uiBasePath)
 }
 
 func bearerToken(authz string) string {

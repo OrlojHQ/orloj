@@ -159,14 +159,14 @@ func TestNativeAuthUIRouteRemainsAccessible(t *testing.T) {
 		return http.ErrUseLastResponse
 	}}
 
-	resp, err := noRedirectClient.Get(server.URL + "/ui")
+	resp, err := noRedirectClient.Get(server.URL + "/")
 	if err != nil {
 		t.Fatalf("ui request failed: %v", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected /ui to bypass auth, got %d body=%s", resp.StatusCode, string(body))
+		t.Fatalf("expected / to bypass auth, got %d body=%s", resp.StatusCode, string(body))
 	}
 }
 

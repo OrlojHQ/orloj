@@ -199,7 +199,7 @@ export function CreateResourceDialog({ kind, open, onClose }: CreateResourceDial
           </button>
         </div>
         <div className="create-dialog__body">
-          <YamlEditor value={yaml} onChange={setYaml} readOnly={false} height="400px" />
+          <YamlEditor value={yaml} onChange={setYaml} readOnly={false} height="clamp(200px, 50vh, 400px)" />
         </div>
         <div className="create-dialog__footer">
           <button className="btn-secondary" onClick={onClose}>Cancel</button>

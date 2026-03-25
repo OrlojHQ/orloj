@@ -183,6 +183,7 @@ go run ./cmd/orlojd -h
 |---|---|---|---|
 | `--version` | `false` | Print version and exit. | n/a |
 | `--addr` | `:8080` | Server listen address. | n/a |
+| `--ui-path` | `/` | Base URL path for the web console. | Env fallback: `ORLOJ_UI_PATH`. Set to a subpath (e.g. `/console/`) when sharing a hostname via reverse proxy. |
 | `--api-key` | empty | Bearer token auth key. | Env fallback: `ORLOJ_API_TOKEN`; see also `ORLOJ_API_TOKENS`. |
 | `--auth-mode` | `off` | API auth mode. | `off|native|sso` (`sso` unavailable in this distribution). |
 | `--auth-session-ttl` | `24h` | Session TTL for local auth mode. | Env fallback: `ORLOJ_AUTH_SESSION_TTL`. |

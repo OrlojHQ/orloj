@@ -60,6 +60,7 @@ Example:
 | `ORLOJ_AGENT_MESSAGE_CONSUMER_NAMESPACE` | `orlojworker` | `--agent-message-consumer-namespace` | Optional namespace filter for runtime inbox consumers. |
 | `ORLOJ_API_TOKEN` | `orlojd`, `orlojctl`, `orloj-alertcheck` | `--api-key` (server), `--api-token` (client/checker) | Bearer token fallback for API auth. |
 | `ORLOJ_API_TOKENS` | `orlojd` | none | Multi-token auth map (`token:role` comma-separated list). |
+| `ORLOJ_UI_PATH` | `orlojd` | `--ui-path` | Base URL path for the web console (default `/`). |
 | `ORLOJ_AUTH_MODE` | `orlojd` | `--auth-mode` | API auth mode (`off`, `native`, `sso`; `sso` unavailable in this distribution). |
 | `ORLOJ_AUTH_SESSION_TTL` | `orlojd` | `--auth-session-ttl` | Session TTL for native auth mode. |
 | `ORLOJ_AUTH_RESET_ADMIN_USERNAME` | `orlojd` | `--auth-reset-admin-username` | One-shot local admin reset username. |
@@ -82,6 +83,29 @@ Quick grouping:
 
 - Server (`orlojd`): auth, storage, embedded worker, control-plane event bus, runtime message bus, model gateway, tool isolation.
 - Worker (`orlojworker`): identity/capacity, storage, runtime inbox consumers, model gateway, tool isolation.
+
+## Web Console Path
+
+By default, `orlojd` serves the built-in web console at the root path (`/`). The REST API lives under `/v1/...`, `/healthz`, and `/metrics`, so there is no collision.
+
+To mount the console at a subpath instead (useful when multiple services share a single reverse proxy hostname):
+
+```bash
+# Serve the console at https://tools.example.com/orloj/
+orlojd --ui-path=/orloj/
+# or
+ORLOJ_UI_PATH=/orloj/ orlojd
+```
+
+| Setting | Console URL | API URL |
+|---|---|---|
+| `--ui-path=/` (default) | `https://example.com/` | `https://example.com/v1/...` |
+| `--ui-path=/console/` | `https://example.com/console/` | `https://example.com/v1/...` |
+| `--ui-path=/orloj/` | `https://tools.example.com/orloj/` | `https://tools.example.com/v1/...` |
+
+The value is normalized to always have a leading and trailing `/`. Client-side routes (e.g. `/tasks/my-task`) are served via SPA fallback so browser refreshes work at any depth.
+
+When using a custom DNS (e.g. `console.example.com`), you typically do **not** need to set `ORLOJ_UI_PATH` — the default `/` means the console is at `https://console.example.com/`. Point your DNS and reverse proxy at `orlojd` and everything works.
 
 ## Secret Resolution
 

@@ -121,6 +121,7 @@ function AppLayout({
           onAuthStateChanged={onAuthStateChanged}
           nativeAuthEnabled={nativeAuthEnabled}
           username={username}
+          onSearchOpen={() => setSearchOpen(true)}
         />
         <main id="main-content" className="app-layout__content" role="main">
           <ErrorBoundary>
@@ -231,7 +232,7 @@ export function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <BrowserRouter basename={import.meta.env.DEV ? "" : "/ui"}>
+        <BrowserRouter basename={import.meta.env.DEV ? "" : ((window as any).__ORLOJ_UI_BASE ?? "/").replace(/\/+$/, "")}>
           {auth.loading ? (
             <div className="page">
               <div className="page__header">

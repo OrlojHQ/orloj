@@ -47,7 +47,7 @@ Orloj is organized into three layers: a **server** that manages resources and sc
 
 The server runs as `orlojd` and provides:
 
-**API Server** -- HTTP REST API for creating, reading, updating, and deleting all 13 resource types. Supports watch endpoints for real-time event streaming, optimistic concurrency via `resourceVersion` / `If-Match`, and namespace scoping. Also serves the built-in web console at `/ui/`.
+**API Server** -- HTTP REST API for creating, reading, updating, and deleting all 13 resource types. Supports watch endpoints for real-time event streaming, optimistic concurrency via `resourceVersion` / `If-Match`, and namespace scoping. Also serves the built-in web console at the root path (`/`) by default, configurable via `--ui-path` / `ORLOJ_UI_PATH`.
 
 **Resource Store** -- Pluggable storage backend for all resources. Two implementations:
 - `memory` -- in-memory store for local development and testing. Fast, no dependencies, data is lost on restart.

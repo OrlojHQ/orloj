@@ -10,6 +10,7 @@ interface AppState {
   theme: Theme;
   connected: boolean;
   sidebarCollapsed: boolean;
+  sidebarOpen: boolean;
 
   setApiBase: (v: string) => void;
   setNamespace: (v: string) => void;
@@ -19,6 +20,7 @@ interface AppState {
   setConnected: (v: boolean) => void;
   setSidebarCollapsed: (v: boolean) => void;
   toggleSidebar: () => void;
+  setSidebarOpen: (v: boolean) => void;
 }
 
 function defaultApiBase(): string {
@@ -35,6 +37,7 @@ export const useAppStore = create<AppState>()(
       theme: "dark",
       connected: false,
       sidebarCollapsed: false,
+      sidebarOpen: false,
 
       setApiBase: (v) => set({ apiBase: v }),
       setNamespace: (v) => set({ namespace: v }),
@@ -44,6 +47,7 @@ export const useAppStore = create<AppState>()(
       setConnected: (v) => set({ connected: v }),
       setSidebarCollapsed: (v) => set({ sidebarCollapsed: v }),
       toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+      setSidebarOpen: (v) => set({ sidebarOpen: v }),
     }),
     {
       name: "orloj-ui",

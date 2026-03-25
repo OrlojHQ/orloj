@@ -1,7 +1,7 @@
 import { useAppStore } from "../store";
 import { useHealthCheck } from "../api/hooks";
 import { logoutLocalAuth } from "../api/client";
-import { Sun, Moon, Wifi, WifiOff, Settings } from "lucide-react";
+import { Sun, Moon, Wifi, WifiOff, Settings, Menu, Search } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { NamespaceSelector } from "./NamespaceSelector";
@@ -10,9 +10,10 @@ interface TopBarProps {
   onAuthStateChanged?: () => void;
   nativeAuthEnabled?: boolean;
   username?: string;
+  onSearchOpen?: () => void;
 }
 
-export function TopBar({ onAuthStateChanged, nativeAuthEnabled = false, username }: TopBarProps) {
+export function TopBar({ onAuthStateChanged, nativeAuthEnabled = false, username, onSearchOpen }: TopBarProps) {
   const navigate = useNavigate();
   const namespace = useAppStore((s) => s.namespace);
   const setNamespace = useAppStore((s) => s.setNamespace);
@@ -22,6 +23,7 @@ export function TopBar({ onAuthStateChanged, nativeAuthEnabled = false, username
   const connected = useAppStore((s) => s.connected);
   const apiBase = useAppStore((s) => s.apiBase);
   const setApiBase = useAppStore((s) => s.setApiBase);
+  const setSidebarOpen = useAppStore((s) => s.setSidebarOpen);
 
   const [showSettings, setShowSettings] = useState(false);
   const health = useHealthCheck();
@@ -46,6 +48,13 @@ export function TopBar({ onAuthStateChanged, nativeAuthEnabled = false, username
   return (
     <header className="topbar">
       <div className="topbar__left">
+        <button
+          className="topbar__icon-btn topbar__hamburger"
+          onClick={() => setSidebarOpen(true)}
+          aria-label="Open navigation"
+        >
+          <Menu size={18} />
+        </button>
         <div className="topbar__breadcrumb">
           <span className="topbar__breadcrumb-muted">namespace:</span>
           <NamespaceSelector value={namespace} onChange={setNamespace} />
@@ -63,6 +72,16 @@ export function TopBar({ onAuthStateChanged, nativeAuthEnabled = false, username
             {connected ? "Connected" : "Disconnected"}
           </span>
         </div>
+
+        {onSearchOpen && (
+          <button
+            className="topbar__icon-btn topbar__search-btn"
+            onClick={onSearchOpen}
+            aria-label="Search"
+          >
+            <Search size={16} />
+          </button>
+        )}
 
         <button
           className="topbar__icon-btn"

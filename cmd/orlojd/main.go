@@ -35,6 +35,7 @@ func main() {
 
 	showVersion := flag.Bool("version", false, "print version and exit")
 	addr := flag.String("addr", ":8080", "server listen address")
+	uiPath := flag.String("ui-path", env("ORLOJ_UI_PATH", "/"), "base URL path for the web console (env: ORLOJ_UI_PATH)")
 	apiKey := flag.String("api-key", env("ORLOJ_API_TOKEN", ""), "API key for bearer token auth (empty disables auth; env fallback: ORLOJ_API_TOKEN or ORLOJ_API_TOKENS)")
 	authModeRaw := flag.String("auth-mode", env("ORLOJ_AUTH_MODE", "off"), "API auth mode: off|native|sso (sso is not available in this distribution)")
 	authSessionTTL := flag.Duration("auth-session-ttl", envDuration("ORLOJ_AUTH_SESSION_TTL", 24*time.Hour), "session TTL for local auth mode")
@@ -252,6 +253,7 @@ func main() {
 		Extensions: extensions,
 		AuthMode:   authMode,
 		SessionTTL: *authSessionTTL,
+		UIBasePath: *uiPath,
 	})
 	bus, closeBus := newEventBus(logger, *eventBusBackend, *natsURL, *natsSubjectPrefix)
 	if closeBus != nil {

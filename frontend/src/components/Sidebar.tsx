@@ -1,8 +1,16 @@
-import { useMemo } from "react";
-import { NavLink } from "react-router-dom";
+import { useMemo, useEffect, useSyncExternalStore } from "react";
+import { NavLink, useLocation } from "react-router-dom";
 import { useAppStore } from "../store";
 import { useToolApprovals } from "../api/hooks";
 import clsx from "clsx";
+
+const mqMobile = typeof window !== "undefined" ? window.matchMedia("(max-width: 768px)") : null;
+function useIsMobile() {
+  return useSyncExternalStore(
+    (cb) => { mqMobile?.addEventListener("change", cb); return () => mqMobile?.removeEventListener("change", cb); },
+    () => mqMobile?.matches ?? false,
+  );
+}
 import {
   LayoutDashboard,
   Network,
@@ -25,6 +33,7 @@ import {
   CircleUserRound,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import orlojMark from "/orloj-mark.png?url";
 
 interface NavItem {
   to: string;
@@ -59,9 +68,25 @@ interface SidebarProps {
 }
 
 export function Sidebar({ nativeAuthEnabled = false, username }: SidebarProps) {
-  const collapsed = useAppStore((s) => s.sidebarCollapsed);
+  const storeCollapsed = useAppStore((s) => s.sidebarCollapsed);
   const toggle = useAppStore((s) => s.toggleSidebar);
+  const sidebarOpen = useAppStore((s) => s.sidebarOpen);
+  const setSidebarOpen = useAppStore((s) => s.setSidebarOpen);
   const approvals = useToolApprovals();
+  const location = useLocation();
+  const isMobile = useIsMobile();
+  const collapsed = isMobile ? false : storeCollapsed;
+
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [location.pathname, setSidebarOpen]);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 769px)");
+    const handler = () => { if (mq.matches) setSidebarOpen(false); };
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, [setSidebarOpen]);
 
   const pendingCount = useMemo(() => {
     return (approvals.data ?? []).filter((a) => (a.status?.phase ?? "Pending").toLowerCase() === "pending").length;
@@ -70,62 +95,65 @@ export function Sidebar({ nativeAuthEnabled = false, username }: SidebarProps) {
   let lastGroup: string | undefined;
 
   return (
-    <aside className={clsx("sidebar", collapsed && "sidebar--collapsed")} role="navigation" aria-label="Main navigation">
-      <div className="sidebar__logo">
-        <div className="sidebar__logo-icon">
-          <Network size={20} />
-        </div>
-        {!collapsed && <span className="sidebar__logo-text">Orloj</span>}
-      </div>
-
-      <nav className="sidebar__nav">
-        {NAV_ITEMS.map((item) => {
-          const showGroup = !collapsed && item.group && item.group !== lastGroup;
-          lastGroup = item.group;
-          const badge = item.to === "/approvals" && pendingCount > 0 ? pendingCount : 0;
-          return (
-            <div key={item.to}>
-              {showGroup && <div className="sidebar__group-label">{item.group}</div>}
-              <NavLink
-                to={item.to}
-                end={item.to === "/"}
-                className={({ isActive }) =>
-                  clsx("sidebar__link", isActive && "sidebar__link--active")
-                }
-                title={collapsed ? item.label : undefined}
-              >
-                <span className="sidebar__link-icon">{item.icon}</span>
-                {!collapsed && <span className="sidebar__link-label">{item.label}</span>}
-                {badge > 0 && <span className="sidebar__badge">{badge}</span>}
-              </NavLink>
-            </div>
-          );
-        })}
-      </nav>
-
-      {nativeAuthEnabled && (
-        <div className="sidebar__account">
-          <NavLink
-            to="/account"
-            className={({ isActive }) => clsx("sidebar__account-link", isActive && "sidebar__account-link--active")}
-            title={collapsed ? "Account Settings" : undefined}
-          >
-            <span className="sidebar__account-avatar">
-              <CircleUserRound size={16} />
-            </span>
-            {!collapsed && (
-              <span className="sidebar__account-meta">
-                <span className="sidebar__account-label">Signed in as</span>
-                <span className="sidebar__account-name mono">{username?.trim() || "local-admin"}</span>
-              </span>
-            )}
-          </NavLink>
-        </div>
+    <>
+      {sidebarOpen && (
+        <div className="sidebar-backdrop" onClick={() => setSidebarOpen(false)} />
       )}
+      <aside className={clsx("sidebar", collapsed && "sidebar--collapsed", sidebarOpen && "sidebar--mobile-open")} role="navigation" aria-label="Main navigation">
+        <div className="sidebar__logo">
+          <img src={orlojMark} alt="Orloj" className="sidebar__logo-mark" />
+          {!collapsed && <span className="sidebar__logo-text">Orloj</span>}
+        </div>
 
-      <button className="sidebar__toggle" onClick={toggle} aria-label="Toggle sidebar">
-        {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-      </button>
-    </aside>
+        <nav className="sidebar__nav">
+          {NAV_ITEMS.map((item) => {
+            const showGroup = !collapsed && item.group && item.group !== lastGroup;
+            lastGroup = item.group;
+            const badge = item.to === "/approvals" && pendingCount > 0 ? pendingCount : 0;
+            return (
+              <div key={item.to}>
+                {showGroup && <div className="sidebar__group-label">{item.group}</div>}
+                <NavLink
+                  to={item.to}
+                  end={item.to === "/"}
+                  className={({ isActive }) =>
+                    clsx("sidebar__link", isActive && "sidebar__link--active")
+                  }
+                  title={collapsed ? item.label : undefined}
+                >
+                  <span className="sidebar__link-icon">{item.icon}</span>
+                  {!collapsed && <span className="sidebar__link-label">{item.label}</span>}
+                  {badge > 0 && <span className="sidebar__badge">{badge}</span>}
+                </NavLink>
+              </div>
+            );
+          })}
+        </nav>
+
+        {nativeAuthEnabled && (
+          <div className="sidebar__account">
+            <NavLink
+              to="/account"
+              className={({ isActive }) => clsx("sidebar__account-link", isActive && "sidebar__account-link--active")}
+              title={collapsed ? "Account Settings" : undefined}
+            >
+              <span className="sidebar__account-avatar">
+                <CircleUserRound size={16} />
+              </span>
+              {!collapsed && (
+                <span className="sidebar__account-meta">
+                  <span className="sidebar__account-label">Signed in as</span>
+                  <span className="sidebar__account-name mono">{username?.trim() || "local-admin"}</span>
+                </span>
+              )}
+            </NavLink>
+          </div>
+        )}
+
+        <button className="sidebar__toggle" onClick={toggle} aria-label="Toggle sidebar">
+          {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+        </button>
+      </aside>
+    </>
   );
 }

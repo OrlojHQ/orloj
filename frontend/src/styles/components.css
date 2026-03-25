@@ -25,6 +25,7 @@
   flex: 1;
   overflow-y: auto;
   padding: 24px;
+  overscroll-behavior: contain;
 }
 
 /* ============================================
@@ -59,6 +60,13 @@
   height: 24px;
 }
 
+.sidebar__logo-mark {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  object-fit: contain;
+}
+
 .sidebar__logo-text {
   font-weight: 700;
   font-size: 1rem;
@@ -70,6 +78,7 @@
   flex: 1;
   overflow-y: auto;
   padding: 8px;
+  overscroll-behavior: contain;
 }
 
 .sidebar__group-label {
@@ -233,12 +242,15 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
+  flex: 1;
 }
 
 .topbar__right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
+  flex-shrink: 0;
 }
 
 .topbar__breadcrumb {
@@ -246,6 +258,8 @@
   align-items: center;
   gap: 6px;
   font-size: 0.8rem;
+  min-width: 0;
+  flex: 1;
 }
 
 .topbar__breadcrumb-muted {
@@ -272,7 +286,7 @@
 
 .ns-selector {
   position: relative;
-  min-width: 160px;
+  min-width: 0;
 }
 
 .ns-selector__control {
@@ -301,6 +315,8 @@
   width: 100%;
   min-width: 0;
   cursor: pointer;
+  text-overflow: ellipsis;
+  overflow: hidden;
 }
 
 .ns-selector__input:focus {
@@ -395,6 +411,18 @@
   color: var(--text-primary);
 }
 
+.topbar__hamburger {
+  display: none;
+}
+
+.topbar__search-btn {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .topbar__search-btn { display: flex; }
+}
+
 .topbar__settings-panel {
   position: absolute;
   top: 100%;
@@ -404,6 +432,7 @@
   border-radius: 8px;
   padding: 16px;
   box-shadow: var(--shadow-lg);
+  z-index: 310;
   display: grid;
   gap: 12px;
   min-width: 300px;
@@ -783,8 +812,73 @@
   transition: border-color 0.15s;
 }
 
+.metric-card--has-hint {
+  position: relative;
+}
+
 .metric-card:hover {
   border-color: var(--border-strong);
+}
+
+.metric-card__hint-wrap {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 3;
+}
+
+.metric-card__hint {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: help;
+  border-radius: 999px;
+}
+
+.metric-card__hint:hover,
+.metric-card__hint:focus-visible {
+  color: var(--text-secondary);
+  outline: none;
+}
+
+.metric-card__hint:focus-visible {
+  box-shadow: 0 0 0 2px var(--card-bg), 0 0 0 4px var(--border-strong);
+}
+
+.metric-card__hint-tooltip {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  width: max-content;
+  max-width: min(280px, calc(100vw - 32px));
+  padding: 8px 10px;
+  font-size: 0.75rem;
+  font-weight: 400;
+  line-height: 1.45;
+  text-align: left;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--text-primary);
+  background: var(--popover-bg, var(--card-bg));
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  overflow-wrap: break-word;
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 20;
+}
+
+.metric-card__hint-wrap:hover .metric-card__hint-tooltip,
+.metric-card__hint-wrap:focus-within .metric-card__hint-tooltip,
+.metric-card__hint-tooltip--visible {
+  visibility: visible;
+  opacity: 1;
 }
 
 .metric-card__header {
@@ -792,6 +886,10 @@
   align-items: center;
   gap: 6px;
   margin-bottom: 8px;
+}
+
+.metric-card--has-hint .metric-card__header {
+  padding-right: 28px;
 }
 
 .metric-card__icon { color: var(--text-tertiary); }
@@ -935,7 +1033,8 @@
   background: var(--card-bg);
   border: 1px solid var(--card-border);
   border-radius: 10px;
-  overflow: hidden;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .table-row--clickable { cursor: pointer; }
@@ -1107,6 +1206,7 @@
   flex: 1;
   overflow-y: auto;
   padding: 20px;
+  overscroll-behavior: contain;
 }
 
 /* ============================================
@@ -2464,6 +2564,7 @@
 .search-dialog__results {
   overflow-y: auto;
   padding: 4px;
+  overscroll-behavior: contain;
 }
 
 .search-dialog__empty {
@@ -2680,9 +2781,45 @@ button:focus-visible {
 }
 
 @media (max-width: 768px) {
-  .app-layout {
-    grid-template-columns: 56px 1fr;
+  /* --- Sidebar: hidden by default, overlay drawer when open --- */
+  .app-layout,
+  .app-layout--collapsed {
+    grid-template-columns: 1fr;
   }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 260px;
+    z-index: 300;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+  }
+  .sidebar--mobile-open {
+    transform: translateX(0);
+  }
+  .sidebar__toggle {
+    display: none;
+  }
+  .sidebar--collapsed .sidebar__logo { justify-content: flex-start; padding: 16px; }
+  .sidebar--collapsed .sidebar__link { justify-content: flex-start; padding: 8px 10px; }
+  .sidebar--collapsed .sidebar__nav { padding: 8px; }
+  .sidebar--collapsed .sidebar__account { padding: 8px; }
+  .sidebar--collapsed .sidebar__account-link { justify-content: flex-start; padding: 10px; }
+
+  .sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 299;
+    background: rgba(0, 0, 0, 0.5);
+  }
+
+  .topbar__hamburger { display: flex; }
+  .topbar__breadcrumb-muted { display: none; }
+  .topbar__left { gap: 8px; }
+  .topbar__right { gap: 0; }
 
   .app-layout__content { padding: 12px; }
 
@@ -2703,6 +2840,19 @@ button:focus-visible {
     gap: 12px;
   }
 
+  .page__header-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .page__header-back {
+    min-width: 0;
+  }
+  .page__header-back .page__title {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
   .card-grid {
     grid-template-columns: 1fr;
   }
@@ -2715,9 +2865,17 @@ button:focus-visible {
     grid-template-columns: 1fr;
   }
 
+  .search-overlay {
+    padding-top: 8vh;
+  }
+
   .search-dialog {
     width: 95vw;
-    max-height: 70vh;
+    max-height: 80vh;
+  }
+
+  .search-dialog__kbd {
+    display: none;
   }
 
   .auth-screen {
@@ -2766,6 +2924,94 @@ button:focus-visible {
   .graph-view { height: 350px; }
 
   .filter-pills { overflow-x: auto; flex-wrap: nowrap; }
+
+  /* --- Touch targets: minimum 44px --- */
+  .topbar__icon-btn {
+    width: 44px;
+    height: 44px;
+  }
+  .sidebar__link {
+    padding: 10px 12px;
+    min-height: 44px;
+  }
+  .sidebar__account-link {
+    min-height: 44px;
+  }
+  .detail-panel__close {
+    width: 44px;
+    height: 44px;
+  }
+  .search-dialog__close {
+    width: 44px;
+    height: 44px;
+  }
+  .metric-card__hint {
+    padding: 8px;
+    margin: -6px -6px 0 0;
+  }
+  .filter-pill {
+    padding: 8px 14px;
+    min-height: 44px;
+  }
+  .btn-sm {
+    padding: 8px 12px;
+    min-height: 44px;
+  }
+  .detail-panel__tab {
+    padding: 10px 14px;
+    min-height: 44px;
+  }
+  .search-dialog__result {
+    padding: 10px 12px;
+    min-height: 44px;
+  }
+  .trace-toolbar {
+    flex-wrap: wrap;
+  }
+  .log-viewer__toolbar {
+    flex-wrap: wrap;
+  }
+  .log-viewer__search {
+    max-width: none;
+  }
+  .message-item__header {
+    flex-wrap: wrap;
+  }
+  .detail-panel__tabs {
+    overflow-x: auto;
+  }
+
+  /* --- Dialogs --- */
+  .create-dialog {
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+  }
+  .create-dialog__body {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+  }
+  .create-dialog__footer {
+    flex-wrap: wrap;
+  }
+  .create-dialog__footer .btn-primary,
+  .create-dialog__footer .btn-secondary {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* --- Graph legend --- */
+  .graph-view__legend {
+    max-width: 200px;
+    font-size: 0.55rem;
+  }
+
+  /* --- React Flow controls --- */
+  .react-flow__controls button {
+    width: 36px !important;
+    height: 36px !important;
+  }
 }
 
 @media (max-width: 480px) {
@@ -2782,6 +3028,39 @@ button:focus-visible {
   }
   .auth-form__submit {
     height: 38px;
+  }
+  .topbar__settings-panel {
+    left: 8px;
+    right: 8px;
+    width: auto;
+    min-width: 0;
+  }
+  .ns-selector {
+    min-width: 100px;
+  }
+}
+
+/* ============================================
+   TOUCH DEVICE ACTIVE STATES
+   ============================================ */
+
+@media (hover: none) {
+  .sidebar__link:active {
+    background: var(--sidebar-hover);
+    color: var(--sidebar-text-active);
+  }
+  .filter-pill:active {
+    background: var(--bg-surface);
+    color: var(--text-primary);
+  }
+  .attention-card:active {
+    background: var(--bg-hover);
+  }
+  .search-dialog__result:active {
+    background: var(--bg-hover);
+  }
+  .metric-card:active {
+    border-color: var(--border-strong);
   }
 }
 

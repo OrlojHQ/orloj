@@ -8,7 +8,7 @@ The web console includes a **Trace** tab on every task detail page. It renders t
 
 To view a task trace:
 
-1. Open the web console at `http://<orlojd-address>/ui/`.
+1. Open the web console at `http://<orlojd-address>/`.
 2. Navigate to a task and click into its detail page.
 3. Click the **Trace** tab.
 

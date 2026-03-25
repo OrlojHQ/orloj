@@ -597,7 +597,8 @@ export interface CapabilitySnapshot {
   capabilities: Capability[];
 }
 
-export interface TaskMetrics {
+/** Aggregate counts from GET /tasks/{name}/metrics (`response.totals`). */
+export interface TaskMetricsTotals {
   messages: number;
   queued: number;
   running: number;
@@ -610,21 +611,51 @@ export interface TaskMetrics {
   latency_ms_avg: number;
   latency_ms_p95: number;
   latency_sample_size: number;
-  per_agent?: Record<string, AgentMetrics>;
-  per_edge?: Record<string, AgentMetrics>;
 }
 
-export interface AgentMetrics {
+export interface TaskMetricsPerAgent {
+  agent: string;
   inbound: number;
   outbound: number;
   queued: number;
   running: number;
+  retrypending: number;
   succeeded: number;
   deadletter: number;
+  in_flight: number;
   retry_count: number;
   deadletters: number;
   latency_ms_avg: number;
   latency_ms_p95: number;
+  latency_sample_size: number;
+}
+
+export interface TaskMetricsPerEdge {
+  from_agent: string;
+  to_agent: string;
+  messages: number;
+  queued: number;
+  running: number;
+  retrypending: number;
+  succeeded: number;
+  deadletter: number;
+  in_flight: number;
+  retry_count: number;
+  deadletters: number;
+  latency_ms_avg: number;
+  latency_ms_p95: number;
+  latency_sample_size: number;
+}
+
+/** Full JSON body from GET /tasks/{name}/metrics. */
+export interface TaskMetrics {
+  name: string;
+  namespace: string;
+  generated_at: string;
+  totals: TaskMetricsTotals;
+  per_agent: TaskMetricsPerAgent[];
+  per_edge: TaskMetricsPerEdge[];
+  filters?: Record<string, unknown>;
 }
 
 export type ResourceKind =

@@ -21,7 +21,7 @@ go run ./cmd/orlojd \
 
 This runs the server and a built-in worker in a single process. No separate worker needed.
 
-**Web console:** Open [http://127.0.0.1:8080/ui/](http://127.0.0.1:8080/ui/) in your browser to view agents, systems, tasks, and the task trace. You can use it to inspect the pipeline and task status as you run the steps below.
+**Web console:** Open [http://127.0.0.1:8080/](http://127.0.0.1:8080/) in your browser to view agents, systems, tasks, and the task trace. You can use it to inspect the pipeline and task status as you run the steps below.
 
 ## 2. Apply a Starter Blueprint
 

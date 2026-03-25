@@ -14,6 +14,12 @@ import clsx from "clsx";
 
 type Tab = "overview" | "messages" | "metrics" | "trace" | "logs" | "graph" | "yaml";
 
+const TOOLTIP_AVG_LATENCY_MS =
+  "Average end-to-end time from each message's timestamp to when it was processed (milliseconds). Only messages that have both times are included; queue wait is part of this duration.";
+
+const TOOLTIP_P95_LATENCY_MS =
+  "The 95th percentile of those same end-to-end latencies: about 95% of measured messages finished within this time or faster (the slowest few are above it).";
+
 export function TaskDetail() {
   const { name } = useParams<{ name: string }>();
   const navigate = useNavigate();
@@ -76,7 +82,7 @@ export function TaskDetail() {
     { id: "yaml", label: "YAML" },
   ];
 
-  const m = metrics.data;
+  const m = metrics.data?.totals;
 
   return (
     <div className="page">
@@ -246,7 +252,10 @@ export function TaskDetail() {
           </div>
         )}
 
-        {tab === "metrics" && m && (
+        {tab === "metrics" && metrics.isLoading && (
+          <div className="loading-placeholder">Loading metrics...</div>
+        )}
+        {tab === "metrics" && !metrics.isLoading && m && (
           <div>
             <div className="metrics-grid">
               <MetricCard label="Total Messages" value={m.messages} icon={<Hash size={16} />} />
@@ -254,12 +263,25 @@ export function TaskDetail() {
               <MetricCard label="Succeeded" value={m.succeeded} icon={<Zap size={16} />} variant="green" />
               <MetricCard label="DeadLetters" value={m.deadletters} variant="orange" />
               <MetricCard label="Retries" value={m.retry_count} variant="yellow" />
-              <MetricCard label="Avg Latency" value={`${m.latency_ms_avg}ms`} icon={<Clock size={16} />} />
-              <MetricCard label="P95 Latency" value={`${m.latency_ms_p95}ms`} icon={<Clock size={16} />} variant="blue" />
+              <MetricCard
+                label="Avg Latency"
+                value={`${m.latency_ms_avg}ms`}
+                icon={<Clock size={16} />}
+                hint={TOOLTIP_AVG_LATENCY_MS}
+              />
+              <MetricCard
+                label="P95 Latency"
+                value={`${m.latency_ms_p95}ms`}
+                icon={<Clock size={16} />}
+                variant="blue"
+                hint={TOOLTIP_P95_LATENCY_MS}
+              />
             </div>
           </div>
         )}
-        {tab === "metrics" && !m && <p className="text-muted">No metrics available</p>}
+        {tab === "metrics" && !metrics.isLoading && !m && (
+          <p className="text-muted">No metrics available</p>
+        )}
 
         {tab === "trace" && <TraceView trace={traceEvents} />}
 
