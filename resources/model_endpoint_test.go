@@ -1,12 +1,15 @@
 package resources
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestModelEndpointNormalizeDefaults(t *testing.T) {
 	endpoint := ModelEndpoint{
 		Kind:     "ModelEndpoint",
 		Metadata: ObjectMeta{Name: "openai-prod"},
-		Spec:     ModelEndpointSpec{},
+		Spec:     ModelEndpointSpec{DefaultModel: "gpt-4o-mini"},
 	}
 	if err := endpoint.Normalize(); err != nil {
 		t.Fatalf("normalize failed: %v", err)
@@ -27,7 +30,8 @@ func TestModelEndpointNormalizeAllowsCustomProvider(t *testing.T) {
 		Kind:     "ModelEndpoint",
 		Metadata: ObjectMeta{Name: "bad"},
 		Spec: ModelEndpointSpec{
-			Provider: "custom-llm",
+			Provider:     "custom-llm",
+			DefaultModel: "custom-model",
 		},
 	}
 	if err := endpoint.Normalize(); err != nil {
@@ -43,7 +47,8 @@ func TestModelEndpointNormalizeAnthropicDefaults(t *testing.T) {
 		Kind:     "ModelEndpoint",
 		Metadata: ObjectMeta{Name: "anthropic-prod"},
 		Spec: ModelEndpointSpec{
-			Provider: "Anthropic",
+			Provider:     "Anthropic",
+			DefaultModel: "claude-3-5-sonnet-latest",
 			Options: map[string]string{
 				" Anthropic_Version ": " 2023-06-01 ",
 			},
@@ -68,7 +73,8 @@ func TestModelEndpointNormalizeOllamaDefaults(t *testing.T) {
 		Kind:     "ModelEndpoint",
 		Metadata: ObjectMeta{Name: "ollama-local"},
 		Spec: ModelEndpointSpec{
-			Provider: "ollama",
+			Provider:     "ollama",
+			DefaultModel: "llama3.1",
 		},
 	}
 	if err := endpoint.Normalize(); err != nil {
@@ -76,6 +82,21 @@ func TestModelEndpointNormalizeOllamaDefaults(t *testing.T) {
 	}
 	if endpoint.Spec.BaseURL != "http://127.0.0.1:11434" {
 		t.Fatalf("unexpected ollama base URL %q", endpoint.Spec.BaseURL)
+	}
+}
+
+func TestModelEndpointNormalizeRequiresDefaultModel(t *testing.T) {
+	endpoint := ModelEndpoint{
+		Kind:     "ModelEndpoint",
+		Metadata: ObjectMeta{Name: "missing-model"},
+		Spec:     ModelEndpointSpec{Provider: "openai"},
+	}
+	err := endpoint.Normalize()
+	if err == nil {
+		t.Fatal("expected error when default_model is empty")
+	}
+	if !strings.Contains(err.Error(), "default_model") {
+		t.Fatalf("expected default_model in error, got %v", err)
 	}
 }
 

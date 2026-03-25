@@ -36,7 +36,7 @@ go build -o orlojd ./cmd/orlojd
 go build -o orlojctl ./cmd/orlojctl
 
 # Start the server with an embedded worker
-./orlojd --storage-backend=memory --task-execution-mode=sequential --embedded-worker --model-gateway-provider=mock
+./orlojd --storage-backend=memory --task-execution-mode=sequential --embedded-worker
 
 # Apply a starter blueprint (pipeline: planner -> research -> writer)
 ./orlojctl apply -f examples/blueprints/pipeline/
@@ -152,8 +152,7 @@ helm upgrade --install orloj ./charts/orloj \
   --set orlojd.image.tag="${TAG}" \
   --set orlojworker.image.repository="${REGISTRY}/orloj-orlojworker" \
   --set orlojworker.image.tag="${TAG}" \
-  --set postgres.auth.password='<strong-password>' \
-  --set runtimeSecret.modelGatewayApiKey='<model-provider-api-key>'
+  --set postgres.auth.password='<strong-password>'
 ```
 
 See the Kubernetes deployment guide for full operations and troubleshooting: [docs/pages/deploy/kubernetes.md](docs/pages/deploy/kubernetes.md).

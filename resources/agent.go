@@ -136,7 +136,7 @@ func (a *Agent) Normalize() error {
 	}
 	a.Spec.Model = strings.TrimSpace(a.Spec.Model)
 	a.Spec.ModelRef = strings.TrimSpace(a.Spec.ModelRef)
-	if a.Spec.ModelRef == "" && a.Spec.Model == "" {
+	if a.Spec.ModelRef == "" {
 		return fmt.Errorf("spec.model_ref is required")
 	}
 	a.Spec.Memory.Ref = strings.TrimSpace(a.Spec.Memory.Ref)

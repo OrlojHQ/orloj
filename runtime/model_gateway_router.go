@@ -14,12 +14,10 @@ type ModelEndpointLookup interface {
 	Get(ctx context.Context, name string) (resources.ModelEndpoint, bool, error)
 }
 
-// ModelRouterConfig configures model routing between default and referenced endpoints.
+// ModelRouterConfig configures model routing via ModelEndpoint resources.
 type ModelRouterConfig struct {
-	Fallback        ModelGateway
 	Endpoints       ModelEndpointLookup
 	Secrets         SecretResourceLookup
-	FallbackAPIKey  string
 	SecretEnvPrefix string
 }
 
@@ -28,23 +26,16 @@ type cachedModelGateway struct {
 	Gateway         ModelGateway
 }
 
-// ModelRouter routes model requests by ModelRequest.ModelRef when provided.
+// ModelRouter routes model requests to ModelEndpoint-backed gateways by ModelRequest.ModelRef.
 type ModelRouter struct {
-	fallback       ModelGateway
 	endpoints      ModelEndpointLookup
 	secretResolver SecretResolver
-	fallbackAPIKey string
 
 	mu    sync.RWMutex
 	cache map[string]cachedModelGateway
 }
 
 func NewModelRouter(cfg ModelRouterConfig) *ModelRouter {
-	fallback := cfg.Fallback
-	if fallback == nil {
-		fallback = &MockModelGateway{}
-	}
-
 	prefix := strings.TrimSpace(cfg.SecretEnvPrefix)
 	if prefix == "" {
 		prefix = "ORLOJ_SECRET_"
@@ -54,21 +45,22 @@ func NewModelRouter(cfg ModelRouterConfig) *ModelRouter {
 	resolver := NewChainSecretResolver(storeResolver, envResolver)
 
 	return &ModelRouter{
-		fallback:       fallback,
 		endpoints:      cfg.Endpoints,
 		secretResolver: resolver,
-		fallbackAPIKey: strings.TrimSpace(cfg.FallbackAPIKey),
 		cache:          make(map[string]cachedModelGateway),
 	}
 }
 
 func (r *ModelRouter) Complete(ctx context.Context, req ModelRequest) (ModelResponse, error) {
 	if r == nil {
-		return (&MockModelGateway{}).Complete(ctx, req)
+		return ModelResponse{}, fmt.Errorf("model router is not configured")
 	}
 	modelRef := strings.TrimSpace(req.ModelRef)
-	if modelRef == "" || r.endpoints == nil {
-		return r.fallback.Complete(ctx, req)
+	if modelRef == "" {
+		return ModelResponse{}, fmt.Errorf("model_ref is required; configure spec.model_ref on the agent")
+	}
+	if r.endpoints == nil {
+		return ModelResponse{}, fmt.Errorf("model endpoint store is not configured")
 	}
 
 	endpoint, endpointKey, ok, err := r.resolveEndpoint(ctx, req.Namespace, modelRef)
@@ -150,10 +142,7 @@ func (r *ModelRouter) gatewayForEndpoint(ctx context.Context, endpoint resources
 func (r *ModelRouter) resolveEndpointAPIKey(ctx context.Context, endpoint resources.ModelEndpoint) (string, error) {
 	secretRef := strings.TrimSpace(endpoint.Spec.Auth.SecretRef)
 	if secretRef == "" {
-		if strings.TrimSpace(r.fallbackAPIKey) == "" {
-			return "", fmt.Errorf("model endpoint %q requires auth.secretRef or fallback API key", endpoint.Metadata.Name)
-		}
-		return strings.TrimSpace(r.fallbackAPIKey), nil
+		return "", fmt.Errorf("model endpoint %q requires auth.secretRef", endpoint.Metadata.Name)
 	}
 	resolver := r.secretResolver
 	if aware, ok := resolver.(namespaceAwareSecretResolver); ok {

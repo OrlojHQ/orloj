@@ -10,18 +10,6 @@ import (
 	"github.com/OrlojHQ/orloj/resources"
 )
 
-type staticModelGateway struct {
-	content string
-}
-
-func (s *staticModelGateway) Complete(_ context.Context, req ModelRequest) (ModelResponse, error) {
-	content := s.content
-	if content == "" {
-		content = "fallback"
-	}
-	return ModelResponse{Content: content + " model=" + strings.TrimSpace(req.Model), Done: false}, nil
-}
-
 type stubModelEndpointLookup struct {
 	items map[string]resources.ModelEndpoint
 }
@@ -40,16 +28,14 @@ func (s *stubSecretLookup) Get(_ context.Context, name string) (resources.Secret
 	return item, ok, nil
 }
 
-func TestModelRouterUsesFallbackWithoutModelRef(t *testing.T) {
-	router := NewModelRouter(ModelRouterConfig{
-		Fallback: &staticModelGateway{content: "fallback"},
-	})
-	resp, err := router.Complete(context.Background(), ModelRequest{Model: "gpt-test", Step: 1})
-	if err != nil {
-		t.Fatalf("complete failed: %v", err)
+func TestModelRouterErrorsWithoutModelRef(t *testing.T) {
+	router := NewModelRouter(ModelRouterConfig{})
+	_, err := router.Complete(context.Background(), ModelRequest{Model: "gpt-test", Step: 1})
+	if err == nil {
+		t.Fatal("expected error when model_ref is empty")
 	}
-	if !strings.Contains(resp.Content, "fallback") {
-		t.Fatalf("expected fallback content, got %q", resp.Content)
+	if !strings.Contains(err.Error(), "model_ref") {
+		t.Fatalf("expected model_ref in error, got %v", err)
 	}
 }
 
@@ -64,7 +50,6 @@ func TestModelRouterRoutesByModelRef(t *testing.T) {
 		},
 	}}
 	router := NewModelRouter(ModelRouterConfig{
-		Fallback:  &staticModelGateway{content: "fallback"},
 		Endpoints: lookup,
 	})
 	resp, err := router.Complete(context.Background(), ModelRequest{
@@ -85,7 +70,6 @@ func TestModelRouterRoutesByModelRef(t *testing.T) {
 
 func TestModelRouterErrorsWhenEndpointMissing(t *testing.T) {
 	router := NewModelRouter(ModelRouterConfig{
-		Fallback:  &staticModelGateway{content: "fallback"},
 		Endpoints: &stubModelEndpointLookup{items: map[string]resources.ModelEndpoint{}},
 	})
 	_, err := router.Complete(context.Background(), ModelRequest{
@@ -122,7 +106,6 @@ func TestModelRouterResolvesEndpointSecret(t *testing.T) {
 	}}
 
 	router := NewModelRouter(ModelRouterConfig{
-		Fallback:  &staticModelGateway{content: "fallback"},
 		Endpoints: lookup,
 		Secrets:   secrets,
 	})
@@ -167,15 +150,14 @@ func TestModelRouterOpenAIFailsWithoutKey(t *testing.T) {
 		},
 	}}
 	router := NewModelRouter(ModelRouterConfig{
-		Fallback:  &staticModelGateway{content: "fallback"},
 		Endpoints: lookup,
 	})
 	_, err := router.Complete(context.Background(), ModelRequest{Namespace: "team-a", ModelRef: "openai-team-a", Step: 1})
 	if err == nil {
-		t.Fatal("expected missing key error")
+		t.Fatal("expected missing auth error")
 	}
-	if !strings.Contains(strings.ToLower(fmt.Sprint(err)), "key") {
-		t.Fatalf("expected key error, got %v", err)
+	if !strings.Contains(strings.ToLower(fmt.Sprint(err)), "secretref") {
+		t.Fatalf("expected secretRef in error, got %v", err)
 	}
 }
 
@@ -191,15 +173,14 @@ func TestModelRouterAnthropicFailsWithoutKey(t *testing.T) {
 		},
 	}}
 	router := NewModelRouter(ModelRouterConfig{
-		Fallback:  &staticModelGateway{content: "fallback"},
 		Endpoints: lookup,
 	})
 	_, err := router.Complete(context.Background(), ModelRequest{Namespace: "team-a", ModelRef: "anthropic-team-a", Step: 1})
 	if err == nil {
-		t.Fatal("expected missing key error")
+		t.Fatal("expected missing auth error")
 	}
-	if !strings.Contains(strings.ToLower(fmt.Sprint(err)), "key") {
-		t.Fatalf("expected key error, got %v", err)
+	if !strings.Contains(strings.ToLower(fmt.Sprint(err)), "secretref") {
+		t.Fatalf("expected secretRef in error, got %v", err)
 	}
 }
 
@@ -218,15 +199,14 @@ func TestModelRouterAzureOpenAIFailsWithoutKey(t *testing.T) {
 		},
 	}}
 	router := NewModelRouter(ModelRouterConfig{
-		Fallback:  &staticModelGateway{content: "fallback"},
 		Endpoints: lookup,
 	})
 	_, err := router.Complete(context.Background(), ModelRequest{Namespace: "team-a", ModelRef: "azure-team-a", Step: 1})
 	if err == nil {
-		t.Fatal("expected missing key error")
+		t.Fatal("expected missing auth error")
 	}
-	if !strings.Contains(strings.ToLower(fmt.Sprint(err)), "key") {
-		t.Fatalf("expected key error, got %v", err)
+	if !strings.Contains(strings.ToLower(fmt.Sprint(err)), "secretref") {
+		t.Fatalf("expected secretRef in error, got %v", err)
 	}
 }
 
@@ -241,13 +221,19 @@ func TestModelRouterEndpointOptionsValidation(t *testing.T) {
 				Options: map[string]string{
 					"max_tokens": "invalid",
 				},
+				Auth: resources.ModelEndpointAuth{SecretRef: "anthropic-api-key"},
 			},
 		},
 	}}
+	secrets := &stubSecretLookup{items: map[string]resources.Secret{
+		"team-a/anthropic-api-key": {
+			Metadata: resources.ObjectMeta{Name: "anthropic-api-key", Namespace: "team-a"},
+			Spec:     resources.SecretSpec{Data: map[string]string{"value": base64.StdEncoding.EncodeToString([]byte("test-key"))}},
+		},
+	}}
 	router := NewModelRouter(ModelRouterConfig{
-		Fallback:       &staticModelGateway{content: "fallback"},
-		Endpoints:      lookup,
-		FallbackAPIKey: "test-key",
+		Endpoints: lookup,
+		Secrets:   secrets,
 	})
 	_, err := router.Complete(context.Background(), ModelRequest{Namespace: "team-a", ModelRef: "anthropic-team-a", Step: 1})
 	if err == nil {
@@ -270,7 +256,6 @@ func TestModelRouterOllamaDoesNotRequireAPIKey(t *testing.T) {
 		},
 	}}
 	router := NewModelRouter(ModelRouterConfig{
-		Fallback:  &staticModelGateway{content: "fallback"},
 		Endpoints: lookup,
 	})
 	_, err := router.gatewayForEndpoint(context.Background(), lookup.items["team-a/ollama-local"], "team-a/ollama-local")

@@ -50,11 +50,6 @@ func main() {
 	embeddedWorkerMaxConcurrentTasks := flag.Int("embedded-worker-max-concurrent-tasks", envInt("ORLOJ_EMBEDDED_WORKER_MAX_CONCURRENT_TASKS", 1), "max concurrent tasks for embedded worker (same semantics as orlojworker --max-concurrent-tasks; env: ORLOJ_EMBEDDED_WORKER_MAX_CONCURRENT_TASKS)")
 	taskWorkerRegion := flag.String("task-worker-region", env("ORLOJ_TASK_WORKER_REGION", "default"), "region for embedded task worker")
 	taskExecutionMode := flag.String("task-execution-mode", env("ORLOJ_TASK_EXECUTION_MODE", "sequential"), "task execution mode: sequential|message-driven")
-	modelGatewayProvider := flag.String("model-gateway-provider", env("ORLOJ_MODEL_GATEWAY_PROVIDER", "mock"), "task model gateway provider: mock|openai|anthropic|azure-openai|ollama")
-	modelGatewayAPIKey := flag.String("model-gateway-api-key", env("ORLOJ_MODEL_GATEWAY_API_KEY", ""), "API key used by task model gateway provider")
-	modelGatewayBaseURL := flag.String("model-gateway-base-url", env("ORLOJ_MODEL_GATEWAY_BASE_URL", ""), "base URL used by task model gateway provider (provider defaults applied when empty)")
-	modelGatewayTimeout := flag.Duration("model-gateway-timeout", envDuration("ORLOJ_MODEL_GATEWAY_TIMEOUT", 30*time.Second), "HTTP timeout for task model gateway requests")
-	modelGatewayDefaultModel := flag.String("model-gateway-default-model", env("ORLOJ_MODEL_GATEWAY_DEFAULT_MODEL", ""), "fallback default model for gateway providers when endpoint/default values are not set")
 	modelSecretEnvPrefix := flag.String("model-secret-env-prefix", env("ORLOJ_MODEL_SECRET_ENV_PREFIX", "ORLOJ_SECRET_"), "environment variable prefix used to resolve ModelEndpoint.spec.auth.secretRef")
 	toolIsolationBackend := flag.String("tool-isolation-backend", env("ORLOJ_TOOL_ISOLATION_BACKEND", "none"), "isolated tool executor backend: none|container|wasm")
 	toolContainerRuntime := flag.String("tool-container-runtime", env("ORLOJ_TOOL_CONTAINER_RUNTIME", "docker"), "container runtime binary for isolated tool execution")
@@ -145,27 +140,14 @@ func main() {
 		return
 	}
 
-	resolvedModelGatewayAPIKey := startup.ResolveModelGatewayAPIKey(*modelGatewayProvider, *modelGatewayAPIKey)
-	baseModelGateway, err := startup.NewModelGateway(startup.ModelGatewayConfig{
-		Provider:     *modelGatewayProvider,
-		APIKey:       resolvedModelGatewayAPIKey,
-		BaseURL:      *modelGatewayBaseURL,
-		DefaultModel: *modelGatewayDefaultModel,
-		Timeout:      *modelGatewayTimeout,
-	})
-	if err != nil {
-		logger.Fatalf("failed to configure model gateway: %v", err)
-	}
 	modelGateway := agentruntime.NewModelRouter(agentruntime.ModelRouterConfig{
-		Fallback:        baseModelGateway,
 		Endpoints:       stores.ModelEPs,
 		Secrets:         stores.Secrets,
-		FallbackAPIKey:  resolvedModelGatewayAPIKey,
 		SecretEnvPrefix: *modelSecretEnvPrefix,
 	})
 	taskExecutor := agentruntime.NewTaskExecutorWithRuntime(logger, nil, modelGateway, nil)
 	extensions := agentruntime.DefaultExtensions()
-	startup.LogModelGatewayConfig(logger, *modelGatewayProvider, *modelGatewayTimeout, *modelGatewayBaseURL, *modelGatewayDefaultModel, *modelSecretEnvPrefix)
+	logger.Printf("model routing: endpoint-driven secret_env_prefix=%s", *modelSecretEnvPrefix)
 
 	runtime := agentruntime.NewManager(logger)
 	agentController := controllers.NewAgentController(stores.Agents, runtime, logger, *reconcile)

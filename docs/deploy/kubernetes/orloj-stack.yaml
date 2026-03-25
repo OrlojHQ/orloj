@@ -14,7 +14,6 @@ stringData:
   postgres-password: change-me
   postgres-db: orloj
   postgres-dsn: postgres://orloj:change-me@postgres:5432/orloj?sslmode=disable
-  model-gateway-api-key: ""
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -27,8 +26,6 @@ data:
   ORLOJ_NATS_URL: nats://nats:4222
   ORLOJ_AGENT_MESSAGE_BUS_BACKEND: nats-jetstream
   ORLOJ_AGENT_MESSAGE_NATS_URL: nats://nats:4222
-  ORLOJ_MODEL_GATEWAY_PROVIDER: mock
-  ORLOJ_MODEL_GATEWAY_DEFAULT_MODEL: ""
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -162,11 +159,6 @@ spec:
                 secretKeyRef:
                   name: orloj-runtime-secrets
                   key: postgres-dsn
-            - name: ORLOJ_MODEL_GATEWAY_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: orloj-runtime-secrets
-                  key: model-gateway-api-key
           envFrom:
             - configMapRef:
                 name: orloj-runtime-config
@@ -234,11 +226,6 @@ spec:
                 secretKeyRef:
                   name: orloj-runtime-secrets
                   key: postgres-dsn
-            - name: ORLOJ_MODEL_GATEWAY_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: orloj-runtime-secrets
-                  key: model-gateway-api-key
             - name: ORLOJ_AGENT_MESSAGE_CONSUME
               value: "true"
           envFrom:

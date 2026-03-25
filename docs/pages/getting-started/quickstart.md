@@ -15,8 +15,7 @@ Start `orlojd` with an embedded worker in sequential mode:
 go run ./cmd/orlojd \
   --storage-backend=memory \
   --task-execution-mode=sequential \
-  --embedded-worker \
-  --model-gateway-provider=mock
+  --embedded-worker
 ```
 
 This runs the server and a built-in worker in a single process. No separate worker needed.
@@ -59,8 +58,7 @@ go run ./cmd/orlojworker \
   --storage-backend=postgres \
   --task-execution-mode=message-driven \
   --agent-message-bus-backend=nats-jetstream \
-  --agent-message-consume \
-  --model-gateway-provider=openai
+  --agent-message-consume
 ```
 
 See [Execution and Messaging](../concepts/execution-model.md) for details on the message lifecycle, ownership guarantees, and retry behavior.

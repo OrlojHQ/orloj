@@ -10,45 +10,6 @@ import (
 	"github.com/OrlojHQ/orloj/store"
 )
 
-type ModelGatewayConfig struct {
-	Provider     string
-	APIKey       string
-	BaseURL      string
-	DefaultModel string
-	Timeout      time.Duration
-}
-
-func NewModelGateway(cfg ModelGatewayConfig) (agentruntime.ModelGateway, error) {
-	gwCfg := agentruntime.DefaultModelGatewayConfig()
-	gwCfg.Provider = strings.TrimSpace(cfg.Provider)
-	gwCfg.APIKey = strings.TrimSpace(cfg.APIKey)
-	gwCfg.BaseURL = strings.TrimSpace(cfg.BaseURL)
-	gwCfg.DefaultModel = strings.TrimSpace(cfg.DefaultModel)
-	gwCfg.Timeout = cfg.Timeout
-	return agentruntime.NewModelGatewayFromConfig(gwCfg)
-}
-
-func ResolveModelGatewayAPIKey(provider string, explicit string) string {
-	key := strings.TrimSpace(explicit)
-	if key != "" {
-		return key
-	}
-	switch strings.ToLower(strings.TrimSpace(provider)) {
-	case "openai", "openai-compatible", "openai_compatible":
-		return EnvOrDefault("OPENAI_API_KEY", "")
-	case "anthropic":
-		return EnvOrDefault("ANTHROPIC_API_KEY", "")
-	case "azure-openai", "azure_openai", "azure":
-		key := EnvOrDefault("AZURE_OPENAI_API_KEY", "")
-		if key != "" {
-			return key
-		}
-		return EnvOrDefault("OPENAI_API_KEY", "")
-	default:
-		return ""
-	}
-}
-
 type IsolatedToolRuntimeConfig struct {
 	Backend          string
 	ContainerRuntime string
@@ -158,19 +119,6 @@ func NewAgentMessageBus(
 		}
 		return nil, nil
 	}
-}
-
-func LogModelGatewayConfig(logger *log.Logger, provider string, timeout time.Duration, baseURL, defaultModel, secretPrefix string) {
-	if logger == nil {
-		return
-	}
-	logger.Printf("task model gateway provider=%s timeout=%s base_url=%s default_model=%s model_secret_env_prefix=%s",
-		strings.ToLower(strings.TrimSpace(provider)),
-		timeout.String(),
-		strings.TrimSpace(baseURL),
-		strings.TrimSpace(defaultModel),
-		strings.TrimSpace(secretPrefix),
-	)
 }
 
 func LogSecretEncryption(logger *log.Logger, key []byte) {

@@ -12,8 +12,8 @@ See also [CLI reference](../reference/cli.md) for exhaustive flag definitions.
 
 Example:
 
-- `--model-gateway-provider` overrides `ORLOJ_MODEL_GATEWAY_PROVIDER`.
-- If neither is set, the default provider is `mock`.
+- `--storage-backend` overrides `ORLOJ_TASK_EXECUTION_MODE`.
+- If neither is set, code defaults apply.
 
 ## Runtime Environment Matrix
 
@@ -24,11 +24,6 @@ Example:
 | `ORLOJ_EMBEDDED_WORKER_MAX_CONCURRENT_TASKS` | `orlojd` | `--embedded-worker-max-concurrent-tasks` | Embedded worker default concurrency. |
 | `ORLOJ_TASK_WORKER_REGION` | `orlojd` | `--task-worker-region` | Region for embedded worker registration. |
 | `ORLOJ_WORKER_HEALTHZ_ADDR` | `orlojworker` | `--healthz-addr` | Optional worker liveness endpoint bind address. |
-| `ORLOJ_MODEL_GATEWAY_PROVIDER` | `orlojd`, `orlojworker` | `--model-gateway-provider` | Model provider: `mock`, `openai`, `anthropic`, `azure-openai`, `ollama`. |
-| `ORLOJ_MODEL_GATEWAY_API_KEY` | `orlojd`, `orlojworker` | `--model-gateway-api-key` | Explicit model provider API key. |
-| `ORLOJ_MODEL_GATEWAY_BASE_URL` | `orlojd`, `orlojworker` | `--model-gateway-base-url` | Provider base URL override. |
-| `ORLOJ_MODEL_GATEWAY_TIMEOUT` | `orlojd`, `orlojworker` | `--model-gateway-timeout` | HTTP timeout for model gateway requests. |
-| `ORLOJ_MODEL_GATEWAY_DEFAULT_MODEL` | `orlojd`, `orlojworker` | `--model-gateway-default-model` | Fallback default model when endpoint/default values are not set. |
 | `ORLOJ_MODEL_SECRET_ENV_PREFIX` | `orlojd`, `orlojworker` | `--model-secret-env-prefix` | Env prefix for model endpoint `secretRef` lookups. |
 | `OPENAI_API_KEY` | `orlojd`, `orlojworker` | none | Fallback key for OpenAI provider integrations. |
 | `ANTHROPIC_API_KEY` | `orlojd`, `orlojworker` | none | Fallback key for Anthropic provider integrations. |
@@ -81,8 +76,8 @@ Use [CLI reference](../reference/cli.md) as the exhaustive list for all flags an
 
 Quick grouping:
 
-- Server (`orlojd`): auth, storage, embedded worker, control-plane event bus, runtime message bus, model gateway, tool isolation.
-- Worker (`orlojworker`): identity/capacity, storage, runtime inbox consumers, model gateway, tool isolation.
+- Server (`orlojd`): auth, storage, embedded worker, control-plane event bus, runtime message bus, model secret resolution, tool isolation.
+- Worker (`orlojworker`): identity/capacity, storage, runtime inbox consumers, model secret resolution, tool isolation.
 
 ## Web Console Path
 

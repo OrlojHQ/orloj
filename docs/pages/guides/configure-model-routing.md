@@ -168,6 +168,38 @@ spec:
   default_model: llama3.1
 ```
 
+## Using OpenAI-Compatible Providers
+
+The `openai-compatible` provider lets you connect to any service that speaks the OpenAI Chat Completions protocol. Set `base_url` to the provider's API base:
+
+**Groq:**
+```yaml
+apiVersion: orloj.dev/v1
+kind: ModelEndpoint
+metadata:
+  name: groq-default
+spec:
+  provider: openai-compatible
+  base_url: https://api.groq.com/openai/v1
+  default_model: llama-3.1-70b-versatile
+  auth:
+    secretRef: groq-api-key
+```
+
+**Ollama via OpenAI-compatible endpoint:**
+```yaml
+apiVersion: orloj.dev/v1
+kind: ModelEndpoint
+metadata:
+  name: ollama-openai
+spec:
+  provider: openai-compatible
+  base_url: http://127.0.0.1:11434/v1
+  default_model: llama3.1
+```
+
+This works with any service that implements `/chat/completions`, including Together AI, Fireworks AI, vLLM, and text-generation-inference.
+
 ## Agent Requirement
 
 Agents must set `spec.model_ref` to a valid ModelEndpoint.

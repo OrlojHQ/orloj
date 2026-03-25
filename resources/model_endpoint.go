@@ -69,6 +69,9 @@ func (m *ModelEndpoint) Normalize() error {
 		}
 	}
 	m.Spec.DefaultModel = strings.TrimSpace(m.Spec.DefaultModel)
+	if m.Spec.DefaultModel == "" {
+		return fmt.Errorf("spec.default_model is required")
+	}
 	if len(m.Spec.Options) > 0 {
 		normalized := make(map[string]string, len(m.Spec.Options))
 		for key, value := range m.Spec.Options {

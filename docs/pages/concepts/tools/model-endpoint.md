@@ -24,7 +24,8 @@ spec:
 | OpenAI | `openai` | `https://api.openai.com/v1` |
 | Anthropic | `anthropic` | `https://api.anthropic.com/v1` |
 | Azure OpenAI | `azure-openai` | (must be set explicitly) |
-| Ollama | `ollama` | `http://127.0.0.1:11434` |
+| Ollama (native) | `ollama` | `http://127.0.0.1:11434` |
+| OpenAI-compatible | `openai-compatible` | (must be set explicitly) |
 | Mock | `mock` | (no network calls) |
 
 ### Provider-Specific Options
@@ -56,13 +57,55 @@ spec:
     secretRef: azure-openai-api-key
 ```
 
-**Ollama** (local, no auth required):
+**Ollama** (native `/api/chat` endpoint, no auth required):
 ```yaml
 spec:
   provider: ollama
   base_url: http://127.0.0.1:11434
   default_model: llama3.1
 ```
+
+### OpenAI-Compatible Providers
+
+The `openai-compatible` provider uses the OpenAI Chat Completions protocol (`/chat/completions`) with a custom `base_url`. This lets you connect to any service that exposes an OpenAI-compatible API, including Groq, Together AI, Fireworks AI, local vLLM/TGI servers, and Ollama's OpenAI-compatible endpoint.
+
+**Groq:**
+```yaml
+spec:
+  provider: openai-compatible
+  base_url: https://api.groq.com/openai/v1
+  default_model: llama-3.1-70b-versatile
+  auth:
+    secretRef: groq-api-key
+```
+
+**Together AI:**
+```yaml
+spec:
+  provider: openai-compatible
+  base_url: https://api.together.xyz/v1
+  default_model: meta-llama/Llama-3.1-70B-Instruct-Turbo
+  auth:
+    secretRef: together-api-key
+```
+
+**Local vLLM server:**
+```yaml
+spec:
+  provider: openai-compatible
+  base_url: http://localhost:8000/v1
+  default_model: meta-llama/Llama-3.1-8B-Instruct
+```
+
+**Ollama via OpenAI-compatible endpoint:**
+```yaml
+spec:
+  provider: openai-compatible
+  base_url: http://127.0.0.1:11434/v1
+  default_model: llama3.1
+```
+
+> **Ollama note:** Ollama exposes both a native API (`/api/chat`, used by the `ollama` provider) and an OpenAI-compatible API (`/v1/chat/completions`). Use whichever suits your setup — the `openai-compatible` provider works with Ollama's `/v1` endpoint.
 
 ## Binding Agents to Models
 

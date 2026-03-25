@@ -82,11 +82,12 @@ Fix:
 
 Cause:
 
-- missing or invalid provider key.
+- missing or invalid API key on the ModelEndpoint resource.
 
 Fix:
 
-- set `--model-gateway-api-key` or provider env var (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `AZURE_OPENAI_API_KEY`).
+- verify the ModelEndpoint `auth.secretRef` points to a valid Secret containing the provider API key.
+- alternatively, set the provider env var (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `AZURE_OPENAI_API_KEY`) as a fallback.
 
 ### Wasm/container runtime errors
 

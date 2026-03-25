@@ -26,8 +26,7 @@ Single process with embedded worker:
 go run ./cmd/orlojd \
   --storage-backend=memory \
   --task-execution-mode=sequential \
-  --embedded-worker \
-  --model-gateway-provider=mock
+  --embedded-worker
 ```
 
 ### Build local binaries
@@ -41,7 +40,7 @@ go build -o ./bin/orlojctl ./cmd/orlojctl
 Run the server:
 
 ```bash
-./bin/orlojd --storage-backend=memory --task-execution-mode=sequential --embedded-worker --model-gateway-provider=mock
+./bin/orlojd --storage-backend=memory --task-execution-mode=sequential --embedded-worker
 ```
 
 ---
@@ -52,7 +51,7 @@ Download the server, worker, and CLI for your platform from [GitHub Releases](ht
 
 ```bash
 # Example: after downloading and extracting orlojd, orlojworker, orlojctl for your OS/arch
-./orlojd --storage-backend=memory --task-execution-mode=sequential --embedded-worker --model-gateway-provider=mock
+./orlojd --storage-backend=memory --task-execution-mode=sequential --embedded-worker
 ```
 
 Use a specific version tag (e.g. `v0.1.0`) for production.
@@ -81,8 +80,7 @@ docker run --rm -p 8080:8080 ghcr.io/orlojhq/orloj-orlojd:latest \
   --addr=:8080 \
   --storage-backend=memory \
   --task-execution-mode=sequential \
-  --embedded-worker \
-  --model-gateway-provider=mock
+  --embedded-worker
 ```
 
 For a full stack (Postgres, NATS, server, workers), use the [VPS](../deploy/vps.md) or [Kubernetes](../deploy/kubernetes.md) deployment guides with `image: ghcr.io/orlojhq/orloj-orlojd:<tag>` (and the worker image) instead of building from the repo.

@@ -93,7 +93,7 @@ func TestOllamaModelGatewayCompleteProviderError(t *testing.T) {
 		t.Fatalf("new gateway failed: %v", err)
 	}
 
-	_, err = gateway.Complete(context.Background(), ModelRequest{Step: 1})
+	_, err = gateway.Complete(context.Background(), ModelRequest{Model: "nonexistent-model", Step: 1})
 	if err == nil {
 		t.Fatal("expected provider error")
 	}
@@ -117,7 +117,7 @@ func TestOllamaModelGatewayCompleteRequestFailure(t *testing.T) {
 		t.Fatalf("new gateway failed: %v", err)
 	}
 
-	_, err = gateway.Complete(context.Background(), ModelRequest{Step: 1})
+	_, err = gateway.Complete(context.Background(), ModelRequest{Model: "llama3.2", Step: 1})
 	if err == nil {
 		t.Fatal("expected transport error")
 	}

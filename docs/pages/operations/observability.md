@@ -195,7 +195,6 @@ services:
     image: orloj:latest
     command: >
       orlojd --embedded-worker
-      --model-gateway-provider=openai
     environment:
       OTEL_EXPORTER_OTLP_ENDPOINT: jaeger:4317
       OTEL_EXPORTER_OTLP_INSECURE: "true"

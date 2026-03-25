@@ -32,7 +32,6 @@ Edit `docs/deploy/vps/.env.vps` and rotate at minimum:
 
 - `POSTGRES_PASSWORD`
 - `ORLOJ_POSTGRES_DSN` password component
-- `ORLOJ_MODEL_GATEWAY_PROVIDER` and key if not using mock
 
 ### 3. Validate Compose Config
 

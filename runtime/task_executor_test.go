@@ -73,7 +73,8 @@ func TestTaskExecutorStepEventsIncludeModelAndToolCalls(t *testing.T) {
 	agent := resources.Agent{
 		Metadata: resources.ObjectMeta{Name: "research"},
 		Spec: resources.AgentSpec{
-			Model:  "gpt-4o",
+			Model:    "gpt-4o",
+			ModelRef: "test-endpoint",
 			Prompt: "test prompt",
 			Tools:  []string{"web_search"},
 			Limits: resources.AgentLimits{MaxSteps: 2},
@@ -125,7 +126,8 @@ func TestTaskExecutorStepEventsCaptureModelErrors(t *testing.T) {
 	agent := resources.Agent{
 		Metadata: resources.ObjectMeta{Name: "planner"},
 		Spec: resources.AgentSpec{
-			Model:  "gpt-4o",
+			Model:    "gpt-4o",
+			ModelRef: "test-endpoint",
 			Prompt: "test prompt",
 			Tools:  []string{"web_search"},
 			Limits: resources.AgentLimits{MaxSteps: 1},
@@ -165,7 +167,8 @@ func TestTaskExecutorHardFailsOnPermissionDenied(t *testing.T) {
 	agent := resources.Agent{
 		Metadata: resources.ObjectMeta{Name: "research"},
 		Spec: resources.AgentSpec{
-			Model:  "gpt-4o",
+			Model:    "gpt-4o",
+			ModelRef: "test-endpoint",
 			Prompt: "test prompt",
 			Tools:  []string{"vector_db"},
 			Limits: resources.AgentLimits{MaxSteps: 2},
@@ -230,7 +233,8 @@ func TestTaskExecutorContractModeHappyPath(t *testing.T) {
 	agent := resources.Agent{
 		Metadata: resources.ObjectMeta{Name: "contract-agent"},
 		Spec: resources.AgentSpec{
-			Model:  "gpt-4o",
+			Model:    "gpt-4o",
+			ModelRef: "test-endpoint",
 			Prompt: "contract prompt",
 			Tools:  []string{"tool.alpha", "tool.beta"},
 			Execution: resources.AgentExecutionSpec{
@@ -284,7 +288,8 @@ func TestTaskExecutorContractModeAllowsNoToolIntermediateStep(t *testing.T) {
 	agent := resources.Agent{
 		Metadata: resources.ObjectMeta{Name: "contract-agent"},
 		Spec: resources.AgentSpec{
-			Model:  "gpt-4o",
+			Model:    "gpt-4o",
+			ModelRef: "test-endpoint",
 			Prompt: "contract prompt",
 			Tools:  []string{"tool.alpha"},
 			Execution: resources.AgentExecutionSpec{
@@ -333,7 +338,8 @@ func TestTaskExecutorContractModeDuplicateShortCircuit(t *testing.T) {
 	agent := resources.Agent{
 		Metadata: resources.ObjectMeta{Name: "contract-agent"},
 		Spec: resources.AgentSpec{
-			Model:  "gpt-4o",
+			Model:    "gpt-4o",
+			ModelRef: "test-endpoint",
 			Prompt: "contract prompt",
 			Tools:  []string{"tool.alpha"},
 			Execution: resources.AgentExecutionSpec{
@@ -380,7 +386,8 @@ func TestTaskExecutorContractModeDuplicateDeny(t *testing.T) {
 	agent := resources.Agent{
 		Metadata: resources.ObjectMeta{Name: "contract-agent"},
 		Spec: resources.AgentSpec{
-			Model:  "gpt-4o",
+			Model:    "gpt-4o",
+			ModelRef: "test-endpoint",
 			Prompt: "contract prompt",
 			Tools:  []string{"tool.alpha"},
 			Execution: resources.AgentExecutionSpec{
@@ -441,7 +448,8 @@ func TestTaskExecutorContractModeToolNotInSequence(t *testing.T) {
 	agent := resources.Agent{
 		Metadata: resources.ObjectMeta{Name: "contract-agent"},
 		Spec: resources.AgentSpec{
-			Model:  "gpt-4o",
+			Model:    "gpt-4o",
+			ModelRef: "test-endpoint",
 			Prompt: "contract prompt",
 			Tools:  []string{"tool.alpha", "tool.beta", "tool.gamma"},
 			Execution: resources.AgentExecutionSpec{
@@ -492,7 +500,8 @@ func TestTaskExecutorContractModeOutOfOrderAllowed(t *testing.T) {
 	agent := resources.Agent{
 		Metadata: resources.ObjectMeta{Name: "contract-agent"},
 		Spec: resources.AgentSpec{
-			Model:  "gpt-4o",
+			Model:    "gpt-4o",
+			ModelRef: "test-endpoint",
 			Prompt: "contract prompt",
 			Tools:  []string{"tool.alpha", "tool.beta"},
 			Execution: resources.AgentExecutionSpec{
@@ -535,7 +544,8 @@ func TestTaskExecutorContractModeMaxStepsMarkersIncompleteCompletesWithWarning(t
 	agent := resources.Agent{
 		Metadata: resources.ObjectMeta{Name: "contract-agent"},
 		Spec: resources.AgentSpec{
-			Model:  "gpt-4o",
+			Model:    "gpt-4o",
+			ModelRef: "test-endpoint",
 			Prompt: "contract prompt",
 			Tools:  []string{"tool.alpha"},
 			Execution: resources.AgentExecutionSpec{
@@ -583,7 +593,8 @@ func TestTaskExecutorContractModeMaxStepsToolsIncomplete(t *testing.T) {
 	agent := resources.Agent{
 		Metadata: resources.ObjectMeta{Name: "contract-agent"},
 		Spec: resources.AgentSpec{
-			Model:  "gpt-4o",
+			Model:    "gpt-4o",
+			ModelRef: "test-endpoint",
 			Prompt: "contract prompt",
 			Tools:  []string{"tool.alpha"},
 			Execution: resources.AgentExecutionSpec{
@@ -627,7 +638,8 @@ func TestTaskExecutorDynamicProfileUnaffectedByContractFields(t *testing.T) {
 	agent := resources.Agent{
 		Metadata: resources.ObjectMeta{Name: "dynamic-agent"},
 		Spec: resources.AgentSpec{
-			Model:  "gpt-4o",
+			Model:    "gpt-4o",
+			ModelRef: "test-endpoint",
 			Prompt: "dynamic prompt",
 			Tools:  []string{"tool.alpha", "tool.beta"},
 			Execution: resources.AgentExecutionSpec{
@@ -671,7 +683,8 @@ func TestTaskExecutorDynamicProfileShortCircuitsDuplicates(t *testing.T) {
 	agent := resources.Agent{
 		Metadata: resources.ObjectMeta{Name: "dynamic-agent"},
 		Spec: resources.AgentSpec{
-			Model:  "gpt-4o",
+			Model:    "gpt-4o",
+			ModelRef: "test-endpoint",
 			Prompt: "test prompt",
 			Tools:  []string{"web_search"},
 			Limits: resources.AgentLimits{MaxSteps: 4},
@@ -724,7 +737,8 @@ func TestTaskExecutorMultiToolAgentFiltersIndependently(t *testing.T) {
 	agent := resources.Agent{
 		Metadata: resources.ObjectMeta{Name: "multi-tool-agent"},
 		Spec: resources.AgentSpec{
-			Model:  "gpt-4o",
+			Model:    "gpt-4o",
+			ModelRef: "test-endpoint",
 			Prompt: "search and query",
 			Tools:  []string{"web_search", "database"},
 			Limits: resources.AgentLimits{MaxSteps: 4},
@@ -771,7 +785,8 @@ func TestTaskExecutorContractModeObservePolicyDoesNotError(t *testing.T) {
 	agent := resources.Agent{
 		Metadata: resources.ObjectMeta{Name: "contract-agent"},
 		Spec: resources.AgentSpec{
-			Model:  "gpt-4o",
+			Model:    "gpt-4o",
+			ModelRef: "test-endpoint",
 			Prompt: "contract prompt",
 			Tools:  []string{"tool.alpha", "tool.gamma"},
 			Execution: resources.AgentExecutionSpec{
@@ -818,7 +833,8 @@ func TestTaskExecutorReturnsApprovalRequiredWhenToolNeedsApproval(t *testing.T) 
 	agent := resources.Agent{
 		Metadata: resources.ObjectMeta{Name: "agent"},
 		Spec: resources.AgentSpec{
-			Model:  "gpt-4o",
+			Model:    "gpt-4o",
+			ModelRef: "test-endpoint",
 			Prompt: "use the smoke tool once",
 			Tools:  []string{"smoke"},
 			Limits: resources.AgentLimits{MaxSteps: 6},
@@ -838,7 +854,8 @@ func TestTaskExecutorStepEventsCaptureToolContractMetadata(t *testing.T) {
 	agent := resources.Agent{
 		Metadata: resources.ObjectMeta{Name: "research", Namespace: "default"},
 		Spec: resources.AgentSpec{
-			Model:  "gpt-4o",
+			Model:    "gpt-4o",
+			ModelRef: "test-endpoint",
 			Prompt: "test prompt",
 			Tools:  []string{"web_search"},
 			Limits: resources.AgentLimits{MaxSteps: 1},
@@ -877,7 +894,8 @@ func TestTaskExecutorNoToolsReturnsModelOutput(t *testing.T) {
 	agent := resources.Agent{
 		Metadata: resources.ObjectMeta{Name: "writer"},
 		Spec: resources.AgentSpec{
-			Model:  "gpt-4o-mini",
+			Model:    "gpt-4o-mini",
+			ModelRef: "test-endpoint",
 			Prompt: "write summary",
 			Limits: resources.AgentLimits{MaxSteps: 4},
 		},
@@ -931,7 +949,8 @@ func TestTaskExecutorStopOnFirstToolCompletesImmediately(t *testing.T) {
 	agent := resources.Agent{
 		Metadata: resources.ObjectMeta{Name: "pipeline-agent"},
 		Spec: resources.AgentSpec{
-			Model:  "gpt-4o",
+			Model:    "gpt-4o",
+			ModelRef: "test-endpoint",
 			Prompt: "search once",
 			Tools:  []string{"web_search"},
 			Execution: resources.AgentExecutionSpec{
@@ -983,7 +1002,8 @@ func TestTaskExecutorStructuredToolHistoryPreservesIDs(t *testing.T) {
 	agent := resources.Agent{
 		Metadata: resources.ObjectMeta{Name: "structured-agent"},
 		Spec: resources.AgentSpec{
-			Model:  "gpt-4o",
+			Model:    "gpt-4o",
+			ModelRef: "test-endpoint",
 			Prompt: "test",
 			Tools:  []string{"web_search"},
 			Limits: resources.AgentLimits{MaxSteps: 3},

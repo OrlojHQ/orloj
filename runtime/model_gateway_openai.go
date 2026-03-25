@@ -24,9 +24,8 @@ type OpenAIModelGatewayConfig struct {
 // DefaultOpenAIModelGatewayConfig returns OpenAI gateway defaults.
 func DefaultOpenAIModelGatewayConfig() OpenAIModelGatewayConfig {
 	return OpenAIModelGatewayConfig{
-		BaseURL:      "https://api.openai.com/v1",
-		DefaultModel: "gpt-4o-mini",
-		Timeout:      30 * time.Second,
+		BaseURL: "https://api.openai.com/v1",
+		Timeout: 30 * time.Second,
 	}
 }
 
@@ -62,9 +61,6 @@ func (c OpenAIModelGatewayConfig) normalized() OpenAIModelGatewayConfig {
 	defaults := DefaultOpenAIModelGatewayConfig()
 	if strings.TrimSpace(out.BaseURL) == "" {
 		out.BaseURL = defaults.BaseURL
-	}
-	if strings.TrimSpace(out.DefaultModel) == "" {
-		out.DefaultModel = defaults.DefaultModel
 	}
 	if out.Timeout <= 0 {
 		out.Timeout = defaults.Timeout

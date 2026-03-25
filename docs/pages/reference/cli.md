@@ -225,16 +225,13 @@ go run ./cmd/orlojd -h
 | `--agent-message-history-max` | `2048` | In-memory runtime message history capacity. | In-memory runtime message backend behavior. |
 | `--agent-message-dedupe-window` | `2m` | In-memory runtime message dedupe window. | In-memory runtime message backend behavior. |
 
-### Model gateway
+### Model secret resolution
 
 | Flag | Default | Description | Condition / Notes |
 |---|---|---|---|
-| `--model-gateway-provider` | `mock` | Task model gateway provider. | `mock|openai|anthropic|azure-openai|ollama`; env `ORLOJ_MODEL_GATEWAY_PROVIDER`. |
-| `--model-gateway-api-key` | empty | Explicit provider API key. | Env fallback: `ORLOJ_MODEL_GATEWAY_API_KEY`. |
-| `--model-gateway-base-url` | empty | Provider base URL override. | Env fallback: `ORLOJ_MODEL_GATEWAY_BASE_URL`. |
-| `--model-gateway-timeout` | `30s` | HTTP timeout for model gateway calls. | Env fallback: `ORLOJ_MODEL_GATEWAY_TIMEOUT`. |
-| `--model-gateway-default-model` | empty | Fallback default model. | Env fallback: `ORLOJ_MODEL_GATEWAY_DEFAULT_MODEL`. |
 | `--model-secret-env-prefix` | `ORLOJ_SECRET_` | Env prefix for model `secretRef` resolution. | Env fallback: `ORLOJ_MODEL_SECRET_ENV_PREFIX`. |
+
+Model routing (provider, base URL, default model, API key, timeout) is configured exclusively via **ModelEndpoint** resources. Agents reference endpoints through `spec.model_ref`. See [Configure Model Routing](../guides/configure-model-routing.md).
 
 ### Tool isolation runtime
 
@@ -303,16 +300,13 @@ go run ./cmd/orlojworker -h
 | `--agent-message-consumer-refresh` | `10s` | Consumer reconciliation interval. | n/a |
 | `--agent-message-consumer-dedupe-window` | `10m` | Inbox processing dedupe window. | n/a |
 
-### Model gateway
+### Model secret resolution
 
 | Flag | Default | Description | Condition / Notes |
 |---|---|---|---|
-| `--model-gateway-provider` | `mock` | Task model gateway provider. | `mock|openai|anthropic|azure-openai|ollama`; env `ORLOJ_MODEL_GATEWAY_PROVIDER`. |
-| `--model-gateway-api-key` | empty | Explicit provider API key. | Env fallback: `ORLOJ_MODEL_GATEWAY_API_KEY`. |
-| `--model-gateway-base-url` | empty | Provider base URL override. | Env fallback: `ORLOJ_MODEL_GATEWAY_BASE_URL`. |
-| `--model-gateway-timeout` | `30s` | HTTP timeout for model gateway calls. | Env fallback: `ORLOJ_MODEL_GATEWAY_TIMEOUT`. |
-| `--model-gateway-default-model` | empty | Fallback default model. | Env fallback: `ORLOJ_MODEL_GATEWAY_DEFAULT_MODEL`. |
 | `--model-secret-env-prefix` | `ORLOJ_SECRET_` | Env prefix for model `secretRef` resolution. | Env fallback: `ORLOJ_MODEL_SECRET_ENV_PREFIX`. |
+
+Model routing (provider, base URL, default model, API key, timeout) is configured exclusively via **ModelEndpoint** resources. Agents reference endpoints through `spec.model_ref`. See [Configure Model Routing](../guides/configure-model-routing.md).
 
 ### Tool isolation runtime
 

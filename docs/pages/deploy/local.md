@@ -31,8 +31,7 @@ go run ./cmd/orlojworker \
   --storage-backend=memory \
   --task-execution-mode=message-driven \
   --agent-message-bus-backend=memory \
-  --agent-message-consume \
-  --model-gateway-provider=mock
+  --agent-message-consume
 ```
 
 ### Option B: Docker Compose Stack

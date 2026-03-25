@@ -27,7 +27,6 @@ type AnthropicModelGatewayConfig struct {
 func DefaultAnthropicModelGatewayConfig() AnthropicModelGatewayConfig {
 	return AnthropicModelGatewayConfig{
 		BaseURL:          "https://api.anthropic.com/v1",
-		DefaultModel:     "claude-3-5-sonnet-latest",
 		AnthropicVersion: "2023-06-01",
 		MaxTokens:        1024,
 		Timeout:          30 * time.Second,
@@ -76,9 +75,6 @@ func (c AnthropicModelGatewayConfig) normalized() AnthropicModelGatewayConfig {
 	defaults := DefaultAnthropicModelGatewayConfig()
 	if strings.TrimSpace(out.BaseURL) == "" {
 		out.BaseURL = defaults.BaseURL
-	}
-	if strings.TrimSpace(out.DefaultModel) == "" {
-		out.DefaultModel = defaults.DefaultModel
 	}
 	if strings.TrimSpace(out.AnthropicVersion) == "" {
 		out.AnthropicVersion = defaults.AnthropicVersion

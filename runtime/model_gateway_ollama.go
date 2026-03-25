@@ -22,9 +22,8 @@ type OllamaModelGatewayConfig struct {
 // DefaultOllamaModelGatewayConfig returns Ollama gateway defaults.
 func DefaultOllamaModelGatewayConfig() OllamaModelGatewayConfig {
 	return OllamaModelGatewayConfig{
-		BaseURL:      "http://127.0.0.1:11434",
-		DefaultModel: "llama3.1",
-		Timeout:      30 * time.Second,
+		BaseURL: "http://127.0.0.1:11434",
+		Timeout: 30 * time.Second,
 	}
 }
 
@@ -55,9 +54,6 @@ func (c OllamaModelGatewayConfig) normalized() OllamaModelGatewayConfig {
 	defaults := DefaultOllamaModelGatewayConfig()
 	if strings.TrimSpace(out.BaseURL) == "" {
 		out.BaseURL = defaults.BaseURL
-	}
-	if strings.TrimSpace(out.DefaultModel) == "" {
-		out.DefaultModel = defaults.DefaultModel
 	}
 	if out.Timeout <= 0 {
 		out.Timeout = defaults.Timeout
