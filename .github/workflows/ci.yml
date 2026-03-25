@@ -70,13 +70,12 @@ jobs:
       - name: Build server
         run: go build -o orlojd ./cmd/orlojd
 
-      - name: Start orlojd (memory backend, embedded worker, mock model)
+      - name: Start orlojd (memory backend, embedded worker)
         run: |
           ./orlojd \
             --storage-backend=memory \
             --run-task-worker \
             --task-worker-id=ci-worker \
-            --model-gateway-provider=mock \
             --reconcile-interval=1s \
             --addr=:8080 &
           echo "ORLOJD_PID=$!" >> "$GITHUB_ENV"
