@@ -1,12 +1,17 @@
+<p align="center">
+  <img src="docs/public/logo.png" alt="Orloj" width="200" />
+</p>
+
 # Orloj
 
-*Named after the [Prague Orloj](https://en.wikipedia.org/wiki/Prague_astronomical_clock), an astronomical clock that has coordinated complex mechanisms for over 600 years.*
+_Named after the [Prague Orloj](https://en.wikipedia.org/wiki/Prague_astronomical_clock), an astronomical clock that has coordinated complex mechanisms for over 600 years._
 
-[Release](https://github.com/OrlojHQ/orloj/releases)
-[CI](https://github.com/OrlojHQ/orloj/actions/workflows/ci.yml)
-[Release workflow](https://github.com/OrlojHQ/orloj/actions/workflows/release.yml)
-[Docs](https://github.com/OrlojHQ/orloj/actions/workflows/docs.yml)
-[License](LICENSE)
+[![Release](https://img.shields.io/github/v/release/OrlojHQ/orloj?display_name=tag&sort=semver)](https://github.com/OrlojHQ/orloj/releases)
+[![CI](https://img.shields.io/github/actions/workflow/status/OrlojHQ/orloj/ci.yml?branch=main&label=ci)](https://github.com/OrlojHQ/orloj/actions/workflows/ci.yml)
+[![Docs](https://img.shields.io/github/actions/workflow/status/OrlojHQ/orloj/docs.yml?branch=main&label=docs)](https://docs.orloj.dev)
+[![Go Report Card](https://goreportcard.com/badge/github.com/OrlojHQ/orloj)](https://goreportcard.com/report/github.com/OrlojHQ/orloj)
+[![Go Reference](https://pkg.go.dev/badge/github.com/OrlojHQ/orloj.svg)](https://pkg.go.dev/github.com/OrlojHQ/orloj)
+[![License](https://img.shields.io/github/license/OrlojHQ/orloj)](LICENSE)
 
 **An orchestration runtime for multi-agent AI systems.**
 
