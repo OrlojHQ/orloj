@@ -1,18 +1,39 @@
+# VCS
 .git
 .gitignore
 
-# Build/test artifacts
-api.test
-*.test
+# CI / release
+.github
+.goreleaser.yaml
 
-# Local/runtime files
+# Container / compose (not needed inside build)
+Dockerfile
+docker-compose.yml
+
+# Build / test artifacts
+*.test
 tmp
 *.log
 
-# Frontend (built in ui stage; ignore host node_modules)
-frontend/node_modules
+# Non-Go project directories
+docs
+charts
+examples
+testing
+monitoring
 
-# Editors/OS
+# Frontend (rebuilt in ui stage; ignore host artifacts and deps)
+frontend/node_modules
+frontend/dist
+
+# Dev / editor / OS
+.envrc
 .DS_Store
 .vscode
 .idea
+Makefile
+
+# Top-level docs / legal
+*.md
+LICENSE
+NOTICE

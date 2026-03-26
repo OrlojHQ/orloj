@@ -17,14 +17,6 @@ Please note that this project is governed by a
 - Keep docs and examples aligned with code changes.
 - Avoid unrelated refactors in feature/fix PRs.
 
-## Releasing (maintainers)
-
-Tag-driven releases are documented in [Release Process](docs/pages/project/release-process.md) (versioning, CI, GHCR, GoReleaser archives, SBOM, Cosign). Push a `v*` tag to trigger [`.github/workflows/release.yml`](.github/workflows/release.yml).
-
-## Docs site (maintainers)
-
-To publish the Vocs site to **GitHub Pages** (including a **custom domain**), use the manual workflow [`.github/workflows/docs-pages-deploy.yml`](.github/workflows/docs-pages-deploy.yml). See [GitHub Pages](docs/pages/deployment/github-pages.md) for setup and input values.
-
 ## Commit Sign-off (DCO)
 
 By contributing, you certify the Developer Certificate of Origin (DCO).

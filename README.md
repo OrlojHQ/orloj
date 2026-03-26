@@ -16,6 +16,8 @@ _Named after the [Prague Orloj](https://en.wikipedia.org/wiki/Prague_astronomica
 
 Define agents, tools, policies, and workflows as declarative YAML. Orloj handles scheduling, execution, model routing, governance enforcement, and reliability -- so you can run multi-agent systems in production with the same operational rigor you expect from infrastructure.
 
+> **Status:** Orloj is under active development. APIs and resource schemas may change between minor versions before 1.0.
+
 ## Why Orloj
 
 Running AI agents in production today looks a lot like running containers before container orchestration: ad-hoc scripts, no governance, no observability, and no standard way to manage an agent fleet. Orloj provides:
@@ -30,19 +32,28 @@ Running AI agents in production today looks a lot like running containers before
 
 ## Quickstart
 
-```bash
-# Build from source (requires Go 1.24+)
-go build -o orlojd ./cmd/orlojd
-go build -o orlojctl ./cmd/orlojctl
+Download **orlojd** (server) and **orlojctl** (CLI) for your platform from [GitHub Releases](https://github.com/OrlojHQ/orloj/releases), extract them, and run:
 
+```bash
 # Start the server with an embedded worker
 ./orlojd --storage-backend=memory --task-execution-mode=sequential --embedded-worker
+```
 
+Open **http://127.0.0.1:8080/** to explore the web console, then apply a starter blueprint. The example manifests live in this repo -- clone it or [browse them on GitHub](https://github.com/OrlojHQ/orloj/tree/main/examples):
+
+```bash
 # Apply a starter blueprint (pipeline: planner -> research -> writer)
 ./orlojctl apply -f examples/blueprints/pipeline/
 
 # Check the result
 ./orlojctl get task bp-pipeline-task
+```
+
+Or build from source (requires Go 1.25+):
+
+```bash
+go build -o orlojd ./cmd/orlojd
+go build -o orlojctl ./cmd/orlojctl
 ```
 
 When you are ready to scale, switch to message-driven mode with distributed workers and Postgres persistence. See the [Quickstart guide](https://docs.orloj.dev/getting-started/quickstart#scaling-to-production) for details.
