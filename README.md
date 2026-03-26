@@ -161,7 +161,7 @@ docker compose up --build -d
 docker compose ps
 ```
 
-The Compose images include the server and workers only. To drive the API from your machine, install `**orlojctl**` from [GitHub Releases](https://github.com/OrlojHQ/orloj/releases) (CLI-only tarball) or build from this repo; see [Deploy & Operate](https://docs.orloj.dev/deploy/).
+The Compose images include the server and workers only. To drive the API from your machine, install **`orlojctl`** from [GitHub Releases](https://github.com/OrlojHQ/orloj/releases) (CLI-only tarball) or build from this repo; see [Deploy & Operate](https://docs.orloj.dev/deploy/).
 
 ## Contributing
 
