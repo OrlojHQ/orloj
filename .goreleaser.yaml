@@ -73,16 +73,37 @@ builds:
       - -X=github.com/OrlojHQ/orloj/internal/version.Date={{.Date}}
 
 archives:
-  - formats:
+  - id: orlojd
+    formats:
       - tar.gz
     format_overrides:
       - goos: windows
         formats:
           - zip
     name_template: "{{ .Binary }}_{{ .Tag }}_{{ .Os }}_{{ .Arch }}"
-    builds:
+    ids:
       - orlojd
+
+  - id: orlojworker
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: "{{ .Binary }}_{{ .Tag }}_{{ .Os }}_{{ .Arch }}"
+    ids:
       - orlojworker
+
+  - id: orlojctl
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: "{{ .Binary }}_{{ .Tag }}_{{ .Os }}_{{ .Arch }}"
+    ids:
       - orlojctl
 
 checksum:
