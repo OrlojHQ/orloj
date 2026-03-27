@@ -33,7 +33,13 @@ Running AI agents in production today looks a lot like running containers before
 
 ## Quickstart
 
-Download **orlojd** (server) and **orlojctl** (CLI) for your platform from [GitHub Releases](https://github.com/OrlojHQ/orloj/releases), extract them, and run:
+Install **orlojd** (server), **orlojworker**, and **orlojctl** (CLI):
+
+```bash
+curl -sSfL https://raw.githubusercontent.com/OrlojHQ/orloj/main/scripts/install.sh | sh
+```
+
+Or download the binaries manually from [GitHub Releases](https://github.com/OrlojHQ/orloj/releases). Then run:
 
 ```bash
 # Start the server with an embedded worker
@@ -161,7 +167,13 @@ docker compose up --build -d
 docker compose ps
 ```
 
-The Compose images include the server and workers only. To drive the API from your machine, install **`orlojctl`** from [GitHub Releases](https://github.com/OrlojHQ/orloj/releases) (CLI-only tarball) or build from this repo; see [Deploy & Operate](https://docs.orloj.dev/deploy/).
+The Compose images include the server and workers only. To drive the API from your machine, install **`orlojctl`**:
+
+```bash
+curl -sSfL https://raw.githubusercontent.com/OrlojHQ/orloj/main/scripts/install.sh | ORLOJ_BINARIES="orlojctl" sh
+```
+
+Or download it from [GitHub Releases](https://github.com/OrlojHQ/orloj/releases). See [Deploy & Operate](https://docs.orloj.dev/deploy/) for more details.
 
 ## Contributing
 
