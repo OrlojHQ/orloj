@@ -47,18 +47,39 @@ Run the server:
 
 ## From release binaries (GitHub Releases)
 
-Download the server, worker, and CLI for your platform from [GitHub Releases](https://github.com/OrlojHQ/orloj/releases). Artifacts are named by binary, git tag, OS, and arch (e.g. `orlojd_v0.1.0_linux_amd64.tar.gz`, `orlojctl_v0.1.0_darwin_arm64.tar.gz`). Verify with `checksums.txt` on the same release. Extract and run:
+The install script detects your OS and architecture, downloads the matching binaries, verifies checksums, and installs to `/usr/local/bin` (or `~/.local/bin` if no sudo):
 
 ```bash
-# Example: after downloading and extracting orlojd, orlojworker, orlojctl for your OS/arch
-./orlojd --storage-backend=memory --task-execution-mode=sequential --embedded-worker
+curl -sSfL https://raw.githubusercontent.com/OrlojHQ/orloj/main/scripts/install.sh | sh
 ```
 
-Use a specific version tag (e.g. `v0.1.0`) for production.
+Install a specific version or a subset of binaries:
+
+```bash
+# Specific version
+curl -sSfL https://raw.githubusercontent.com/OrlojHQ/orloj/main/scripts/install.sh | ORLOJ_VERSION=v0.1.1 sh
+
+# CLI only (for remote management of a hosted deployment)
+curl -sSfL https://raw.githubusercontent.com/OrlojHQ/orloj/main/scripts/install.sh | ORLOJ_BINARIES="orlojctl" sh
+```
+
+Or download manually from [GitHub Releases](https://github.com/OrlojHQ/orloj/releases). Artifacts are named by binary, git tag, OS, and arch (e.g. `orlojd_v0.1.0_linux_amd64.tar.gz`, `orlojctl_v0.1.0_darwin_arm64.tar.gz`). Verify with `checksums.txt` on the same release.
+
+Run the server:
+
+```bash
+orlojd --storage-backend=memory --task-execution-mode=sequential --embedded-worker
+```
 
 ### CLI only for hosted deployments
 
-If `orlojd` and workers run elsewhere—Docker Compose on a VPS, Kubernetes, GHCR images, or a managed host—you **do not** need the full repo on your laptop. Download only the **`orlojctl_*_<os>_<arch>`** archive for your platform from the same [GitHub Releases](https://github.com/OrlojHQ/orloj/releases) page, verify it with `checksums.txt`, extract the binary, and put it on your `PATH` (or run it by full path). Container images ship the server and worker binaries only, not the CLI.
+If `orlojd` and workers run elsewhere—Docker Compose on a VPS, Kubernetes, GHCR images, or a managed host—you **do not** need the full repo on your laptop. Install just the CLI:
+
+```bash
+curl -sSfL https://raw.githubusercontent.com/OrlojHQ/orloj/main/scripts/install.sh | ORLOJ_BINARIES="orlojctl" sh
+```
+
+Or download only the **`orlojctl_*_<os>_<arch>`** archive for your platform from [GitHub Releases](https://github.com/OrlojHQ/orloj/releases), verify it with `checksums.txt`, extract the binary, and put it on your `PATH`.
 
 Point `orlojctl` at your API with `--server` and authenticate with a bearer token; see [Remote CLI and API access](../deploy/remote-cli-access.md). Prefer a **CLI version that matches your server’s release tag** when possible.
 
