@@ -10,6 +10,27 @@ This guide covers how to install Orloj for local evaluation and production-like 
 
 ---
 
+## Homebrew (macOS / Linux)
+
+The fastest way to install the CLI:
+
+```bash
+brew tap OrlojHQ/orloj
+brew install orlojctl
+```
+
+Formula versions follow [Orloj releases](https://github.com/OrlojHQ/orloj/releases).
+
+Upgrade to the latest release:
+
+```bash
+brew update && brew upgrade orlojctl
+```
+
+> Homebrew installs the **`orlojctl`** CLI only. For the server (`orlojd`) and worker (`orlojworker`) binaries, use the install script, release binaries, or container images below.
+
+---
+
 ## From source
 
 Clone the repo, then either run in place or build binaries.
@@ -74,6 +95,13 @@ orlojd --storage-backend=memory --task-execution-mode=sequential --embedded-work
 ### CLI only for hosted deployments
 
 If `orlojd` and workers run elsewhere—Docker Compose on a VPS, Kubernetes, GHCR images, or a managed host—you **do not** need the full repo on your laptop. Install just the CLI:
+
+```bash
+brew tap OrlojHQ/orloj
+brew install orlojctl
+```
+
+Or with the install script:
 
 ```bash
 curl -sSfL https://raw.githubusercontent.com/OrlojHQ/orloj/main/scripts/install.sh | ORLOJ_BINARIES="orlojctl" sh

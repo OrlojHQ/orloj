@@ -6,7 +6,14 @@ For deeper security context (generation, rotation, threat model), see [Control p
 
 ## Install `orlojctl` locally
 
-You need the CLI on **your** machine (or in CI), not inside the server container. The easiest path is the standalone binary from [GitHub Releases](https://github.com/OrlojHQ/orloj/releases): download **`orlojctl_<tag>_<os>_<arch>`**, verify with `checksums.txt` on that release, extract, and add the binary to your `PATH`. Details and naming conventions are in [Install: CLI only for hosted deployments](../getting-started/install.md#cli-only-for-hosted-deployments). If you already cloned the repo with Go installed, `go run ./cmd/orlojctl` works the same way against a remote `--server`.
+You need the CLI on **your** machine (or in CI), not inside the server container. The easiest path is Homebrew:
+
+```bash
+brew tap OrlojHQ/orloj
+brew install orlojctl
+```
+
+Alternatively, download the standalone binary from [GitHub Releases](https://github.com/OrlojHQ/orloj/releases) (`orlojctl_<tag>_<os>_<arch>`), verify with `checksums.txt`, extract, and add it to your `PATH`. Details and naming conventions are in [Install: CLI only for hosted deployments](../getting-started/install.md#cli-only-for-hosted-deployments). If you already cloned the repo with Go installed, `go run ./cmd/orlojctl` works the same way against a remote `--server`.
 
 ## API tokens (shared secret)
 

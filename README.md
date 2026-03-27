@@ -33,13 +33,22 @@ Running AI agents in production today looks a lot like running containers before
 
 ## Quickstart
 
-Install **orlojd** (server), **orlojworker**, and **orlojctl** (CLI):
+Install **orlojctl** (CLI) via Homebrew:
+
+```bash
+brew tap OrlojHQ/orloj
+brew install orlojctl
+```
+
+Formula versions follow [Orloj releases](https://github.com/OrlojHQ/orloj/releases).
+
+Or install all binaries (**orlojd**, **orlojworker**, **orlojctl**) with the install script:
 
 ```bash
 curl -sSfL https://raw.githubusercontent.com/OrlojHQ/orloj/main/scripts/install.sh | sh
 ```
 
-Or download the binaries manually from [GitHub Releases](https://github.com/OrlojHQ/orloj/releases). Then run:
+You can also download binaries manually from [GitHub Releases](https://github.com/OrlojHQ/orloj/releases). Then run:
 
 ```bash
 # Start the server with an embedded worker
@@ -170,10 +179,17 @@ docker compose ps
 The Compose images include the server and workers only. To drive the API from your machine, install **`orlojctl`**:
 
 ```bash
+brew tap OrlojHQ/orloj
+brew install orlojctl
+```
+
+Or via the install script:
+
+```bash
 curl -sSfL https://raw.githubusercontent.com/OrlojHQ/orloj/main/scripts/install.sh | ORLOJ_BINARIES="orlojctl" sh
 ```
 
-Or download it from [GitHub Releases](https://github.com/OrlojHQ/orloj/releases). See [Deploy & Operate](https://docs.orloj.dev/deploy/) for more details.
+You can also download it from [GitHub Releases](https://github.com/OrlojHQ/orloj/releases). See [Deploy & Operate](https://docs.orloj.dev/deploy/) for more details.
 
 ## Contributing
 
