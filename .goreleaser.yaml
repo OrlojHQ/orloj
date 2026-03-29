@@ -122,3 +122,19 @@ changelog:
 
 release:
   make_latest: true
+
+brews:
+  - ids:
+      - orlojctl
+    repository:
+      owner: OrlojHQ
+      name: homebrew-orloj
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/OrlojHQ/orloj"
+    description: "CLI for Orloj — multi-agent AI orchestration runtime"
+    license: "Apache-2.0"
+    install: |
+      bin.install "orlojctl"
+    test: |
+      system "#{bin}/orlojctl", "version"
