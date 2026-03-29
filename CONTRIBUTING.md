@@ -17,6 +17,16 @@ Please note that this project is governed by a
 - Keep docs and examples aligned with code changes.
 - Avoid unrelated refactors in feature/fix PRs.
 
+## Changelog
+
+Every PR that changes **user-visible** behavior should include a bullet under
+`[Unreleased]` in [CHANGELOG.md](./CHANGELOG.md). Use the appropriate section:
+**Added**, **Changed**, **Deprecated**, **Removed**, **Fixed**, or **Security**
+([Keep a Changelog](https://keepachangelog.com/) format).
+
+You do **not** need a changelog entry for internal refactors, test-only changes,
+or CI and tooling updates that do not affect users or operators.
+
 ## Commit Sign-off (DCO)
 
 By contributing, you certify the Developer Certificate of Origin (DCO).

@@ -15,12 +15,13 @@ This page is the canonical reference for CLI flags across all Orloj binaries.
 Usage patterns:
 
 ```text
-orlojctl apply -f <resource.yaml>
+orlojctl apply -f <file-or-directory>
+orlojctl validate -f <file|dir>
 orlojctl create secret <name> --from-literal key=value [...]
 orlojctl get [-w] <resource>
 orlojctl delete <resource> <name>
 orlojctl run --system <name> [key=value ...]
-orlojctl init --blueprint pipeline|hierarchical|swarm-loop [--name <prefix>] [--dir <path>]
+orlojctl init <name> [--blueprint pipeline|hierarchical|swarm-loop]
 orlojctl logs <agent-name>|task/<task-name>
 orlojctl trace task <task-name>
 orlojctl graph system|task <name>
@@ -48,8 +49,30 @@ orlojctl config path|get|use <name>|set-profile <name> [--server URL] [--token v
 
 | Flag | Default | Description |
 |---|---|---|
-| `-f` | none | Path to resource manifest (required). |
+| `-f` | none | Path to a manifest file or directory (required). |
 | `--server` | resolved server | API server URL. |
+
+- **File:** applies that manifest.
+- **Directory:** walks recursively (skips `.git` dirs) and applies every `.yaml`, `.yml`, and `.json` file in sorted path order. Failures are collected; the command exits with an error if any file failed.
+
+### `orlojctl validate`
+
+Parse and normalize manifests **offline** (no API server, no `orlojctl` config file required). Use in CI or before `apply` to catch schema and normalization errors early.
+
+| Flag | Default | Description |
+|---|---|---|
+| `-f` | none | Path to a manifest file or a directory (required). |
+
+- **File:** validates that one manifest.
+- **Directory:** walks recursively (skips `.git` dirs) and validates every `.yaml`, `.yml`, and `.json` file.
+- **Exit code:** `0` if every file is valid; `1` if any file fails. Failed files are listed with path and error on stdout.
+
+Examples:
+
+```bash
+orlojctl validate -f agent.yaml
+orlojctl validate -f ./manifests/
+```
 
 ### `orlojctl create secret`
 
@@ -163,11 +186,11 @@ Other config subcommands:
 
 ### `orlojctl init`
 
+Positional argument `<name>` is required. It sets both the output directory and the resource name prefix.
+
 | Flag | Default | Description |
 |---|---|---|
-| `--blueprint` | none | Required blueprint: `pipeline`, `hierarchical`, `swarm-loop`. |
-| `--name` | blueprint name | Prefix for generated resource names. |
-| `--dir` | `.` | Output directory. |
+| `--blueprint` | `pipeline` | Blueprint topology: `pipeline`, `hierarchical`, `swarm-loop`. |
 
 ## `orlojd`
 

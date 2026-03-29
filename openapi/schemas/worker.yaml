@@ -1,0 +1,41 @@
+components:
+  schemas:
+    WorkerCapabilities:
+      type: object
+      properties:
+        gpu: { type: boolean }
+        supported_models:
+          type: array
+          items: { type: string }
+    WorkerSpec:
+      type: object
+      properties:
+        region: { type: string }
+        capabilities: { $ref: "#/components/schemas/WorkerCapabilities" }
+        max_concurrent_tasks: { type: integer }
+    WorkerStatus:
+      type: object
+      properties:
+        phase: { type: string }
+        lastError: { type: string }
+        lastHeartbeat: { type: string }
+        observedGeneration: { type: integer, format: int64 }
+        currentTasks: { type: integer }
+    Worker:
+      type: object
+      required: [apiVersion, kind, metadata, spec]
+      properties:
+        apiVersion: { type: string, enum: [orloj.dev/v1] }
+        kind: { type: string, enum: [Worker] }
+        metadata: { $ref: "common.yaml#/components/schemas/ObjectMeta" }
+        spec: { $ref: "#/components/schemas/WorkerSpec" }
+        status: { $ref: "#/components/schemas/WorkerStatus" }
+    WorkerList:
+      allOf:
+        - { $ref: "common.yaml#/components/schemas/ListMeta" }
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: { $ref: "#/components/schemas/Worker" }

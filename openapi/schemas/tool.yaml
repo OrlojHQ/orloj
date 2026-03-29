@@ -1,0 +1,67 @@
+components:
+  schemas:
+    ToolRetryPolicy:
+      type: object
+      properties:
+        max_attempts: { type: integer }
+        backoff: { type: string }
+        max_backoff: { type: string }
+        jitter: { type: string }
+    ToolRuntimePolicy:
+      type: object
+      properties:
+        timeout: { type: string }
+        isolation_mode: { type: string }
+        retry: { $ref: "#/components/schemas/ToolRetryPolicy" }
+    ToolAuth:
+      type: object
+      properties:
+        profile: { type: string }
+        secretRef: { type: string }
+        headerName: { type: string }
+        tokenURL: { type: string }
+        scopes:
+          type: array
+          items: { type: string }
+    ToolSpec:
+      type: object
+      properties:
+        type: { type: string }
+        endpoint: { type: string }
+        description: { type: string }
+        input_schema: { type: object, additionalProperties: true }
+        mcp_server_ref: { type: string }
+        mcp_tool_name: { type: string }
+        capabilities:
+          type: array
+          items: { type: string }
+        operation_classes:
+          type: array
+          items: { type: string }
+        risk_level: { type: string }
+        runtime: { $ref: "#/components/schemas/ToolRuntimePolicy" }
+        auth: { $ref: "#/components/schemas/ToolAuth" }
+    ToolStatus:
+      type: object
+      properties:
+        phase: { type: string }
+        lastError: { type: string }
+        observedGeneration: { type: integer, format: int64 }
+    Tool:
+      type: object
+      required: [apiVersion, kind, metadata, spec]
+      properties:
+        apiVersion: { type: string, enum: [orloj.dev/v1] }
+        kind: { type: string, enum: [Tool] }
+        metadata: { $ref: "common.yaml#/components/schemas/ObjectMeta" }
+        spec: { $ref: "#/components/schemas/ToolSpec" }
+        status: { $ref: "#/components/schemas/ToolStatus" }
+    ToolList:
+      allOf:
+        - { $ref: "common.yaml#/components/schemas/ListMeta" }
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: { $ref: "#/components/schemas/Tool" }

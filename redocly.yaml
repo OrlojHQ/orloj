@@ -1,0 +1,8 @@
+extends:
+  - recommended
+
+rules:
+  operation-summary: off
+  tag-description: off
+  operation-operationId: off
+  operation-4xx-response: off

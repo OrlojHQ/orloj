@@ -1,12 +1,17 @@
 # Guides
 
-Step-by-step tutorials for common Orloj workflows. Each guide walks through a complete use case from start to finish, using real manifests from the `examples/` directory.
+Step-by-step tutorials for common Orloj workflows.
 
-For **ready-made scenario folders** (full YAML sets you can copy into your environment), see [examples/use-cases/](https://github.com/OrlojHQ/orloj/tree/main/examples/use-cases).
+**Start here:** **[Your First Agent System in 5 Minutes](./five-minute-tutorial.md)** — install `orlojctl` and `orlojd`, scaffold a pipeline with `orlojctl init`, add an API key, apply manifests, and run a task end-to-end with the web console.
 
-If you have not installed Orloj yet, start with the [Install](../getting-started/install.md) and [Quickstart](../getting-started/quickstart.md) pages first.
+Other guides use real manifests from the `examples/` directory or walk through authoring resources by hand. For **ready-made scenario folders** (full YAML sets you can copy into your environment), see [examples/use-cases/](https://github.com/OrlojHQ/orloj/tree/main/examples/use-cases).
+
+If you have not installed Orloj yet, begin with [Install](../getting-started/install.md). Developers building from a clone may prefer the [Quickstart](../getting-started/quickstart.md) (`go run` + checked-in blueprints).
 
 ## Available Guides
+
+**[Your First Agent System in 5 Minutes](./five-minute-tutorial.md)**
+*The fastest path from zero to a running multi-agent pipeline with a real model.*
 
 **[Deploy Your First Pipeline](./deploy-pipeline.md)**
 *For platform engineers who want to run a multi-agent pipeline end-to-end.*

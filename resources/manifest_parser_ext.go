@@ -893,6 +893,102 @@ func ParseToolPermissionManifest(data []byte) (ToolPermission, error) {
 	return out, nil
 }
 
+// ParseToolApprovalManifest parses ToolApproval resources from JSON or constrained YAML.
+func ParseToolApprovalManifest(data []byte) (ToolApproval, error) {
+	var out ToolApproval
+	if json.Valid(data) {
+		if err := json.Unmarshal(data, &out); err != nil {
+			return ToolApproval{}, fmt.Errorf("failed to decode JSON manifest: %w", err)
+		}
+		if err := out.Normalize(); err != nil {
+			return ToolApproval{}, err
+		}
+		return out, nil
+	}
+
+	lines := strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n")
+	section := ""
+	subsection := ""
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		indent := leadingSpaces(line)
+		if section == "metadata" && indent <= 2 && !strings.HasSuffix(trimmed, ":") && !strings.HasPrefix(trimmed, "- ") {
+			subsection = ""
+		}
+		if section == "spec" && indent <= 2 && !strings.HasSuffix(trimmed, ":") && !strings.HasPrefix(trimmed, "- ") {
+			subsection = ""
+		}
+		if section == "status" && indent <= 2 && !strings.HasSuffix(trimmed, ":") && !strings.HasPrefix(trimmed, "- ") {
+			subsection = ""
+		}
+
+		if strings.HasSuffix(trimmed, ":") {
+			switch strings.TrimSuffix(trimmed, ":") {
+			case "metadata":
+				section = "metadata"
+				subsection = ""
+			case "spec":
+				section = "spec"
+				subsection = ""
+			case "status":
+				section = "status"
+				subsection = ""
+			case "labels":
+				if section == "metadata" {
+					subsection = "labels"
+				}
+			}
+			continue
+		}
+
+		key, value, ok := parseKeyValue(trimmed)
+		if !ok {
+			continue
+		}
+		value = stripQuotes(value)
+
+		switch {
+		case key == "apiVersion":
+			out.APIVersion = value
+		case key == "kind":
+			out.Kind = value
+		case section == "metadata" && subsection == "labels" && indent >= 4:
+			if out.Metadata.Labels == nil {
+				out.Metadata.Labels = make(map[string]string)
+			}
+			out.Metadata.Labels[key] = value
+		case section == "metadata":
+			if err := applyObjectMetaField(&out.Metadata, key, value); err != nil {
+				return ToolApproval{}, err
+			}
+		case section == "spec" && (key == "task_ref" || key == "taskRef"):
+			out.Spec.TaskRef = value
+		case section == "spec" && key == "tool":
+			out.Spec.Tool = value
+		case section == "spec" && (key == "operation_class" || key == "operationClass"):
+			out.Spec.OperationClass = value
+		case section == "spec" && key == "agent":
+			out.Spec.Agent = value
+		case section == "spec" && key == "input":
+			out.Spec.Input = value
+		case section == "spec" && key == "reason":
+			out.Spec.Reason = value
+		case section == "spec" && key == "ttl":
+			out.Spec.TTL = value
+		case section == "status" && key == "phase":
+			out.Status.Phase = value
+		}
+	}
+
+	if err := out.Normalize(); err != nil {
+		return ToolApproval{}, err
+	}
+	return out, nil
+}
+
 // ParseTaskManifest parses Task resources from JSON or constrained YAML.
 func ParseTaskManifest(data []byte) (Task, error) {
 	var out Task

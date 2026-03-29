@@ -1,0 +1,43 @@
+components:
+  schemas:
+    AgentPolicySpec:
+      type: object
+      properties:
+        max_tokens_per_run: { type: integer }
+        allowed_models:
+          type: array
+          items: { type: string }
+        blocked_tools:
+          type: array
+          items: { type: string }
+        apply_mode: { type: string }
+        target_systems:
+          type: array
+          items: { type: string }
+        target_tasks:
+          type: array
+          items: { type: string }
+    PolicyStatus:
+      type: object
+      properties:
+        phase: { type: string }
+        lastError: { type: string }
+        observedGeneration: { type: integer, format: int64 }
+    AgentPolicy:
+      type: object
+      required: [apiVersion, kind, metadata, spec]
+      properties:
+        apiVersion: { type: string, enum: [orloj.dev/v1] }
+        kind: { type: string, enum: [AgentPolicy] }
+        metadata: { $ref: "common.yaml#/components/schemas/ObjectMeta" }
+        spec: { $ref: "#/components/schemas/AgentPolicySpec" }
+        status: { $ref: "#/components/schemas/PolicyStatus" }
+    AgentPolicyList:
+      allOf:
+        - { $ref: "common.yaml#/components/schemas/ListMeta" }
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: { $ref: "#/components/schemas/AgentPolicy" }

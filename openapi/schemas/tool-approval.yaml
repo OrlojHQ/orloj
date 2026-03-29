@@ -1,0 +1,39 @@
+components:
+  schemas:
+    ToolApprovalSpec:
+      type: object
+      required: [task_ref, tool]
+      properties:
+        task_ref: { type: string }
+        tool: { type: string }
+        operation_class: { type: string }
+        agent: { type: string }
+        input: { type: string }
+        reason: { type: string }
+        ttl: { type: string }
+    ToolApprovalStatus:
+      type: object
+      properties:
+        phase: { type: string }
+        decision: { type: string }
+        decided_by: { type: string }
+        decided_at: { type: string }
+        expires_at: { type: string }
+    ToolApproval:
+      type: object
+      required: [apiVersion, kind, metadata, spec]
+      properties:
+        apiVersion: { type: string, enum: [orloj.dev/v1] }
+        kind: { type: string, enum: [ToolApproval] }
+        metadata: { $ref: "common.yaml#/components/schemas/ObjectMeta" }
+        spec: { $ref: "#/components/schemas/ToolApprovalSpec" }
+        status: { $ref: "#/components/schemas/ToolApprovalStatus" }
+    ToolApprovalList:
+      allOf:
+        - { $ref: "common.yaml#/components/schemas/ListMeta" }
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: { $ref: "#/components/schemas/ToolApproval" }

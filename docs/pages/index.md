@@ -44,7 +44,11 @@ You interact with Orloj through `orlojctl` (the CLI), the REST API, or the built
 
 ## Get Started
 
+**[Get started in 5 minutes](./guides/five-minute-tutorial.md)** — scaffold a pipeline, configure a model endpoint, and run your first task (binaries or install script).
+
+Then:
+
 1. [Install Orloj](./getting-started/install.md) -- run from source, build binaries, or use Docker Compose.
-2. [Quickstart](./getting-started/quickstart.md) -- deploy a multi-agent pipeline in under five minutes.
+2. [Quickstart](./getting-started/quickstart.md) -- from-source `go run` with the checked-in pipeline blueprint.
 3. [Explore Concepts](./concepts/agents/agent.md) -- understand agents, tasks, tools, governance, and the execution model.
 4. [Follow a Guide](./guides/) -- step-by-step tutorials for common workflows.

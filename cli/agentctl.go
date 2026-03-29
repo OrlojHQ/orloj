@@ -28,6 +28,11 @@ func Run(args []string) error {
 	if err != nil {
 		return err
 	}
+	args = cleanArgs
+	if len(args) > 0 && args[0] == "validate" {
+		return runValidate(args[1:])
+	}
+
 	cfg, err := loadOrlojctlConfig()
 	if err != nil {
 		return fmt.Errorf("orlojctl config: %w", err)
@@ -44,7 +49,6 @@ func Run(args []string) error {
 		token = tokenFromProfile(cfg)
 	}
 	configureDefaultHTTPClient(token)
-	args = cleanArgs
 
 	if len(args) == 1 {
 		switch args[0] {
@@ -146,7 +150,7 @@ func extractGlobalAPIToken(args []string) ([]string, string, error) {
 
 func runApply(args []string) error {
 	fs := flag.NewFlagSet("apply", flag.ContinueOnError)
-	manifestPath := fs.String("f", "", "path to resource manifest")
+	manifestPath := fs.String("f", "", "path to resource manifest file or directory")
 	server := fs.String("server", defaultServerResolved(resolvedCliConfig), "Agent API server URL")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -155,33 +159,63 @@ func runApply(args []string) error {
 		return errors.New("-f is required")
 	}
 
-	raw, err := os.ReadFile(*manifestPath)
-	if err != nil {
-		return fmt.Errorf("failed to read %s: %w", *manifestPath, err)
-	}
-
-	kind, err := resources.DetectKind(raw)
+	files, err := manifestPaths(*manifestPath)
 	if err != nil {
 		return err
 	}
-
-	endpoint, payload, name, err := buildApplyRequest(kind, raw)
-	if err != nil {
-		return err
+	if len(files) == 0 {
+		return fmt.Errorf("no manifest files found in %s", *manifestPath)
 	}
 
-	resp, err := http.Post(*server+endpoint, "application/json", bytes.NewReader(payload))
-	if err != nil {
-		return fmt.Errorf("apply request failed: %w", err)
-	}
-	defer resp.Body.Close()
+	var applyErrs []string
+	applied := 0
+	for _, f := range files {
+		raw, err := os.ReadFile(f)
+		if err != nil {
+			applyErrs = append(applyErrs, fmt.Sprintf("%s: %v", f, err))
+			continue
+		}
 
-	if resp.StatusCode >= 300 {
+		kind, err := resources.DetectKind(raw)
+		if err != nil {
+			applyErrs = append(applyErrs, fmt.Sprintf("%s: %v", f, err))
+			continue
+		}
+
+		endpoint, payload, name, err := buildApplyRequest(kind, raw)
+		if err != nil {
+			applyErrs = append(applyErrs, fmt.Sprintf("%s: %v", f, err))
+			continue
+		}
+
+		resp, err := http.Post(*server+endpoint, "application/json", bytes.NewReader(payload))
+		if err != nil {
+			applyErrs = append(applyErrs, fmt.Sprintf("%s: apply request failed: %v", f, err))
+			continue
+		}
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("apply failed: %s", bytes.TrimSpace(body))
+		resp.Body.Close()
+
+		if resp.StatusCode >= 300 {
+			applyErrs = append(applyErrs, fmt.Sprintf("%s: %s", f, bytes.TrimSpace(body)))
+			continue
+		}
+
+		fmt.Printf("applied %s/%s\n", strings.ToLower(kind), name)
+		applied++
 	}
 
-	fmt.Printf("applied %s/%s\n", strings.ToLower(kind), name)
+	if len(applyErrs) > 0 {
+		fmt.Printf("\n%d applied, %d failed:\n", applied, len(applyErrs))
+		for _, e := range applyErrs {
+			fmt.Printf("  error  %s\n", e)
+		}
+		return fmt.Errorf("apply failed for %d file(s)", len(applyErrs))
+	}
+
+	if applied > 1 {
+		fmt.Printf("\n%d file(s) applied\n", applied)
+	}
 	return nil
 }
 
@@ -301,109 +335,39 @@ func runCreateSecret(args []string) error {
 	return nil
 }
 
+// applyEndpoints maps normalized manifest kinds (see resources.ParseManifest) to POST paths.
+var applyEndpoints = map[string]string{
+	"agent":          "/v1/agents",
+	"agentsystem":    "/v1/agent-systems",
+	"modelendpoint":  "/v1/model-endpoints",
+	"tool":           "/v1/tools",
+	"secret":         "/v1/secrets",
+	"memory":         "/v1/memories",
+	"agentpolicy":    "/v1/agent-policies",
+	"agentrole":      "/v1/agent-roles",
+	"toolpermission": "/v1/tool-permissions",
+	"toolapproval":   "/v1/tool-approvals",
+	"task":           "/v1/tasks",
+	"taskschedule":   "/v1/task-schedules",
+	"taskwebhook":    "/v1/task-webhooks",
+	"worker":         "/v1/workers",
+	"mcpserver":      "/v1/mcp-servers",
+}
+
 func buildApplyRequest(kind string, raw []byte) (string, []byte, string, error) {
-	switch strings.ToLower(strings.TrimSpace(kind)) {
-	case "agent":
-		obj, err := resources.ParseAgentManifest(raw)
-		if err != nil {
-			return "", nil, "", err
-		}
-		payload, err := json.Marshal(obj)
-		return "/v1/agents", payload, obj.Metadata.Name, err
-	case "agentsystem":
-		obj, err := resources.ParseAgentSystemManifest(raw)
-		if err != nil {
-			return "", nil, "", err
-		}
-		payload, err := json.Marshal(obj)
-		return "/v1/agent-systems", payload, obj.Metadata.Name, err
-	case "modelendpoint":
-		obj, err := resources.ParseModelEndpointManifest(raw)
-		if err != nil {
-			return "", nil, "", err
-		}
-		payload, err := json.Marshal(obj)
-		return "/v1/model-endpoints", payload, obj.Metadata.Name, err
-	case "tool":
-		obj, err := resources.ParseToolManifest(raw)
-		if err != nil {
-			return "", nil, "", err
-		}
-		payload, err := json.Marshal(obj)
-		return "/v1/tools", payload, obj.Metadata.Name, err
-	case "secret":
-		obj, err := resources.ParseSecretManifest(raw)
-		if err != nil {
-			return "", nil, "", err
-		}
-		payload, err := json.Marshal(obj)
-		return "/v1/secrets", payload, obj.Metadata.Name, err
-	case "memory":
-		obj, err := resources.ParseMemoryManifest(raw)
-		if err != nil {
-			return "", nil, "", err
-		}
-		payload, err := json.Marshal(obj)
-		return "/v1/memories", payload, obj.Metadata.Name, err
-	case "agentpolicy":
-		obj, err := resources.ParseAgentPolicyManifest(raw)
-		if err != nil {
-			return "", nil, "", err
-		}
-		payload, err := json.Marshal(obj)
-		return "/v1/agent-policies", payload, obj.Metadata.Name, err
-	case "agentrole":
-		obj, err := resources.ParseAgentRoleManifest(raw)
-		if err != nil {
-			return "", nil, "", err
-		}
-		payload, err := json.Marshal(obj)
-		return "/v1/agent-roles", payload, obj.Metadata.Name, err
-	case "toolpermission":
-		obj, err := resources.ParseToolPermissionManifest(raw)
-		if err != nil {
-			return "", nil, "", err
-		}
-		payload, err := json.Marshal(obj)
-		return "/v1/tool-permissions", payload, obj.Metadata.Name, err
-	case "task":
-		obj, err := resources.ParseTaskManifest(raw)
-		if err != nil {
-			return "", nil, "", err
-		}
-		payload, err := json.Marshal(obj)
-		return "/v1/tasks", payload, obj.Metadata.Name, err
-	case "taskschedule":
-		obj, err := resources.ParseTaskScheduleManifest(raw)
-		if err != nil {
-			return "", nil, "", err
-		}
-		payload, err := json.Marshal(obj)
-		return "/v1/task-schedules", payload, obj.Metadata.Name, err
-	case "taskwebhook":
-		obj, err := resources.ParseTaskWebhookManifest(raw)
-		if err != nil {
-			return "", nil, "", err
-		}
-		payload, err := json.Marshal(obj)
-		return "/v1/task-webhooks", payload, obj.Metadata.Name, err
-	case "worker":
-		obj, err := resources.ParseWorkerManifest(raw)
-		if err != nil {
-			return "", nil, "", err
-		}
-		payload, err := json.Marshal(obj)
-		return "/v1/workers", payload, obj.Metadata.Name, err
-	case "mcpserver":
-		obj, err := resources.ParseMcpServerManifest(raw)
-		if err != nil {
-			return "", nil, "", err
-		}
-		payload, err := json.Marshal(obj)
-		return "/v1/mcp-servers", payload, obj.Metadata.Name, err
-	default:
-		return "", nil, "", fmt.Errorf("unsupported kind %q", kind)
+	normKind, name, obj, err := resources.ParseManifest(kind, raw)
+	if err != nil {
+		return "", nil, "", err
 	}
+	endpoint, ok := applyEndpoints[normKind]
+	if !ok {
+		return "", nil, "", fmt.Errorf("unsupported kind %q", normKind)
+	}
+	payload, err := json.Marshal(obj)
+	if err != nil {
+		return "", nil, "", err
+	}
+	return endpoint, payload, name, nil
 }
 
 func runGet(args []string) error {
@@ -1461,12 +1425,13 @@ func printUsage() {
 	fmt.Print(`orlojctl - Orloj CLI
 
 Usage:
-  orlojctl apply -f <resource.yaml>
+  orlojctl apply -f <file-or-directory>
+  orlojctl validate -f <file|dir>
   orlojctl create secret <name> --from-literal key=value [--from-literal key2=value2 ...]
   orlojctl get [-w] agents|agent-systems|model-endpoints|tools|secrets|memories|agent-policies|agent-roles|tool-permissions|tasks|task-schedules|task-webhooks|workers
   orlojctl delete <resource> <name>
   orlojctl run --system <name> [key=value ...]
-  orlojctl init --blueprint pipeline|hierarchical|swarm-loop [--name <prefix>] [--dir <path>]
+  orlojctl init <name> [--blueprint pipeline|hierarchical|swarm-loop]
   orlojctl logs <agent-name>|task/<task-name>
   orlojctl trace task <task-name>
   orlojctl graph system|task <name>

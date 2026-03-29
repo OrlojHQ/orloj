@@ -41,8 +41,14 @@ jobs:
       - name: Test
         run: go test ./... -count=1 -timeout 120s
 
+      - name: Validate example manifests (orlojctl)
+        run: go run ./cmd/orlojctl validate -f examples/
+
       - name: Vet
         run: go vet ./...
+
+      - name: Validate OpenAPI spec
+        run: npx --yes @redocly/cli@1.28.5 lint openapi/openapi.yaml
 
   reliability:
     needs: build-and-test

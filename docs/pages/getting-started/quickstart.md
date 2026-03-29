@@ -2,6 +2,8 @@
 
 Get a multi-agent pipeline running in under five minutes. This quickstart uses sequential execution mode -- the simplest way to run Orloj with a single process and no external dependencies.
 
+> **Using Homebrew or release binaries?** Use the guided [5-minute tutorial](../guides/five-minute-tutorial.md) instead: it covers `orlojctl init`, a real OpenAI secret (`value=…`), and `orlojctl run` against `demo-system`. This page is aimed at **from-source** development with `go run` and the checked-in `examples/` blueprints.
+
 ## Before You Begin
 
 - Go `1.24+` is installed.

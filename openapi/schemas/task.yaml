@@ -1,0 +1,171 @@
+components:
+  schemas:
+    TaskRetryPolicy:
+      type: object
+      properties:
+        max_attempts: { type: integer }
+        backoff: { type: string }
+    TaskMessageRetryPolicy:
+      type: object
+      properties:
+        max_attempts: { type: integer }
+        backoff: { type: string }
+        max_backoff: { type: string }
+        jitter: { type: string }
+        non_retryable:
+          type: array
+          items: { type: string }
+    TaskRequirements:
+      type: object
+      properties:
+        region: { type: string }
+        gpu: { type: boolean }
+        model: { type: string }
+    TaskSpec:
+      type: object
+      properties:
+        system: { type: string }
+        mode: { type: string }
+        input: { type: object, additionalProperties: { type: string } }
+        priority: { type: string }
+        max_turns: { type: integer }
+        retry: { $ref: "#/components/schemas/TaskRetryPolicy" }
+        message_retry: { $ref: "#/components/schemas/TaskMessageRetryPolicy" }
+        requirements: { $ref: "#/components/schemas/TaskRequirements" }
+    TaskTraceEvent:
+      type: object
+      properties:
+        timestamp: { type: string }
+        step_id: { type: string }
+        attempt: { type: integer }
+        step: { type: integer }
+        branch_id: { type: string }
+        type: { type: string }
+        agent: { type: string }
+        tool: { type: string }
+        tool_contract_version: { type: string }
+        tool_request_id: { type: string }
+        tool_attempt: { type: integer }
+        error_code: { type: string }
+        error_reason: { type: string }
+        retryable: { type: boolean }
+        message: { type: string }
+        latency_ms: { type: integer, format: int64 }
+        tokens: { type: integer }
+        input_tokens: { type: integer }
+        output_tokens: { type: integer }
+        token_usage_source: { type: string }
+        tool_calls: { type: integer }
+        memory_writes: { type: integer }
+        tool_auth_profile: { type: string }
+        tool_auth_secret_ref: { type: string }
+    TaskHistoryEvent:
+      type: object
+      properties:
+        timestamp: { type: string }
+        type: { type: string }
+        worker: { type: string }
+        message: { type: string }
+    TaskMessage:
+      type: object
+      properties:
+        timestamp: { type: string }
+        message_id: { type: string }
+        idempotency_key: { type: string }
+        task_id: { type: string }
+        attempt: { type: integer }
+        system: { type: string }
+        from_agent: { type: string }
+        to_agent: { type: string }
+        branch_id: { type: string }
+        parent_branch_id: { type: string }
+        type: { type: string }
+        content: { type: string }
+        trace_id: { type: string }
+        parent_id: { type: string }
+        phase: { type: string }
+        attempts: { type: integer }
+        max_attempts: { type: integer }
+        last_error: { type: string }
+        worker: { type: string }
+        processed_at: { type: string }
+        next_attempt_at: { type: string }
+    TaskMessageIdempotency:
+      type: object
+      properties:
+        key: { type: string }
+        message_id: { type: string }
+        state: { type: string }
+        updated_at: { type: string }
+        expires_at: { type: string }
+        worker: { type: string }
+    TaskJoinSource:
+      type: object
+      properties:
+        message_id: { type: string }
+        from_agent: { type: string }
+        branch_id: { type: string }
+        timestamp: { type: string }
+        payload: { type: string }
+    TaskJoinState:
+      type: object
+      properties:
+        attempt: { type: integer }
+        node: { type: string }
+        mode: { type: string }
+        expected: { type: integer }
+        quorum_required: { type: integer }
+        activated: { type: boolean }
+        activated_at: { type: string }
+        activated_by: { type: string }
+        sources:
+          type: array
+          items: { $ref: "#/components/schemas/TaskJoinSource" }
+    TaskStatus:
+      type: object
+      properties:
+        phase: { type: string }
+        lastError: { type: string }
+        startedAt: { type: string }
+        completedAt: { type: string }
+        nextAttemptAt: { type: string }
+        attempts: { type: integer }
+        output: { type: object, additionalProperties: { type: string } }
+        assignedWorker: { type: string }
+        claimedBy: { type: string }
+        leaseUntil: { type: string }
+        lastHeartbeat: { type: string }
+        trace:
+          type: array
+          items: { $ref: "#/components/schemas/TaskTraceEvent" }
+        history:
+          type: array
+          items: { $ref: "#/components/schemas/TaskHistoryEvent" }
+        messages:
+          type: array
+          items: { $ref: "#/components/schemas/TaskMessage" }
+        message_idempotency:
+          type: array
+          items: { $ref: "#/components/schemas/TaskMessageIdempotency" }
+        join_states:
+          type: array
+          items: { $ref: "#/components/schemas/TaskJoinState" }
+        observedGeneration: { type: integer, format: int64 }
+    Task:
+      type: object
+      required: [apiVersion, kind, metadata, spec]
+      properties:
+        apiVersion: { type: string, enum: [orloj.dev/v1] }
+        kind: { type: string, enum: [Task] }
+        metadata: { $ref: "common.yaml#/components/schemas/ObjectMeta" }
+        spec: { $ref: "#/components/schemas/TaskSpec" }
+        status: { $ref: "#/components/schemas/TaskStatus" }
+    TaskList:
+      allOf:
+        - { $ref: "common.yaml#/components/schemas/ListMeta" }
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: { $ref: "#/components/schemas/Task" }
