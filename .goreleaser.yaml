@@ -124,7 +124,8 @@ release:
   make_latest: true
 
 brews:
-  - ids:
+  - name: orlojctl
+    ids:
       - orlojctl
     repository:
       owner: OrlojHQ
