@@ -1,0 +1,58 @@
+components:
+  schemas:
+    TaskWebhookAuthSpec:
+      type: object
+      properties:
+        profile: { type: string, description: generic or github }
+        secret_ref: { type: string }
+        signature_header: { type: string }
+        signature_prefix: { type: string }
+        timestamp_header: { type: string }
+        max_skew_seconds: { type: integer }
+    TaskWebhookIdempotency:
+      type: object
+      properties:
+        event_id_header: { type: string }
+        dedupe_window_seconds: { type: integer }
+    TaskWebhookPayloadSpec:
+      type: object
+      properties:
+        mode: { type: string }
+        input_key: { type: string }
+    TaskWebhookSpec:
+      type: object
+      properties:
+        task_ref: { type: string }
+        suspend: { type: boolean }
+        auth: { $ref: "#/components/schemas/TaskWebhookAuthSpec" }
+        idempotency: { $ref: "#/components/schemas/TaskWebhookIdempotency" }
+        payload: { $ref: "#/components/schemas/TaskWebhookPayloadSpec" }
+    TaskWebhookStatus:
+      type: object
+      properties:
+        phase: { type: string }
+        lastError: { type: string }
+        observedGeneration: { type: integer, format: int64 }
+        endpointID: { type: string }
+        endpointPath: { type: string }
+        lastDeliveryTime: { type: string }
+        lastEventID: { type: string }
+        lastTriggeredTask: { type: string }
+        acceptedCount: { type: integer, format: int64 }
+        duplicateCount: { type: integer, format: int64 }
+        rejectedCount: { type: integer, format: int64 }
+    TaskWebhook:
+      type: object
+      required: [apiVersion, kind, metadata, spec]
+      properties:
+        apiVersion: { type: string, enum: [orloj.dev/v1] }
+        kind: { type: string, enum: [TaskWebhook] }
+        metadata: { $ref: "common.yaml#/components/schemas/ObjectMeta" }
+        spec: { $ref: "#/components/schemas/TaskWebhookSpec" }
+        status: { $ref: "#/components/schemas/TaskWebhookStatus" }
+    TaskWebhookList:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/TaskWebhook" }

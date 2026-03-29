@@ -11,38 +11,36 @@ import (
 
 func runInit(args []string) error {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
-	blueprint := fs.String("blueprint", "", "blueprint to scaffold: pipeline, hierarchical, swarm-loop")
-	name := fs.String("name", "", "resource name prefix (defaults to blueprint name)")
-	dir := fs.String("dir", ".", "output directory")
+	blueprint := fs.String("blueprint", "pipeline", "blueprint to scaffold: pipeline, hierarchical, swarm-loop")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *blueprint == "" {
-		return errors.New("--blueprint is required (pipeline, hierarchical, swarm-loop)")
+
+	if fs.NArg() == 0 {
+		return errors.New("usage: orlojctl init <name> [--blueprint pipeline|hierarchical|swarm-loop]")
+	}
+	name := strings.TrimSpace(fs.Arg(0))
+	if name == "" {
+		return errors.New("name cannot be empty")
 	}
 
 	bp := strings.ToLower(strings.TrimSpace(*blueprint))
-	prefix := strings.TrimSpace(*name)
-	if prefix == "" {
-		prefix = bp
-	}
-
 	var files map[string]string
 	switch bp {
 	case "pipeline":
-		files = pipelineBlueprint(prefix)
+		files = pipelineBlueprint(name)
 	case "hierarchical":
-		files = hierarchicalBlueprint(prefix)
+		files = hierarchicalBlueprint(name)
 	case "swarm-loop":
-		files = swarmLoopBlueprint(prefix)
+		files = swarmLoopBlueprint(name)
 	default:
 		return fmt.Errorf("unknown blueprint %q (expected: pipeline, hierarchical, swarm-loop)", bp)
 	}
 
-	outDir := *dir
+	outDir := name
 	agentsDir := filepath.Join(outDir, "agents")
 	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
-		return fmt.Errorf("create agents directory: %w", err)
+		return fmt.Errorf("create directory %s: %w", outDir, err)
 	}
 
 	for path, content := range files {
@@ -50,10 +48,10 @@ func runInit(args []string) error {
 		if err := os.WriteFile(fullPath, []byte(content), 0o644); err != nil {
 			return fmt.Errorf("write %s: %w", path, err)
 		}
-		fmt.Printf("  created %s\n", path)
+		fmt.Printf("  created %s/%s\n", outDir, path)
 	}
 
-	fmt.Printf("\nScaffolded %s blueprint with prefix %q in %s\n", bp, prefix, outDir)
+	fmt.Printf("\nScaffolded %s blueprint %q in %s/\n", bp, name, outDir)
 	fmt.Printf("\nTo apply:\n  orlojctl apply -f %s\n", outDir)
 	return nil
 }

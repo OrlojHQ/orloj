@@ -1,0 +1,208 @@
+# Shared schemas (JSON names match Go json tags).
+components:
+  schemas:
+    ObjectMeta:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        namespace: { type: string, default: default }
+        labels: { type: object, additionalProperties: { type: string } }
+        annotations: { type: object, additionalProperties: { type: string } }
+        resourceVersion: { type: string }
+        generation: { type: integer, format: int64 }
+        createdAt: { type: string }
+    ListMeta:
+      type: object
+      properties:
+        continue:
+          type: string
+          description: Cursor for next page (last item name); empty if none.
+    PlainTextError:
+      type: string
+      description: Error body when Content-Type is text/plain.
+    HealthResponse:
+      type: object
+      required: [status]
+      properties:
+        status: { type: string, enum: [ok] }
+    NamespacesResponse:
+      type: object
+      required: [namespaces]
+      properties:
+        namespaces: { type: array, items: { type: string } }
+    Capability:
+      type: object
+      required: [id, enabled]
+      properties:
+        id: { type: string }
+        enabled: { type: boolean }
+        description: { type: string }
+        source: { type: string }
+    CapabilitySnapshot:
+      type: object
+      required: [generated_at, capabilities]
+      properties:
+        generated_at: { type: string }
+        capabilities:
+          type: array
+          items: { $ref: "#/components/schemas/Capability" }
+    AuthConfigResponse:
+      type: object
+      properties:
+        mode: { type: string }
+        setup_required: { type: boolean }
+        login_methods: { type: array, items: { type: string } }
+    AuthMeResponse:
+      type: object
+      properties:
+        authenticated: { type: boolean }
+        username: { type: string }
+        method: { type: string }
+    AuthCredentialsRequest:
+      type: object
+      properties:
+        username: { type: string }
+        password: { type: string }
+        setup_token: { type: string }
+    AuthChangePasswordRequest:
+      type: object
+      properties:
+        current_password: { type: string }
+        new_password: { type: string }
+    AuthResetPasswordRequest:
+      type: object
+      properties:
+        username: { type: string }
+        new_password: { type: string }
+    OkStatusMessage:
+      type: object
+      properties:
+        status: { type: string }
+    WebhookDeliveryResponse:
+      type: object
+      properties:
+        accepted: { type: boolean }
+        duplicate: { type: boolean }
+        event_id: { type: string }
+        task: { type: string }
+        message: { type: string }
+    WatchResourceEvent:
+      type: object
+      properties:
+        type: { type: string }
+        resource: { type: object, additionalProperties: true }
+    BusEvent:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        timestamp: { type: string }
+        source: { type: string }
+        type: { type: string }
+        kind: { type: string }
+        name: { type: string }
+        namespace: { type: string }
+        action: { type: string }
+        message: { type: string }
+        data: { nullable: true }
+    ToolApprovalDecisionRequest:
+      type: object
+      properties:
+        decided_by: { type: string }
+    MemoryEntriesResponse:
+      type: object
+      properties:
+        entries:
+          type: array
+          items: { type: object, additionalProperties: true }
+        count: { type: integer }
+    NamedLogsResponse:
+      type: object
+      properties:
+        name: { type: string }
+        logs:
+          type: array
+          items: { type: string }
+    TaskMessageListResponse:
+      type: object
+      properties:
+        name: { type: string }
+        namespace: { type: string }
+        total: { type: integer }
+        filtered_from: { type: integer }
+        lifecycle_counts: { type: object, additionalProperties: { type: integer } }
+        messages:
+          type: array
+          items: { $ref: "task.yaml#/components/schemas/TaskMessage" }
+    TaskMessageTotals:
+      type: object
+      properties:
+        messages: { type: integer }
+        queued: { type: integer }
+        running: { type: integer }
+        retrypending: { type: integer }
+        succeeded: { type: integer }
+        deadletter: { type: integer }
+        in_flight: { type: integer }
+        retry_count: { type: integer }
+        deadletters: { type: integer }
+        latency_ms_avg: { type: integer, format: int64 }
+        latency_ms_p95: { type: integer, format: int64 }
+        latency_sample_size: { type: integer }
+    TaskMessageAgentMetric:
+      type: object
+      properties:
+        agent: { type: string }
+        inbound: { type: integer }
+        outbound: { type: integer }
+        queued: { type: integer }
+        running: { type: integer }
+        retrypending: { type: integer }
+        succeeded: { type: integer }
+        deadletter: { type: integer }
+        in_flight: { type: integer }
+        retry_count: { type: integer }
+        deadletters: { type: integer }
+        latency_ms_avg: { type: integer, format: int64 }
+        latency_ms_p95: { type: integer, format: int64 }
+        latency_sample_size: { type: integer }
+    TaskMessageEdgeMetric:
+      type: object
+      properties:
+        from_agent: { type: string }
+        to_agent: { type: string }
+        messages: { type: integer }
+        queued: { type: integer }
+        running: { type: integer }
+        retrypending: { type: integer }
+        succeeded: { type: integer }
+        deadletter: { type: integer }
+        in_flight: { type: integer }
+        retry_count: { type: integer }
+        deadletters: { type: integer }
+        latency_ms_avg: { type: integer, format: int64 }
+        latency_ms_p95: { type: integer, format: int64 }
+        latency_sample_size: { type: integer }
+    TaskMessageMetricsResponse:
+      type: object
+      properties:
+        name: { type: string }
+        namespace: { type: string }
+        generated_at: { type: string }
+        totals: { $ref: "#/components/schemas/TaskMessageTotals" }
+        per_agent:
+          type: array
+          items: { $ref: "#/components/schemas/TaskMessageAgentMetric" }
+        per_edge:
+          type: array
+          items: { $ref: "#/components/schemas/TaskMessageEdgeMetric" }
+        filters: { type: object, additionalProperties: true }
+    McpServerDeletedResponse:
+      type: object
+      properties:
+        deleted: { type: string }
+    StatusEnvelope:
+      type: object
+      properties:
+        metadata: { $ref: "#/components/schemas/ObjectMeta" }
+        status: { type: object, additionalProperties: true }

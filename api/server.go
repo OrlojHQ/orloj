@@ -68,6 +68,7 @@ type Server struct {
 	extensions         agentruntime.Extensions
 	memoryBackends     *agentruntime.PersistentMemoryBackendRegistry
 	authRateLimiter    *authRateLimiter
+	requestRateLimiter *rate.Limiter // per-server; avoids test suites sharing one process-global bucket
 	uiBasePath         string
 }
 
@@ -136,6 +137,9 @@ func NewServerWithOptions(stores Stores, runtime *agentruntime.Manager, logger *
 		bus:                eventbus.NewMemoryBus(4096),
 		extensions:         extensions,
 		authRateLimiter:    newAuthRateLimiter(),
+		// 500 r/s sustained, burst 100 — same as previous package-global limiter, but per Server instance
+		// so concurrent httptest servers in tests do not share one token bucket.
+		requestRateLimiter: rate.NewLimiter(rate.Limit(500), 100),
 		uiBasePath:         uiBase,
 	}
 	s.routes()
@@ -173,14 +177,13 @@ func (s *Server) withBodyLimit(next http.Handler) http.Handler {
 	})
 }
 
-// globalRateLimiter caps the API server to 500 requests/second with a burst
-// of 100 to handle short spikes. This is a simple global limiter; deploy a
-// reverse proxy for per-client or per-IP limiting at scale.
-var globalRateLimiter = rate.NewLimiter(rate.Limit(500), 100)
-
-func withRateLimit(next http.Handler) http.Handler {
+func (s *Server) withRateLimit(next http.Handler) http.Handler {
+	lim := s.requestRateLimiter
+	if lim == nil {
+		lim = rate.NewLimiter(rate.Limit(500), 100)
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !globalRateLimiter.Allow() {
+		if !lim.Allow() {
 			http.Error(w, "rate limit exceeded", http.StatusTooManyRequests)
 			return
 		}
@@ -192,7 +195,7 @@ func withRateLimit(next http.Handler) http.Handler {
 func (s *Server) UIBasePath() string { return s.uiBasePath }
 
 func (s *Server) Handler() http.Handler {
-	return withRequestTimeout(withRateLimit(s.withBodyLimit(s.withAuth(s.mux))))
+	return withRequestTimeout(s.withRateLimit(s.withBodyLimit(s.withAuth(s.mux))))
 }
 
 // normalizeUIBasePath ensures the path has a leading and trailing slash.
@@ -466,7 +469,9 @@ func (s *Server) handleAgentByName(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		current, ok, err := s.stores.Agents.Get(r.Context(), key)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if !ok {
 			http.Error(w, fmt.Sprintf("agent %q not found", name), http.StatusNotFound)
 			return
@@ -509,7 +514,9 @@ func (s *Server) createOrUpdateAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	existing, ok, err := s.stores.Agents.Get(r.Context(), store.ScopedName(agent.Metadata.Namespace, agent.Metadata.Name))
-	if writeStoreFetchError(w, err) { return }
+	if writeStoreFetchError(w, err) {
+		return
+	}
 	if ok {
 		agent.Status = existing.Status
 	}
@@ -532,7 +539,9 @@ func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
 		nsFilter = ns
 	}
 	agents, err := s.stores.Agents.ListCursor(r.Context(), limit, after, nsFilter)
-	if writeStoreFetchError(w, err) { return }
+	if writeStoreFetchError(w, err) {
+		return
+	}
 	cont := listContinue(limit, len(agents), "")
 	if len(agents) > 0 {
 		cont = listContinue(limit, len(agents), agents[len(agents)-1].Metadata.Name)
@@ -560,7 +569,9 @@ func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) getAgent(w http.ResponseWriter, ctx context.Context, key, name string) {
 	agent, ok, err := s.stores.Agents.Get(ctx, key)
-	if writeStoreFetchError(w, err) { return }
+	if writeStoreFetchError(w, err) {
+		return
+	}
 	if !ok {
 		http.Error(w, fmt.Sprintf("agent %q not found", name), http.StatusNotFound)
 		return
@@ -580,7 +591,9 @@ func (s *Server) deleteAgent(w http.ResponseWriter, r *http.Request, key, name s
 
 func (s *Server) getAgentLogs(w http.ResponseWriter, ctx context.Context, key, name string) {
 	_, ok, err := s.stores.Agents.Get(ctx, key)
-	if writeStoreFetchError(w, err) { return }
+	if writeStoreFetchError(w, err) {
+		return
+	}
 	if !ok {
 		http.Error(w, fmt.Sprintf("agent %q not found", name), http.StatusNotFound)
 		return
@@ -599,7 +612,9 @@ func (s *Server) handleAgentSystems(w http.ResponseWriter, r *http.Request) {
 			nsFilter = ns
 		}
 		items, err := s.stores.AgentSystems.ListCursor(r.Context(), limit, after, nsFilter)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		cont := listContinue(limit, len(items), "")
 		if len(items) > 0 {
 			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
@@ -636,7 +651,9 @@ func (s *Server) handleAgentSystems(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		existing, ok, err := s.stores.AgentSystems.Get(r.Context(), store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if ok {
 			obj.Status = existing.Status
 		}
@@ -672,7 +689,9 @@ func (s *Server) handleAgentSystemByName(w http.ResponseWriter, r *http.Request)
 	switch r.Method {
 	case http.MethodGet:
 		obj, ok, err := s.stores.AgentSystems.Get(r.Context(), key)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if !ok {
 			http.Error(w, fmt.Sprintf("agentsystem %q not found", name), http.StatusNotFound)
 			return
@@ -697,7 +716,9 @@ func (s *Server) handleAgentSystemByName(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		current, ok, err := s.stores.AgentSystems.Get(r.Context(), key)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if !ok {
 			http.Error(w, fmt.Sprintf("agentsystem %q not found", name), http.StatusNotFound)
 			return
@@ -735,7 +756,9 @@ func (s *Server) handleModelEndpoints(w http.ResponseWriter, r *http.Request) {
 			nsFilter = ns
 		}
 		items, err := s.stores.ModelEPs.ListCursor(r.Context(), limit, after, nsFilter)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		cont := listContinue(limit, len(items), "")
 		if len(items) > 0 {
 			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
@@ -772,7 +795,9 @@ func (s *Server) handleModelEndpoints(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		existing, ok, err := s.stores.ModelEPs.Get(r.Context(), store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if ok {
 			obj.Status = existing.Status
 		}
@@ -808,7 +833,9 @@ func (s *Server) handleModelEndpointByName(w http.ResponseWriter, r *http.Reques
 	switch r.Method {
 	case http.MethodGet:
 		obj, ok, err := s.stores.ModelEPs.Get(r.Context(), key)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if !ok {
 			http.Error(w, fmt.Sprintf("modelendpoint %q not found", name), http.StatusNotFound)
 			return
@@ -833,7 +860,9 @@ func (s *Server) handleModelEndpointByName(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		current, ok, err := s.stores.ModelEPs.Get(r.Context(), key)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if !ok {
 			http.Error(w, fmt.Sprintf("modelendpoint %q not found", name), http.StatusNotFound)
 			return
@@ -871,7 +900,9 @@ func (s *Server) handleTools(w http.ResponseWriter, r *http.Request) {
 			nsFilter = ns
 		}
 		items, err := s.stores.Tools.ListCursor(r.Context(), limit, after, nsFilter)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		cont := listContinue(limit, len(items), "")
 		if len(items) > 0 {
 			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
@@ -908,7 +939,9 @@ func (s *Server) handleTools(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		existing, ok, err := s.stores.Tools.Get(r.Context(), store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if ok {
 			obj.Status = existing.Status
 		}
@@ -944,7 +977,9 @@ func (s *Server) handleToolByName(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		obj, ok, err := s.stores.Tools.Get(r.Context(), key)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if !ok {
 			http.Error(w, fmt.Sprintf("tool %q not found", name), http.StatusNotFound)
 			return
@@ -969,7 +1004,9 @@ func (s *Server) handleToolByName(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		current, ok, err := s.stores.Tools.Get(r.Context(), key)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if !ok {
 			http.Error(w, fmt.Sprintf("tool %q not found", name), http.StatusNotFound)
 			return
@@ -1007,7 +1044,9 @@ func (s *Server) handleSecrets(w http.ResponseWriter, r *http.Request) {
 			nsFilter = ns
 		}
 		items, err := s.stores.Secrets.ListCursor(r.Context(), limit, after, nsFilter)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		cont := listContinue(limit, len(items), "")
 		if len(items) > 0 {
 			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
@@ -1047,7 +1086,9 @@ func (s *Server) handleSecrets(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		existing, ok, err := s.stores.Secrets.Get(r.Context(), store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if ok {
 			obj.Status = existing.Status
 		}
@@ -1076,7 +1117,9 @@ func (s *Server) handleSecretByName(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		obj, ok, err := s.stores.Secrets.Get(r.Context(), key)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if !ok {
 			http.Error(w, fmt.Sprintf("secret %q not found", name), http.StatusNotFound)
 			return
@@ -1102,7 +1145,9 @@ func (s *Server) handleSecretByName(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		current, ok, err := s.stores.Secrets.Get(r.Context(), key)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if !ok {
 			http.Error(w, fmt.Sprintf("secret %q not found", name), http.StatusNotFound)
 			return
@@ -1158,7 +1203,9 @@ func (s *Server) handleMemories(w http.ResponseWriter, r *http.Request) {
 			nsFilter = ns
 		}
 		items, err := s.stores.Memories.ListCursor(r.Context(), limit, after, nsFilter)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		cont := listContinue(limit, len(items), "")
 		if len(items) > 0 {
 			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
@@ -1195,7 +1242,9 @@ func (s *Server) handleMemories(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		existing, ok, err := s.stores.Memories.Get(r.Context(), store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if ok {
 			obj.Status = existing.Status
 		}
@@ -1240,7 +1289,9 @@ func (s *Server) handleMemoryByName(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		obj, ok, err := s.stores.Memories.Get(r.Context(), key)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if !ok {
 			http.Error(w, fmt.Sprintf("memory %q not found", name), http.StatusNotFound)
 			return
@@ -1265,7 +1316,9 @@ func (s *Server) handleMemoryByName(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		current, ok, err := s.stores.Memories.Get(r.Context(), key)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if !ok {
 			http.Error(w, fmt.Sprintf("memory %q not found", name), http.StatusNotFound)
 			return
@@ -1299,7 +1352,9 @@ func (s *Server) handleMemoryEntries(w http.ResponseWriter, r *http.Request, nam
 	}
 	key := scopedNameForRequest(r, name)
 	_, ok, err := s.stores.Memories.Get(r.Context(), key)
-	if writeStoreFetchError(w, err) { return }
+	if writeStoreFetchError(w, err) {
+		return
+	}
 	if !ok {
 		http.Error(w, fmt.Sprintf("memory %q not found", name), http.StatusNotFound)
 		return
@@ -1357,7 +1412,9 @@ func (s *Server) handlePolicies(w http.ResponseWriter, r *http.Request) {
 			nsFilter = ns
 		}
 		items, err := s.stores.Policies.ListCursor(r.Context(), limit, after, nsFilter)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		cont := listContinue(limit, len(items), "")
 		if len(items) > 0 {
 			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
@@ -1394,7 +1451,9 @@ func (s *Server) handlePolicies(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		existing, ok, err := s.stores.Policies.Get(r.Context(), store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if ok {
 			obj.Status = existing.Status
 		}
@@ -1430,7 +1489,9 @@ func (s *Server) handlePolicyByName(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		obj, ok, err := s.stores.Policies.Get(r.Context(), key)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if !ok {
 			http.Error(w, fmt.Sprintf("agentpolicy %q not found", name), http.StatusNotFound)
 			return
@@ -1455,7 +1516,9 @@ func (s *Server) handlePolicyByName(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		current, ok, err := s.stores.Policies.Get(r.Context(), key)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if !ok {
 			http.Error(w, fmt.Sprintf("agentpolicy %q not found", name), http.StatusNotFound)
 			return
@@ -1493,7 +1556,9 @@ func (s *Server) handleAgentRoles(w http.ResponseWriter, r *http.Request) {
 			nsFilter = ns
 		}
 		items, err := s.stores.AgentRoles.ListCursor(r.Context(), limit, after, nsFilter)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		cont := listContinue(limit, len(items), "")
 		if len(items) > 0 {
 			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
@@ -1530,7 +1595,9 @@ func (s *Server) handleAgentRoles(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		existing, ok, err := s.stores.AgentRoles.Get(r.Context(), store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if ok {
 			obj.Status = existing.Status
 		}
@@ -1557,7 +1624,9 @@ func (s *Server) handleAgentRoleByName(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		obj, ok, err := s.stores.AgentRoles.Get(r.Context(), key)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if !ok {
 			http.Error(w, fmt.Sprintf("agentrole %q not found", name), http.StatusNotFound)
 			return
@@ -1582,7 +1651,9 @@ func (s *Server) handleAgentRoleByName(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		current, ok, err := s.stores.AgentRoles.Get(r.Context(), key)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if !ok {
 			http.Error(w, fmt.Sprintf("agentrole %q not found", name), http.StatusNotFound)
 			return
@@ -1620,7 +1691,9 @@ func (s *Server) handleToolPermissions(w http.ResponseWriter, r *http.Request) {
 			nsFilter = ns
 		}
 		items, err := s.stores.ToolPerms.ListCursor(r.Context(), limit, after, nsFilter)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		cont := listContinue(limit, len(items), "")
 		if len(items) > 0 {
 			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
@@ -1657,7 +1730,9 @@ func (s *Server) handleToolPermissions(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		existing, ok, err := s.stores.ToolPerms.Get(r.Context(), store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if ok {
 			obj.Status = existing.Status
 		}
@@ -1684,7 +1759,9 @@ func (s *Server) handleToolPermissionByName(w http.ResponseWriter, r *http.Reque
 	switch r.Method {
 	case http.MethodGet:
 		obj, ok, err := s.stores.ToolPerms.Get(r.Context(), key)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if !ok {
 			http.Error(w, fmt.Sprintf("toolpermission %q not found", name), http.StatusNotFound)
 			return
@@ -1709,7 +1786,9 @@ func (s *Server) handleToolPermissionByName(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		current, ok, err := s.stores.ToolPerms.Get(r.Context(), key)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if !ok {
 			http.Error(w, fmt.Sprintf("toolpermission %q not found", name), http.StatusNotFound)
 			return
@@ -1747,7 +1826,9 @@ func (s *Server) handleToolApprovals(w http.ResponseWriter, r *http.Request) {
 			nsFilter = ns
 		}
 		items, err := s.stores.ToolApprovals.ListCursor(r.Context(), limit, after, nsFilter)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		cont := listContinue(limit, len(items), "")
 		if len(items) > 0 {
 			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
@@ -1784,7 +1865,9 @@ func (s *Server) handleToolApprovals(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		existing, ok, err := s.stores.ToolApprovals.Get(r.Context(), store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if ok {
 			obj.Status = existing.Status
 		}
@@ -1822,7 +1905,9 @@ func (s *Server) handleToolApprovalByName(w http.ResponseWriter, r *http.Request
 	switch r.Method {
 	case http.MethodGet:
 		obj, ok, err := s.stores.ToolApprovals.Get(r.Context(), key)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if !ok {
 			http.Error(w, fmt.Sprintf("toolapproval %q not found", name), http.StatusNotFound)
 			return
@@ -1862,7 +1947,9 @@ func (s *Server) handleToolApprovalDecision(w http.ResponseWriter, r *http.Reque
 	// requests could both pass the Pending guard and both commit.
 	for attempt := 0; attempt < 5; attempt++ {
 		obj, ok, err := s.stores.ToolApprovals.Get(r.Context(), key)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if !ok {
 			http.Error(w, fmt.Sprintf("toolapproval %q not found", name), http.StatusNotFound)
 			return
@@ -1907,7 +1994,9 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 		} else {
 			items, err = s.stores.Tasks.ListPaged(r.Context(), limit, offset, nsFilter)
 		}
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		cont := listContinue(limit, len(items), "")
 		if len(items) > 0 {
 			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
@@ -1944,7 +2033,9 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		existing, ok, err := s.stores.Tasks.Get(r.Context(), store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if ok {
 			obj.Status = existing.Status
 		}
@@ -2034,7 +2125,9 @@ func (s *Server) handleTaskByName(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		obj, ok, err := s.stores.Tasks.Get(r.Context(), key)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if !ok {
 			http.Error(w, fmt.Sprintf("task %q not found", name), http.StatusNotFound)
 			return
@@ -2059,7 +2152,9 @@ func (s *Server) handleTaskByName(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		current, ok, err := s.stores.Tasks.Get(r.Context(), key)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if !ok {
 			http.Error(w, fmt.Sprintf("task %q not found", name), http.StatusNotFound)
 			return
@@ -2119,7 +2214,9 @@ func (s *Server) handleTaskSchedules(w http.ResponseWriter, r *http.Request) {
 			nsFilter = ns
 		}
 		items, err := s.stores.TaskSchedules.ListCursor(r.Context(), limit, after, nsFilter)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		cont := listContinue(limit, len(items), "")
 		if len(items) > 0 {
 			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
@@ -2156,7 +2253,9 @@ func (s *Server) handleTaskSchedules(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		existing, ok, err := s.stores.TaskSchedules.Get(r.Context(), store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if ok {
 			obj.Status = existing.Status
 		}
@@ -2202,7 +2301,9 @@ func (s *Server) handleTaskScheduleByName(w http.ResponseWriter, r *http.Request
 	switch r.Method {
 	case http.MethodGet:
 		obj, ok, err := s.stores.TaskSchedules.Get(r.Context(), key)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if !ok {
 			http.Error(w, fmt.Sprintf("taskschedule %q not found", name), http.StatusNotFound)
 			return
@@ -2227,7 +2328,9 @@ func (s *Server) handleTaskScheduleByName(w http.ResponseWriter, r *http.Request
 			return
 		}
 		current, ok, err := s.stores.TaskSchedules.Get(r.Context(), key)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if !ok {
 			http.Error(w, fmt.Sprintf("taskschedule %q not found", name), http.StatusNotFound)
 			return
@@ -2265,7 +2368,9 @@ func (s *Server) handleWorkers(w http.ResponseWriter, r *http.Request) {
 			nsFilter = ns
 		}
 		items, err := s.stores.Workers.ListCursor(r.Context(), limit, after, nsFilter)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		cont := listContinue(limit, len(items), "")
 		if len(items) > 0 {
 			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
@@ -2302,7 +2407,9 @@ func (s *Server) handleWorkers(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		existing, ok, err := s.stores.Workers.Get(r.Context(), store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if ok {
 			obj.Status = existing.Status
 		}
@@ -2338,7 +2445,9 @@ func (s *Server) handleWorkerByName(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		obj, ok, err := s.stores.Workers.Get(r.Context(), key)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if !ok {
 			http.Error(w, fmt.Sprintf("worker %q not found", name), http.StatusNotFound)
 			return
@@ -2363,7 +2472,9 @@ func (s *Server) handleWorkerByName(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		current, ok, err := s.stores.Workers.Get(r.Context(), key)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if !ok {
 			http.Error(w, fmt.Sprintf("worker %q not found", name), http.StatusNotFound)
 			return
@@ -2422,7 +2533,9 @@ func (s *Server) handleMcpServers(w http.ResponseWriter, r *http.Request) {
 			nsFilter = ns
 		}
 		items, err := s.stores.McpServers.ListCursor(r.Context(), limit, after, nsFilter)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		cont := listContinue(limit, len(items), "")
 		if len(items) > 0 {
 			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
@@ -2459,7 +2572,9 @@ func (s *Server) handleMcpServers(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		existing, ok, err := s.stores.McpServers.Get(r.Context(), store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if ok {
 			obj.Status = existing.Status
 		}
@@ -2486,7 +2601,9 @@ func (s *Server) handleMcpServerByName(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		obj, ok, err := s.stores.McpServers.Get(r.Context(), key)
-		if writeStoreFetchError(w, err) { return }
+		if writeStoreFetchError(w, err) {
+			return
+		}
 		if !ok {
 			http.Error(w, fmt.Sprintf("mcp-server %q not found", name), http.StatusNotFound)
 			return

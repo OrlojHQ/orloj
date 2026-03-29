@@ -106,6 +106,10 @@ export default defineConfig({
     {
       text: "Guides",
       items: [
+        {
+          text: "5-Minute Tutorial",
+          link: "/guides/five-minute-tutorial",
+        },
         { text: "Overview", link: "/guides/" },
         {
           text: "Deploy Your First Pipeline",

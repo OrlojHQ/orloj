@@ -1,0 +1,67 @@
+components:
+  schemas:
+    McpServerEnvVar:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        value: { type: string }
+        secretRef: { type: string }
+    McpToolFilter:
+      type: object
+      properties:
+        include:
+          type: array
+          items: { type: string }
+    McpReconnectPolicy:
+      type: object
+      properties:
+        max_attempts: { type: integer }
+        backoff: { type: string }
+    McpServerSpec:
+      type: object
+      required: [transport]
+      properties:
+        transport: { type: string, enum: [stdio, http] }
+        command: { type: string }
+        args:
+          type: array
+          items: { type: string }
+        env:
+          type: array
+          items: { $ref: "#/components/schemas/McpServerEnvVar" }
+        endpoint: { type: string }
+        auth: { $ref: "tool.yaml#/components/schemas/ToolAuth" }
+        tool_filter: { $ref: "#/components/schemas/McpToolFilter" }
+        reconnect: { $ref: "#/components/schemas/McpReconnectPolicy" }
+    McpServerStatus:
+      type: object
+      properties:
+        phase: { type: string }
+        discoveredTools:
+          type: array
+          items: { type: string }
+        generatedTools:
+          type: array
+          items: { type: string }
+        lastSyncedAt: { type: string }
+        lastError: { type: string }
+        observedGeneration: { type: integer, format: int64 }
+    McpServer:
+      type: object
+      required: [apiVersion, kind, metadata, spec]
+      properties:
+        apiVersion: { type: string, enum: [orloj.dev/v1] }
+        kind: { type: string, enum: [McpServer] }
+        metadata: { $ref: "common.yaml#/components/schemas/ObjectMeta" }
+        spec: { $ref: "#/components/schemas/McpServerSpec" }
+        status: { $ref: "#/components/schemas/McpServerStatus" }
+    McpServerList:
+      allOf:
+        - { $ref: "common.yaml#/components/schemas/ListMeta" }
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: { $ref: "#/components/schemas/McpServer" }

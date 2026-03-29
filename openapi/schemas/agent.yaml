@@ -1,0 +1,70 @@
+components:
+  schemas:
+    AgentLimits:
+      type: object
+      properties:
+        max_steps: { type: integer }
+        timeout: { type: string }
+    MemorySpecInline:
+      type: object
+      properties:
+        ref: { type: string }
+        type: { type: string }
+        provider: { type: string }
+        allow:
+          type: array
+          items: { type: string }
+    AgentExecutionSpec:
+      type: object
+      properties:
+        profile: { type: string }
+        tool_sequence:
+          type: array
+          items: { type: string }
+        required_output_markers:
+          type: array
+          items: { type: string }
+        duplicate_tool_call_policy: { type: string }
+        on_contract_violation: { type: string }
+        tool_use_behavior: { type: string }
+    AgentSpec:
+      type: object
+      properties:
+        model_ref: { type: string }
+        prompt: { type: string }
+        tools:
+          type: array
+          items: { type: string }
+        allowed_tools:
+          type: array
+          items: { type: string }
+        roles:
+          type: array
+          items: { type: string }
+        memory: { $ref: "#/components/schemas/MemorySpecInline" }
+        execution: { $ref: "#/components/schemas/AgentExecutionSpec" }
+        limits: { $ref: "#/components/schemas/AgentLimits" }
+    AgentStatus:
+      type: object
+      properties:
+        phase: { type: string }
+        lastError: { type: string }
+        observedGeneration: { type: integer, format: int64 }
+    Agent:
+      type: object
+      required: [apiVersion, kind, metadata, spec]
+      properties:
+        apiVersion: { type: string, enum: [orloj.dev/v1] }
+        kind: { type: string, enum: [Agent] }
+        metadata: { $ref: "common.yaml#/components/schemas/ObjectMeta" }
+        spec: { $ref: "#/components/schemas/AgentSpec" }
+        status: { $ref: "#/components/schemas/AgentStatus" }
+    AgentList:
+      allOf:
+        - { $ref: "common.yaml#/components/schemas/ListMeta" }
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: { $ref: "#/components/schemas/Agent" }

@@ -1,0 +1,5422 @@
+---
+openapi: 3.1.0
+servers:
+- url: "/"
+  description: Server root (set host/port when calling the API)
+info:
+  title: Orloj API
+  version: 1.0.0
+  license:
+    name: Apache-2.0
+    identifier: Apache-2.0
+  description: |-
+    Control plane HTTP API for Orloj (v1).
+
+    Most error responses use `text/plain` bodies. A future release may standardize errors as JSON for clients and tooling.
+
+    Authentication: bearer token (`Authorization: Bearer ...`) and/or session cookie (`orloj_session`, or `__Host-orloj_session` over HTTPS). Effective requirements depend on server configuration (`ORLOJ_API_TOKEN` / `ORLOJ_API_TOKENS`, native auth mode, etc.).
+tags:
+- name: agents
+- name: agent-systems
+- name: model-endpoints
+- name: tools
+- name: secrets
+- name: memories
+- name: agent-policies
+- name: agent-roles
+- name: tool-permissions
+- name: tool-approvals
+- name: tasks
+- name: task-schedules
+- name: task-webhooks
+- name: workers
+- name: mcp-servers
+- name: auth
+- name: system
+- name: events
+paths:
+  "/v1/agents":
+    get:
+      tags:
+      - agents
+      parameters:
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+      - name: after
+        in: query
+        schema:
+          type: string
+      - name: labelSelector
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/agent.yaml#/components/schemas/AgentList"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    post:
+      tags:
+      - agents
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/agent.yaml#/components/schemas/Agent"
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/agent.yaml#/components/schemas/Agent"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/agents/watch":
+    get:
+      tags:
+      - agents
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: resourceVersion
+        in: query
+        schema:
+          type: string
+      - name: name
+        in: query
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: 'SSE; `event: resource` with WatchResourceEvent JSON in data'
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/agents/{name}/status":
+    get:
+      tags:
+      - agents
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    put:
+      tags:
+      - agents
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/agents/{name}/logs":
+    get:
+      tags:
+      - agents
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/NamedLogsResponse"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/agents/{name}":
+    get:
+      tags:
+      - agents
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/agent.yaml#/components/schemas/Agent"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    put:
+      tags:
+      - agents
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/agent.yaml#/components/schemas/Agent"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/agent.yaml#/components/schemas/Agent"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    delete:
+      tags:
+      - agents
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/agent-systems":
+    get:
+      tags:
+      - agent-systems
+      parameters:
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+      - name: after
+        in: query
+        schema:
+          type: string
+      - name: labelSelector
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/agent-system.yaml#/components/schemas/AgentSystemList"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    post:
+      tags:
+      - agent-systems
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/agent-system.yaml#/components/schemas/AgentSystem"
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/agent-system.yaml#/components/schemas/AgentSystem"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/agent-systems/{name}/status":
+    get:
+      tags:
+      - agent-systems
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    put:
+      tags:
+      - agent-systems
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/agent-systems/{name}":
+    get:
+      tags:
+      - agent-systems
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/agent-system.yaml#/components/schemas/AgentSystem"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    put:
+      tags:
+      - agent-systems
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/agent-system.yaml#/components/schemas/AgentSystem"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/agent-system.yaml#/components/schemas/AgentSystem"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    delete:
+      tags:
+      - agent-systems
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/model-endpoints":
+    get:
+      tags:
+      - model-endpoints
+      parameters:
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+      - name: after
+        in: query
+        schema:
+          type: string
+      - name: labelSelector
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/model-endpoint.yaml#/components/schemas/ModelEndpointList"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    post:
+      tags:
+      - model-endpoints
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/model-endpoint.yaml#/components/schemas/ModelEndpoint"
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/model-endpoint.yaml#/components/schemas/ModelEndpoint"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/model-endpoints/{name}/status":
+    get:
+      tags:
+      - model-endpoints
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    put:
+      tags:
+      - model-endpoints
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/model-endpoints/{name}":
+    get:
+      tags:
+      - model-endpoints
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/model-endpoint.yaml#/components/schemas/ModelEndpoint"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    put:
+      tags:
+      - model-endpoints
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/model-endpoint.yaml#/components/schemas/ModelEndpoint"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/model-endpoint.yaml#/components/schemas/ModelEndpoint"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    delete:
+      tags:
+      - model-endpoints
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/tools":
+    get:
+      tags:
+      - tools
+      parameters:
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+      - name: after
+        in: query
+        schema:
+          type: string
+      - name: labelSelector
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/tool.yaml#/components/schemas/ToolList"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    post:
+      tags:
+      - tools
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/tool.yaml#/components/schemas/Tool"
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/tool.yaml#/components/schemas/Tool"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/tools/{name}/status":
+    get:
+      tags:
+      - tools
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    put:
+      tags:
+      - tools
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/tools/{name}":
+    get:
+      tags:
+      - tools
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/tool.yaml#/components/schemas/Tool"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    put:
+      tags:
+      - tools
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/tool.yaml#/components/schemas/Tool"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/tool.yaml#/components/schemas/Tool"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    delete:
+      tags:
+      - tools
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/secrets":
+    get:
+      tags:
+      - secrets
+      parameters:
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+      - name: after
+        in: query
+        schema:
+          type: string
+      - name: labelSelector
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/secret.yaml#/components/schemas/SecretList"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    post:
+      tags:
+      - secrets
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/secret.yaml#/components/schemas/Secret"
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/secret.yaml#/components/schemas/Secret"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/secrets/{name}":
+    get:
+      tags:
+      - secrets
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/secret.yaml#/components/schemas/Secret"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    put:
+      tags:
+      - secrets
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/secret.yaml#/components/schemas/Secret"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/secret.yaml#/components/schemas/Secret"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    delete:
+      tags:
+      - secrets
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/memories":
+    get:
+      tags:
+      - memories
+      parameters:
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+      - name: after
+        in: query
+        schema:
+          type: string
+      - name: labelSelector
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/memory.yaml#/components/schemas/MemoryList"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    post:
+      tags:
+      - memories
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/memory.yaml#/components/schemas/Memory"
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/memory.yaml#/components/schemas/Memory"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/memories/{name}/status":
+    get:
+      tags:
+      - memories
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    put:
+      tags:
+      - memories
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/memories/{name}":
+    get:
+      tags:
+      - memories
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/memory.yaml#/components/schemas/Memory"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    put:
+      tags:
+      - memories
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/memory.yaml#/components/schemas/Memory"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/memory.yaml#/components/schemas/Memory"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    delete:
+      tags:
+      - memories
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/memories/{name}/entries":
+    get:
+      tags:
+      - memories
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: q
+        in: query
+        schema:
+          type: string
+      - name: prefix
+        in: query
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/MemoryEntriesResponse"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '500':
+          description: Backend error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/agent-policies":
+    get:
+      tags:
+      - agent-policies
+      parameters:
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+      - name: after
+        in: query
+        schema:
+          type: string
+      - name: labelSelector
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/agent-policy.yaml#/components/schemas/AgentPolicyList"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    post:
+      tags:
+      - agent-policies
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/agent-policy.yaml#/components/schemas/AgentPolicy"
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/agent-policy.yaml#/components/schemas/AgentPolicy"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/agent-policies/{name}/status":
+    get:
+      tags:
+      - agent-policies
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    put:
+      tags:
+      - agent-policies
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/agent-policies/{name}":
+    get:
+      tags:
+      - agent-policies
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/agent-policy.yaml#/components/schemas/AgentPolicy"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    put:
+      tags:
+      - agent-policies
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/agent-policy.yaml#/components/schemas/AgentPolicy"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/agent-policy.yaml#/components/schemas/AgentPolicy"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    delete:
+      tags:
+      - agent-policies
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/agent-roles":
+    get:
+      tags:
+      - agent-roles
+      parameters:
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+      - name: after
+        in: query
+        schema:
+          type: string
+      - name: labelSelector
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/agent-role.yaml#/components/schemas/AgentRoleList"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    post:
+      tags:
+      - agent-roles
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/agent-role.yaml#/components/schemas/AgentRole"
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/agent-role.yaml#/components/schemas/AgentRole"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/agent-roles/{name}":
+    get:
+      tags:
+      - agent-roles
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/agent-role.yaml#/components/schemas/AgentRole"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    put:
+      tags:
+      - agent-roles
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/agent-role.yaml#/components/schemas/AgentRole"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/agent-role.yaml#/components/schemas/AgentRole"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    delete:
+      tags:
+      - agent-roles
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/tool-permissions":
+    get:
+      tags:
+      - tool-permissions
+      parameters:
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+      - name: after
+        in: query
+        schema:
+          type: string
+      - name: labelSelector
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/tool-permission.yaml#/components/schemas/ToolPermissionList"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    post:
+      tags:
+      - tool-permissions
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/tool-permission.yaml#/components/schemas/ToolPermission"
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/tool-permission.yaml#/components/schemas/ToolPermission"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/tool-permissions/{name}":
+    get:
+      tags:
+      - tool-permissions
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/tool-permission.yaml#/components/schemas/ToolPermission"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    put:
+      tags:
+      - tool-permissions
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/tool-permission.yaml#/components/schemas/ToolPermission"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/tool-permission.yaml#/components/schemas/ToolPermission"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    delete:
+      tags:
+      - tool-permissions
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/tool-approvals":
+    get:
+      tags:
+      - tool-approvals
+      parameters:
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+      - name: after
+        in: query
+        schema:
+          type: string
+      - name: labelSelector
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/tool-approval.yaml#/components/schemas/ToolApprovalList"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    post:
+      tags:
+      - tool-approvals
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/tool-approval.yaml#/components/schemas/ToolApproval"
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/tool-approval.yaml#/components/schemas/ToolApproval"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/tool-approvals/{name}":
+    get:
+      tags:
+      - tool-approvals
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/tool-approval.yaml#/components/schemas/ToolApproval"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    delete:
+      tags:
+      - tool-approvals
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    put:
+      tags:
+      - tool-approvals
+      summary: Not supported
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '405':
+          description: Method not allowed
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/tool-approvals/{name}/approve":
+    post:
+      tags:
+      - tool-approvals
+      summary: Approve pending tool invocation
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/common.yaml#/components/schemas/ToolApprovalDecisionRequest"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/tool-approval.yaml#/components/schemas/ToolApproval"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/tool-approvals/{name}/deny":
+    post:
+      tags:
+      - tool-approvals
+      summary: Deny pending tool invocation
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/common.yaml#/components/schemas/ToolApprovalDecisionRequest"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/tool-approval.yaml#/components/schemas/ToolApproval"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/tasks":
+    get:
+      tags:
+      - tasks
+      parameters:
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+      - name: after
+        in: query
+        schema:
+          type: string
+      - name: offset
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+      - name: labelSelector
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/task.yaml#/components/schemas/TaskList"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    post:
+      tags:
+      - tasks
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/task.yaml#/components/schemas/Task"
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/task.yaml#/components/schemas/Task"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/tasks/watch":
+    get:
+      tags:
+      - tasks
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: resourceVersion
+        in: query
+        schema:
+          type: string
+      - name: name
+        in: query
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: SSE resource watch for tasks
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/tasks/{name}/status":
+    get:
+      tags:
+      - tasks
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    put:
+      tags:
+      - tasks
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/tasks/{name}/logs":
+    get:
+      tags:
+      - tasks
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/NamedLogsResponse"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/tasks/{name}/messages":
+    get:
+      tags:
+      - tasks
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: phase
+        in: query
+        schema:
+          type: string
+      - name: lifecycle
+        in: query
+        schema:
+          type: string
+      - name: from_agent
+        in: query
+        schema:
+          type: string
+      - name: to_agent
+        in: query
+        schema:
+          type: string
+      - name: branch_id
+        in: query
+        schema:
+          type: string
+      - name: trace_id
+        in: query
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/TaskMessageListResponse"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/tasks/{name}/metrics":
+    get:
+      tags:
+      - tasks
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: phase
+        in: query
+        schema:
+          type: string
+      - name: lifecycle
+        in: query
+        schema:
+          type: string
+      - name: from_agent
+        in: query
+        schema:
+          type: string
+      - name: to_agent
+        in: query
+        schema:
+          type: string
+      - name: branch_id
+        in: query
+        schema:
+          type: string
+      - name: trace_id
+        in: query
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/TaskMessageMetricsResponse"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/tasks/{name}":
+    get:
+      tags:
+      - tasks
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/task.yaml#/components/schemas/Task"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    put:
+      tags:
+      - tasks
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/task.yaml#/components/schemas/Task"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/task.yaml#/components/schemas/Task"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    delete:
+      tags:
+      - tasks
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/task-schedules":
+    get:
+      tags:
+      - task-schedules
+      parameters:
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+      - name: after
+        in: query
+        schema:
+          type: string
+      - name: labelSelector
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/task-schedule.yaml#/components/schemas/TaskScheduleList"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    post:
+      tags:
+      - task-schedules
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/task-schedule.yaml#/components/schemas/TaskSchedule"
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/task-schedule.yaml#/components/schemas/TaskSchedule"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/task-schedules/{name}/status":
+    get:
+      tags:
+      - task-schedules
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    put:
+      tags:
+      - task-schedules
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/task-schedules/{name}":
+    get:
+      tags:
+      - task-schedules
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/task-schedule.yaml#/components/schemas/TaskSchedule"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    put:
+      tags:
+      - task-schedules
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/task-schedule.yaml#/components/schemas/TaskSchedule"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/task-schedule.yaml#/components/schemas/TaskSchedule"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    delete:
+      tags:
+      - task-schedules
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/task-schedules/watch":
+    get:
+      tags:
+      - task-schedules
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: resourceVersion
+        in: query
+        schema:
+          type: string
+      - name: name
+        in: query
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: SSE resource watch for task schedules
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/task-webhooks":
+    get:
+      tags:
+      - task-webhooks
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: labelSelector
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/task-webhook.yaml#/components/schemas/TaskWebhookList"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    post:
+      tags:
+      - task-webhooks
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/task-webhook.yaml#/components/schemas/TaskWebhook"
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/task-webhook.yaml#/components/schemas/TaskWebhook"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/task-webhooks/watch":
+    get:
+      tags:
+      - task-webhooks
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: resourceVersion
+        in: query
+        schema:
+          type: string
+      - name: name
+        in: query
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: SSE resource watch for task webhooks
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/task-webhooks/{name}/status":
+    get:
+      tags:
+      - task-webhooks
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    put:
+      tags:
+      - task-webhooks
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/task-webhooks/{name}":
+    get:
+      tags:
+      - task-webhooks
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/task-webhook.yaml#/components/schemas/TaskWebhook"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    put:
+      tags:
+      - task-webhooks
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/task-webhook.yaml#/components/schemas/TaskWebhook"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/task-webhook.yaml#/components/schemas/TaskWebhook"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    delete:
+      tags:
+      - task-webhooks
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/workers":
+    get:
+      tags:
+      - workers
+      parameters:
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+      - name: after
+        in: query
+        schema:
+          type: string
+      - name: labelSelector
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/worker.yaml#/components/schemas/WorkerList"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    post:
+      tags:
+      - workers
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/worker.yaml#/components/schemas/Worker"
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/worker.yaml#/components/schemas/Worker"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/workers/{name}/status":
+    get:
+      tags:
+      - workers
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    put:
+      tags:
+      - workers
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/workers/{name}":
+    get:
+      tags:
+      - workers
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/worker.yaml#/components/schemas/Worker"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    put:
+      tags:
+      - workers
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/worker.yaml#/components/schemas/Worker"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/worker.yaml#/components/schemas/Worker"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    delete:
+      tags:
+      - workers
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/mcp-servers":
+    get:
+      tags:
+      - mcp-servers
+      parameters:
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+      - name: after
+        in: query
+        schema:
+          type: string
+      - name: labelSelector
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/mcp-server.yaml#/components/schemas/McpServerList"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    post:
+      tags:
+      - mcp-servers
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/mcp-server.yaml#/components/schemas/McpServer"
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/mcp-server.yaml#/components/schemas/McpServer"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/mcp-servers/{name}":
+    get:
+      tags:
+      - mcp-servers
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/mcp-server.yaml#/components/schemas/McpServer"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    put:
+      tags:
+      - mcp-servers
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/mcp-server.yaml#/components/schemas/McpServer"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/mcp-server.yaml#/components/schemas/McpServer"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    delete:
+      tags:
+      - mcp-servers
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/McpServerDeletedResponse"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/webhook-deliveries/{endpoint_id}":
+    post:
+      tags:
+      - task-webhooks
+      summary: Inbound webhook (HMAC per TaskWebhook auth profile generic|github)
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: endpoint_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/WebhookDeliveryResponse"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '401':
+          description: Signature verification failed
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Unknown endpoint
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Suspended or conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '500':
+          description: Server error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/events/watch":
+    get:
+      tags:
+      - events
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: since
+        in: query
+        schema:
+          type: string
+      - name: source
+        in: query
+        schema:
+          type: string
+      - name: type
+        in: query
+        schema:
+          type: string
+      - name: kind
+        in: query
+        schema:
+          type: string
+      - name: name
+        in: query
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: 'SSE; `event: event` with BusEvent JSON'
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '503':
+          description: Event bus unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/namespaces":
+    get:
+      tags:
+      - system
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/NamespacesResponse"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/capabilities":
+    get:
+      tags:
+      - system
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/CapabilitySnapshot"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/healthz":
+    get:
+      tags:
+      - system
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/HealthResponse"
+  "/metrics":
+    get:
+      tags:
+      - system
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: Prometheus text exposition
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          description: Unauthorized
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/auth/config":
+    get:
+      tags:
+      - auth
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/AuthConfigResponse"
+        '500':
+          description: Server error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/auth/setup":
+    post:
+      tags:
+      - auth
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/common.yaml#/components/schemas/AuthCredentialsRequest"
+      responses:
+        '201':
+          description: Created session
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/AuthMeResponse"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Already configured
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '429':
+          description: Rate limited
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/auth/login":
+    post:
+      tags:
+      - auth
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/common.yaml#/components/schemas/AuthCredentialsRequest"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/AuthMeResponse"
+        '401':
+          description: Invalid credentials
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Setup required
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '429':
+          description: Rate limited
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/auth/logout":
+    post:
+      tags:
+      - auth
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/OkStatusMessage"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/auth/me":
+    get:
+      tags:
+      - auth
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/AuthMeResponse"
+  "/v1/auth/change-password":
+    post:
+      tags:
+      - auth
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/common.yaml#/components/schemas/AuthChangePasswordRequest"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '401':
+          description: Unauthorized
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '429':
+          description: Rate limited
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/auth/admin/reset-password":
+    post:
+      tags:
+      - auth
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/common.yaml#/components/schemas/AuthResetPasswordRequest"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '429':
+          description: Rate limited
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: orloj_session
+      description: Session cookie; `__Host-orloj_session` is used for secure sites.

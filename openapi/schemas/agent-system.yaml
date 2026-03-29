@@ -1,0 +1,56 @@
+components:
+  schemas:
+    GraphRoute:
+      type: object
+      properties:
+        to: { type: string }
+        labels: { type: object, additionalProperties: { type: string } }
+        policy: { type: object, additionalProperties: { type: string } }
+    GraphJoin:
+      type: object
+      properties:
+        mode: { type: string }
+        quorum_count: { type: integer }
+        quorum_percent: { type: integer }
+        on_failure: { type: string }
+    GraphEdge:
+      type: object
+      properties:
+        next: { type: string }
+        edges:
+          type: array
+          items: { $ref: "#/components/schemas/GraphRoute" }
+        join: { $ref: "#/components/schemas/GraphJoin" }
+    AgentSystemSpec:
+      type: object
+      properties:
+        agents:
+          type: array
+          items: { type: string }
+        graph:
+          type: object
+          additionalProperties: { $ref: "#/components/schemas/GraphEdge" }
+    AgentSystemStatus:
+      type: object
+      properties:
+        phase: { type: string }
+        lastError: { type: string }
+        observedGeneration: { type: integer, format: int64 }
+    AgentSystem:
+      type: object
+      required: [apiVersion, kind, metadata, spec]
+      properties:
+        apiVersion: { type: string, enum: [orloj.dev/v1] }
+        kind: { type: string, enum: [AgentSystem] }
+        metadata: { $ref: "common.yaml#/components/schemas/ObjectMeta" }
+        spec: { $ref: "#/components/schemas/AgentSystemSpec" }
+        status: { $ref: "#/components/schemas/AgentSystemStatus" }
+    AgentSystemList:
+      allOf:
+        - { $ref: "common.yaml#/components/schemas/ListMeta" }
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: { $ref: "#/components/schemas/AgentSystem" }

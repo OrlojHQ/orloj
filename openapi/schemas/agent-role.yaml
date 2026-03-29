@@ -1,0 +1,33 @@
+components:
+  schemas:
+    AgentRoleSpec:
+      type: object
+      properties:
+        description: { type: string }
+        permissions:
+          type: array
+          items: { type: string }
+    AgentRoleStatus:
+      type: object
+      properties:
+        phase: { type: string }
+        lastError: { type: string }
+        observedGeneration: { type: integer, format: int64 }
+    AgentRole:
+      type: object
+      required: [apiVersion, kind, metadata, spec]
+      properties:
+        apiVersion: { type: string, enum: [orloj.dev/v1] }
+        kind: { type: string, enum: [AgentRole] }
+        metadata: { $ref: "common.yaml#/components/schemas/ObjectMeta" }
+        spec: { $ref: "#/components/schemas/AgentRoleSpec" }
+        status: { $ref: "#/components/schemas/AgentRoleStatus" }
+    AgentRoleList:
+      allOf:
+        - { $ref: "common.yaml#/components/schemas/ListMeta" }
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: { $ref: "#/components/schemas/AgentRole" }

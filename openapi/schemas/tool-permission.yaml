@@ -1,0 +1,47 @@
+components:
+  schemas:
+    OperationRule:
+      type: object
+      properties:
+        operation_class: { type: string }
+        verdict: { type: string }
+    ToolPermissionSpec:
+      type: object
+      properties:
+        tool_ref: { type: string }
+        action: { type: string }
+        required_permissions:
+          type: array
+          items: { type: string }
+        match_mode: { type: string }
+        apply_mode: { type: string }
+        target_agents:
+          type: array
+          items: { type: string }
+        operation_rules:
+          type: array
+          items: { $ref: "#/components/schemas/OperationRule" }
+    ToolPermissionStatus:
+      type: object
+      properties:
+        phase: { type: string }
+        lastError: { type: string }
+        observedGeneration: { type: integer, format: int64 }
+    ToolPermission:
+      type: object
+      required: [apiVersion, kind, metadata, spec]
+      properties:
+        apiVersion: { type: string, enum: [orloj.dev/v1] }
+        kind: { type: string, enum: [ToolPermission] }
+        metadata: { $ref: "common.yaml#/components/schemas/ObjectMeta" }
+        spec: { $ref: "#/components/schemas/ToolPermissionSpec" }
+        status: { $ref: "#/components/schemas/ToolPermissionStatus" }
+    ToolPermissionList:
+      allOf:
+        - { $ref: "common.yaml#/components/schemas/ListMeta" }
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: { $ref: "#/components/schemas/ToolPermission" }

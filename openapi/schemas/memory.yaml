@@ -1,0 +1,38 @@
+components:
+  schemas:
+    MemoryAuthConfig:
+      type: object
+      properties:
+        secretRef: { type: string }
+    MemoryConfig:
+      type: object
+      properties:
+        type: { type: string }
+        provider: { type: string }
+        embedding_model: { type: string }
+        endpoint: { type: string }
+        auth: { $ref: "#/components/schemas/MemoryAuthConfig" }
+    MemoryStatus:
+      type: object
+      properties:
+        phase: { type: string }
+        lastError: { type: string }
+        observedGeneration: { type: integer, format: int64 }
+    Memory:
+      type: object
+      required: [apiVersion, kind, metadata, spec]
+      properties:
+        apiVersion: { type: string, enum: [orloj.dev/v1] }
+        kind: { type: string, enum: [Memory] }
+        metadata: { $ref: "common.yaml#/components/schemas/ObjectMeta" }
+        spec: { $ref: "#/components/schemas/MemoryConfig" }
+        status: { $ref: "#/components/schemas/MemoryStatus" }
+    MemoryList:
+      allOf:
+        - { $ref: "common.yaml#/components/schemas/ListMeta" }
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: { $ref: "#/components/schemas/Memory" }

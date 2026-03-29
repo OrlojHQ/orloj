@@ -1,0 +1,44 @@
+components:
+  schemas:
+    TaskScheduleSpec:
+      type: object
+      properties:
+        task_ref: { type: string }
+        schedule: { type: string }
+        time_zone: { type: string }
+        suspend: { type: boolean }
+        starting_deadline_seconds: { type: integer }
+        concurrency_policy: { type: string }
+        successful_history_limit: { type: integer }
+        failed_history_limit: { type: integer }
+    TaskScheduleStatus:
+      type: object
+      properties:
+        phase: { type: string }
+        lastError: { type: string }
+        lastScheduleTime: { type: string }
+        lastSuccessfulTime: { type: string }
+        nextScheduleTime: { type: string }
+        lastTriggeredTask: { type: string }
+        activeRuns:
+          type: array
+          items: { type: string }
+        observedGeneration: { type: integer, format: int64 }
+    TaskSchedule:
+      type: object
+      required: [apiVersion, kind, metadata, spec]
+      properties:
+        apiVersion: { type: string, enum: [orloj.dev/v1] }
+        kind: { type: string, enum: [TaskSchedule] }
+        metadata: { $ref: "common.yaml#/components/schemas/ObjectMeta" }
+        spec: { $ref: "#/components/schemas/TaskScheduleSpec" }
+        status: { $ref: "#/components/schemas/TaskScheduleStatus" }
+    TaskScheduleList:
+      allOf:
+        - { $ref: "common.yaml#/components/schemas/ListMeta" }
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: { $ref: "#/components/schemas/TaskSchedule" }

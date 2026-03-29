@@ -33,6 +33,8 @@ Running AI agents in production today looks a lot like running containers before
 
 ## Quickstart
 
+**[Get started in 5 minutes](https://docs.orloj.dev/guides/five-minute-tutorial)** — scaffold with `orlojctl init`, add your API key, apply manifests, and run a pipeline with `orlojctl run`.
+
 Install **orlojctl** (CLI) via Homebrew:
 
 ```bash
@@ -72,7 +74,7 @@ go build -o orlojd ./cmd/orlojd
 go build -o orlojctl ./cmd/orlojctl
 ```
 
-When you are ready to scale, switch to message-driven mode with distributed workers and Postgres persistence. See the [Quickstart guide](https://docs.orloj.dev/getting-started/quickstart#scaling-to-production) for details.
+When you are ready to scale, switch to message-driven mode with distributed workers and Postgres persistence. See the [Quickstart guide](https://docs.orloj.dev/getting-started/quickstart#scaling-to-production) for details. Full walkthrough: [5-minute tutorial](https://docs.orloj.dev/guides/five-minute-tutorial).
 
 ## Architecture
 
@@ -114,6 +116,10 @@ When you are ready to scale, switch to message-driven mode with distributed work
 **Governance** -- AgentPolicy, AgentRole, and ToolPermission resources enforced inline during every tool call and model interaction.
 
 Persistence is backed by Postgres (or in-memory for local dev). Message-driven mode uses NATS JetStream for durable agent-to-agent messaging.
+
+## HTTP API (OpenAPI)
+
+The v1 REST API is described in [openapi/openapi.yaml](openapi/openapi.yaml) (OpenAPI 3.1, split schemas under [openapi/schemas/](openapi/schemas/)). CI runs `npx @redocly/cli lint openapi/openapi.yaml`. To regenerate the root document from [openapi/build_openapi.py](openapi/build_openapi.py), run `python3 openapi/build_openapi.py` from the repo root.
 
 ## Resources
 
@@ -159,6 +165,8 @@ Orloj manages 15 resource types, all defined as declarative YAML with `apiVersio
 
 Browse **[docs.orloj.dev](https://docs.orloj.dev)**.
 
+- [Changelog](CHANGELOG.md) -- notable changes by release
+- [5-minute tutorial](https://docs.orloj.dev/guides/five-minute-tutorial) -- scaffold, model key, first run
 - [Getting Started](https://docs.orloj.dev/getting-started/install) -- install, quickstart
 - [Concepts](https://docs.orloj.dev/concepts/architecture) -- architecture, agents, tasks, tools, model routing, governance
 - [Guides](https://docs.orloj.dev/guides/) -- deploy a pipeline, configure routing, build tools, set up governance
