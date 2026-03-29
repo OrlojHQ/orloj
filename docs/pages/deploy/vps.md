@@ -66,7 +66,7 @@ go run ./cmd/orlojctl get workers
 Sample task execution:
 
 ```bash
-go run ./cmd/orlojctl apply -f examples/blueprints/pipeline/
+go run ./cmd/orlojctl apply -f examples/blueprints/pipeline/ --run
 go run ./cmd/orlojctl get task bp-pipeline-task
 ```
 

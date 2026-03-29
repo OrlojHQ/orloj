@@ -61,7 +61,7 @@ Open **[http://127.0.0.1:8080/](http://127.0.0.1:8080/)** to explore the web con
 
 ```bash
 # Apply a starter blueprint (pipeline: planner -> research -> writer)
-./orlojctl apply -f examples/blueprints/pipeline/
+./orlojctl apply -f examples/blueprints/pipeline/ --run
 
 # Check the result
 ./orlojctl get task bp-pipeline-task
@@ -201,7 +201,11 @@ You can also download it from [GitHub Releases](https://github.com/OrlojHQ/orloj
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for environment setup, test matrix, and PR lifecycle details.
+
+- [Good first issue](https://github.com/OrlojHQ/orloj/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22good%20first%20issue%22)
+- [Help wanted](https://github.com/OrlojHQ/orloj/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22help%20wanted%22)
+- [Use-case contribution guide](examples/use-cases/CONTRIBUTING.md)
 
 ## License
 

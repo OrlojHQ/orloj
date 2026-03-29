@@ -11,7 +11,7 @@ For copy-paste **use case** bundles (YAML + README per scenario) that map these 
 Predictable stage-by-stage execution: `planner -> research -> writer`.
 
 ```bash
-orlojctl apply -f examples/blueprints/pipeline/
+orlojctl apply -f examples/blueprints/pipeline/ --run
 ```
 
 ### Hierarchical
@@ -19,7 +19,7 @@ orlojctl apply -f examples/blueprints/pipeline/
 Manager-led delegation: `manager -> leads -> workers -> editor`.
 
 ```bash
-orlojctl apply -f examples/blueprints/hierarchical/
+orlojctl apply -f examples/blueprints/hierarchical/ --run
 ```
 
 ### Swarm and Loop
@@ -27,7 +27,7 @@ orlojctl apply -f examples/blueprints/hierarchical/
 Parallel exploration with iterative coordination: `coordinator <-> scouts -> synthesizer`. Safety-bounded by `Task.spec.max_turns`.
 
 ```bash
-orlojctl apply -f examples/blueprints/swarm-loop/
+orlojctl apply -f examples/blueprints/swarm-loop/ --run
 ```
 
 ## Runtime Compatibility
@@ -45,4 +45,4 @@ Each blueprint directory contains:
 - `agent-system.yaml` -- the AgentSystem resource defining the graph topology (nodes and edges).
 - `task.yaml` -- a Task resource that targets the agent system with sample input.
 
-Apply the entire directory with `orlojctl apply -f <path>/` to create all resources at once.
+Apply the entire directory with `orlojctl apply -f <path>/ --run` to include runnable `Task` resources.

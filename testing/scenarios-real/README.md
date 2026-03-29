@@ -131,7 +131,7 @@ Critical readiness rule:
 16. `17-tool-approval-live`
 - Isolated namespace (`rr-real-tool-approval`): HTTP smoke tool with `operation_classes: [write]` and `ToolPermission.operation_rules` `approval_required` for that class.
 - **`make real-gate-tool-approval`** applies the scenario, waits for `WaitingApproval`, prints the pending approval name and a sample `curl`, then **waits for you to approve** in the UI (Approvals) or via `POST /v1/tool-approvals/{name}/approve` yourself. It finishes with the same trace/output checks after the task succeeds. You should only need **one** approval per pending row for that inbox message and tool: after you approve, the runtime may re-run the agent turn, but the stored **Approved** `ToolApproval` is treated as a grant so you are not asked again for the same tool on that message. If the model issues **another** tool call that is still under `approval_required` (e.g. a second step), that can create a new pending approval. For **CI / non-interactive** runs (including **`make real-gate-wave5`**), use **`make real-gate-tool-approval-ci`**, which posts `/approve` automatically (`decided_by: make-real-gate-tool-approval-ci`). **`make real-apply-tool-approval`** only reapplies resources and deletes prior `ToolApproval` rows in that namespace—it does not run the gate assertions.
-- See [Tool governance and isolation](../../docs/pages/concepts/tools-and-isolation.md) (approval workflow). Use `REAL_APPROVAL_GATE_TIMEOUT_SECONDS` if the model is slow to request the tool.
+- See [Tool approval](../../docs/pages/concepts/governance/tool-approval.md) (approval workflow). Use `REAL_APPROVAL_GATE_TIMEOUT_SECONDS` if the model is slow to request the tool.
 
 ## Key Targets
 

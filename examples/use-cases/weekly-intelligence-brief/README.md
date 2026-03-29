@@ -65,7 +65,7 @@ go run ./cmd/orlojctl apply -f examples/use-cases/weekly-intelligence-brief/task
 go run ./cmd/orlojctl apply -f examples/use-cases/weekly-intelligence-brief/task-schedule.yaml
 ```
 
-Run workers with **message-driven** execution and `--agent-message-consume` as in [Starter blueprints](../../../docs/pages/architecture/starter-blueprints.md).
+Run workers with **message-driven** execution and `--agent-message-consume` as in [Starter blueprints](../../../docs/pages/guides/starter-blueprints.md).
 
 ## Related use cases
 

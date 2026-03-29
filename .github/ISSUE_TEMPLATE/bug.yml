@@ -1,0 +1,67 @@
+name: Bug report
+description: Report a reproducible defect in Orloj
+title: "[Bug]: "
+labels:
+  - needs-repro
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug report. Include enough detail for maintainers to reproduce quickly.
+  - type: input
+    id: version
+    attributes:
+      label: Orloj version
+      description: Include release tag or commit SHA
+      placeholder: v0.2.0
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - runtime
+        - frontend
+        - docs/examples
+        - cli
+        - release/packaging
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, architecture, storage backend, execution mode, provider info
+      placeholder: macOS 14 arm64, memory backend, sequential mode
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include exact commands and manifests when possible
+      placeholder: |
+        1. Start server with ...
+        2. Apply ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and artifacts
+      description: Paste logs, traces, or links to artifacts
+      render: shell

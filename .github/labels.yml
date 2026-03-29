@@ -1,0 +1,31 @@
+- name: good first issue
+  color: "7057ff"
+  description: Good entry point for first-time contributors.
+
+- name: help wanted
+  color: "008672"
+  description: Extra attention is welcome from the community.
+
+- name: docs
+  color: "1d76db"
+  description: Documentation updates in docs, README, or guides.
+
+- name: examples
+  color: "5319e7"
+  description: Changes to blueprints, use-cases, and resource examples.
+
+- name: runtime
+  color: "d93f0b"
+  description: Server, worker, scheduler, execution, or storage behavior.
+
+- name: frontend
+  color: "0e8a16"
+  description: Web console and frontend UX updates.
+
+- name: blocked
+  color: "b60205"
+  description: Work is blocked by external dependency or pending decision.
+
+- name: needs-repro
+  color: "fbca04"
+  description: Reproduction details are still required.

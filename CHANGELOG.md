@@ -5,6 +5,15 @@ All notable changes to Orloj are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.3.0] - 2026-03-29
+
+### Changed
+
+- `orlojctl apply -f <dir>` now skips runnable `Task` manifests by default (`spec.mode: run` or omitted mode). Use `--run` to include runnable tasks in directory applies. Single-file apply behavior is unchanged.
+- Internal CLI file naming was aligned from `agentctl*` to `orlojctl*` and the `Makefile` now uses `ORLOJCTL` as the canonical CLI variable with backward-compatible `AGENTCTL` alias support.
+
 ## [0.2.0] - 2026-03-29
 
 ### Added
@@ -56,6 +65,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Homebrew tap distribution (`OrlojHQ/orloj`)
 - Blueprint scaffolding via `orlojctl init`
 
+[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/OrlojHQ/orloj/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/OrlojHQ/orloj/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/OrlojHQ/orloj/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/OrlojHQ/orloj/releases/tag/v0.1.0

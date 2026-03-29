@@ -1,0 +1,60 @@
+name: Good first task
+description: Create a scoped onboarding task for new contributors
+title: "[Good First Task]: "
+labels:
+  - good first issue
+  - help wanted
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form to publish contribution-ready tasks with clear acceptance criteria.
+  - type: input
+    id: area
+    attributes:
+      label: Primary area
+      description: Choose the main subsystem label maintainers should apply
+      placeholder: docs, examples, runtime, frontend
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What is broken, missing, or unclear?
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and constraints
+      description: Keep scope bounded so first-time contributors can finish in one PR
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Include concrete validation commands and expected outcomes
+      placeholder: |
+        - [ ] Update file X
+        - [ ] Run command Y
+        - [ ] Verify output Z
+    validations:
+      required: true
+  - type: dropdown
+    id: difficulty
+    attributes:
+      label: Difficulty
+      options:
+        - Beginner
+        - Intermediate
+    validations:
+      required: true
+  - type: checkboxes
+    id: mentoring
+    attributes:
+      label: Maintainer support
+      options:
+        - label: A maintainer is available for async guidance in comments.
+          required: true

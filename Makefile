@@ -1,6 +1,15 @@
 SHELL := /bin/zsh
 
-AGENTCTL ?= go run ./cmd/orlojctl
+# Canonical CLI command variable; AGENTCTL is a deprecated compatibility alias.
+ORLOJCTL ?=
+ifeq ($(strip $(ORLOJCTL)),)
+ifneq ($(strip $(AGENTCTL)),)
+ORLOJCTL := $(AGENTCTL)
+else
+ORLOJCTL := go run ./cmd/orlojctl
+endif
+endif
+AGENTCTL ?= $(ORLOJCTL)
 API_BASE ?= http://localhost:8080
 SCENARIOS_REAL_DIR ?= testing/scenarios-real
 REAL_ARTIFACTS_DIR ?= testing/artifacts/real
@@ -265,14 +274,14 @@ real-apply:
 	if [ -n "$$non_task_files" ]; then \
 		printf '%s\n' "$$non_task_files" | while IFS= read -r file; do \
 			[ -n "$$file" ] || continue; \
-			$(AGENTCTL) apply -f "$$file"; \
+			$(ORLOJCTL) apply -f "$$file"; \
 		done; \
 	fi; \
 	task_files=$$(find "$(SCENARIOS_REAL_DIR)/$(SCENARIO)" -name 'task*.yaml' -print | sort); \
 	if [ -n "$$task_files" ]; then \
 		printf '%s\n' "$$task_files" | while IFS= read -r file; do \
 			[ -n "$$file" ] || continue; \
-			$(AGENTCTL) apply -f "$$file"; \
+			$(ORLOJCTL) apply -f "$$file"; \
 		done; \
 	fi
 
@@ -321,7 +330,7 @@ real-apply-kitchen:
 	@set -eu; \
 	find "$(SCENARIOS_REAL_DIR)/$(KITCHEN_SCENARIO)" -name '*.yaml' ! -name 'task*.yaml' -print | sort | while IFS= read -r file; do \
 		[ -n "$$file" ] || continue; \
-		$(AGENTCTL) apply -f "$$file"; \
+		$(ORLOJCTL) apply -f "$$file"; \
 	done; \
 	echo "waiting for kitchen MCP server to discover tools..."; \
 	deadline=$$(( $$(date +%s) + 90 )); \
@@ -339,16 +348,16 @@ real-apply-kitchen:
 	done; \
 	find "$(SCENARIOS_REAL_DIR)/$(KITCHEN_SCENARIO)" -name 'task*.yaml' ! -name 'task_memory_seed.yaml' ! -name 'task_memory_query.yaml' -print | sort | while IFS= read -r file; do \
 		[ -n "$$file" ] || continue; \
-		$(AGENTCTL) apply -f "$$file"; \
+		$(ORLOJCTL) apply -f "$$file"; \
 	done
 
 real-apply-kitchen-memory-seed:
 	@$(MAKE) real-delete-task NS=$(KITCHEN_NS) TASK=$(KITCHEN_MEMORY_SEED_TASK)
-	@$(AGENTCTL) apply -f "$(SCENARIOS_REAL_DIR)/$(KITCHEN_SCENARIO)/task_memory_seed.yaml"
+	@$(ORLOJCTL) apply -f "$(SCENARIOS_REAL_DIR)/$(KITCHEN_SCENARIO)/task_memory_seed.yaml"
 
 real-apply-kitchen-memory-query:
 	@$(MAKE) real-delete-task NS=$(KITCHEN_NS) TASK=$(KITCHEN_MEMORY_QUERY_TASK)
-	@$(AGENTCTL) apply -f "$(SCENARIOS_REAL_DIR)/$(KITCHEN_SCENARIO)/task_memory_query.yaml"
+	@$(ORLOJCTL) apply -f "$(SCENARIOS_REAL_DIR)/$(KITCHEN_SCENARIO)/task_memory_query.yaml"
 
 # Remove all ToolApproval rows in a namespace so UI/lists are not confused by prior gate runs (gate POSTs /approve).
 real-delete-tool-approvals-in-ns:
@@ -392,11 +401,11 @@ real-apply-memory-reuse:
 			exit 1; \
 		fi; \
 	fi
-	@find "$(SCENARIOS_REAL_DIR)/$(MEMORY_REUSE_SCENARIO)" -name '*.yaml' ! -name 'task_query.yaml' -print | sort | xargs -I{} $(AGENTCTL) apply -f {}
+	@find "$(SCENARIOS_REAL_DIR)/$(MEMORY_REUSE_SCENARIO)" -name '*.yaml' ! -name 'task_query.yaml' -print | sort | xargs -I{} $(ORLOJCTL) apply -f {}
 
 real-apply-memory-reuse-query:
 	@$(MAKE) real-delete-task NS=$(MEMORY_REUSE_NS) TASK=$(MEMORY_REUSE_QUERY_TASK)
-	@$(AGENTCTL) apply -f "$(SCENARIOS_REAL_DIR)/$(MEMORY_REUSE_SCENARIO)/task_query.yaml"
+	@$(ORLOJCTL) apply -f "$(SCENARIOS_REAL_DIR)/$(MEMORY_REUSE_SCENARIO)/task_query.yaml"
 
 real-apply-tool-auth:
 	@$(MAKE) real-delete-task NS=$(TOOL_AUTH_NS) TASK=$(TOOL_AUTH_TASK)
@@ -425,7 +434,7 @@ real-apply-mcp:
 	@set -eu; \
 	find "$(SCENARIOS_REAL_DIR)/$(MCP_SCENARIO)" -name '*.yaml' ! -name 'task*.yaml' -print | sort | while IFS= read -r file; do \
 		[ -n "$$file" ] || continue; \
-		$(AGENTCTL) apply -f "$$file"; \
+		$(ORLOJCTL) apply -f "$$file"; \
 	done; \
 	echo "waiting for MCP server to discover tools..."; \
 	deadline=$$(( $$(date +%s) + 60 )); \
@@ -443,7 +452,7 @@ real-apply-mcp:
 	done; \
 	find "$(SCENARIOS_REAL_DIR)/$(MCP_SCENARIO)" -name 'task*.yaml' -print | sort | while IFS= read -r file; do \
 		[ -n "$$file" ] || continue; \
-		$(AGENTCTL) apply -f "$$file"; \
+		$(ORLOJCTL) apply -f "$$file"; \
 	done
 
 real-apply-all: \
@@ -457,7 +466,7 @@ real-get:
 		echo "NS and TASK are required. Example: make real-get NS=$(PIPELINE_NS) TASK=$(PIPELINE_TASK)"; \
 		exit 1; \
 	fi
-	@$(AGENTCTL) get task "$(TASK)" --namespace "$(NS)"
+	@$(ORLOJCTL) get task "$(TASK)" --namespace "$(NS)"
 
 real-messages:
 	@if [ -z "$(NS)" ] || [ -z "$(TASK)" ]; then \
