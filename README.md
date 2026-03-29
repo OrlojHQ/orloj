@@ -174,7 +174,6 @@ Browse **[docs.orloj.dev](https://docs.orloj.dev)**.
 - [Reference](https://docs.orloj.dev/reference/cli) -- CLI, API, resource schemas
 - [Security](https://docs.orloj.dev/operations/security) -- control plane API tokens, secrets, tool isolation
 - [Examples](examples/README.md) -- per-kind YAML under `examples/resources/`, starter `blueprints/`, and `use-cases/` (in this repo)
-- [Roadmap](ROADMAP.md) -- current OSS priorities (`Now / Next / Later`), contributor track cadence, and examples split criteria
 
 ## Docker Compose
 

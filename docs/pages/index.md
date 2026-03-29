@@ -52,4 +52,3 @@ Then:
 2. [Quickstart](./getting-started/quickstart.md) -- from-source `go run` with the checked-in pipeline blueprint.
 3. [Explore Concepts](./concepts/agents/agent.md) -- understand agents, tasks, tools, governance, and the execution model.
 4. [Follow a Guide](./guides/) -- step-by-step tutorials for common workflows.
-5. [Project Roadmap](https://github.com/OrlojHQ/orloj/blob/main/ROADMAP.md) -- current OSS priorities and contribution tracks.

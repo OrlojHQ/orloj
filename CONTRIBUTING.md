@@ -10,7 +10,6 @@ Please note that this project is governed by a
 - [Good first issue](https://github.com/OrlojHQ/orloj/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22good%20first%20issue%22)
 - [Help wanted](https://github.com/OrlojHQ/orloj/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22help%20wanted%22)
 - [Use-case templates contribution guide](./examples/use-cases/CONTRIBUTING.md)
-- [Project roadmap](./ROADMAP.md)
 
 ## Before You Start
 
