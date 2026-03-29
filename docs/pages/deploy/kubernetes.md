@@ -93,7 +93,7 @@ In another terminal:
 ```bash
 curl -s http://127.0.0.1:8080/healthz | jq .
 go run ./cmd/orlojctl --server http://127.0.0.1:8080 get workers
-go run ./cmd/orlojctl --server http://127.0.0.1:8080 apply -f examples/blueprints/pipeline/
+go run ./cmd/orlojctl --server http://127.0.0.1:8080 apply -f examples/blueprints/pipeline/ --run
 go run ./cmd/orlojctl --server http://127.0.0.1:8080 get task bp-pipeline-task
 ```
 

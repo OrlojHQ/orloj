@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/OrlojHQ/orloj/security/policy
+    about: Report vulnerabilities privately instead of opening a public issue.
+  - name: Community chat
+    url: https://discord.gg/a6bJmPwGS
+    about: Ask usage questions or discuss ideas with maintainers and users.

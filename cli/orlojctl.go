@@ -151,6 +151,7 @@ func extractGlobalAPIToken(args []string) ([]string, string, error) {
 func runApply(args []string) error {
 	fs := flag.NewFlagSet("apply", flag.ContinueOnError)
 	manifestPath := fs.String("f", "", "path to resource manifest file or directory")
+	includeRunnable := fs.Bool("run", false, "include runnable Task manifests when applying a directory")
 	server := fs.String("server", defaultServerResolved(resolvedCliConfig), "Agent API server URL")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -159,12 +160,49 @@ func runApply(args []string) error {
 		return errors.New("-f is required")
 	}
 
+	info, err := os.Stat(*manifestPath)
+	if err != nil {
+		return fmt.Errorf("cannot access %s: %w", *manifestPath, err)
+	}
+	isDir := info.IsDir()
+
 	files, err := manifestPaths(*manifestPath)
 	if err != nil {
 		return err
 	}
 	if len(files) == 0 {
 		return fmt.Errorf("no manifest files found in %s", *manifestPath)
+	}
+
+	skippedRunnableTasks := 0
+	if isDir && !*includeRunnable {
+		filtered := make([]string, 0, len(files))
+		for _, f := range files {
+			raw, readErr := os.ReadFile(f)
+			if readErr != nil {
+				// Keep file in apply set so the original read error is reported in normal apply flow.
+				filtered = append(filtered, f)
+				continue
+			}
+			kind, detectErr := resources.DetectKind(raw)
+			if detectErr != nil || !strings.EqualFold(strings.TrimSpace(kind), "task") {
+				filtered = append(filtered, f)
+				continue
+			}
+			task, taskErr := resources.ParseTaskManifest(raw)
+			if taskErr != nil {
+				// Invalid task manifests must still fail apply; do not silently skip.
+				filtered = append(filtered, f)
+				continue
+			}
+			if task.Spec.Mode == "template" {
+				filtered = append(filtered, f)
+				continue
+			}
+			skippedRunnableTasks++
+			fmt.Printf("skipped task/%s (mode: %s) from %s; use --run to include\n", task.Metadata.Name, task.Spec.Mode, f)
+		}
+		files = filtered
 	}
 
 	var applyErrs []string
@@ -206,15 +244,23 @@ func runApply(args []string) error {
 	}
 
 	if len(applyErrs) > 0 {
-		fmt.Printf("\n%d applied, %d failed:\n", applied, len(applyErrs))
+		if skippedRunnableTasks > 0 {
+			fmt.Printf("\n%d applied, %d skipped runnable task(s), %d failed:\n", applied, skippedRunnableTasks, len(applyErrs))
+		} else {
+			fmt.Printf("\n%d applied, %d failed:\n", applied, len(applyErrs))
+		}
 		for _, e := range applyErrs {
 			fmt.Printf("  error  %s\n", e)
 		}
 		return fmt.Errorf("apply failed for %d file(s)", len(applyErrs))
 	}
 
-	if applied > 1 {
-		fmt.Printf("\n%d file(s) applied\n", applied)
+	if isDir || applied > 1 || skippedRunnableTasks > 0 {
+		if skippedRunnableTasks > 0 {
+			fmt.Printf("\n%d file(s) applied, %d runnable task(s) skipped\n", applied, skippedRunnableTasks)
+		} else {
+			fmt.Printf("\n%d file(s) applied\n", applied)
+		}
 	}
 	return nil
 }
@@ -1425,7 +1471,7 @@ func printUsage() {
 	fmt.Print(`orlojctl - Orloj CLI
 
 Usage:
-  orlojctl apply -f <file-or-directory>
+  orlojctl apply -f <file-or-directory> [--run]
   orlojctl validate -f <file|dir>
   orlojctl create secret <name> --from-literal key=value [--from-literal key2=value2 ...]
   orlojctl get [-w] agents|agent-systems|model-endpoints|tools|secrets|memories|agent-policies|agent-roles|tool-permissions|tasks|task-schedules|task-webhooks|workers

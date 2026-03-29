@@ -64,7 +64,7 @@ go run ./cmd/orlojctl apply -f examples/use-cases/roadmap-synthesis-swarm/agent-
 go run ./cmd/orlojctl apply -f examples/use-cases/roadmap-synthesis-swarm/task.yaml
 ```
 
-**Message-driven** execution with `--agent-message-consume` matters here for **realistic parallel fan-out** ([Starter blueprints](../../../docs/pages/architecture/starter-blueprints.md)).
+**Message-driven** execution with `--agent-message-consume` matters here for **realistic parallel fan-out** ([Starter blueprints](../../../docs/pages/guides/starter-blueprints.md)).
 
 ## Related use cases
 

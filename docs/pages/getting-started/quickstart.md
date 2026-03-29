@@ -27,7 +27,7 @@ This runs the server and a built-in worker in a single process. No separate work
 ## 2. Apply a Starter Blueprint
 
 ```bash
-go run ./cmd/orlojctl apply -f examples/blueprints/pipeline/
+go run ./cmd/orlojctl apply -f examples/blueprints/pipeline/ --run
 ```
 
 This creates agents, an agent system (the pipeline graph), and a task in one command.

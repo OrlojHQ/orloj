@@ -15,7 +15,7 @@ This page is the canonical reference for CLI flags across all Orloj binaries.
 Usage patterns:
 
 ```text
-orlojctl apply -f <file-or-directory>
+orlojctl apply -f <file-or-directory> [--run]
 orlojctl validate -f <file|dir>
 orlojctl create secret <name> --from-literal key=value [...]
 orlojctl get [-w] <resource>
@@ -50,10 +50,23 @@ orlojctl config path|get|use <name>|set-profile <name> [--server URL] [--token v
 | Flag | Default | Description |
 |---|---|---|
 | `-f` | none | Path to a manifest file or directory (required). |
+| `--run` | `false` | Include runnable `Task` manifests when `-f` points to a directory. |
 | `--server` | resolved server | API server URL. |
 
 - **File:** applies that manifest.
-- **Directory:** walks recursively (skips `.git` dirs) and applies every `.yaml`, `.yml`, and `.json` file in sorted path order. Failures are collected; the command exits with an error if any file failed.
+- **Directory:** walks recursively (skips `.git` dirs) and evaluates every `.yaml`, `.yml`, and `.json` file in sorted path order.
+  - By default, runnable `Task` manifests (`spec.mode: run` or omitted mode) are skipped for safety.
+  - `Task` manifests with `spec.mode: template` are always applied.
+  - Pass `--run` to include runnable tasks during directory apply.
+  - Failures are collected; the command exits with an error if any file failed.
+
+Behavior matrix:
+
+| Command | Runnable Task (`spec.mode: run` or omitted mode) | Template Task (`spec.mode: template`) | Other Kinds |
+|---|---|---|---|
+| `orlojctl apply -f task.yaml` | Applied | Applied | Applied |
+| `orlojctl apply -f <dir>` | Skipped | Applied | Applied |
+| `orlojctl apply -f <dir> --run` | Applied | Applied | Applied |
 
 ### `orlojctl validate`
 

@@ -52,7 +52,7 @@ func runInit(args []string) error {
 	}
 
 	fmt.Printf("\nScaffolded %s blueprint %q in %s/\n", bp, name, outDir)
-	fmt.Printf("\nTo apply:\n  orlojctl apply -f %s\n", outDir)
+	fmt.Printf("\nTo apply:\n  orlojctl apply -f %s --run\n", outDir)
 	return nil
 }
 

@@ -54,7 +54,7 @@ You do not need to edit `model-endpoint.yaml` unless you want a different secret
 Apply every manifest in the scaffolded directory at once:
 
 ```bash
-orlojctl apply -f demo/
+orlojctl apply -f demo/ --run
 ```
 
 Or apply resources individually:
@@ -65,7 +65,7 @@ orlojctl apply -f demo/model-endpoint.yaml
 orlojctl apply -f demo/agent-system.yaml
 ```
 
-The first form also applies `task.yaml`, which creates a sample **Task** named `demo-task`. You can leave it, delete it from the UI, or ignore it — `orlojctl run` in the next step still creates a **new** task with your topic.
+The first form also applies `task.yaml`, which creates a sample **Task** named `demo-task`. If you want to apply the directory without runnable tasks, omit `--run`. Either way, `orlojctl run` in the next step still creates a **new** task with your topic.
 
 ## 5. Run the pipeline
 

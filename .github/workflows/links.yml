@@ -1,0 +1,35 @@
+name: links
+
+on:
+  pull_request:
+    paths:
+      - "**/*.md"
+      - ".github/workflows/links.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "**/*.md"
+      - ".github/workflows/links.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  markdown-links:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Check markdown links (internal)
+        uses: lycheeverse/lychee-action@v2
+        with:
+          fail: true
+          args: >-
+            --offline
+            --no-progress
+            --exclude-path docs/node_modules
+            --exclude-path docs/dist
+            --exclude-path frontend/node_modules
+            "./**/*.md"

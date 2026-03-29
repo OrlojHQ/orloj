@@ -67,7 +67,7 @@ go run ./cmd/orlojctl apply -f examples/use-cases/cross-functional-pmo/agent-sys
 go run ./cmd/orlojctl apply -f examples/use-cases/cross-functional-pmo/task.yaml
 ```
 
-Use **message-driven** workers with `--agent-message-consume` ([Starter blueprints](../../../docs/pages/architecture/starter-blueprints.md)).
+Use **message-driven** workers with `--agent-message-consume` ([Starter blueprints](../../../docs/pages/guides/starter-blueprints.md)).
 
 ## Hardening (outside this folder)
 
@@ -80,4 +80,4 @@ Layer **`AgentPolicy`**, **`AgentRole`**, **`ToolPermission`**, **`Worker`**, an
 
 ## Try this next
 
-- Use **`Task.spec.requirements`** with **`Worker`** capabilities for routing ([resource reference](../../../docs/pages/reference/resources.md)).
+- Use **`Task.spec.requirements`** with **`Worker`** capabilities for routing ([resource reference](../../../docs/pages/reference/resources/index.md)).

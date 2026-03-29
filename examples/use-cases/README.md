@@ -18,7 +18,7 @@ Operator tutorials: [Guides](../../docs/pages/guides/index.md).
 
 1. **Edit secrets** in each folder’s `secret-*.yaml` before apply (OpenAI key, webhook HMAC secret).
 2. **`ModelEndpoint` `openai-default`** is duplicated per use case folder so **one directory** is enough to copy; skip `model-endpoint.yaml` / `secret-openai.yaml` if you already defined them.
-3. **Message-driven** execution with `--agent-message-consume` is recommended for blueprints-style graphs; **swarm** needs it for parallel fan-out ([Starter blueprints](../../docs/pages/architecture/starter-blueprints.md)).
+3. **Message-driven** execution with `--agent-message-consume` is recommended for blueprints-style graphs; **swarm** needs it for parallel fan-out ([Starter blueprints](../../docs/pages/guides/starter-blueprints.md)).
 
 ## Scenarios
 
@@ -31,4 +31,10 @@ Operator tutorials: [Guides](../../docs/pages/guides/index.md).
 
 ## Resource kinds
 
-Typical bundles include: `Agent`, `AgentSystem`, `ModelEndpoint`, `Secret`, `Task`, `TaskSchedule`, `TaskWebhook`. Extend with `Memory`, `Tool`, `AgentPolicy`, `AgentRole`, `ToolPermission`, `Worker`, `McpServer` from [`examples/`](../README.md) and the [resource reference](../../docs/pages/reference/resources.md).
+Use-case bundles can include **any Orloj resource kind**. Typical bundles include `Agent`, `AgentSystem`, `ModelEndpoint`, `Secret`, `Task`, `TaskSchedule`, and `TaskWebhook`; many scenarios also include `Memory`, `Tool`, `AgentPolicy`, `AgentRole`, `ToolPermission`, `Worker`, and `McpServer`. See [`examples/`](../README.md) and the [resource reference](../../docs/pages/reference/resources/index.md).
+
+## Contributing new use cases
+
+- Start from [`TEMPLATE.md`](./TEMPLATE.md) for the scenario README contract.
+- Follow [`CONTRIBUTING.md`](./CONTRIBUTING.md) for naming, validation, and acceptance checks.
+- Open work items with the **Good First Task** issue form so they are discoverable in the scenario contribution track.

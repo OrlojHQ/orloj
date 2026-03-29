@@ -1,0 +1,46 @@
+name: Feature request
+description: Propose a new capability or improvement
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for scoped proposals. For large changes, include milestones and rollout notes.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What user or operator problem does this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the behavior, API/UX impact, and constraints
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Include rejected options and tradeoffs
+  - type: checkboxes
+    id: area
+    attributes:
+      label: Affected areas
+      options:
+        - label: runtime
+        - label: frontend
+        - label: docs
+        - label: examples
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: List concrete checks that define done
+      placeholder: |
+        - [ ] Criterion 1
+        - [ ] Criterion 2
+    validations:
+      required: true
