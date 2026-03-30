@@ -29,6 +29,12 @@ func Run(args []string) error {
 		return err
 	}
 	args = cleanArgs
+	cleanArgs, globalNamespace, err := extractGlobalNamespace(args)
+	if err != nil {
+		return err
+	}
+	args = cleanArgs
+	resolvedGlobalNamespace = strings.TrimSpace(globalNamespace)
 	if len(args) > 0 && args[0] == "validate" {
 		return runValidate(args[1:])
 	}
@@ -68,10 +74,30 @@ func Run(args []string) error {
 		return runApply(args[1:])
 	case "create":
 		return runCreate(args[1:])
+	case "approve":
+		return runToolApprovalDecision("approve", args[1:])
+	case "deny":
+		return runToolApprovalDecision("deny", args[1:])
 	case "get":
 		return runGet(args[1:])
+	case "memory-entries":
+		return runMemoryEntries(args[1:])
 	case "delete":
 		return runDelete(args[1:])
+	case "describe":
+		return runDescribe(args[1:])
+	case "edit":
+		return runEdit(args[1:])
+	case "diff":
+		return runDiff(args[1:])
+	case "wait":
+		return runWait(args[1:])
+	case "cancel":
+		return runCancel(args[1:])
+	case "retry":
+		return runRetry(args[1:])
+	case "top":
+		return runTop(args[1:])
 	case "run":
 		return runRun(args[1:])
 	case "init":
@@ -84,6 +110,16 @@ func Run(args []string) error {
 		return runGraph(args[1:])
 	case "events":
 		return runEvents(args[1:])
+	case "messages":
+		return runMessages(args[1:])
+	case "metrics":
+		return runMetrics(args[1:])
+	case "health":
+		return runHealth(args[1:])
+	case "status":
+		return runStatus(args[1:])
+	case "completion":
+		return runCompletion(args[1:])
 	case "admin":
 		return runAdmin(args[1:])
 	case "config":
@@ -148,14 +184,49 @@ func extractGlobalAPIToken(args []string) ([]string, string, error) {
 	return clean, token, nil
 }
 
+func extractGlobalNamespace(args []string) ([]string, string, error) {
+	clean := make([]string, 0, len(args))
+	var namespace string
+	i := 0
+	for i < len(args) {
+		arg := args[i]
+		switch {
+		case strings.HasPrefix(arg, "--namespace="):
+			namespace = strings.TrimSpace(strings.TrimPrefix(arg, "--namespace="))
+			i++
+			continue
+		case strings.HasPrefix(arg, "-n="):
+			namespace = strings.TrimSpace(strings.TrimPrefix(arg, "-n="))
+			i++
+			continue
+		case arg == "--namespace" || arg == "-n":
+			if i+1 >= len(args) {
+				return nil, "", fmt.Errorf("%s requires a value", arg)
+			}
+			namespace = strings.TrimSpace(args[i+1])
+			i += 2
+			continue
+		default:
+			clean = append(clean, args[i:]...)
+			return clean, namespace, nil
+		}
+	}
+	return clean, namespace, nil
+}
+
 func runApply(args []string) error {
 	fs := flag.NewFlagSet("apply", flag.ContinueOnError)
 	manifestPath := fs.String("f", "", "path to resource manifest file or directory")
 	includeRunnable := fs.Bool("run", false, "include runnable Task manifests when applying a directory")
+	dryRun := fs.Bool("dry-run", false, "preview changes without persisting")
 	server := fs.String("server", defaultServerResolved(resolvedCliConfig), "Agent API server URL")
+	var ns string
+	fs.StringVar(&ns, "namespace", resolveNamespaceForCommand(""), "resource namespace override")
+	fs.StringVar(&ns, "n", resolveNamespaceForCommand(""), "resource namespace override (shorthand)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	ns = resolveNamespaceForCommand(ns)
 	if *manifestPath == "" {
 		return errors.New("-f is required")
 	}
@@ -207,6 +278,9 @@ func runApply(args []string) error {
 
 	var applyErrs []string
 	applied := 0
+	created := 0
+	updated := 0
+	unchanged := 0
 	for _, f := range files {
 		raw, err := os.ReadFile(f)
 		if err != nil {
@@ -223,6 +297,31 @@ func runApply(args []string) error {
 		endpoint, payload, name, err := buildApplyRequest(kind, raw)
 		if err != nil {
 			applyErrs = append(applyErrs, fmt.Sprintf("%s: %v", f, err))
+			continue
+		}
+		if strings.TrimSpace(ns) != "" {
+			payload, err = overridePayloadNamespace(payload, ns)
+			if err != nil {
+				applyErrs = append(applyErrs, fmt.Sprintf("%s: %v", f, err))
+				continue
+			}
+		}
+		if *dryRun {
+			action, previewErr := previewApplyChange(*server, endpoint, name, payload)
+			if previewErr != nil {
+				applyErrs = append(applyErrs, fmt.Sprintf("%s: %v", f, previewErr))
+				continue
+			}
+			switch action {
+			case "create":
+				created++
+			case "update":
+				updated++
+			default:
+				unchanged++
+			}
+			fmt.Printf("dry-run %s %s/%s\n", action, strings.ToLower(kind), name)
+			applied++
 			continue
 		}
 
@@ -253,6 +352,11 @@ func runApply(args []string) error {
 			fmt.Printf("  error  %s\n", e)
 		}
 		return fmt.Errorf("apply failed for %d file(s)", len(applyErrs))
+	}
+
+	if *dryRun {
+		fmt.Printf("\ndry-run summary: %d checked, %d create, %d update, %d unchanged\n", applied, created, updated, unchanged)
+		return nil
 	}
 
 	if isDir || applied > 1 || skippedRunnableTasks > 0 {
@@ -325,13 +429,14 @@ func runCreateSecret(args []string) error {
 	fs := flag.NewFlagSet("create secret", flag.ContinueOnError)
 	server := fs.String("server", defaultServerResolved(resolvedCliConfig), "Orloj server URL")
 	var ns string
-	fs.StringVar(&ns, "namespace", "default", "secret namespace")
-	fs.StringVar(&ns, "n", "default", "secret namespace (shorthand)")
+	fs.StringVar(&ns, "namespace", defaultNamespaceValue("default"), "secret namespace")
+	fs.StringVar(&ns, "n", defaultNamespaceValue("default"), "secret namespace (shorthand)")
 	var literals stringSliceFlag
 	fs.Var(&literals, "from-literal", "key=value pair (repeatable)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	ns = resolveNamespaceForCommand(ns)
 	if fs.NArg() < 1 {
 		return errors.New("secret name is required: orlojctl create secret <name> --from-literal key=value")
 	}
@@ -381,6 +486,155 @@ func runCreateSecret(args []string) error {
 	return nil
 }
 
+func runToolApprovalDecision(action string, args []string) error {
+	opts, err := parseToolApprovalDecisionArgs(action, args)
+	if err != nil {
+		return err
+	}
+
+	resourceArg := opts.resource
+	resource := normalizeResource(resourceArg)
+	if resource != "tool-approvals" {
+		return fmt.Errorf("unsupported %s resource %q (supported: tool-approval)", action, resourceArg)
+	}
+	name := strings.TrimSpace(opts.name)
+	if name == "" {
+		return errors.New("tool approval name is required")
+	}
+
+	path := "/v1/tool-approvals/" + url.PathEscape(name) + "/" + action
+	requestURL := strings.TrimRight(opts.server, "/") + path
+	if strings.TrimSpace(opts.namespace) != "" {
+		requestURL += "?namespace=" + url.QueryEscape(strings.TrimSpace(opts.namespace))
+	}
+
+	bodyPayload := map[string]string{}
+	if trimmed := strings.TrimSpace(opts.decidedBy); trimmed != "" {
+		bodyPayload["decided_by"] = trimmed
+	}
+	if trimmed := strings.TrimSpace(opts.reason); trimmed != "" {
+		bodyPayload["reason"] = trimmed
+	}
+
+	var (
+		body   io.Reader
+		reqErr error
+	)
+	if len(bodyPayload) > 0 {
+		raw, marshalErr := json.Marshal(bodyPayload)
+		if marshalErr != nil {
+			return fmt.Errorf("failed to encode decision payload: %w", marshalErr)
+		}
+		body = bytes.NewReader(raw)
+	}
+
+	req, reqErr := http.NewRequest(http.MethodPost, requestURL, body)
+	if reqErr != nil {
+		return fmt.Errorf("%s request build failed: %w", action, reqErr)
+	}
+	if len(bodyPayload) > 0 {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("%s request failed: %w", action, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		payload, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("%s failed: %s", action, bytes.TrimSpace(payload))
+	}
+
+	if action == "approve" {
+		fmt.Printf("approved tool-approval/%s\n", name)
+		return nil
+	}
+	fmt.Printf("denied tool-approval/%s\n", name)
+	return nil
+}
+
+type toolApprovalDecisionOptions struct {
+	server    string
+	decidedBy string
+	reason    string
+	namespace string
+	resource  string
+	name      string
+}
+
+func parseToolApprovalDecisionArgs(action string, args []string) (toolApprovalDecisionOptions, error) {
+	opts := toolApprovalDecisionOptions{
+		server:    defaultServerResolved(resolvedCliConfig),
+		namespace: resolveNamespaceForCommand(""),
+	}
+	positionals := make([]string, 0, 2)
+	consumeValue := func(i int, raw string) (string, int, error) {
+		if eq := strings.Index(raw, "="); eq >= 0 {
+			return strings.TrimSpace(raw[eq+1:]), i, nil
+		}
+		if i+1 >= len(args) {
+			return "", i, fmt.Errorf("%s requires a value", raw)
+		}
+		return strings.TrimSpace(args[i+1]), i + 1, nil
+	}
+
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		switch {
+		case arg == "--server" || strings.HasPrefix(arg, "--server="):
+			value, next, err := consumeValue(i, arg)
+			if err != nil {
+				return opts, err
+			}
+			opts.server = value
+			i = next
+		case arg == "--decided-by" || strings.HasPrefix(arg, "--decided-by="):
+			value, next, err := consumeValue(i, arg)
+			if err != nil {
+				return opts, err
+			}
+			opts.decidedBy = value
+			i = next
+		case arg == "--reason" || strings.HasPrefix(arg, "--reason="):
+			value, next, err := consumeValue(i, arg)
+			if err != nil {
+				return opts, err
+			}
+			opts.reason = value
+			i = next
+		case arg == "--namespace" || strings.HasPrefix(arg, "--namespace="):
+			value, next, err := consumeValue(i, arg)
+			if err != nil {
+				return opts, err
+			}
+			opts.namespace = value
+			i = next
+		case arg == "-n" || strings.HasPrefix(arg, "-n="):
+			value, next, err := consumeValue(i, arg)
+			if err != nil {
+				return opts, err
+			}
+			opts.namespace = value
+			i = next
+		case strings.HasPrefix(arg, "-"):
+			return opts, fmt.Errorf("unknown %s flag %q", action, arg)
+		default:
+			positionals = append(positionals, arg)
+		}
+	}
+
+	if len(positionals) < 2 {
+		return opts, fmt.Errorf("usage: orlojctl %s tool-approval <name>", action)
+	}
+	if len(positionals) > 2 {
+		return opts, fmt.Errorf("unexpected argument %q", positionals[2])
+	}
+	opts.resource = strings.TrimSpace(positionals[0])
+	opts.name = strings.TrimSpace(positionals[1])
+	return opts, nil
+}
+
 // applyEndpoints maps normalized manifest kinds (see resources.ParseManifest) to POST paths.
 var applyEndpoints = map[string]string{
 	"agent":          "/v1/agents",
@@ -420,6 +674,9 @@ func runGet(args []string) error {
 	if len(args) == 0 {
 		return errors.New("resource is required (example: get agents)")
 	}
+	if isMemoryEntriesResource(args[0]) {
+		return runMemoryEntries(args[1:])
+	}
 
 	resource := normalizeResource(args[0])
 	if resource == "" {
@@ -429,22 +686,55 @@ func runGet(args []string) error {
 	fs := flag.NewFlagSet("get", flag.ContinueOnError)
 	server := fs.String("server", defaultServerResolved(resolvedCliConfig), "Agent API server URL")
 	watch := fs.Bool("w", false, "watch for incremental updates (tasks only)")
+	output := fs.String("o", "table", "output format: table|json|yaml")
+	var ns string
+	fs.StringVar(&ns, "namespace", "", "resource namespace override")
+	fs.StringVar(&ns, "n", "", "resource namespace override (shorthand)")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
+	}
+	ns = resolveNamespaceForCommand(ns)
+	format, err := normalizeOutputFormat(*output)
+	if err != nil {
+		return err
+	}
+	if fs.NArg() > 1 {
+		return errors.New("usage: orlojctl get <resource> [name]")
+	}
+	name := ""
+	if fs.NArg() == 1 {
+		name = strings.TrimSpace(fs.Arg(0))
+		if name == "" {
+			return errors.New("resource name cannot be empty")
+		}
 	}
 	if *watch {
 		if resource != "tasks" {
 			return errors.New("-w is currently supported for tasks only")
 		}
-		return watchTasks(*server)
+		if name != "" {
+			return errors.New("-w does not support selecting a single resource name")
+		}
+		return watchTasks(*server, ns)
 	}
 
 	endpoint, err := listEndpointForResource(resource)
 	if err != nil {
 		return err
 	}
+	requestURL := strings.TrimRight(*server, "/") + endpoint
+	if name != "" {
+		requestURL += "/" + url.PathEscape(name)
+	}
+	if strings.TrimSpace(ns) != "" {
+		sep := "?"
+		if strings.Contains(requestURL, "?") {
+			sep = "&"
+		}
+		requestURL += sep + "namespace=" + url.QueryEscape(strings.TrimSpace(ns))
+	}
 
-	resp, err := http.Get(*server + endpoint)
+	resp, err := http.Get(requestURL)
 	if err != nil {
 		return fmt.Errorf("get request failed: %w", err)
 	}
@@ -452,6 +742,13 @@ func runGet(args []string) error {
 	if resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("get failed: %s", bytes.TrimSpace(body))
+	}
+	if format != "table" || name != "" {
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("failed to read response: %w", err)
+		}
+		return printStructuredOutput(body, format)
 	}
 
 	switch resource {
@@ -577,6 +874,26 @@ func runGet(args []string) error {
 				item.Spec.MatchMode,
 				len(item.Spec.RequiredPermissions),
 				item.Status.Phase,
+			)
+		}
+		_ = tw.Flush()
+	case "tool-approvals":
+		var list resources.ToolApprovalList
+		if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
+			return fmt.Errorf("failed to decode response: %w", err)
+		}
+		tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+		fmt.Fprintln(tw, "NAME\tTASK\tTOOL\tOPERATION\tAGENT\tPHASE\tEXPIRES_AT\tDECIDED_BY")
+		for _, item := range list.Items {
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+				item.Metadata.Name,
+				item.Spec.TaskRef,
+				item.Spec.Tool,
+				item.Spec.OperationClass,
+				item.Spec.Agent,
+				item.Status.Phase,
+				item.Status.ExpiresAt,
+				item.Status.DecidedBy,
 			)
 		}
 		_ = tw.Flush()
@@ -707,6 +1024,8 @@ func normalizeResource(resource string) string {
 		return "agent-roles"
 	case "tool-permissions", "toolpermissions", "toolpermission":
 		return "tool-permissions"
+	case "tool-approvals", "tool-approval", "toolapprovals", "toolapproval":
+		return "tool-approvals"
 	case "tasks", "task":
 		return "tasks"
 	case "task-schedules", "taskschedules", "taskschedule":
@@ -742,6 +1061,8 @@ func listEndpointForResource(resource string) (string, error) {
 		return "/v1/agent-roles", nil
 	case "tool-permissions":
 		return "/v1/tool-permissions", nil
+	case "tool-approvals":
+		return "/v1/tool-approvals", nil
 	case "tasks":
 		return "/v1/tasks", nil
 	case "task-schedules":
@@ -808,11 +1129,12 @@ func runDelete(args []string) error {
 	fs := flag.NewFlagSet("delete", flag.ContinueOnError)
 	server := fs.String("server", defaultServerResolved(resolvedCliConfig), "Agent API server URL")
 	var ns string
-	fs.StringVar(&ns, "namespace", "", "resource namespace override")
-	fs.StringVar(&ns, "n", "", "resource namespace override (shorthand)")
+	fs.StringVar(&ns, "namespace", resolveNamespaceForCommand(""), "resource namespace override")
+	fs.StringVar(&ns, "n", resolveNamespaceForCommand(""), "resource namespace override (shorthand)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	ns = resolveNamespaceForCommand(ns)
 	if fs.NArg() < 2 {
 		return errors.New("usage: orlojctl delete <resource> <name>")
 	}
@@ -1367,13 +1689,14 @@ func runRun(args []string) error {
 	system := fs.String("system", "", "AgentSystem name to execute (required)")
 	server := fs.String("server", defaultServerResolved(resolvedCliConfig), "Orloj server URL")
 	var ns string
-	fs.StringVar(&ns, "namespace", "default", "namespace for the task")
-	fs.StringVar(&ns, "n", "default", "namespace for the task (shorthand)")
+	fs.StringVar(&ns, "namespace", defaultNamespaceValue("default"), "namespace for the task")
+	fs.StringVar(&ns, "n", defaultNamespaceValue("default"), "namespace for the task (shorthand)")
 	pollInterval := fs.Duration("poll", 2*time.Second, "status poll interval")
 	timeout := fs.Duration("timeout", 5*time.Minute, "maximum wait time")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	ns = resolveNamespaceForCommand(ns)
 	if *system == "" {
 		return errors.New("--system is required")
 	}
@@ -1471,22 +1794,39 @@ func printUsage() {
 	fmt.Print(`orlojctl - Orloj CLI
 
 Usage:
-  orlojctl apply -f <file-or-directory> [--run]
+  orlojctl apply -f <file-or-directory> [--run] [--dry-run] [--namespace <ns>]
   orlojctl validate -f <file|dir>
   orlojctl create secret <name> --from-literal key=value [--from-literal key2=value2 ...]
-  orlojctl get [-w] agents|agent-systems|model-endpoints|tools|secrets|memories|agent-policies|agent-roles|tool-permissions|tasks|task-schedules|task-webhooks|workers
+  orlojctl approve tool-approval <name> [--decided-by <id>] [--reason <text>]
+  orlojctl deny tool-approval <name> [--decided-by <id>] [--reason <text>]
+  orlojctl get [-w] <resource> [name] [-o table|json|yaml] [--namespace <ns>]
+  orlojctl get memory-entries <memory-name> [--query <q>] [--prefix <p>] [--limit <n>] [-o table|json|yaml]
+  orlojctl memory-entries <memory-name> [--query <q>] [--prefix <p>] [--limit <n>] [-o table|json|yaml]
   orlojctl delete <resource> <name>
+  orlojctl describe <resource> <name>
+  orlojctl edit <resource> <name>
+  orlojctl diff -f <file-or-directory> [--namespace <ns>]
+  orlojctl wait <resource>/<name> --for condition=<value> [--timeout <duration>]
+  orlojctl cancel task <name> [--reason <text>]
+  orlojctl retry task <name> [--with-overrides key=value ...]
+  orlojctl top workers|tasks
   orlojctl run --system <name> [key=value ...]
   orlojctl init <name> [--blueprint pipeline|hierarchical|swarm-loop]
   orlojctl logs <agent-name>|task/<task-name>
   orlojctl trace task <task-name>
   orlojctl graph system|task <name>
+  orlojctl messages task/<task-name> [--agent <name>] [-o table|json|yaml]
+  orlojctl metrics task/<task-name> [-o table|json|yaml]
   orlojctl events [--source=<s>] [--type=<t>] [--kind=<k>] [--name=<n>] [--namespace=<ns>] [--since=<id>] [--once] [--timeout=<duration>] [--raw]
+  orlojctl health [-o table|json|yaml]
+  orlojctl status [-o table|json|yaml]
+  orlojctl completion bash|zsh|fish
   orlojctl admin reset-password [--server <url>] [--username <name>] --new-password <value>
   orlojctl config path|get|use <name>|set-profile <name> [--server URL] [--token value] [--token-env NAME]
 
 Global options:
   --api-token <token>   Bearer token applied to all HTTP requests
+  --namespace, -n <ns>  Default namespace for namespace-aware commands
 
   orlojctl version      Print CLI version (also: -version, --version)
 
@@ -1505,8 +1845,12 @@ func compactError(s string) string {
 	return s[:77] + "..."
 }
 
-func watchTasks(server string) error {
-	resp, err := http.Get(server + "/v1/tasks/watch")
+func watchTasks(server, namespace string) error {
+	endpoint := strings.TrimRight(server, "/") + "/v1/tasks/watch"
+	if strings.TrimSpace(namespace) != "" {
+		endpoint += "?namespace=" + url.QueryEscape(strings.TrimSpace(namespace))
+	}
+	resp, err := http.Get(endpoint)
 	if err != nil {
 		return fmt.Errorf("task watch request failed: %w", err)
 	}
@@ -1560,14 +1904,15 @@ func runEvents(args []string) error {
 	kind := fs.String("kind", "", "filter by resource kind (example: Task)")
 	name := fs.String("name", "", "filter by resource name")
 	var evtNs string
-	fs.StringVar(&evtNs, "namespace", "", "filter by resource namespace")
-	fs.StringVar(&evtNs, "n", "", "filter by resource namespace (shorthand)")
+	fs.StringVar(&evtNs, "namespace", resolveNamespaceForCommand(""), "filter by resource namespace")
+	fs.StringVar(&evtNs, "n", resolveNamespaceForCommand(""), "filter by resource namespace (shorthand)")
 	once := fs.Bool("once", false, "exit after first matching event")
 	timeout := fs.Duration("timeout", 0, "max time to wait for matching events (example: 30s)")
 	raw := fs.Bool("raw", false, "print raw event JSON payload")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	evtNs = resolveNamespaceForCommand(evtNs)
 	if *timeout < 0 {
 		return errors.New("--timeout must be >= 0")
 	}

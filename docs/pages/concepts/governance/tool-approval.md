@@ -60,8 +60,8 @@ spec:
 - `GET /v1/tool-approvals` -- list approval requests.
 - `GET /v1/tool-approvals/{name}` -- get a specific approval.
 - `DELETE /v1/tool-approvals/{name}` -- delete an approval.
-- `POST /v1/tool-approvals/{name}/approve` -- approve a pending request. Body: `{"decided_by": "..."}`.
-- `POST /v1/tool-approvals/{name}/deny` -- deny a pending request. Body: `{"decided_by": "..."}`.
+- `POST /v1/tool-approvals/{name}/approve` -- approve a pending request. Body: `{"decided_by": "...", "reason": "..."}` (`reason` optional).
+- `POST /v1/tool-approvals/{name}/deny` -- deny a pending request. Body: `{"decided_by": "...", "reason": "..."}` (`reason` optional).
 
 ## Related
 
