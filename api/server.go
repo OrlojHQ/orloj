@@ -41,6 +41,7 @@ type Stores struct {
 	Workers       *store.WorkerStore
 	McpServers    *store.McpServerStore
 	LocalAdmins   *store.LocalAdminStore
+	APITokens     *store.APITokenStore
 	AuthSessions  *store.AuthSessionStore
 }
 
@@ -104,6 +105,9 @@ func NewServerWithOptions(stores Stores, runtime *agentruntime.Manager, logger *
 	if stores.LocalAdmins == nil {
 		stores.LocalAdmins = store.NewLocalAdminStore()
 	}
+	if stores.APITokens == nil {
+		stores.APITokens = store.NewAPITokenStore()
+	}
 	if stores.AuthSessions == nil {
 		stores.AuthSessions = store.NewAuthSessionStore()
 	}
@@ -119,7 +123,7 @@ func NewServerWithOptions(stores Stores, runtime *agentruntime.Manager, logger *
 	if authMode == AuthModeOff && authModeExplicit {
 		authorizer = noAuthAuthorizer{}
 	} else if authorizer == nil {
-		authorizer = newTokenAuthorizerFromEnv()
+		authorizer = newTokenAuthorizerWithStoreFromEnv(stores.APITokens)
 	}
 	if authMode == AuthModeNative {
 		authorizer = newNativeModeAuthorizer(authorizer, stores.LocalAdmins, stores.AuthSessions, sessionTTL)
@@ -243,7 +247,11 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/v1/auth/logout", s.handleAuthLogout)
 	s.mux.HandleFunc("/v1/auth/me", s.handleAuthMe)
 	s.mux.HandleFunc("/v1/auth/change-password", s.handleAuthChangePassword)
+	s.mux.HandleFunc("/v1/auth/users", s.handleAuthUsers)
+	s.mux.HandleFunc("/v1/auth/users/", s.handleAuthUserByName)
 	s.mux.HandleFunc("/v1/auth/admin/reset-password", s.handleAuthAdminResetPassword)
+	s.mux.HandleFunc("/v1/tokens", s.handleTokens)
+	s.mux.HandleFunc("/v1/tokens/", s.handleTokenByName)
 	if s.uiBasePath != "/" {
 		trimmed := strings.TrimSuffix(s.uiBasePath, "/")
 		s.mux.HandleFunc(trimmed, func(w http.ResponseWriter, r *http.Request) {

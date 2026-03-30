@@ -10,6 +10,7 @@ type authContextKey struct{}
 // AuthIdentity carries the authenticated caller's identity through the
 // request context for audit logging and downstream authorization.
 type AuthIdentity struct {
+	Name   string // token name (bearer) or username (session)
 	Role   string
 	Method string // "bearer", "session", "none"
 }

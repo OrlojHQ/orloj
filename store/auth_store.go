@@ -6,7 +6,9 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -14,44 +16,132 @@ import (
 
 const (
 	tableAuthLocalAdmin = "auth_local_admin"
+	tableAuthLocalUsers = "auth_local_users"
 	tableAuthSessions   = "auth_sessions"
+	tableAuthAPITokens  = "auth_api_tokens"
 )
+
+var (
+	ErrAuthUserExists     = errors.New("auth user already exists")
+	ErrAuthUserNotFound   = errors.New("auth user not found")
+	ErrAuthLastAdmin      = errors.New("cannot delete last admin user")
+	ErrAPITokenExists     = errors.New("api token already exists")
+	ErrAPITokenNotFound   = errors.New("api token not found")
+	ErrInvalidAuthRole    = errors.New("invalid auth role")
+	allowedAuthRoleValues = map[string]struct{}{
+		"admin":      {},
+		"writer":     {},
+		"reader":     {},
+		"controller": {},
+	}
+)
+
+func normalizeAuthRoleWithDefault(role, defaultRole string) (string, error) {
+	r := strings.ToLower(strings.TrimSpace(role))
+	if r == "" {
+		r = strings.ToLower(strings.TrimSpace(defaultRole))
+	}
+	if _, ok := allowedAuthRoleValues[r]; !ok {
+		return "", fmt.Errorf("%w: %q", ErrInvalidAuthRole, strings.TrimSpace(role))
+	}
+	return r, nil
+}
+
+func normalizeAuthRole(role string) (string, error) {
+	return normalizeAuthRoleWithDefault(role, "")
+}
+
+func normalizeLocalUsername(username string) string {
+	return strings.ToLower(strings.TrimSpace(username))
+}
 
 type LocalAdminAccount struct {
 	Username     string
+	Role         string
 	PasswordHash string
+	CreatedAt    string
 	UpdatedAt    string
 }
 
 type LocalAdminStore struct {
-	mu      sync.RWMutex
-	account *LocalAdminAccount
-	db      *sql.DB
+	mu    sync.RWMutex
+	users map[string]LocalAdminAccount
+	db    *sql.DB
 }
 
 func NewLocalAdminStore() *LocalAdminStore {
-	return &LocalAdminStore{}
+	return &LocalAdminStore{users: make(map[string]LocalAdminAccount)}
 }
 
 func NewLocalAdminStoreWithDB(db *sql.DB) *LocalAdminStore {
-	return &LocalAdminStore{db: db}
+	return &LocalAdminStore{users: make(map[string]LocalAdminAccount), db: db}
 }
 
 func (s *LocalAdminStore) HasAdmin() (bool, error) {
-	_, ok, err := s.Get()
-	return ok, err
+	count, err := s.CountByRole("admin")
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }
 
+func (s *LocalAdminStore) CountUsers() (int, error) {
+	if s.db != nil {
+		var count int
+		err := s.db.QueryRow(`SELECT COUNT(*) FROM auth_local_users`).Scan(&count)
+		if err != nil {
+			return 0, err
+		}
+		return count, nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.users), nil
+}
+
+func (s *LocalAdminStore) CountByRole(role string) (int, error) {
+	role, err := normalizeAuthRole(role)
+	if err != nil {
+		return 0, err
+	}
+	if s.db != nil {
+		var count int
+		err := s.db.QueryRow(`SELECT COUNT(*) FROM auth_local_users WHERE role = $1`, role).Scan(&count)
+		if err != nil {
+			return 0, err
+		}
+		return count, nil
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	count := 0
+	for _, user := range s.users {
+		if strings.EqualFold(user.Role, role) {
+			count++
+		}
+	}
+	return count, nil
+}
+
+// Get returns one admin account for backward compatibility with legacy callers.
 func (s *LocalAdminStore) Get() (LocalAdminAccount, bool, error) {
 	if s.db != nil {
 		var (
-			account   LocalAdminAccount
-			updatedAt time.Time
+			account            LocalAdminAccount
+			createdAt, updated time.Time
 		)
-		err := s.db.QueryRow(`SELECT username, password_hash, updated_at FROM auth_local_admin WHERE id = 1`).Scan(
+		err := s.db.QueryRow(`
+			SELECT username, role, password_hash, created_at, updated_at
+			FROM auth_local_users
+			WHERE role = 'admin'
+			ORDER BY username ASC
+			LIMIT 1`).Scan(
 			&account.Username,
+			&account.Role,
 			&account.PasswordHash,
-			&updatedAt,
+			&createdAt,
+			&updated,
 		)
 		if err == sql.ErrNoRows {
 			return LocalAdminAccount{}, false, nil
@@ -59,20 +149,224 @@ func (s *LocalAdminStore) Get() (LocalAdminAccount, bool, error) {
 		if err != nil {
 			return LocalAdminAccount{}, false, err
 		}
-		account.UpdatedAt = updatedAt.UTC().Format(time.RFC3339Nano)
+		account.CreatedAt = createdAt.UTC().Format(time.RFC3339Nano)
+		account.UpdatedAt = updated.UTC().Format(time.RFC3339Nano)
 		return account, true, nil
 	}
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if s.account == nil {
+	admins := make([]LocalAdminAccount, 0)
+	for _, user := range s.users {
+		if strings.EqualFold(user.Role, "admin") {
+			admins = append(admins, user)
+		}
+	}
+	if len(admins) == 0 {
 		return LocalAdminAccount{}, false, nil
 	}
-	return *s.account, true, nil
+	sort.Slice(admins, func(i, j int) bool { return admins[i].Username < admins[j].Username })
+	return admins[0], true, nil
 }
 
+func (s *LocalAdminStore) GetByUsername(username string) (LocalAdminAccount, bool, error) {
+	username = normalizeLocalUsername(username)
+	if username == "" {
+		return LocalAdminAccount{}, false, nil
+	}
+	if s.db != nil {
+		var (
+			account            LocalAdminAccount
+			createdAt, updated time.Time
+		)
+		err := s.db.QueryRow(`
+			SELECT username, role, password_hash, created_at, updated_at
+			FROM auth_local_users
+			WHERE username = $1`,
+			username,
+		).Scan(&account.Username, &account.Role, &account.PasswordHash, &createdAt, &updated)
+		if err == sql.ErrNoRows {
+			return LocalAdminAccount{}, false, nil
+		}
+		if err != nil {
+			return LocalAdminAccount{}, false, err
+		}
+		account.CreatedAt = createdAt.UTC().Format(time.RFC3339Nano)
+		account.UpdatedAt = updated.UTC().Format(time.RFC3339Nano)
+		return account, true, nil
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	account, ok := s.users[username]
+	if !ok {
+		return LocalAdminAccount{}, false, nil
+	}
+	return account, true, nil
+}
+
+func (s *LocalAdminStore) ListUsers() ([]LocalAdminAccount, error) {
+	if s.db != nil {
+		rows, err := s.db.Query(`
+			SELECT username, role, password_hash, created_at, updated_at
+			FROM auth_local_users
+			ORDER BY username ASC`)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		out := make([]LocalAdminAccount, 0)
+		for rows.Next() {
+			var (
+				account            LocalAdminAccount
+				createdAt, updated time.Time
+			)
+			if err := rows.Scan(&account.Username, &account.Role, &account.PasswordHash, &createdAt, &updated); err != nil {
+				return nil, err
+			}
+			account.CreatedAt = createdAt.UTC().Format(time.RFC3339Nano)
+			account.UpdatedAt = updated.UTC().Format(time.RFC3339Nano)
+			out = append(out, account)
+		}
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		return out, nil
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]LocalAdminAccount, 0, len(s.users))
+	for _, user := range s.users {
+		out = append(out, user)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Username < out[j].Username })
+	return out, nil
+}
+
+// Upsert keeps backward compatibility for legacy single-admin callers by
+// forcing role=admin.
 func (s *LocalAdminStore) Upsert(username, passwordHash string) error {
-	username = strings.TrimSpace(username)
+	_, err := s.UpsertUser(username, passwordHash, "admin")
+	return err
+}
+
+func (s *LocalAdminStore) UpsertUser(username, passwordHash, role string) (LocalAdminAccount, error) {
+	username = normalizeLocalUsername(username)
+	passwordHash = strings.TrimSpace(passwordHash)
+	if username == "" {
+		return LocalAdminAccount{}, fmt.Errorf("username is required")
+	}
+	if passwordHash == "" {
+		return LocalAdminAccount{}, fmt.Errorf("password hash is required")
+	}
+	r, err := normalizeAuthRoleWithDefault(role, "admin")
+	if err != nil {
+		return LocalAdminAccount{}, err
+	}
+
+	now := time.Now().UTC()
+	if s.db != nil {
+		_, err := s.db.Exec(
+			`INSERT INTO auth_local_users(username, role, password_hash, created_at, updated_at)
+			 VALUES($1, $2, $3, NOW(), NOW())
+			 ON CONFLICT(username) DO UPDATE SET
+				 role = EXCLUDED.role,
+				 password_hash = EXCLUDED.password_hash,
+				 updated_at = NOW()`,
+			username,
+			r,
+			passwordHash,
+		)
+		if err != nil {
+			return LocalAdminAccount{}, err
+		}
+		user, ok, err := s.GetByUsername(username)
+		if err != nil {
+			return LocalAdminAccount{}, err
+		}
+		if !ok {
+			return LocalAdminAccount{}, fmt.Errorf("upserted user %q not found", username)
+		}
+		return user, nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	existing, ok := s.users[username]
+	createdAt := now
+	if ok {
+		if parsed, parseErr := time.Parse(time.RFC3339Nano, existing.CreatedAt); parseErr == nil {
+			createdAt = parsed
+		}
+	}
+	account := LocalAdminAccount{
+		Username:     username,
+		Role:         r,
+		PasswordHash: passwordHash,
+		CreatedAt:    createdAt.UTC().Format(time.RFC3339Nano),
+		UpdatedAt:    now.Format(time.RFC3339Nano),
+	}
+	s.users[username] = account
+	return account, nil
+}
+
+func (s *LocalAdminStore) CreateUser(username, passwordHash, role string) (LocalAdminAccount, error) {
+	username = normalizeLocalUsername(username)
+	passwordHash = strings.TrimSpace(passwordHash)
+	if username == "" {
+		return LocalAdminAccount{}, fmt.Errorf("username is required")
+	}
+	if passwordHash == "" {
+		return LocalAdminAccount{}, fmt.Errorf("password hash is required")
+	}
+	r, err := normalizeAuthRoleWithDefault(role, "reader")
+	if err != nil {
+		return LocalAdminAccount{}, err
+	}
+	if s.db != nil {
+		_, err := s.db.Exec(
+			`INSERT INTO auth_local_users(username, role, password_hash, created_at, updated_at)
+			 VALUES($1, $2, $3, NOW(), NOW())`,
+			username,
+			r,
+			passwordHash,
+		)
+		if err != nil {
+			if strings.Contains(strings.ToLower(err.Error()), "duplicate") || strings.Contains(strings.ToLower(err.Error()), "unique") {
+				return LocalAdminAccount{}, ErrAuthUserExists
+			}
+			return LocalAdminAccount{}, err
+		}
+		user, ok, err := s.GetByUsername(username)
+		if err != nil {
+			return LocalAdminAccount{}, err
+		}
+		if !ok {
+			return LocalAdminAccount{}, fmt.Errorf("created user %q not found", username)
+		}
+		return user, nil
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, exists := s.users[username]; exists {
+		return LocalAdminAccount{}, ErrAuthUserExists
+	}
+	account := LocalAdminAccount{
+		Username:     username,
+		Role:         r,
+		PasswordHash: passwordHash,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	s.users[username] = account
+	return account, nil
+}
+
+func (s *LocalAdminStore) SetPassword(username, passwordHash string) error {
+	username = normalizeLocalUsername(username)
 	passwordHash = strings.TrimSpace(passwordHash)
 	if username == "" {
 		return fmt.Errorf("username is required")
@@ -80,28 +374,90 @@ func (s *LocalAdminStore) Upsert(username, passwordHash string) error {
 	if passwordHash == "" {
 		return fmt.Errorf("password hash is required")
 	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
 	if s.db != nil {
-		_, err := s.db.Exec(
-			`INSERT INTO auth_local_admin(id, username, password_hash, updated_at)
-			 VALUES(1, $1, $2, NOW())
-			 ON CONFLICT(id) DO UPDATE SET
-				 username = EXCLUDED.username,
-				 password_hash = EXCLUDED.password_hash,
-				 updated_at = NOW()`,
+		result, err := s.db.Exec(
+			`UPDATE auth_local_users SET password_hash = $2, updated_at = NOW() WHERE username = $1`,
 			username,
 			passwordHash,
 		)
-		return err
+		if err != nil {
+			return err
+		}
+		affected, err := result.RowsAffected()
+		if err == nil && affected == 0 {
+			return ErrAuthUserNotFound
+		}
+		return nil
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.account = &LocalAdminAccount{
-		Username:     username,
-		PasswordHash: passwordHash,
-		UpdatedAt:    now,
+	user, ok := s.users[username]
+	if !ok {
+		return ErrAuthUserNotFound
 	}
+	user.PasswordHash = passwordHash
+	user.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	s.users[username] = user
+	return nil
+}
+
+func (s *LocalAdminStore) DeleteUser(username string) error {
+	username = normalizeLocalUsername(username)
+	if username == "" {
+		return fmt.Errorf("username is required")
+	}
+	if s.db != nil {
+		tx, err := s.db.Begin()
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+
+		var role string
+		err = tx.QueryRow(`SELECT role FROM auth_local_users WHERE username = $1 FOR UPDATE`, username).Scan(&role)
+		if err == sql.ErrNoRows {
+			return ErrAuthUserNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if strings.EqualFold(strings.TrimSpace(role), "admin") {
+			var adminCount int
+			if err := tx.QueryRow(`SELECT COUNT(*) FROM auth_local_users WHERE role = 'admin'`).Scan(&adminCount); err != nil {
+				return err
+			}
+			if adminCount <= 1 {
+				return ErrAuthLastAdmin
+			}
+		}
+		if _, err := tx.Exec(`DELETE FROM auth_local_users WHERE username = $1`, username); err != nil {
+			return err
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	user, ok := s.users[username]
+	if !ok {
+		return ErrAuthUserNotFound
+	}
+	if strings.EqualFold(user.Role, "admin") {
+		adminCount := 0
+		for _, item := range s.users {
+			if strings.EqualFold(item.Role, "admin") {
+				adminCount++
+			}
+		}
+		if adminCount <= 1 {
+			return ErrAuthLastAdmin
+		}
+	}
+	delete(s.users, username)
 	return nil
 }
 
@@ -128,7 +484,7 @@ func NewAuthSessionStoreWithDB(db *sql.DB) *AuthSessionStore {
 }
 
 func (s *AuthSessionStore) Create(username string, ttl time.Duration, now time.Time) (AuthSession, error) {
-	username = strings.TrimSpace(username)
+	username = normalizeLocalUsername(username)
 	if username == "" {
 		return AuthSession{}, fmt.Errorf("username is required")
 	}
@@ -270,7 +626,7 @@ func (s *AuthSessionStore) Delete(token string) error {
 }
 
 func (s *AuthSessionStore) DeleteByUsername(username string) error {
-	username = strings.TrimSpace(username)
+	username = normalizeLocalUsername(username)
 	if username == "" {
 		return nil
 	}
@@ -305,6 +661,245 @@ func (s *AuthSessionStore) DeleteExpired(now time.Time) error {
 	return nil
 }
 
+type APITokenRecord struct {
+	Name      string
+	Role      string
+	TokenHash string
+	CreatedAt string
+	UpdatedAt string
+}
+
+type APITokenStore struct {
+	mu     sync.RWMutex
+	tokens map[string]APITokenRecord
+	db     *sql.DB
+}
+
+func NewAPITokenStore() *APITokenStore {
+	return &APITokenStore{tokens: make(map[string]APITokenRecord)}
+}
+
+func NewAPITokenStoreWithDB(db *sql.DB) *APITokenStore {
+	return &APITokenStore{tokens: make(map[string]APITokenRecord), db: db}
+}
+
+func normalizeTokenName(name string) string {
+	return strings.TrimSpace(name)
+}
+
+func (s *APITokenStore) Create(name, tokenHash, role string, now time.Time) (APITokenRecord, error) {
+	name = normalizeTokenName(name)
+	tokenHash = strings.TrimSpace(tokenHash)
+	if name == "" {
+		return APITokenRecord{}, fmt.Errorf("name is required")
+	}
+	if tokenHash == "" {
+		return APITokenRecord{}, fmt.Errorf("token hash is required")
+	}
+	r, err := normalizeAuthRoleWithDefault(role, "reader")
+	if err != nil {
+		return APITokenRecord{}, err
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	if s.db != nil {
+		_, err := s.db.Exec(
+			`INSERT INTO auth_api_tokens(name, token_hash, role, created_at, updated_at)
+			 VALUES($1, $2, $3, NOW(), NOW())`,
+			name,
+			tokenHash,
+			r,
+		)
+		if err != nil {
+			msg := strings.ToLower(err.Error())
+			if strings.Contains(msg, "duplicate") || strings.Contains(msg, "unique") {
+				return APITokenRecord{}, ErrAPITokenExists
+			}
+			return APITokenRecord{}, err
+		}
+		record, ok, err := s.Get(name)
+		if err != nil {
+			return APITokenRecord{}, err
+		}
+		if !ok {
+			return APITokenRecord{}, fmt.Errorf("created token %q not found", name)
+		}
+		return record, nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, exists := s.tokens[name]; exists {
+		return APITokenRecord{}, ErrAPITokenExists
+	}
+	for _, existing := range s.tokens {
+		if existing.TokenHash == tokenHash {
+			return APITokenRecord{}, ErrAPITokenExists
+		}
+	}
+	record := APITokenRecord{
+		Name:      name,
+		Role:      r,
+		TokenHash: tokenHash,
+		CreatedAt: now.UTC().Format(time.RFC3339Nano),
+		UpdatedAt: now.UTC().Format(time.RFC3339Nano),
+	}
+	s.tokens[name] = record
+	return record, nil
+}
+
+func (s *APITokenStore) Get(name string) (APITokenRecord, bool, error) {
+	name = normalizeTokenName(name)
+	if name == "" {
+		return APITokenRecord{}, false, nil
+	}
+	if s.db != nil {
+		var (
+			record             APITokenRecord
+			createdAt, updated time.Time
+		)
+		err := s.db.QueryRow(
+			`SELECT name, token_hash, role, created_at, updated_at
+			 FROM auth_api_tokens
+			 WHERE name = $1`,
+			name,
+		).Scan(&record.Name, &record.TokenHash, &record.Role, &createdAt, &updated)
+		if err == sql.ErrNoRows {
+			return APITokenRecord{}, false, nil
+		}
+		if err != nil {
+			return APITokenRecord{}, false, err
+		}
+		record.CreatedAt = createdAt.UTC().Format(time.RFC3339Nano)
+		record.UpdatedAt = updated.UTC().Format(time.RFC3339Nano)
+		return record, true, nil
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	record, ok := s.tokens[name]
+	if !ok {
+		return APITokenRecord{}, false, nil
+	}
+	return record, true, nil
+}
+
+func (s *APITokenStore) GetByHash(tokenHash string) (APITokenRecord, bool, error) {
+	tokenHash = strings.TrimSpace(tokenHash)
+	if tokenHash == "" {
+		return APITokenRecord{}, false, nil
+	}
+	if s.db != nil {
+		var (
+			record             APITokenRecord
+			createdAt, updated time.Time
+		)
+		err := s.db.QueryRow(
+			`SELECT name, token_hash, role, created_at, updated_at
+			 FROM auth_api_tokens
+			 WHERE token_hash = $1`,
+			tokenHash,
+		).Scan(&record.Name, &record.TokenHash, &record.Role, &createdAt, &updated)
+		if err == sql.ErrNoRows {
+			return APITokenRecord{}, false, nil
+		}
+		if err != nil {
+			return APITokenRecord{}, false, err
+		}
+		record.CreatedAt = createdAt.UTC().Format(time.RFC3339Nano)
+		record.UpdatedAt = updated.UTC().Format(time.RFC3339Nano)
+		return record, true, nil
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, record := range s.tokens {
+		if strings.EqualFold(record.TokenHash, tokenHash) {
+			return record, true, nil
+		}
+	}
+	return APITokenRecord{}, false, nil
+}
+
+func (s *APITokenStore) List() ([]APITokenRecord, error) {
+	if s.db != nil {
+		rows, err := s.db.Query(`
+			SELECT name, token_hash, role, created_at, updated_at
+			FROM auth_api_tokens
+			ORDER BY name ASC`)
+		if err != nil {
+			return nil, err
+		}
+		defer rows.Close()
+		out := make([]APITokenRecord, 0)
+		for rows.Next() {
+			var (
+				record             APITokenRecord
+				createdAt, updated time.Time
+			)
+			if err := rows.Scan(&record.Name, &record.TokenHash, &record.Role, &createdAt, &updated); err != nil {
+				return nil, err
+			}
+			record.CreatedAt = createdAt.UTC().Format(time.RFC3339Nano)
+			record.UpdatedAt = updated.UTC().Format(time.RFC3339Nano)
+			out = append(out, record)
+		}
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		return out, nil
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]APITokenRecord, 0, len(s.tokens))
+	for _, record := range s.tokens {
+		out = append(out, record)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out, nil
+}
+
+func (s *APITokenStore) HasAny() (bool, error) {
+	if s.db != nil {
+		var count int
+		if err := s.db.QueryRow(`SELECT COUNT(*) FROM auth_api_tokens`).Scan(&count); err != nil {
+			return false, err
+		}
+		return count > 0, nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.tokens) > 0, nil
+}
+
+func (s *APITokenStore) Delete(name string) error {
+	name = normalizeTokenName(name)
+	if name == "" {
+		return fmt.Errorf("name is required")
+	}
+	if s.db != nil {
+		result, err := s.db.Exec(`DELETE FROM auth_api_tokens WHERE name = $1`, name)
+		if err != nil {
+			return err
+		}
+		affected, err := result.RowsAffected()
+		if err == nil && affected == 0 {
+			return ErrAPITokenNotFound
+		}
+		return nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.tokens[name]; !ok {
+		return ErrAPITokenNotFound
+	}
+	delete(s.tokens, name)
+	return nil
+}
+
 func randomToken(size int) (string, error) {
 	if size <= 0 {
 		size = 32
@@ -314,6 +909,12 @@ func randomToken(size int) (string, error) {
 		return "", fmt.Errorf("generate session token: %w", err)
 	}
 	return base64.RawURLEncoding.EncodeToString(buf), nil
+}
+
+// GenerateOpaqueCredential returns a random base64url credential suitable for
+// bearer tokens or one-time bootstrap passwords.
+func GenerateOpaqueCredential(size int) (string, error) {
+	return randomToken(size)
 }
 
 func hashSessionToken(token string) string {

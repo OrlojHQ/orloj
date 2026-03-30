@@ -122,6 +122,8 @@ func Run(args []string) error {
 		return runCompletion(args[1:])
 	case "admin":
 		return runAdmin(args[1:])
+	case "auth":
+		return runAuth(args[1:])
 	case "config":
 		return runConfig(args[1:])
 	case "rollback":
@@ -379,28 +381,149 @@ func (f *stringSliceFlag) Set(v string) error {
 
 func runCreate(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: orlojctl create secret <name> --from-literal key=value [--from-literal key2=value2 ...]")
+		return errors.New("usage: orlojctl create secret <name> --from-literal key=value [--from-literal key2=value2 ...] | orlojctl create token <name> --role <role>")
 	}
 	switch strings.ToLower(strings.TrimSpace(args[0])) {
 	case "secret":
 		return runCreateSecret(args[1:])
+	case "token":
+		return runCreateToken(args[1:])
 	default:
-		return fmt.Errorf("unsupported create resource %q (supported: secret)", args[0])
+		return fmt.Errorf("unsupported create resource %q (supported: secret, token)", args[0])
 	}
 }
 
 func runAdmin(args []string) error {
 	if len(args) == 0 {
-		return errors.New("usage: orlojctl admin reset-password [--server URL] [--username name] --new-password value")
+		return errors.New("usage: orlojctl admin create-user <username> --role <role> | list-users | delete-user <username> | reset-password --username <name> --new-password <value>")
 	}
 	switch strings.ToLower(strings.TrimSpace(args[0])) {
+	case "create-user":
+		fs := flag.NewFlagSet("admin create-user", flag.ContinueOnError)
+		server := fs.String("server", defaultServerResolved(resolvedCliConfig), "Orloj server URL")
+		role := fs.String("role", "reader", "user role: admin|writer|reader|controller")
+		parseArgs := args[1:]
+		username := ""
+		if len(parseArgs) > 0 && !strings.HasPrefix(strings.TrimSpace(parseArgs[0]), "-") {
+			username = strings.TrimSpace(parseArgs[0])
+			parseArgs = parseArgs[1:]
+		}
+		if err := fs.Parse(parseArgs); err != nil {
+			return err
+		}
+		switch fs.NArg() {
+		case 0:
+		case 1:
+			if username == "" {
+				username = strings.TrimSpace(fs.Arg(0))
+			}
+		default:
+			return errors.New("usage: orlojctl admin create-user <username> --role <role>")
+		}
+		if username != "" && fs.NArg() == 1 {
+			return errors.New("usage: orlojctl admin create-user <username> --role <role>")
+		}
+		if username == "" {
+			return errors.New("username is required")
+		}
+		payload, _ := json.Marshal(map[string]string{
+			"username": username,
+			"role":     strings.TrimSpace(*role),
+		})
+		resp, err := http.Post(strings.TrimRight(*server, "/")+"/v1/auth/users", "application/json", bytes.NewReader(payload))
+		if err != nil {
+			return fmt.Errorf("create user request failed: %w", err)
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode >= 300 {
+			return fmt.Errorf("create user failed: %s", bytes.TrimSpace(body))
+		}
+		var created struct {
+			Username string `json:"username"`
+			Role     string `json:"role"`
+			Password string `json:"password"`
+		}
+		if err := json.Unmarshal(body, &created); err != nil {
+			return fmt.Errorf("decode create-user response failed: %w", err)
+		}
+		fmt.Printf("created user/%s role=%s\n", created.Username, created.Role)
+		fmt.Printf("password: %s\n", strings.TrimSpace(created.Password))
+		return nil
+	case "list-users":
+		fs := flag.NewFlagSet("admin list-users", flag.ContinueOnError)
+		server := fs.String("server", defaultServerResolved(resolvedCliConfig), "Orloj server URL")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() != 0 {
+			return errors.New("usage: orlojctl admin list-users")
+		}
+		resp, err := http.Get(strings.TrimRight(*server, "/") + "/v1/auth/users")
+		if err != nil {
+			return fmt.Errorf("list users request failed: %w", err)
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode >= 300 {
+			return fmt.Errorf("list users failed: %s", bytes.TrimSpace(body))
+		}
+		var list struct {
+			Items []struct {
+				Username  string `json:"username"`
+				Role      string `json:"role"`
+				CreatedAt string `json:"created_at"`
+				UpdatedAt string `json:"updated_at"`
+			} `json:"items"`
+		}
+		if err := json.Unmarshal(body, &list); err != nil {
+			return fmt.Errorf("decode list-users response failed: %w", err)
+		}
+		tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+		fmt.Fprintln(tw, "USERNAME\tROLE\tCREATED_AT\tUPDATED_AT")
+		for _, item := range list.Items {
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", item.Username, item.Role, item.CreatedAt, item.UpdatedAt)
+		}
+		_ = tw.Flush()
+		return nil
+	case "delete-user":
+		fs := flag.NewFlagSet("admin delete-user", flag.ContinueOnError)
+		server := fs.String("server", defaultServerResolved(resolvedCliConfig), "Orloj server URL")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() != 1 {
+			return errors.New("usage: orlojctl admin delete-user <username>")
+		}
+		username := strings.TrimSpace(fs.Arg(0))
+		if username == "" {
+			return errors.New("username is required")
+		}
+		req, err := http.NewRequest(http.MethodDelete, strings.TrimRight(*server, "/")+"/v1/auth/users/"+url.PathEscape(username), nil)
+		if err != nil {
+			return fmt.Errorf("delete user request build failed: %w", err)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return fmt.Errorf("delete user request failed: %w", err)
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode >= 300 {
+			return fmt.Errorf("delete user failed: %s", bytes.TrimSpace(body))
+		}
+		fmt.Printf("deleted user/%s\n", username)
+		return nil
 	case "reset-password":
 		fs := flag.NewFlagSet("admin reset-password", flag.ContinueOnError)
 		server := fs.String("server", defaultServerResolved(resolvedCliConfig), "Orloj server URL")
-		username := fs.String("username", "", "admin username (optional)")
+		username := fs.String("username", "", "target username")
 		newPassword := fs.String("new-password", "", "new admin password")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
+		}
+		if strings.TrimSpace(*username) == "" {
+			return errors.New("--username is required")
 		}
 		if strings.TrimSpace(*newPassword) == "" {
 			return errors.New("--new-password is required")
@@ -418,11 +541,127 @@ func runAdmin(args []string) error {
 			body, _ := io.ReadAll(resp.Body)
 			return fmt.Errorf("password reset failed: %s", bytes.TrimSpace(body))
 		}
-		fmt.Println("admin password reset")
+		fmt.Printf("password reset for %s\n", strings.TrimSpace(*username))
 		return nil
 	default:
-		return fmt.Errorf("unsupported admin subcommand %q (supported: reset-password)", args[0])
+		return fmt.Errorf("unsupported admin subcommand %q (supported: create-user, list-users, delete-user, reset-password)", args[0])
 	}
+}
+
+func runAuth(args []string) error {
+	if len(args) == 0 {
+		return errors.New("usage: orlojctl auth whoami [--server URL]")
+	}
+	switch strings.ToLower(strings.TrimSpace(args[0])) {
+	case "whoami":
+		fs := flag.NewFlagSet("auth whoami", flag.ContinueOnError)
+		server := fs.String("server", defaultServerResolved(resolvedCliConfig), "Orloj server URL")
+		if err := fs.Parse(args[1:]); err != nil {
+			return err
+		}
+		if fs.NArg() != 0 {
+			return errors.New("usage: orlojctl auth whoami [--server URL]")
+		}
+		resp, err := http.Get(strings.TrimRight(*server, "/") + "/v1/auth/me")
+		if err != nil {
+			return fmt.Errorf("whoami request failed: %w", err)
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode >= 300 {
+			return fmt.Errorf("whoami failed: %s", bytes.TrimSpace(body))
+		}
+		var me struct {
+			Authenticated bool   `json:"authenticated"`
+			Username      string `json:"username"`
+			Name          string `json:"name"`
+			Role          string `json:"role"`
+			Method        string `json:"method"`
+		}
+		if err := json.Unmarshal(body, &me); err != nil {
+			return fmt.Errorf("decode whoami response failed: %w", err)
+		}
+		if !me.Authenticated {
+			return errors.New("not authenticated")
+		}
+		name := strings.TrimSpace(me.Name)
+		if name == "" {
+			name = strings.TrimSpace(me.Username)
+		}
+		if name == "" {
+			name = "anonymous"
+		}
+		role := strings.TrimSpace(me.Role)
+		if role == "" {
+			role = "none"
+		}
+		method := strings.TrimSpace(me.Method)
+		if method == "" {
+			method = "unknown"
+		}
+		fmt.Printf("method=%s name=%s role=%s\n", method, name, role)
+		return nil
+	default:
+		return fmt.Errorf("unsupported auth subcommand %q (supported: whoami)", args[0])
+	}
+}
+
+func runCreateToken(args []string) error {
+	fs := flag.NewFlagSet("create token", flag.ContinueOnError)
+	server := fs.String("server", defaultServerResolved(resolvedCliConfig), "Orloj server URL")
+	role := fs.String("role", "", "token role: admin|writer|reader|controller")
+	parseArgs := args
+	name := ""
+	if len(parseArgs) > 0 && !strings.HasPrefix(strings.TrimSpace(parseArgs[0]), "-") {
+		name = strings.TrimSpace(parseArgs[0])
+		parseArgs = parseArgs[1:]
+	}
+	if err := fs.Parse(parseArgs); err != nil {
+		return err
+	}
+	switch fs.NArg() {
+	case 0:
+	case 1:
+		if name == "" {
+			name = strings.TrimSpace(fs.Arg(0))
+		}
+	default:
+		return errors.New("usage: orlojctl create token <name> --role <role>")
+	}
+	if name != "" && fs.NArg() == 1 {
+		return errors.New("usage: orlojctl create token <name> --role <role>")
+	}
+	if name == "" {
+		return errors.New("token name is required")
+	}
+	if strings.TrimSpace(*role) == "" {
+		return errors.New("--role is required")
+	}
+	payload, _ := json.Marshal(map[string]string{
+		"name": name,
+		"role": strings.TrimSpace(*role),
+	})
+	resp, err := http.Post(strings.TrimRight(*server, "/")+"/v1/tokens", "application/json", bytes.NewReader(payload))
+	if err != nil {
+		return fmt.Errorf("create token request failed: %w", err)
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 300 {
+		return fmt.Errorf("create token failed: %s", bytes.TrimSpace(body))
+	}
+	var created struct {
+		Name      string `json:"name"`
+		Role      string `json:"role"`
+		Token     string `json:"token"`
+		CreatedAt string `json:"created_at"`
+	}
+	if err := json.Unmarshal(body, &created); err != nil {
+		return fmt.Errorf("decode create-token response failed: %w", err)
+	}
+	fmt.Printf("created token/%s role=%s\n", created.Name, created.Role)
+	fmt.Printf("token: %s\n", strings.TrimSpace(created.Token))
+	return nil
 }
 
 func runCreateSecret(args []string) error {
@@ -707,6 +946,9 @@ func runGet(args []string) error {
 		if name == "" {
 			return errors.New("resource name cannot be empty")
 		}
+	}
+	if resource == "tokens" && name != "" {
+		return errors.New("usage: orlojctl get tokens")
 	}
 	if *watch {
 		if resource != "tasks" {
@@ -999,6 +1241,23 @@ func runGet(args []string) error {
 			)
 		}
 		_ = tw.Flush()
+	case "tokens":
+		var list struct {
+			Items []struct {
+				Name      string `json:"name"`
+				Role      string `json:"role"`
+				CreatedAt string `json:"created_at"`
+			} `json:"items"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
+			return fmt.Errorf("failed to decode response: %w", err)
+		}
+		tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+		fmt.Fprintln(tw, "NAME\tROLE\tCREATED_AT")
+		for _, item := range list.Items {
+			fmt.Fprintf(tw, "%s\t%s\t%s\n", item.Name, item.Role, item.CreatedAt)
+		}
+		_ = tw.Flush()
 	}
 
 	return nil
@@ -1036,6 +1295,8 @@ func normalizeResource(resource string) string {
 		return "workers"
 	case "mcp-servers", "mcpservers", "mcpserver":
 		return "mcp-servers"
+	case "tokens", "token":
+		return "tokens"
 	default:
 		return ""
 	}
@@ -1073,6 +1334,8 @@ func listEndpointForResource(resource string) (string, error) {
 		return "/v1/workers", nil
 	case "mcp-servers":
 		return "/v1/mcp-servers", nil
+	case "tokens":
+		return "/v1/tokens", nil
 	default:
 		return "", fmt.Errorf("unsupported resource %q", resource)
 	}
@@ -1797,12 +2060,15 @@ Usage:
   orlojctl apply -f <file-or-directory> [--run] [--dry-run] [--namespace <ns>]
   orlojctl validate -f <file|dir>
   orlojctl create secret <name> --from-literal key=value [--from-literal key2=value2 ...]
+  orlojctl create token <name> --role <role>
   orlojctl approve tool-approval <name> [--decided-by <id>] [--reason <text>]
   orlojctl deny tool-approval <name> [--decided-by <id>] [--reason <text>]
   orlojctl get [-w] <resource> [name] [-o table|json|yaml] [--namespace <ns>]
+  orlojctl get tokens
   orlojctl get memory-entries <memory-name> [--query <q>] [--prefix <p>] [--limit <n>] [-o table|json|yaml]
   orlojctl memory-entries <memory-name> [--query <q>] [--prefix <p>] [--limit <n>] [-o table|json|yaml]
   orlojctl delete <resource> <name>
+  orlojctl delete token <name>
   orlojctl describe <resource> <name>
   orlojctl edit <resource> <name>
   orlojctl diff -f <file-or-directory> [--namespace <ns>]
@@ -1821,7 +2087,11 @@ Usage:
   orlojctl health [-o table|json|yaml]
   orlojctl status [-o table|json|yaml]
   orlojctl completion bash|zsh|fish
-  orlojctl admin reset-password [--server <url>] [--username <name>] --new-password <value>
+  orlojctl auth whoami [--server <url>]
+  orlojctl admin create-user <username> --role <role>
+  orlojctl admin list-users
+  orlojctl admin delete-user <username>
+  orlojctl admin reset-password [--server <url>] --username <name> --new-password <value>
   orlojctl config path|get|use <name>|set-profile <name> [--server URL] [--token value] [--token-env NAME]
 
 Global options:

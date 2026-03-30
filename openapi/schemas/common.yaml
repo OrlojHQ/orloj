@@ -58,6 +58,8 @@ components:
       properties:
         authenticated: { type: boolean }
         username: { type: string }
+        name: { type: string }
+        role: { type: string }
         method: { type: string }
     AuthCredentialsRequest:
       type: object
@@ -72,9 +74,62 @@ components:
         new_password: { type: string }
     AuthResetPasswordRequest:
       type: object
+      required: [username, new_password]
       properties:
         username: { type: string }
         new_password: { type: string }
+    TokenCreateRequest:
+      type: object
+      required: [name, role]
+      properties:
+        name: { type: string }
+        role: { type: string }
+    TokenMetadata:
+      type: object
+      properties:
+        name: { type: string }
+        role: { type: string }
+        created_at: { type: string }
+    TokenCreateResponse:
+      type: object
+      properties:
+        name: { type: string }
+        role: { type: string }
+        created_at: { type: string }
+        token: { type: string }
+    TokenListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/TokenMetadata" }
+    AuthUserCreateRequest:
+      type: object
+      required: [username]
+      properties:
+        username: { type: string }
+        role: { type: string }
+    AuthUserResponse:
+      type: object
+      properties:
+        username: { type: string }
+        role: { type: string }
+        created_at: { type: string }
+        updated_at: { type: string }
+    AuthUserCreateResponse:
+      type: object
+      properties:
+        username: { type: string }
+        role: { type: string }
+        created_at: { type: string }
+        updated_at: { type: string }
+        password: { type: string }
+    AuthUserListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/AuthUserResponse" }
     OkStatusMessage:
       type: object
       properties:

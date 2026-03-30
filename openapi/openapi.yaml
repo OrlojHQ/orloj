@@ -5322,7 +5322,9 @@ paths:
     post:
       tags:
       - auth
-      security: []
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
       requestBody:
         required: true
         content:
@@ -5400,6 +5402,280 @@ paths:
                 "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
         '429':
           description: Rate limited
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/auth/users":
+    get:
+      tags:
+      - auth
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/AuthUserListResponse"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '401':
+          description: Unauthorized
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    post:
+      tags:
+      - auth
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/common.yaml#/components/schemas/AuthUserCreateRequest"
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/AuthUserCreateResponse"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '401':
+          description: Unauthorized
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/auth/users/{username}":
+    delete:
+      tags:
+      - auth
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: username
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/OkStatusMessage"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '401':
+          description: Unauthorized
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/tokens":
+    get:
+      tags:
+      - auth
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/TokenListResponse"
+        '401':
+          description: Unauthorized
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    post:
+      tags:
+      - auth
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/common.yaml#/components/schemas/TokenCreateRequest"
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/TokenCreateResponse"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '401':
+          description: Unauthorized
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/tokens/{name}":
+    delete:
+      tags:
+      - auth
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/OkStatusMessage"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '401':
+          description: Unauthorized
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '403':
+          description: Forbidden
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
           content:
             text/plain:
               schema:

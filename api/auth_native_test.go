@@ -179,7 +179,7 @@ func TestNativeAuthAdminResetPassword(t *testing.T) {
 
 	_, _ = client.Post(server.URL+"/v1/auth/setup", "application/json", bytes.NewReader([]byte(`{"username":"admin","password":"very-strong-pass"}`)))
 
-	resetBody := []byte(`{"new_password":"another-strong-pass"}`)
+	resetBody := []byte(`{"username":"admin","new_password":"another-strong-pass"}`)
 	resp, err := client.Post(server.URL+"/v1/auth/admin/reset-password", "application/json", bytes.NewReader(resetBody))
 	if err != nil {
 		t.Fatalf("reset request failed: %v", err)
@@ -187,6 +187,15 @@ func TestNativeAuthAdminResetPassword(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("expected 200 reset, got %d body=%s", resp.StatusCode, string(body))
+	}
+	var sawClearedSessionCookie bool
+	for _, cookie := range resp.Cookies() {
+		if (cookie.Name == "orloj_session" || cookie.Name == "__Host-orloj_session") && cookie.MaxAge < 0 {
+			sawClearedSessionCookie = true
+		}
+	}
+	if !sawClearedSessionCookie {
+		t.Fatalf("expected reset response to clear session cookie, cookies=%+v", resp.Cookies())
 	}
 	resp.Body.Close()
 

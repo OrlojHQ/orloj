@@ -25,7 +25,7 @@ openssl rand -hex 32
 
 Store the value in your secrets manager or deployment environment—**not** in git.
 
-On the server, set **`orlojd --api-key=...`** or **`ORLOJ_API_TOKEN=...`** (or **`ORLOJ_API_TOKENS`** for multiple `token:role` pairs). See [Control plane API tokens](../operations/security.md#control-plane-api-tokens) for details.
+On the server, set **`orlojd --api-key=...`** or **`ORLOJ_API_TOKEN=...`** (or **`ORLOJ_API_TOKENS`** for multiple `name:token:role` entries; legacy `token:role` remains supported). See [Control plane API tokens](../operations/security.md#control-plane-api-tokens) for details.
 
 ## Server-side wiring
 

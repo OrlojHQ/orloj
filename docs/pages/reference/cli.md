@@ -18,12 +18,15 @@ Usage patterns:
 orlojctl apply -f <file-or-directory> [--run] [--dry-run] [--namespace <ns>]
 orlojctl validate -f <file|dir>
 orlojctl create secret <name> --from-literal key=value [...]
+orlojctl create token <name> --role <role>
 orlojctl approve tool-approval <name> [--decided-by <id>] [--reason <text>]
 orlojctl deny tool-approval <name> [--decided-by <id>] [--reason <text>]
 orlojctl get [-w] <resource> [name] [-o table|json|yaml]
+orlojctl get tokens
 orlojctl get memory-entries <memory-name> [--query <q>] [--prefix <p>] [--limit <n>]
 orlojctl memory-entries <memory-name> [--query <q>] [--prefix <p>] [--limit <n>]
 orlojctl delete <resource> <name>
+orlojctl delete token <name>
 orlojctl describe <resource> <name>
 orlojctl edit <resource> <name>
 orlojctl diff -f <file-or-directory> [--namespace <ns>]
@@ -42,7 +45,11 @@ orlojctl metrics task/<task-name> [-o table|json|yaml]
 orlojctl health [-o table|json|yaml]
 orlojctl status [-o table|json|yaml]
 orlojctl completion bash|zsh|fish
-orlojctl admin reset-password --new-password <value> [--username <name>]
+orlojctl auth whoami [--server URL]
+orlojctl admin create-user <username> --role <role>
+orlojctl admin list-users
+orlojctl admin delete-user <username>
+orlojctl admin reset-password --username <name> --new-password <value>
 orlojctl config path|get|use <name>|set-profile <name> [--server URL] [--token value] [--token-env NAME]
 ```
 
@@ -116,6 +123,13 @@ orlojctl validate -f ./manifests/
 | `-n` | `default` | Shorthand for `--namespace`. |
 | `--server` | resolved server | API server URL. |
 
+### `orlojctl create token`
+
+| Flag | Default | Description |
+|---|---|---|
+| `--role` | none | Token role (`admin`, `writer`, `reader`, `controller`). Required. |
+| `--server` | resolved server | API server URL. |
+
 ### `orlojctl approve` / `orlojctl deny`
 
 Approves or denies a pending `ToolApproval`:
@@ -158,6 +172,7 @@ Supported resources:
 - `task-webhooks`
 - `workers`
 - `mcp-servers`
+- `tokens`
 
 Notes:
 
@@ -388,12 +403,39 @@ Usage:
 |---|---|---|
 | `--server` | resolved server | API server URL. |
 
+### `orlojctl auth whoami`
+
+Returns the currently authenticated identity from `/v1/auth/me`.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--server` | resolved server | API server URL. |
+
+### `orlojctl admin create-user`
+
+| Flag | Default | Description |
+|---|---|---|
+| `--role` | `reader` | User role (`admin`, `writer`, `reader`, `controller`). |
+| `--server` | resolved server | API server URL. |
+
+### `orlojctl admin list-users`
+
+| Flag | Default | Description |
+|---|---|---|
+| `--server` | resolved server | API server URL. |
+
+### `orlojctl admin delete-user`
+
+| Flag | Default | Description |
+|---|---|---|
+| `--server` | resolved server | API server URL. |
+
 ### `orlojctl admin reset-password`
 
 | Flag | Default | Description |
 |---|---|---|
 | `--server` | resolved server | API server URL. |
-| `--username` | empty | Optional admin username. |
+| `--username` | none | Target username (required). |
 | `--new-password` | none | New password (required). |
 
 ### `orlojctl config set-profile`

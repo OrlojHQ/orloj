@@ -41,9 +41,21 @@ Namespace defaults to `default` and can be overridden with `?namespace=<ns>`.
 - `POST /v1/auth/logout`
   - clears local session cookie
 - `GET /v1/auth/me`
-  - returns current auth state for UI bootstrap
+  - returns current auth state and identity (`method`, `name`, `role`) for UI/CLI bootstrap
+- `POST /v1/auth/users`
+  - admin-only native-auth endpoint; creates a local user and returns a generated password once
+- `GET /v1/auth/users`
+  - admin-only native-auth endpoint; lists local users
+- `DELETE /v1/auth/users/{username}`
+  - admin-only native-auth endpoint; deletes a local user (last-admin delete is blocked)
 - `POST /v1/auth/admin/reset-password`
-  - admin-authenticated local password rotation endpoint
+  - admin-authenticated local password reset endpoint for a specific `username`
+- `POST /v1/tokens`
+  - admin-only endpoint; creates a named API token and returns the token once
+- `GET /v1/tokens`
+  - admin-only endpoint; lists store-managed tokens (`name`, `role`, `created_at`)
+- `DELETE /v1/tokens/{name}`
+  - admin-only endpoint; revokes a store-managed token
 
 ## Status and Logs
 
