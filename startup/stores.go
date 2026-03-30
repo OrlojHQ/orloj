@@ -30,6 +30,7 @@ type StoreSet struct {
 	Workers       *store.WorkerStore
 	McpServers    *store.McpServerStore
 	LocalAdmins   *store.LocalAdminStore
+	APITokens     *store.APITokenStore
 	AuthSessions  *store.AuthSessionStore
 	DB            *sql.DB
 }
@@ -71,6 +72,7 @@ func OpenStores(cfg StoreConfig, logger *log.Logger) (*StoreSet, error) {
 		Workers:       store.NewWorkerStore(),
 		McpServers:    store.NewMcpServerStore(),
 		LocalAdmins:   store.NewLocalAdminStore(),
+		APITokens:     store.NewAPITokenStore(),
 		AuthSessions:  store.NewAuthSessionStore(),
 	}
 	if cfg.IncludeScheduleStores {
@@ -141,6 +143,7 @@ func OpenStores(cfg StoreConfig, logger *log.Logger) (*StoreSet, error) {
 		s.Workers = store.NewWorkerStoreWithDB(db)
 		s.McpServers = store.NewMcpServerStoreWithDB(db)
 		s.LocalAdmins = store.NewLocalAdminStoreWithDB(db)
+		s.APITokens = store.NewAPITokenStoreWithDB(db)
 		s.AuthSessions = store.NewAuthSessionStoreWithDB(db)
 		if cfg.IncludeScheduleStores {
 			s.TaskSchedules = store.NewTaskScheduleStoreWithDB(db)

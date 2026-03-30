@@ -886,7 +886,7 @@ def build() -> dict:
     paths["/v1/auth/change-password"] = {
         "post": {
             "tags": ["auth"],
-            "security": [],
+            "security": SEC_READER,
             "requestBody": {
                 "required": True,
                 "content": json_body(
@@ -923,6 +923,142 @@ def build() -> dict:
                 "400": {"description": "Bad request", "content": text_plain_error()},
                 "403": {"description": "Forbidden", "content": text_plain_error()},
                 "429": {"description": "Rate limited", "content": text_plain_error()},
+                "default": {"description": "Error", "content": text_plain_error()},
+            },
+        }
+    }
+    paths["/v1/auth/users"] = {
+        "get": {
+            "tags": ["auth"],
+            "security": SEC_ADMIN,
+            "responses": {
+                "200": {
+                    "description": "OK",
+                    "content": json_body(
+                        "./schemas/common.yaml#/components/schemas/AuthUserListResponse"
+                    ),
+                },
+                "400": {"description": "Bad request", "content": text_plain_error()},
+                "401": {"description": "Unauthorized", "content": text_plain_error()},
+                "403": {"description": "Forbidden", "content": text_plain_error()},
+                "default": {"description": "Error", "content": text_plain_error()},
+            },
+        },
+        "post": {
+            "tags": ["auth"],
+            "security": SEC_ADMIN,
+            "requestBody": {
+                "required": True,
+                "content": json_body(
+                    "./schemas/common.yaml#/components/schemas/AuthUserCreateRequest"
+                ),
+            },
+            "responses": {
+                "201": {
+                    "description": "Created",
+                    "content": json_body(
+                        "./schemas/common.yaml#/components/schemas/AuthUserCreateResponse"
+                    ),
+                },
+                "400": {"description": "Bad request", "content": text_plain_error()},
+                "401": {"description": "Unauthorized", "content": text_plain_error()},
+                "403": {"description": "Forbidden", "content": text_plain_error()},
+                "409": {"description": "Conflict", "content": text_plain_error()},
+                "default": {"description": "Error", "content": text_plain_error()},
+            },
+        },
+    }
+    paths["/v1/auth/users/{username}"] = {
+        "delete": {
+            "tags": ["auth"],
+            "security": SEC_ADMIN,
+            "parameters": [
+                {
+                    "name": "username",
+                    "in": "path",
+                    "required": True,
+                    "schema": {"type": "string"},
+                }
+            ],
+            "responses": {
+                "200": {
+                    "description": "OK",
+                    "content": json_body(
+                        "./schemas/common.yaml#/components/schemas/OkStatusMessage"
+                    ),
+                },
+                "400": {"description": "Bad request", "content": text_plain_error()},
+                "401": {"description": "Unauthorized", "content": text_plain_error()},
+                "403": {"description": "Forbidden", "content": text_plain_error()},
+                "404": {"description": "Not found", "content": text_plain_error()},
+                "409": {"description": "Conflict", "content": text_plain_error()},
+                "default": {"description": "Error", "content": text_plain_error()},
+            },
+        }
+    }
+    paths["/v1/tokens"] = {
+        "get": {
+            "tags": ["auth"],
+            "security": SEC_ADMIN,
+            "responses": {
+                "200": {
+                    "description": "OK",
+                    "content": json_body(
+                        "./schemas/common.yaml#/components/schemas/TokenListResponse"
+                    ),
+                },
+                "401": {"description": "Unauthorized", "content": text_plain_error()},
+                "403": {"description": "Forbidden", "content": text_plain_error()},
+                "default": {"description": "Error", "content": text_plain_error()},
+            },
+        },
+        "post": {
+            "tags": ["auth"],
+            "security": SEC_ADMIN,
+            "requestBody": {
+                "required": True,
+                "content": json_body(
+                    "./schemas/common.yaml#/components/schemas/TokenCreateRequest"
+                ),
+            },
+            "responses": {
+                "201": {
+                    "description": "Created",
+                    "content": json_body(
+                        "./schemas/common.yaml#/components/schemas/TokenCreateResponse"
+                    ),
+                },
+                "400": {"description": "Bad request", "content": text_plain_error()},
+                "401": {"description": "Unauthorized", "content": text_plain_error()},
+                "403": {"description": "Forbidden", "content": text_plain_error()},
+                "409": {"description": "Conflict", "content": text_plain_error()},
+                "default": {"description": "Error", "content": text_plain_error()},
+            },
+        },
+    }
+    paths["/v1/tokens/{name}"] = {
+        "delete": {
+            "tags": ["auth"],
+            "security": SEC_ADMIN,
+            "parameters": [
+                {
+                    "name": "name",
+                    "in": "path",
+                    "required": True,
+                    "schema": {"type": "string"},
+                }
+            ],
+            "responses": {
+                "200": {
+                    "description": "OK",
+                    "content": json_body(
+                        "./schemas/common.yaml#/components/schemas/OkStatusMessage"
+                    ),
+                },
+                "400": {"description": "Bad request", "content": text_plain_error()},
+                "401": {"description": "Unauthorized", "content": text_plain_error()},
+                "403": {"description": "Forbidden", "content": text_plain_error()},
+                "404": {"description": "Not found", "content": text_plain_error()},
                 "default": {"description": "Error", "content": text_plain_error()},
             },
         }

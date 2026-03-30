@@ -99,6 +99,10 @@ func main() {
 	slogger := telemetry.NewLogger("orlojd")
 	logger := telemetry.NewBridgeLogger(slogger)
 
+	if authMode == api.AuthModeNative && strings.TrimSpace(os.Getenv("ORLOJ_SETUP_TOKEN")) == "" {
+		logger.Printf("WARNING: auth mode is native but ORLOJ_SETUP_TOKEN is not set; the first POST to /v1/auth/setup will create the admin account without a setup secret")
+	}
+
 	otelShutdown, otelErr := telemetry.Init(context.Background(), telemetry.Config{
 		ServiceName: "orlojd",
 	})
@@ -229,6 +233,7 @@ func main() {
 		Workers:       stores.Workers,
 		McpServers:    stores.McpServers,
 		LocalAdmins:   stores.LocalAdmins,
+		APITokens:     stores.APITokens,
 		AuthSessions:  stores.AuthSessions,
 	}, runtime, logger, api.ServerOptions{
 		Authorizer: requestAuthorizer,
@@ -356,7 +361,6 @@ func main() {
 	wg.Wait()
 }
 
-
 func runLocalAdminPasswordReset(stores *startup.StoreSet, username, password string) error {
 	if stores == nil || stores.LocalAdmins == nil || stores.AuthSessions == nil {
 		return fmt.Errorf("auth stores are not initialized")
@@ -382,8 +386,25 @@ func runLocalAdminPasswordReset(stores *startup.StoreSet, username, password str
 	if err != nil {
 		return err
 	}
-	if err := stores.LocalAdmins.Upsert(username, hash); err != nil {
+	existing, found, err := stores.LocalAdmins.GetByUsername(username)
+	if err != nil {
 		return err
+	}
+	if found {
+		if err := stores.LocalAdmins.SetPassword(existing.Username, hash); err != nil {
+			return err
+		}
+	} else {
+		userCount, err := stores.LocalAdmins.CountUsers()
+		if err != nil {
+			return err
+		}
+		if userCount > 0 {
+			return fmt.Errorf("user %q not found", username)
+		}
+		if _, err := stores.LocalAdmins.UpsertUser(username, hash, "admin"); err != nil {
+			return err
+		}
 	}
 	if hasAdmin {
 		_ = stores.AuthSessions.DeleteByUsername(current.Username)

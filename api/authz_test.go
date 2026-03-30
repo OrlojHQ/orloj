@@ -126,6 +126,31 @@ func TestAuthzEnforcement(t *testing.T) {
 	}
 	resp.Body.Close()
 
+	// Token management endpoints are admin-only.
+	req, _ = http.NewRequest(http.MethodGet, httpServer.URL+"/v1/tokens", nil)
+	req.Header.Set("Authorization", "Bearer writer-token")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("writer tokens get failed: %v", err)
+	}
+	if resp.StatusCode != http.StatusForbidden {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected writer GET /v1/tokens 403, got %d body=%s", resp.StatusCode, string(b))
+	}
+	resp.Body.Close()
+
+	req, _ = http.NewRequest(http.MethodGet, httpServer.URL+"/v1/tokens", nil)
+	req.Header.Set("Authorization", "Bearer admin-token")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("admin tokens get failed: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected admin GET /v1/tokens 200, got %d body=%s", resp.StatusCode, string(b))
+	}
+	resp.Body.Close()
+
 	req, _ = http.NewRequest(http.MethodGet, httpServer.URL+"/v1/tools/t1", nil)
 	req.Header.Set("Authorization", "Bearer reader-token")
 	resp, err = http.DefaultClient.Do(req)

@@ -1365,11 +1365,23 @@ func orlojctlBashCompletion() string {
   local cur prev
   cur="${COMP_WORDS[COMP_CWORD]}"
   prev="${COMP_WORDS[COMP_CWORD-1]}"
-  local commands="apply validate create approve deny get memory-entries delete describe edit diff wait cancel retry top run init logs trace graph events messages metrics health status completion admin config version"
-  local resources="agents agent-systems model-endpoints tools secrets memories agent-policies agent-roles tool-permissions tool-approvals tasks task-schedules task-webhooks workers mcp-servers"
+  local commands="apply validate create approve deny get memory-entries delete describe edit diff wait cancel retry top run init logs trace graph events messages metrics health status completion auth admin config version"
+  local resources="agents agent-systems model-endpoints tools secrets memories agent-policies agent-roles tool-permissions tool-approvals tasks task-schedules task-webhooks workers mcp-servers tokens"
   case "${prev}" in
+    create)
+      COMPREPLY=( $(compgen -W "secret token" -- "${cur}") )
+      return
+      ;;
     get|describe|delete|edit)
       COMPREPLY=( $(compgen -W "${resources} memory-entries" -- "${cur}") )
+      return
+      ;;
+    auth)
+      COMPREPLY=( $(compgen -W "whoami" -- "${cur}") )
+      return
+      ;;
+    admin)
+      COMPREPLY=( $(compgen -W "create-user list-users delete-user reset-password" -- "${cur}") )
       return
       ;;
     approve|deny)
@@ -1396,14 +1408,23 @@ func orlojctlZshCompletion() string {
 _orlojctl() {
   local -a commands resources
   commands=(
-    apply validate create approve deny get memory-entries delete describe edit diff wait cancel retry top run init logs trace graph events messages metrics health status completion admin config version
+    apply validate create approve deny get memory-entries delete describe edit diff wait cancel retry top run init logs trace graph events messages metrics health status completion auth admin config version
   )
   resources=(
-    agents agent-systems model-endpoints tools secrets memories agent-policies agent-roles tool-permissions tool-approvals tasks task-schedules task-webhooks workers mcp-servers
+    agents agent-systems model-endpoints tools secrets memories agent-policies agent-roles tool-permissions tool-approvals tasks task-schedules task-webhooks workers mcp-servers tokens
   )
   case $words[2] in
+    create)
+      _arguments "1:resource:(secret token)"
+      ;;
     get|describe|delete|edit)
       _arguments "1:resource:(${resources} memory-entries)"
+      ;;
+    auth)
+      _arguments "1:subcommand:(whoami)"
+      ;;
+    admin)
+      _arguments "1:subcommand:(create-user list-users delete-user reset-password)"
       ;;
     approve|deny)
       _arguments "1:resource:(tool-approval)"
@@ -1424,9 +1445,12 @@ _orlojctl "$@"
 }
 
 func orlojctlFishCompletion() string {
-	return `complete -c orlojctl -f -a "apply validate create approve deny get memory-entries delete describe edit diff wait cancel retry top run init logs trace graph events messages metrics health status completion admin config version"
-complete -c orlojctl -n "__fish_seen_subcommand_from get describe delete edit" -a "agents agent-systems model-endpoints tools secrets memories agent-policies agent-roles tool-permissions tool-approvals tasks task-schedules task-webhooks workers mcp-servers memory-entries"
+	return `complete -c orlojctl -f -a "apply validate create approve deny get memory-entries delete describe edit diff wait cancel retry top run init logs trace graph events messages metrics health status completion auth admin config version"
+complete -c orlojctl -n "__fish_seen_subcommand_from create" -a "secret token"
+complete -c orlojctl -n "__fish_seen_subcommand_from get describe delete edit" -a "agents agent-systems model-endpoints tools secrets memories agent-policies agent-roles tool-permissions tool-approvals tasks task-schedules task-webhooks workers mcp-servers tokens memory-entries"
 complete -c orlojctl -n "__fish_seen_subcommand_from approve deny" -a "tool-approval"
+complete -c orlojctl -n "__fish_seen_subcommand_from auth" -a "whoami"
+complete -c orlojctl -n "__fish_seen_subcommand_from admin" -a "create-user list-users delete-user reset-password"
 complete -c orlojctl -n "__fish_seen_subcommand_from top" -a "workers tasks"
 complete -c orlojctl -n "__fish_seen_subcommand_from completion" -a "bash zsh fish"
 `

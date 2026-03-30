@@ -3,6 +3,7 @@ package api
 import (
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"strings"
@@ -26,11 +27,13 @@ type authRequest struct {
 type authMeResponse struct {
 	Authenticated bool   `json:"authenticated"`
 	Username      string `json:"username,omitempty"`
+	Name          string `json:"name,omitempty"`
+	Role          string `json:"role,omitempty"`
 	Method        string `json:"method,omitempty"`
 }
 
 type authResetPasswordRequest struct {
-	Username    string `json:"username,omitempty"`
+	Username    string `json:"username"`
 	NewPassword string `json:"new_password"`
 }
 
@@ -48,12 +51,12 @@ func (s *Server) handleAuthConfig(w http.ResponseWriter, r *http.Request) {
 	switch s.authMode {
 	case AuthModeNative:
 		resp.LoginMethods = []string{"password"}
-		hasAdmin, err := s.stores.LocalAdmins.HasAdmin()
+		userCount, err := s.stores.LocalAdmins.CountUsers()
 		if err != nil {
 			http.Error(w, "auth store error", http.StatusInternalServerError)
 			return
 		}
-		resp.SetupRequired = !hasAdmin
+		resp.SetupRequired = userCount == 0
 	case AuthModeSSO:
 		resp.LoginMethods = []string{"sso"}
 	default:
@@ -97,12 +100,12 @@ func (s *Server) handleAuthSetup(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	hasAdmin, err := s.stores.LocalAdmins.HasAdmin()
+	userCount, err := s.stores.LocalAdmins.CountUsers()
 	if err != nil {
 		http.Error(w, "auth store error", http.StatusInternalServerError)
 		return
 	}
-	if hasAdmin {
+	if userCount > 0 {
 		http.Error(w, "admin account is already configured", http.StatusConflict)
 		return
 	}
@@ -111,17 +114,28 @@ func (s *Server) handleAuthSetup(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to hash password", http.StatusInternalServerError)
 		return
 	}
-	if err := s.stores.LocalAdmins.Upsert(req.Username, hash); err != nil {
+	user, err := s.stores.LocalAdmins.CreateUser(req.Username, hash, "admin")
+	if err != nil {
+		if errors.Is(err, store.ErrAuthUserExists) {
+			http.Error(w, "admin account is already configured", http.StatusConflict)
+			return
+		}
 		http.Error(w, "failed to store admin account", http.StatusInternalServerError)
 		return
 	}
-	session, err := s.stores.AuthSessions.Create(req.Username, s.sessionTTL, time.Now().UTC())
+	session, err := s.stores.AuthSessions.Create(user.Username, s.sessionTTL, time.Now().UTC())
 	if err != nil {
 		http.Error(w, "failed to create session", http.StatusInternalServerError)
 		return
 	}
 	s.setSessionCookie(w, r, session.ID, s.sessionTTL)
-	writeJSON(w, http.StatusCreated, authMeResponse{Authenticated: true, Username: req.Username, Method: "session"})
+	writeJSON(w, http.StatusCreated, authMeResponse{
+		Authenticated: true,
+		Username:      user.Username,
+		Name:          user.Username,
+		Role:          user.Role,
+		Method:        "session",
+	})
 }
 
 func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
@@ -147,32 +161,43 @@ func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "username is required", http.StatusBadRequest)
 		return
 	}
-	admin, hasAdmin, err := s.stores.LocalAdmins.Get()
+	user, ok, err := s.stores.LocalAdmins.GetByUsername(req.Username)
 	if err != nil {
 		http.Error(w, "auth store error", http.StatusInternalServerError)
 		return
 	}
-	if !hasAdmin {
-		http.Error(w, "admin setup required", http.StatusConflict)
-		return
-	}
-	if !strings.EqualFold(admin.Username, req.Username) {
+	if !ok {
+		userCount, countErr := s.stores.LocalAdmins.CountUsers()
+		if countErr != nil {
+			http.Error(w, "auth store error", http.StatusInternalServerError)
+			return
+		}
+		if userCount == 0 {
+			http.Error(w, "admin setup required", http.StatusConflict)
+			return
+		}
 		http.Error(w, "invalid credentials", http.StatusUnauthorized)
 		return
 	}
-	ok, err := store.VerifyPasswordHash(admin.PasswordHash, req.Password)
+	ok, err = store.VerifyPasswordHash(user.PasswordHash, req.Password)
 	if err != nil || !ok {
 		http.Error(w, "invalid credentials", http.StatusUnauthorized)
 		return
 	}
 	_ = s.stores.AuthSessions.DeleteExpired(time.Now().UTC())
-	session, err := s.stores.AuthSessions.Create(admin.Username, s.sessionTTL, time.Now().UTC())
+	session, err := s.stores.AuthSessions.Create(user.Username, s.sessionTTL, time.Now().UTC())
 	if err != nil {
 		http.Error(w, "failed to create session", http.StatusInternalServerError)
 		return
 	}
 	s.setSessionCookie(w, r, session.ID, s.sessionTTL)
-	writeJSON(w, http.StatusOK, authMeResponse{Authenticated: true, Username: admin.Username, Method: "session"})
+	writeJSON(w, http.StatusOK, authMeResponse{
+		Authenticated: true,
+		Username:      user.Username,
+		Name:          user.Username,
+		Role:          user.Role,
+		Method:        "session",
+	})
 }
 
 func (s *Server) handleAuthLogout(w http.ResponseWriter, r *http.Request) {
@@ -197,29 +222,45 @@ func (s *Server) handleAuthMe(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if s.authMode != AuthModeNative {
-		writeJSON(w, http.StatusOK, authMeResponse{Authenticated: true, Method: "none"})
+	if s.authMode == AuthModeNative {
+		user, ok, err := s.authenticatedSessionUser(r, true)
+		if err != nil {
+			http.Error(w, "auth store error", http.StatusInternalServerError)
+			return
+		}
+		if ok {
+			writeJSON(w, http.StatusOK, authMeResponse{
+				Authenticated: true,
+				Username:      user.Username,
+				Name:          user.Username,
+				Role:          user.Role,
+				Method:        "session",
+			})
+			return
+		}
+		if bearerToken(r.Header.Get("Authorization")) != "" {
+			allowed, status, _, identity := authorizeWithIdentity(s.authorizer, r, "reader")
+			if status >= 500 {
+				http.Error(w, "authorization lookup failed", http.StatusInternalServerError)
+				return
+			}
+			if allowed {
+				writeJSON(w, http.StatusOK, authMeFromIdentity(identity, true))
+				return
+			}
+		}
+		writeJSON(w, http.StatusOK, authMeResponse{Authenticated: false})
 		return
 	}
 
-	if sessionID := readSessionID(r); sessionID != "" {
-		session, ok, err := s.stores.AuthSessions.Get(sessionID)
-		if err == nil && ok {
-			expiresAt, parseErr := time.Parse(time.RFC3339Nano, session.ExpiresAt)
-			if parseErr == nil && expiresAt.After(time.Now().UTC()) {
-				_ = s.stores.AuthSessions.Touch(sessionID, s.sessionTTL, time.Now().UTC())
-				writeJSON(w, http.StatusOK, authMeResponse{Authenticated: true, Username: session.Username, Method: "session"})
-				return
-			}
-			_ = s.stores.AuthSessions.Delete(sessionID)
-		}
+	allowed, status, _, identity := authorizeWithIdentity(s.authorizer, r, "reader")
+	if status >= 500 {
+		http.Error(w, "authorization lookup failed", http.StatusInternalServerError)
+		return
 	}
-
-	if s.authorizer != nil {
-		if allowed, _, _ := s.authorizer.Authorize(r, "reader"); allowed {
-			writeJSON(w, http.StatusOK, authMeResponse{Authenticated: true, Method: "bearer"})
-			return
-		}
+	if allowed {
+		writeJSON(w, http.StatusOK, authMeFromIdentity(identity, true))
+		return
 	}
 	writeJSON(w, http.StatusOK, authMeResponse{Authenticated: false})
 }
@@ -252,43 +293,18 @@ func (s *Server) handleAuthChangePassword(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	admin, hasAdmin, err := s.stores.LocalAdmins.Get()
+	user, ok, err := s.authenticatedSessionUser(r, true)
 	if err != nil {
 		http.Error(w, "auth store error", http.StatusInternalServerError)
 		return
 	}
-	if !hasAdmin {
-		http.Error(w, "admin setup required", http.StatusConflict)
-		return
-	}
-
-	authenticated := false
-	if sessionID := readSessionID(r); sessionID != "" {
-		session, ok, sessionErr := s.stores.AuthSessions.Get(sessionID)
-		if sessionErr != nil {
-			http.Error(w, "session lookup failed", http.StatusInternalServerError)
-			return
-		}
-		if ok {
-			expiresAt, parseErr := time.Parse(time.RFC3339Nano, session.ExpiresAt)
-			if parseErr == nil && expiresAt.After(time.Now().UTC()) && strings.EqualFold(session.Username, admin.Username) {
-				authenticated = true
-			} else if parseErr != nil || !expiresAt.After(time.Now().UTC()) {
-				_ = s.stores.AuthSessions.Delete(sessionID)
-			}
-		}
-	}
-	if !authenticated && s.authorizer != nil {
-		allowed, _, _ := s.authorizer.Authorize(r, "admin")
-		authenticated = allowed
-	}
-	if !authenticated {
+	if !ok {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
 
-	ok, verifyErr := store.VerifyPasswordHash(admin.PasswordHash, req.CurrentPassword)
-	if verifyErr != nil || !ok {
+	passwordOK, verifyErr := store.VerifyPasswordHash(user.PasswordHash, req.CurrentPassword)
+	if verifyErr != nil || !passwordOK {
 		http.Error(w, "invalid current password", http.StatusUnauthorized)
 		return
 	}
@@ -298,11 +314,13 @@ func (s *Server) handleAuthChangePassword(w http.ResponseWriter, r *http.Request
 		http.Error(w, "failed to hash password", http.StatusInternalServerError)
 		return
 	}
-	if upsertErr := s.stores.LocalAdmins.Upsert(admin.Username, hash); upsertErr != nil {
+	if setErr := s.stores.LocalAdmins.SetPassword(user.Username, hash); setErr != nil {
 		http.Error(w, "failed to update password", http.StatusInternalServerError)
 		return
 	}
-	_ = s.stores.AuthSessions.DeleteByUsername(admin.Username)
+	if delErr := s.stores.AuthSessions.DeleteByUsername(user.Username); delErr != nil && s.logger != nil {
+		s.logger.Printf("WARNING: failed to invalidate sessions after password change for %s: %v", user.Username, delErr)
+	}
 	s.clearSessionCookie(w, r)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "password changed"})
 }
@@ -320,15 +338,8 @@ func (s *Server) handleAuthAdminResetPassword(w http.ResponseWriter, r *http.Req
 		http.Error(w, "password reset is only available in native mode", http.StatusBadRequest)
 		return
 	}
-	if s.authorizer != nil {
-		allowed, status, message := s.authorizer.Authorize(r, "admin")
-		if !allowed {
-			if status <= 0 {
-				status = http.StatusForbidden
-			}
-			http.Error(w, strings.TrimSpace(message), status)
-			return
-		}
+	if !s.authorizeAdminRequest(w, r) {
+		return
 	}
 
 	var req authResetPasswordRequest
@@ -337,21 +348,22 @@ func (s *Server) handleAuthAdminResetPassword(w http.ResponseWriter, r *http.Req
 		return
 	}
 	req.Username = strings.TrimSpace(req.Username)
+	if req.Username == "" {
+		http.Error(w, "username is required", http.StatusBadRequest)
+		return
+	}
 	if err := store.ValidatePasswordPolicy(req.NewPassword, 12); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	admin, hasAdmin, err := s.stores.LocalAdmins.Get()
+
+	_, hasUser, err := s.stores.LocalAdmins.GetByUsername(req.Username)
 	if err != nil {
 		http.Error(w, "auth store error", http.StatusInternalServerError)
 		return
 	}
-	if !hasAdmin {
-		http.Error(w, "admin setup required", http.StatusConflict)
-		return
-	}
-	if req.Username != "" && !strings.EqualFold(req.Username, admin.Username) {
-		http.Error(w, "only the existing admin username may be reset", http.StatusBadRequest)
+	if !hasUser {
+		http.Error(w, "user not found", http.StatusNotFound)
 		return
 	}
 
@@ -360,13 +372,110 @@ func (s *Server) handleAuthAdminResetPassword(w http.ResponseWriter, r *http.Req
 		http.Error(w, "failed to hash password", http.StatusInternalServerError)
 		return
 	}
-	if err := s.stores.LocalAdmins.Upsert(admin.Username, hash); err != nil {
+	if err := s.stores.LocalAdmins.SetPassword(req.Username, hash); err != nil {
+		if errors.Is(err, store.ErrAuthUserNotFound) {
+			http.Error(w, "user not found", http.StatusNotFound)
+			return
+		}
 		http.Error(w, "failed to reset password", http.StatusInternalServerError)
 		return
 	}
-	_ = s.stores.AuthSessions.DeleteByUsername(admin.Username)
-	s.clearSessionCookie(w, r)
+	currentUser, hasCurrentSession, currentSessionErr := s.authenticatedSessionUser(r, false)
+	if currentSessionErr != nil && s.logger != nil {
+		s.logger.Printf("WARNING: failed to resolve current session during password reset for %s: %v", req.Username, currentSessionErr)
+	}
+	if delErr := s.stores.AuthSessions.DeleteByUsername(req.Username); delErr != nil && s.logger != nil {
+		s.logger.Printf("WARNING: failed to invalidate sessions after password reset for %s: %v", req.Username, delErr)
+	}
+	if hasCurrentSession && strings.EqualFold(currentUser.Username, req.Username) {
+		s.clearSessionCookie(w, r)
+	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "password reset"})
+}
+
+func authMeFromIdentity(identity AuthIdentity, authenticated bool) authMeResponse {
+	name := strings.TrimSpace(identity.Name)
+	method := strings.ToLower(strings.TrimSpace(identity.Method))
+	role := strings.ToLower(strings.TrimSpace(identity.Role))
+	resp := authMeResponse{
+		Authenticated: authenticated,
+		Name:          name,
+		Role:          role,
+		Method:        method,
+	}
+	if method == "session" {
+		resp.Username = name
+	}
+	return resp
+}
+
+func authorizeWithIdentity(authorizer RequestAuthorizer, r *http.Request, requiredRole string) (bool, int, string, AuthIdentity) {
+	if authorizer == nil {
+		return true, 0, "", AuthIdentity{Method: "none"}
+	}
+	if withIdentity, ok := authorizer.(IdentityAuthorizer); ok {
+		return withIdentity.AuthorizeWithIdentity(r, requiredRole)
+	}
+	allowed, statusCode, message := authorizer.Authorize(r, requiredRole)
+	identity := AuthIdentity{}
+	if allowed {
+		identity = AuthIdentity{
+			Role:   strings.TrimSpace(requiredRole),
+			Method: "bearer",
+		}
+	}
+	return allowed, statusCode, message, identity
+}
+
+func (s *Server) authorizeAdminRequest(w http.ResponseWriter, r *http.Request) bool {
+	_, ok := s.authorizeAdminRequestWithIdentity(w, r)
+	return ok
+}
+
+// authorizeAdminRequestWithIdentity performs admin authorization and returns
+// the caller's identity for audit logging.  On failure it writes an HTTP error
+// and returns (zero, false).
+func (s *Server) authorizeAdminRequestWithIdentity(w http.ResponseWriter, r *http.Request) (AuthIdentity, bool) {
+	allowed, status, message, identity := authorizeWithIdentity(s.authorizer, r, "admin")
+	if allowed {
+		return identity, true
+	}
+	if status <= 0 {
+		status = http.StatusForbidden
+	}
+	http.Error(w, strings.TrimSpace(message), status)
+	return AuthIdentity{}, false
+}
+
+func (s *Server) authenticatedSessionUser(r *http.Request, touch bool) (store.LocalAdminAccount, bool, error) {
+	sessionID := readSessionID(r)
+	if sessionID == "" {
+		return store.LocalAdminAccount{}, false, nil
+	}
+	session, ok, err := s.stores.AuthSessions.Get(sessionID)
+	if err != nil {
+		return store.LocalAdminAccount{}, false, err
+	}
+	if !ok {
+		return store.LocalAdminAccount{}, false, nil
+	}
+	expiresAt, parseErr := time.Parse(time.RFC3339Nano, session.ExpiresAt)
+	if parseErr != nil || !expiresAt.After(time.Now().UTC()) {
+		_ = s.stores.AuthSessions.Delete(sessionID)
+		return store.LocalAdminAccount{}, false, nil
+	}
+	user, found, err := s.stores.LocalAdmins.GetByUsername(session.Username)
+	if err != nil {
+		return store.LocalAdminAccount{}, false, err
+	}
+	if !found {
+		_ = s.stores.AuthSessions.Delete(sessionID)
+		return store.LocalAdminAccount{}, false, nil
+	}
+	if touch {
+		_ = s.stores.AuthSessions.Touch(sessionID, s.sessionTTL, time.Now().UTC())
+	}
+	return user, true, nil
 }
 
 func (s *Server) setSessionCookie(w http.ResponseWriter, r *http.Request, sessionID string, ttl time.Duration) {

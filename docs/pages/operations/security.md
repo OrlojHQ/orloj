@@ -48,10 +48,18 @@ Pick **one** of these (same token string you generated):
 For **multiple** distinct tokens with different roles (reader vs admin-style access), use:
 
 ```bash
-export ORLOJ_API_TOKENS='reader-token-here:reader,automation-token-here:admin'
+export ORLOJ_API_TOKENS='reader-bot:reader-token-here:reader,automation-bot:automation-token-here:admin'
 ```
 
-Format is comma-separated `token:role` pairs. When `ORLOJ_API_TOKENS` is set, it populates the token map and a single `ORLOJ_API_TOKEN` is only used if that list is empty (see `loadAuthConfig` in `api/authz.go`).
+Format is comma-separated `name:token:role` entries. Legacy `token:role` entries are still accepted for backward compatibility. When `ORLOJ_API_TOKENS` is set, it populates the token map and a single `ORLOJ_API_TOKEN` is only used if that list is empty (see `loadAuthConfig` in `api/authz.go`).
+
+For runtime-managed tokens (no server restart required), use:
+
+```bash
+orlojctl create token <name> --role <role>
+orlojctl get tokens
+orlojctl delete token <name>
+```
 
 ### 3. Configure clients (`orlojctl` and automation)
 
@@ -83,7 +91,7 @@ The comparison uses constant-time comparison to prevent timing side-channels. Wi
 
 ### 6. Authentication rate limiting
 
-Authentication endpoints (`/v1/auth/login`, `/v1/auth/setup`, `/v1/auth/change-password`, `/v1/auth/admin-reset-password`) are rate-limited per client IP address. The default policy allows 10 requests per minute sustained with a burst of 20 to accommodate legitimate multi-step flows. Requests that exceed the limit receive HTTP 429.
+Authentication endpoints (`/v1/auth/login`, `/v1/auth/setup`, `/v1/auth/change-password`, `/v1/auth/admin/reset-password`) are rate-limited per client IP address. The default policy allows 10 requests per minute sustained with a burst of 20 to accommodate legitimate multi-step flows. Requests that exceed the limit receive HTTP 429.
 
 ## Tool Types
 

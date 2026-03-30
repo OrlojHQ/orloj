@@ -9,15 +9,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Native multi-user authentication** (`--auth-mode native`): local username/password auth with bcrypt-hashed passwords, session cookies, and role-based access control.
+- **API token management**: named bearer tokens stored with SHA-256 hashes. CRUD via `POST /v1/tokens`, `GET /v1/tokens`, `DELETE /v1/tokens/{name}` (admin-only).
+- **Multi-user admin API**: `POST /v1/auth/users`, `GET /v1/auth/users`, `DELETE /v1/auth/users/{username}` for managing local accounts (admin-only). Server-generated passwords returned once on creation.
+- **Named bearer token format**: `name:token:role` alongside the existing legacy `token:role` format; env tokens (`ORLOJ_API_TOKENS`) checked first, then store-managed tokens.
+- **First-user bootstrap**: `/v1/auth/setup` creates the initial admin account; optionally protected by `ORLOJ_SETUP_TOKEN` env var.
+- **Auth identity propagation**: bearer and session callers carry `AuthIdentity` (name, role, method) through request context for audit logging. Bearer principals logged as `token-name` or `bearer:<role>`.
+- **Audit logging for admin operations**: token and user create/delete events emitted via the audit extension with principal, resource kind, and action.
+- `orlojctl`: `create token`, `get tokens`, `delete token` commands for API token lifecycle.
+- `orlojctl`: `admin create-user`, `admin list-users`, `admin delete-user` commands for local user management.
+- `orlojctl`: `auth whoami` queries `/v1/auth/me` and prints current identity.
+- `orlojctl`: `admin reset-password --username ... --new-password ...` for targeted password resets (invalidates target sessions).
 - `orlojctl`: global `--namespace` / `-n` default for namespace-aware commands; `apply` supports `--dry-run` and optional namespace override on manifest payloads.
 - `orlojctl`: `approve` / `deny` for pending tool approvals (`tool-approval`), with optional `--decided-by`, `--reason`, and namespace flags.
 - `orlojctl`: richer `get` (fetch by resource name, `-o table|json|yaml`, `tool-approvals` list view, memory entry listing, namespace filter for task watch).
 - `orlojctl`: `describe`, `edit`, `diff`, `wait`, `cancel task`, `retry task`, `top`, `messages`, `metrics`, `health`, `status`, and shell `completion` (bash/zsh/fish).
 - OpenAPI: optional `reason` on the tool approval decision request body (`openapi/schemas/common.yaml`).
+- OpenAPI: full schema and endpoint documentation for all OSS auth and token endpoints.
+- PostgreSQL migration `009_auth_users_and_tokens` creating `auth_local_users` and `auth_api_tokens` tables with backfill from env-configured admin credentials.
+- Startup warning when `--auth-mode native` is active but `ORLOJ_SETUP_TOKEN` is not set.
 
 ### Changed
 
+- `/v1/auth/me` now returns identity fields (`method`, `name`, `role`, compat `username`) for UI/CLI bootstrap.
+- `/v1/auth/admin/reset-password` requires an explicit `username` field and invalidates the target user's sessions.
+- Native session authorization now uses the actual logged-in user's role instead of a hardcoded default.
 - `orlojctl`: `main` exits with `cli.ExitCode(err)` so coded CLI errors can use non-default exit statuses.
+
+### Fixed
+
+- API: SSE watch endpoints (`/v1/events/watch`, resource `…/watch` URLs) work again when requests use bearer authentication (the auth middleware response wrapper now forwards `Flush` to the underlying connection).
+- API: session deletion failures after password change, password reset, and user deletion are now logged instead of silently ignored.
+- OpenAPI: `/v1/auth/change-password` spec now correctly declares authentication as required (matching the actual server behavior).
 
 ## [0.3.0] - 2026-03-29
 

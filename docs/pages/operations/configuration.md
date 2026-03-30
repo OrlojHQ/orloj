@@ -54,7 +54,7 @@ Example:
 | `ORLOJ_AGENT_MESSAGE_CONSUME` | `orlojworker` | `--agent-message-consume` | Enables worker-side runtime inbox consumers. |
 | `ORLOJ_AGENT_MESSAGE_CONSUMER_NAMESPACE` | `orlojworker` | `--agent-message-consumer-namespace` | Optional namespace filter for runtime inbox consumers. |
 | `ORLOJ_API_TOKEN` | `orlojd`, `orlojctl`, `orloj-alertcheck` | `--api-key` (server), `--api-token` (client/checker) | Bearer token fallback for API auth. |
-| `ORLOJ_API_TOKENS` | `orlojd` | none | Multi-token auth map (`token:role` comma-separated list). |
+| `ORLOJ_API_TOKENS` | `orlojd` | none | Multi-token auth map (`name:token:role` entries; legacy `token:role` supported). |
 | `ORLOJ_UI_PATH` | `orlojd` | `--ui-path` | Base URL path for the web console (default `/`). |
 | `ORLOJ_AUTH_MODE` | `orlojd` | `--auth-mode` | API auth mode (`off`, `native`, `sso`; `sso` unavailable in this distribution). |
 | `ORLOJ_AUTH_SESSION_TTL` | `orlojd` | `--auth-session-ttl` | Session TTL for native auth mode. |
