@@ -2,81 +2,117 @@ name: ci
 
 on:
   pull_request:
-    paths-ignore:
-      - "docs/**"
-      - "*.md"
   push:
     branches:
       - main
-    paths-ignore:
-      - "docs/**"
-      - "*.md"
 
 jobs:
+  # Matches previous paths-ignore: skip heavy jobs when only docs/** or repo-root *.md changed.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            code:
+              - '**'
+              - '!docs/**'
+              - '!/*.md'
+
   build-and-test:
+    needs: changes
     runs-on: ubuntu-latest
     steps:
+      - name: Skip (docs or root markdown only)
+        if: needs.changes.outputs.code != 'true'
+        run: echo "No code paths changed in this event; skipping build and test."
+
       - name: Checkout
+        if: needs.changes.outputs.code == 'true'
         uses: actions/checkout@v5
 
       - name: Setup Go
+        if: needs.changes.outputs.code == 'true'
         uses: actions/setup-go@v5
         with:
           go-version: "1.25"
 
       - name: Setup Bun
+        if: needs.changes.outputs.code == 'true'
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.0
 
       - name: Install frontend dependencies
+        if: needs.changes.outputs.code == 'true'
         run: cd frontend && bun install --frozen-lockfile
 
       - name: Build frontend (for Go embed)
+        if: needs.changes.outputs.code == 'true'
         run: cd frontend && bun run build
 
       - name: Build
+        if: needs.changes.outputs.code == 'true'
         run: go build ./...
 
       - name: Test
+        if: needs.changes.outputs.code == 'true'
         run: go test ./... -count=1 -timeout 120s
 
       - name: Validate example manifests (orlojctl)
+        if: needs.changes.outputs.code == 'true'
         run: go run ./cmd/orlojctl validate -f examples/
 
       - name: Vet
+        if: needs.changes.outputs.code == 'true'
         run: go vet ./...
 
       - name: Validate OpenAPI spec
+        if: needs.changes.outputs.code == 'true'
         run: npx --yes @redocly/cli@1.28.5 lint openapi/openapi.yaml
 
   reliability:
-    needs: build-and-test
+    needs: [changes, build-and-test]
     runs-on: ubuntu-latest
     steps:
+      - name: Skip (docs or root markdown only)
+        if: needs.changes.outputs.code != 'true'
+        run: echo "No code paths changed in this event; skipping reliability suite."
+
       - name: Checkout
+        if: needs.changes.outputs.code == 'true'
         uses: actions/checkout@v5
 
       - name: Setup Go
+        if: needs.changes.outputs.code == 'true'
         uses: actions/setup-go@v5
         with:
           go-version: "1.25"
 
       - name: Setup Bun
+        if: needs.changes.outputs.code == 'true'
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.3.0
 
       - name: Install frontend dependencies
+        if: needs.changes.outputs.code == 'true'
         run: cd frontend && bun install --frozen-lockfile
 
       - name: Build frontend (for Go embed)
+        if: needs.changes.outputs.code == 'true'
         run: cd frontend && bun run build
 
       - name: Build server
+        if: needs.changes.outputs.code == 'true'
         run: go build -o orlojd ./cmd/orlojd
 
       - name: Start orlojd (memory backend, embedded worker)
+        if: needs.changes.outputs.code == 'true'
         run: |
           ./orlojd \
             --storage-backend=memory \
@@ -87,6 +123,7 @@ jobs:
           echo "ORLOJD_PID=$!" >> "$GITHUB_ENV"
 
       - name: Wait for healthy server
+        if: needs.changes.outputs.code == 'true'
         run: |
           for i in $(seq 1 30); do
             if curl -sf http://127.0.0.1:8080/healthz > /dev/null 2>&1; then
@@ -99,6 +136,7 @@ jobs:
           exit 1
 
       - name: Run load test (SLO quality gates)
+        if: needs.changes.outputs.code == 'true'
         run: |
           go run ./cmd/orloj-loadtest \
             --base-url=http://127.0.0.1:8080 \
@@ -111,6 +149,7 @@ jobs:
             --json
 
       - name: Run alert check
+        if: needs.changes.outputs.code == 'true'
         run: |
           go run ./cmd/orloj-alertcheck \
             --base-url=http://127.0.0.1:8080 \
@@ -119,7 +158,7 @@ jobs:
             --json
 
       - name: Stop server
-        if: always()
+        if: always() && needs.changes.outputs.code == 'true'
         run: |
           if [ -n "$ORLOJD_PID" ]; then
             kill "$ORLOJD_PID" 2>/dev/null || true
