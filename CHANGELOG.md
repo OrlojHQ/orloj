@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-03-30
+
 ### Added
 
 - **Native multi-user authentication** (`--auth-mode native`): local username/password auth with bcrypt-hashed passwords, session cookies, and role-based access control.
@@ -100,7 +102,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Homebrew tap distribution (`OrlojHQ/orloj`)
 - Blueprint scaffolding via `orlojctl init`
 
-[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/OrlojHQ/orloj/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/OrlojHQ/orloj/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/OrlojHQ/orloj/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/OrlojHQ/orloj/compare/v0.1.0...v0.1.1
