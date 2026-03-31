@@ -289,6 +289,9 @@ func ParseToolManifest(data []byte) (Tool, error) {
 		if section == "spec" && subsection == "runtime" && indent <= 4 && !strings.HasSuffix(trimmed, ":") && !strings.HasPrefix(trimmed, "- ") {
 			runtimeSubsection = ""
 		}
+		if section == "spec" && subsection == "cli" && indent <= 4 && !strings.HasSuffix(trimmed, ":") && !strings.HasPrefix(trimmed, "- ") {
+			runtimeSubsection = ""
+		}
 
 		if strings.HasSuffix(trimmed, ":") {
 			switch strings.TrimSuffix(trimmed, ":") {
@@ -333,6 +336,23 @@ func ParseToolManifest(data []byte) (Tool, error) {
 			if section == "spec" && subsection == "runtime" {
 				runtimeSubsection = "retry"
 			}
+		case "cli":
+			if section == "spec" {
+				subsection = "cli"
+				runtimeSubsection = ""
+			}
+		case "args":
+			if section == "spec" && subsection == "cli" {
+				runtimeSubsection = "args"
+			}
+		case "env":
+			if section == "spec" && subsection == "cli" {
+				runtimeSubsection = "env"
+			}
+		case "env_from", "envFrom":
+			if section == "spec" && subsection == "cli" {
+				runtimeSubsection = "env_from"
+			}
 		}
 		continue
 	}
@@ -349,6 +369,38 @@ func ParseToolManifest(data []byte) (Tool, error) {
 
 	if section == "spec" && subsection == "auth" && runtimeSubsection == "scopes" && strings.HasPrefix(trimmed, "- ") {
 		out.Spec.Auth.Scopes = append(out.Spec.Auth.Scopes, stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))))
+		continue
+	}
+
+	if section == "spec" && subsection == "cli" && runtimeSubsection == "args" && strings.HasPrefix(trimmed, "- ") {
+		out.Spec.Cli.Args = append(out.Spec.Cli.Args, stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))))
+		continue
+	}
+
+	if section == "spec" && subsection == "cli" && runtimeSubsection == "env_from" && strings.HasPrefix(trimmed, "- ") {
+		item := strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))
+		k, v, ok := parseKeyValue(item)
+		if ok && (k == "name") {
+			out.Spec.Cli.EnvFrom = append(out.Spec.Cli.EnvFrom, ToolCliEnvRef{Name: stripQuotes(v)})
+		}
+		continue
+	}
+
+	if section == "spec" && subsection == "cli" && runtimeSubsection == "env_from" && !strings.HasPrefix(trimmed, "- ") {
+		if len(out.Spec.Cli.EnvFrom) > 0 {
+			k, v, ok := parseKeyValue(trimmed)
+			if ok {
+				last := &out.Spec.Cli.EnvFrom[len(out.Spec.Cli.EnvFrom)-1]
+				switch k {
+				case "name":
+					last.Name = stripQuotes(v)
+				case "secretRef", "secret_ref":
+					last.SecretRef = stripQuotes(v)
+				case "key":
+					last.Key = stripQuotes(v)
+				}
+			}
+		}
 		continue
 	}
 
@@ -402,6 +454,23 @@ func ParseToolManifest(data []byte) (Tool, error) {
 			out.Spec.Runtime.Retry.MaxBackoff = value
 		case section == "spec" && subsection == "runtime" && runtimeSubsection == "retry" && key == "jitter":
 			out.Spec.Runtime.Retry.Jitter = value
+		case section == "spec" && subsection == "cli" && runtimeSubsection == "env":
+			if out.Spec.Cli.Env == nil {
+				out.Spec.Cli.Env = make(map[string]string)
+			}
+			out.Spec.Cli.Env[key] = value
+		case section == "spec" && subsection == "cli" && runtimeSubsection == "" && key == "command":
+			out.Spec.Cli.Command = value
+		case section == "spec" && subsection == "cli" && runtimeSubsection == "" && key == "image":
+			out.Spec.Cli.Image = value
+		case section == "spec" && subsection == "cli" && runtimeSubsection == "" && key == "network":
+			out.Spec.Cli.Network = value
+		case section == "spec" && subsection == "cli" && runtimeSubsection == "" && key == "output":
+			out.Spec.Cli.Output = value
+		case section == "spec" && subsection == "cli" && runtimeSubsection == "" && (key == "working_dir" || key == "workingDir"):
+			out.Spec.Cli.WorkingDir = value
+		case section == "spec" && subsection == "cli" && runtimeSubsection == "" && (key == "stdin_from_input" || key == "stdinFromInput"):
+			out.Spec.Cli.StdinFromInput = strings.EqualFold(value, "true")
 		}
 	}
 

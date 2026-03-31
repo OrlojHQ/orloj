@@ -57,6 +57,8 @@ type AgentMessageConsumerOptions struct {
 	Roles               AgentRoleLookup
 	ToolPermissions     ToolPermissionLookup
 	IsolatedToolRuntime ToolRuntime
+	CliToolConfig       CLIToolRuntimeConfig
+	SecretResolver      SecretResolver
 	McpSessionManager   *McpSessionManager
 	McpServerStore      McpServerLookup
 	Extensions          Extensions
@@ -82,6 +84,8 @@ type AgentMessageConsumerManager struct {
 	roles          AgentRoleLookup
 	toolPerms      ToolPermissionLookup
 	isolated       ToolRuntime
+	cliConfig      CLIToolRuntimeConfig
+	secretResolver SecretResolver
 	mcpSessionMgr  *McpSessionManager
 	mcpServerStore McpServerLookup
 	executor       *TaskExecutor
@@ -142,6 +146,8 @@ func NewAgentMessageConsumerManager(
 		roles:          opts.Roles,
 		toolPerms:      opts.ToolPermissions,
 		isolated:       opts.IsolatedToolRuntime,
+		cliConfig:      opts.CliToolConfig,
+		secretResolver: opts.SecretResolver,
 		mcpSessionMgr:  opts.McpSessionManager,
 		mcpServerStore: opts.McpServerStore,
 		executor:       executor,
@@ -425,6 +431,7 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 	if m.mcpSessionMgr != nil && m.mcpServerStore != nil {
 		ConfigureMcpRuntime(toolRT, m.mcpSessionMgr, m.mcpServerStore, ns)
 	}
+	ConfigureCliRuntime(toolRT, m.secretResolver, nil, m.cliConfig, ns)
 	if memRef := strings.TrimSpace(agent.Spec.Memory.Ref); memRef != "" {
 		sharedMem := m.taskSharedMemory(taskKey)
 		memRT := NewMemoryToolRuntime(toolRT, sharedMem)

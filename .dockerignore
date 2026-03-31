@@ -14,6 +14,10 @@ docker-compose.yml
 *.test
 tmp
 *.log
+dist
+orlojctl
+orlojd
+orlojworker
 
 # Non-Go project directories
 docs
@@ -21,6 +25,8 @@ charts
 examples
 testing
 monitoring
+openapi
+scripts
 
 # Frontend (rebuilt in ui stage; ignore host artifacts and deps)
 frontend/node_modules
@@ -31,7 +37,9 @@ frontend/dist
 .DS_Store
 .vscode
 .idea
+.cursor
 Makefile
+redocly.yaml
 
 # Top-level docs / legal
 *.md

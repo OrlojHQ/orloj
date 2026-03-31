@@ -94,6 +94,7 @@ type GovernedToolRuntime struct {
 	baseRuntime     ToolRuntime
 	isolatedRuntime ToolRuntime
 	mcpRuntime      ToolRuntime
+	cliRuntime      ToolRuntime
 	registry        ToolCapabilityRegistry
 	authorizer      ToolCallAuthorizer
 	strict          bool
@@ -242,6 +243,24 @@ func ConfigureMcpRuntime(rt ToolRuntime, sessionManager *McpSessionManager, mcpS
 	governed.mcpRuntime = mcpRT
 }
 
+// ConfigureCliRuntime builds and attaches a CLI runtime for direct (non-containerized)
+// CLI tool execution. The runtime is scoped to the governed runtime's registry and
+// the provided namespace.
+func ConfigureCliRuntime(rt ToolRuntime, secrets SecretResolver, runner CLICommandRunner, config CLIToolRuntimeConfig, namespace string) {
+	governed, ok := rt.(*GovernedToolRuntime)
+	if !ok || governed == nil {
+		return
+	}
+	var cliRT ToolRuntime = NewCLIToolRuntime(governed.registry, secrets, runner, config)
+	if scoped, ok := cliRT.(namespaceAwareToolRuntime); ok {
+		cliRT = scoped.WithNamespace(namespace)
+	}
+	if aware, ok := cliRT.(registryAwareToolRuntime); ok && governed.registry != nil {
+		cliRT = aware.WithRegistry(governed.registry)
+	}
+	governed.cliRuntime = cliRT
+}
+
 func (r *GovernedToolRuntime) Call(ctx context.Context, tool string, input string) (string, error) {
 	tool = strings.TrimSpace(tool)
 	if tool == "" {
@@ -345,6 +364,38 @@ func (r *GovernedToolRuntime) callWithPolicy(ctx context.Context, tool string, i
 			)
 		}
 		target = r.mcpRuntime
+	} else if toolType == "cli" {
+		mode := strings.ToLower(strings.TrimSpace(spec.Runtime.IsolationMode))
+		if mode == "" {
+			mode = "container"
+		}
+		if mode != "none" {
+			if r.isolatedRuntime == nil {
+				return "", NewToolError(
+					ToolStatusError,
+					ToolCodeIsolationUnavailable,
+					ToolReasonIsolationUnavailable,
+					false,
+					fmt.Sprintf("tool isolation runtime unavailable for cli tool=%s mode=%s", tool, mode),
+					ErrToolIsolationUnavailable,
+					map[string]string{"tool": tool, "isolation_mode": mode, "type": "cli"},
+				)
+			}
+			target = r.isolatedRuntime
+		} else {
+			if r.cliRuntime == nil {
+				return "", NewToolError(
+					ToolStatusError,
+					ToolCodeIsolationUnavailable,
+					ToolReasonIsolationUnavailable,
+					false,
+					fmt.Sprintf("cli runtime unavailable for tool=%s", tool),
+					ErrToolIsolationUnavailable,
+					map[string]string{"tool": tool, "type": "cli"},
+				)
+			}
+			target = r.cliRuntime
+		}
 	} else {
 		mode := strings.ToLower(strings.TrimSpace(spec.Runtime.IsolationMode))
 		if mode == "" {

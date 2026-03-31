@@ -1,0 +1,38 @@
+apiVersion: orloj.dev/v1
+kind: Tool
+metadata:
+  name: gh-pr-list
+spec:
+  type: cli
+  description: "List open pull requests for a GitHub repository"
+  input_schema:
+    type: object
+    properties:
+      repo:
+        type: string
+        description: "GitHub repository in owner/name format"
+      state:
+        type: string
+        enum: [open, closed, merged, all]
+        description: "PR state filter"
+  cli:
+    command: gh
+    args:
+      - pr
+      - list
+      - --repo
+      - "{{ .repo }}"
+      - --state
+      - "{{ .state }}"
+      - --json
+      - number,title,author,state
+    image: ghcr.io/cli/cli:2.50
+    output: stdout
+    env_from:
+      - name: GITHUB_TOKEN
+        secretRef: gh-api-token
+  risk_level: low
+  operation_classes:
+    - read
+  runtime:
+    timeout: 30s

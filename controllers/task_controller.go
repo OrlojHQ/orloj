@@ -44,6 +44,8 @@ type TaskController struct {
 	agentMessageBus   agentruntime.AgentMessageBus
 	executionMode     string
 	isolatedTools     agentruntime.ToolRuntime
+	cliToolConfig     agentruntime.CLIToolRuntimeConfig
+	cliSecretResolver agentruntime.SecretResolver
 	mcpSessionMgr     *agentruntime.McpSessionManager
 	mcpServerStore    *store.McpServerStore
 	extensions        agentruntime.Extensions
@@ -141,6 +143,11 @@ func (c *TaskController) SetExtensions(ext agentruntime.Extensions) {
 func (c *TaskController) SetMcpRuntime(sessionMgr *agentruntime.McpSessionManager, mcpServerStore *store.McpServerStore) {
 	c.mcpSessionMgr = sessionMgr
 	c.mcpServerStore = mcpServerStore
+}
+
+func (c *TaskController) SetCliToolRuntime(config agentruntime.CLIToolRuntimeConfig, secrets agentruntime.SecretResolver) {
+	c.cliToolConfig = config
+	c.cliSecretResolver = secrets
 }
 
 func (c *TaskController) Start(ctx context.Context) {
@@ -1202,6 +1209,7 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 		if c.mcpSessionMgr != nil && c.mcpServerStore != nil {
 			agentruntime.ConfigureMcpRuntime(toolRuntime, c.mcpSessionMgr, c.mcpServerStore, task.Metadata.Namespace)
 		}
+		agentruntime.ConfigureCliRuntime(toolRuntime, c.cliSecretResolver, nil, c.cliToolConfig, task.Metadata.Namespace)
 		result, err := c.executor.ExecuteAgentWithRuntime(agentCtx, agent, runtimeInput, toolRuntime)
 		if err != nil {
 			category := "failure"

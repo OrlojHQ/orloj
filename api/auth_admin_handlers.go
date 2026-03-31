@@ -77,6 +77,10 @@ func (s *Server) handleTokens(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, resp)
 	case http.MethodPost:
+		// Re-extract identity so audit is explicit, not dependent on middleware ordering.
+		identity, _ := AuthIdentityFromRequest(r)
+		auditReq := r.WithContext(withAuthIdentity(r.Context(), identity))
+
 		var req createTokenRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
@@ -104,7 +108,7 @@ func (s *Server) handleTokens(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
-		s.emitAdminAudit(r, "token.create", "api-token", record.Name, fmt.Sprintf("created API token %q with role %s", record.Name, record.Role))
+		s.emitAdminAudit(auditReq, "token.create", "api-token", record.Name, fmt.Sprintf("created API token %q with role %s", record.Name, record.Role))
 		writeJSON(w, http.StatusCreated, tokenCreateResponse{
 			Name:      record.Name,
 			Role:      record.Role,
@@ -122,18 +126,20 @@ func (s *Server) handleTokenByName(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "token name is required", http.StatusBadRequest)
 		return
 	}
-	if strings.Contains(name, "/") {
+	decoded, err := url.PathUnescape(name)
+	if err != nil {
+		http.Error(w, "invalid token name encoding", http.StatusBadRequest)
+		return
+	}
+	name = strings.TrimSpace(decoded)
+	if name == "" || strings.Contains(name, "/") {
 		http.Error(w, "invalid token name", http.StatusBadRequest)
 		return
 	}
-	decoded, err := url.PathUnescape(name)
-	if err == nil {
-		name = strings.TrimSpace(decoded)
-	}
-	if name == "" {
-		http.Error(w, "token name is required", http.StatusBadRequest)
-		return
-	}
+
+	// Re-extract identity so audit is explicit, not dependent on middleware ordering.
+	identity, _ := AuthIdentityFromRequest(r)
+	auditReq := r.WithContext(withAuthIdentity(r.Context(), identity))
 
 	switch r.Method {
 	case http.MethodDelete:
@@ -147,7 +153,7 @@ func (s *Server) handleTokenByName(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
-		s.emitAdminAudit(r, "token.delete", "api-token", name, fmt.Sprintf("deleted API token %q", name))
+		s.emitAdminAudit(auditReq, "token.delete", "api-token", name, fmt.Sprintf("deleted API token %q", name))
 		writeJSON(w, http.StatusOK, map[string]string{"status": "token deleted"})
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -244,16 +250,14 @@ func (s *Server) handleAuthUserByName(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "username is required", http.StatusBadRequest)
 		return
 	}
-	if strings.Contains(username, "/") {
-		http.Error(w, "invalid username", http.StatusBadRequest)
+	decoded, err := url.PathUnescape(username)
+	if err != nil {
+		http.Error(w, "invalid username encoding", http.StatusBadRequest)
 		return
 	}
-	decoded, err := url.PathUnescape(username)
-	if err == nil {
-		username = strings.TrimSpace(decoded)
-	}
-	if username == "" {
-		http.Error(w, "username is required", http.StatusBadRequest)
+	username = strings.TrimSpace(decoded)
+	if username == "" || strings.Contains(username, "/") {
+		http.Error(w, "invalid username", http.StatusBadRequest)
 		return
 	}
 

@@ -19,9 +19,14 @@ func TestRunCreateTokenCommand(t *testing.T) {
 	rt := roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		gotMethod = r.Method
 		gotPath = r.URL.Path
-		raw, _ := io.ReadAll(r.Body)
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("failed to read request body: %v", err)
+		}
 		_ = r.Body.Close()
-		_ = json.Unmarshal(raw, &gotBody)
+		if err := json.Unmarshal(raw, &gotBody); err != nil {
+			t.Fatalf("failed to unmarshal request body: %v", err)
+		}
 		return mockResponse(r, http.StatusCreated, `{"name":"ci","role":"writer","token":"secret-token"}`), nil
 	})
 
@@ -158,9 +163,14 @@ func TestRunAdminCreateUserCommand(t *testing.T) {
 	rt := roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		gotMethod = r.Method
 		gotPath = r.URL.Path
-		raw, _ := io.ReadAll(r.Body)
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("failed to read request body: %v", err)
+		}
 		_ = r.Body.Close()
-		_ = json.Unmarshal(raw, &gotBody)
+		if err := json.Unmarshal(raw, &gotBody); err != nil {
+			t.Fatalf("failed to unmarshal request body: %v", err)
+		}
 		return mockResponse(r, http.StatusCreated, `{"username":"alice","role":"writer","password":"one-time-pass"}`), nil
 	})
 

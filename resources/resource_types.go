@@ -131,11 +131,32 @@ type ToolSpec struct {
 	InputSchema      map[string]any    `json:"input_schema,omitempty"`
 	McpServerRef     string            `json:"mcp_server_ref,omitempty"`
 	McpToolName      string            `json:"mcp_tool_name,omitempty"`
+	Cli              ToolCliSpec       `json:"cli,omitempty"`
 	Capabilities     []string          `json:"capabilities,omitempty"`
 	OperationClasses []string          `json:"operation_classes,omitempty"`
 	RiskLevel        string            `json:"risk_level,omitempty"`
 	Runtime          ToolRuntimePolicy `json:"runtime,omitempty"`
 	Auth             ToolAuth          `json:"auth,omitempty"`
+}
+
+// ToolCliSpec defines the configuration for CLI tool invocations.
+type ToolCliSpec struct {
+	Command        string            `json:"command,omitempty"`
+	Args           []string          `json:"args,omitempty"`
+	Image          string            `json:"image,omitempty"`
+	Network        string            `json:"network,omitempty"`
+	StdinFromInput bool              `json:"stdin_from_input,omitempty"`
+	Output         string            `json:"output,omitempty"`
+	WorkingDir     string            `json:"working_dir,omitempty"`
+	Env            map[string]string `json:"env,omitempty"`
+	EnvFrom        []ToolCliEnvRef   `json:"env_from,omitempty"`
+}
+
+// ToolCliEnvRef maps an Orloj secret to a process environment variable.
+type ToolCliEnvRef struct {
+	Name      string `json:"name"`
+	SecretRef string `json:"secretRef"`
+	Key       string `json:"key,omitempty"`
 }
 
 type ToolAuth struct {
@@ -215,10 +236,10 @@ func (t *Tool) Normalize() error {
 		toolType = "http"
 	}
 	switch toolType {
-	case "http", "external", "grpc", "queue", "webhook-callback", "mcp", "wasm":
+	case "http", "external", "grpc", "queue", "webhook-callback", "mcp", "wasm", "cli":
 		t.Spec.Type = toolType
 	default:
-		return fmt.Errorf("invalid spec.type %q: expected http, external, grpc, queue, webhook-callback, mcp, or wasm", t.Spec.Type)
+		return fmt.Errorf("invalid spec.type %q: expected http, external, grpc, queue, webhook-callback, mcp, wasm, or cli", t.Spec.Type)
 	}
 	t.Spec.McpServerRef = strings.TrimSpace(t.Spec.McpServerRef)
 	t.Spec.McpToolName = strings.TrimSpace(t.Spec.McpToolName)
@@ -228,6 +249,41 @@ func (t *Tool) Normalize() error {
 		}
 		if t.Spec.McpToolName == "" {
 			return fmt.Errorf("spec.mcp_tool_name is required when spec.type is mcp")
+		}
+	}
+	if toolType == "cli" {
+		t.Spec.Cli.Command = strings.TrimSpace(t.Spec.Cli.Command)
+		if t.Spec.Cli.Command == "" {
+			return fmt.Errorf("spec.cli.command is required when spec.type is cli")
+		}
+		t.Spec.Cli.Image = strings.TrimSpace(t.Spec.Cli.Image)
+		t.Spec.Cli.WorkingDir = strings.TrimSpace(t.Spec.Cli.WorkingDir)
+		output := strings.ToLower(strings.TrimSpace(t.Spec.Cli.Output))
+		if output == "" {
+			output = "stdout"
+		}
+		switch output {
+		case "stdout", "stderr", "both":
+			t.Spec.Cli.Output = output
+		default:
+			return fmt.Errorf("invalid spec.cli.output %q: expected stdout, stderr, or both", t.Spec.Cli.Output)
+		}
+		network := strings.TrimSpace(t.Spec.Cli.Network)
+		if network == "" {
+			network = "bridge"
+		}
+		t.Spec.Cli.Network = network
+		for i, ref := range t.Spec.Cli.EnvFrom {
+			ref.Name = strings.TrimSpace(ref.Name)
+			ref.SecretRef = strings.TrimSpace(ref.SecretRef)
+			ref.Key = strings.TrimSpace(ref.Key)
+			if ref.Name == "" {
+				return fmt.Errorf("spec.cli.env_from[%d].name is required", i)
+			}
+			if ref.SecretRef == "" {
+				return fmt.Errorf("spec.cli.env_from[%d].secretRef is required", i)
+			}
+			t.Spec.Cli.EnvFrom[i] = ref
 		}
 	}
 	normalizedCaps := make([]string, 0, len(t.Spec.Capabilities))
@@ -294,7 +350,9 @@ func (t *Tool) Normalize() error {
 
 	mode := strings.ToLower(strings.TrimSpace(t.Spec.Runtime.IsolationMode))
 	if mode == "" {
-		if t.Spec.RiskLevel == "high" || t.Spec.RiskLevel == "critical" {
+		if toolType == "cli" {
+			mode = "container"
+		} else if t.Spec.RiskLevel == "high" || t.Spec.RiskLevel == "critical" {
 			mode = "sandboxed"
 		} else {
 			mode = "none"
@@ -305,6 +363,9 @@ func (t *Tool) Normalize() error {
 		t.Spec.Runtime.IsolationMode = mode
 	default:
 		return fmt.Errorf("invalid spec.runtime.isolation_mode %q: expected none, sandboxed, container, or wasm", t.Spec.Runtime.IsolationMode)
+	}
+	if toolType == "cli" && mode != "none" && t.Spec.Cli.Image == "" {
+		return fmt.Errorf("spec.cli.image is required when spec.type is cli and isolation_mode is not none")
 	}
 
 	if t.Spec.Runtime.Retry.MaxAttempts <= 0 {
@@ -335,6 +396,11 @@ func (t *Tool) Normalize() error {
 	t.Spec.Auth.SecretRef = strings.TrimSpace(t.Spec.Auth.SecretRef)
 	t.Spec.Auth.HeaderName = strings.TrimSpace(t.Spec.Auth.HeaderName)
 	t.Spec.Auth.TokenURL = strings.TrimSpace(t.Spec.Auth.TokenURL)
+	if toolType == "cli" {
+		if t.Spec.Auth.Profile != "" || t.Spec.Auth.SecretRef != "" {
+			return fmt.Errorf("spec.auth is not supported for cli tools; use spec.cli.env_from for CLI tool credentials")
+		}
+	}
 	authProfile := strings.ToLower(strings.TrimSpace(t.Spec.Auth.Profile))
 	if authProfile == "" && t.Spec.Auth.SecretRef != "" {
 		authProfile = "bearer"

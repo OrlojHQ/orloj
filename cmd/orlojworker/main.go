@@ -55,6 +55,8 @@ func main() {
 	toolWASMMemoryBytes := flag.Int64("tool-wasm-memory-bytes", envInt64("ORLOJ_TOOL_WASM_MEMORY_BYTES", 64*1024*1024), "max wasm runtime memory bytes for tool isolation runtime")
 	toolWASMFuel := flag.Uint64("tool-wasm-fuel", envUint64("ORLOJ_TOOL_WASM_FUEL", 0), "optional wasm execution fuel limit (0 disables fuel limiting)")
 	toolWASMWASI := flag.Bool("tool-wasm-wasi", envBool("ORLOJ_TOOL_WASM_WASI", true), "enable WASI host functions for wasm tool isolation runtime")
+	cliToolAllowedCommands := flag.String("cli-tool-allowed-commands", env("ORLOJ_CLI_TOOL_ALLOWED_COMMANDS", ""), "comma-separated allowlist of commands for CLI tools (empty allows all)")
+	cliToolMaxArgvLength := flag.Int("cli-tool-max-argv-length", envInt("ORLOJ_CLI_TOOL_MAX_ARGV_LENGTH", 4096), "max total argv byte length for CLI tool invocations")
 	agentMessageBusBackend := flag.String("agent-message-bus-backend", env("ORLOJ_AGENT_MESSAGE_BUS_BACKEND", "none"), "runtime agent message bus backend: none|memory|nats-jetstream")
 	agentMessageNATSURL := flag.String("agent-message-nats-url", env("ORLOJ_AGENT_MESSAGE_NATS_URL", env("ORLOJ_NATS_URL", "nats://127.0.0.1:4222")), "NATS server URL used when --agent-message-bus-backend=nats-jetstream")
 	agentMessageSubjectPrefix := flag.String("agent-message-subject-prefix", env("ORLOJ_AGENT_MESSAGE_SUBJECT_PREFIX", "orloj.agentmsg"), "runtime agent message subject prefix")
@@ -159,6 +161,16 @@ func main() {
 		logger.Fatalf("failed to configure isolated tool runtime: %v", err)
 	}
 	taskController.SetIsolatedToolRuntime(isolatedToolRuntime)
+
+	toolStoreResolver := agentruntime.NewStoreSecretResolver(stores.Secrets, "value")
+	toolEnvResolver := agentruntime.NewEnvSecretResolver(strings.TrimSpace(*toolSecretEnvPrefix))
+	toolSecretResolver := agentruntime.NewChainSecretResolver(toolStoreResolver, toolEnvResolver)
+	cliConfig := agentruntime.CLIToolRuntimeConfig{
+		AllowedCommands: startup.ParseCSV(*cliToolAllowedCommands),
+		MaxArgvLength:   *cliToolMaxArgvLength,
+	}
+	taskController.SetCliToolRuntime(cliConfig, toolSecretResolver)
+
 	agentMessageBus, closeAgentMessageBus := startup.NewAgentMessageBus(
 		logger, *agentMessageBusBackend, *agentMessageNATSURL,
 		*agentMessageSubjectPrefix, *agentMessageStreamName,
@@ -204,6 +216,8 @@ func main() {
 					Roles:               stores.Roles,
 					ToolPermissions:     stores.ToolPerms,
 					IsolatedToolRuntime: isolatedToolRuntime,
+					CliToolConfig:       cliConfig,
+					SecretResolver:      toolSecretResolver,
 					Extensions:          extensions,
 					Memories:            stores.Memories,
 					MemoryBackends:      memoryBackendRegistry,

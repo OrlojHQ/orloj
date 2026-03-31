@@ -14,6 +14,7 @@ This page summarizes key HTTP endpoints and behavior contracts.
 - tools
 - secrets
 - memories
+- mcp-servers
 - agent-policies
 - agent-roles
 - tool-permissions
