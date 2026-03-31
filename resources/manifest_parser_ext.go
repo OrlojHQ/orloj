@@ -336,6 +336,11 @@ func ParseToolManifest(data []byte) (Tool, error) {
 			if section == "spec" && subsection == "runtime" {
 				runtimeSubsection = "retry"
 			}
+		case "input_schema", "inputSchema":
+			if section == "spec" {
+				subsection = "input_schema"
+				runtimeSubsection = ""
+			}
 		case "cli":
 			if section == "spec" {
 				subsection = "cli"

@@ -251,6 +251,40 @@ spec:
 	}
 }
 
+// Regression: JSON Schema uses nested "type" keys; the line-based YAML parser must treat
+// input_schema as a subsection so those lines do not overwrite spec.type.
+func TestParseToolManifestYAMLSpecTypeNotOverwrittenByInputSchema(t *testing.T) {
+	yaml := `apiVersion: orloj.dev/v1
+kind: Tool
+metadata:
+  name: gh-pr-list
+spec:
+  type: cli
+  input_schema:
+    type: object
+    properties:
+      repo:
+        type: string
+      state:
+        type: string
+        enum: [open, closed]
+  cli:
+    command: gh
+    image: ghcr.io/cli/cli:2.50
+    output: stdout
+`
+	tool, err := ParseToolManifest([]byte(yaml))
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+	if tool.Spec.Type != "cli" {
+		t.Fatalf("expected spec.type cli, got %q (nested schema type must not overwrite)", tool.Spec.Type)
+	}
+	if tool.Spec.Cli.Command != "gh" {
+		t.Fatalf("expected cli.command gh, got %q", tool.Spec.Cli.Command)
+	}
+}
+
 func TestToolNormalizeAcceptsCLIInValidTypes(t *testing.T) {
 	validTypes := []string{"cli", "CLI", "Cli"}
 	for _, toolType := range validTypes {
