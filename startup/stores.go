@@ -57,32 +57,31 @@ type StoreConfig struct {
 }
 
 func OpenStores(cfg StoreConfig, logger *log.Logger) (*StoreSet, error) {
-	s := &StoreSet{
-		Agents:        store.NewAgentStore(),
-		AgentSystems:  store.NewAgentSystemStore(),
-		ModelEPs:      store.NewModelEndpointStore(),
-		Tools:         store.NewToolStore(),
-		Secrets:       store.NewSecretStore(),
-		Memories:      store.NewMemoryStore(),
-		Policies:      store.NewAgentPolicyStore(),
-		Roles:         store.NewAgentRoleStore(),
-		ToolPerms:     store.NewToolPermissionStore(),
-		ToolApprovals: store.NewToolApprovalStore(),
-		Tasks:         store.NewTaskStore(),
-		Workers:       store.NewWorkerStore(),
-		McpServers:    store.NewMcpServerStore(),
-		LocalAdmins:   store.NewLocalAdminStore(),
-		APITokens:     store.NewAPITokenStore(),
-		AuthSessions:  store.NewAuthSessionStore(),
-	}
-	if cfg.IncludeScheduleStores {
-		s.TaskSchedules = store.NewTaskScheduleStore()
-		s.TaskWebhooks = store.NewTaskWebhookStore()
-		s.WebhookDedupe = store.NewWebhookDedupeStore()
-	}
+	s := &StoreSet{}
 
 	switch cfg.Backend {
 	case "memory":
+		s.Agents = store.NewAgentStore()
+		s.AgentSystems = store.NewAgentSystemStore()
+		s.ModelEPs = store.NewModelEndpointStore()
+		s.Tools = store.NewToolStore()
+		s.Secrets = store.NewSecretStore()
+		s.Memories = store.NewMemoryStore()
+		s.Policies = store.NewAgentPolicyStore()
+		s.Roles = store.NewAgentRoleStore()
+		s.ToolPerms = store.NewToolPermissionStore()
+		s.ToolApprovals = store.NewToolApprovalStore()
+		s.Tasks = store.NewTaskStore()
+		s.Workers = store.NewWorkerStore()
+		s.McpServers = store.NewMcpServerStore()
+		s.LocalAdmins = store.NewLocalAdminStore()
+		s.APITokens = store.NewAPITokenStore()
+		s.AuthSessions = store.NewAuthSessionStore()
+		if cfg.IncludeScheduleStores {
+			s.TaskSchedules = store.NewTaskScheduleStore()
+			s.TaskWebhooks = store.NewTaskWebhookStore()
+			s.WebhookDedupe = store.NewWebhookDedupeStore()
+		}
 		if logger != nil {
 			logger.Printf("using storage backend=%s", cfg.Backend)
 		}

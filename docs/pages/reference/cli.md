@@ -179,6 +179,24 @@ Notes:
 - `orlojctl get <resource> [name]` supports both list and single-resource fetch.
 - `orlojctl get memory-entries <memory-name> ...` delegates to memory entry inspection.
 
+Examples (MCP servers):
+
+```bash
+# Apply an MCP server manifest
+orlojctl apply -f mcp-server.yaml
+
+# List all MCP servers
+orlojctl get mcp-servers
+
+# Get a specific MCP server
+orlojctl get mcp-server my-server
+
+# Delete an MCP server
+orlojctl delete mcp-server my-server
+```
+
+See the [Connect an MCP Server](../guides/connect-mcp-server.md) guide for full setup instructions.
+
 ### `orlojctl delete`
 
 | Flag | Default | Description |

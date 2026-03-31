@@ -274,6 +274,8 @@ func (r *ContainerToolRuntime) Call(ctx context.Context, tool string, input stri
 	switch strings.ToLower(strings.TrimSpace(spec.Type)) {
 	case "", "http":
 		return r.callHTTP(ctx, tool, spec, input)
+	case "cli":
+		return r.callCLI(ctx, tool, spec, input)
 	default:
 		return "", NewToolError(
 			ToolStatusError,
@@ -340,6 +342,100 @@ func (r *ContainerToolRuntime) callHTTP(ctx context.Context, tool string, spec r
 		)
 	}
 	return strings.TrimSpace(stdout), nil
+}
+
+func (r *ContainerToolRuntime) callCLI(ctx context.Context, tool string, spec resources.ToolSpec, input string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", mapContainerContextError(tool, err)
+	}
+	command := strings.TrimSpace(spec.Cli.Command)
+	if command == "" {
+		return "", NewToolError(ToolStatusError, ToolCodeRuntimePolicyInvalid, ToolReasonRuntimePolicyInvalid, false,
+			fmt.Sprintf("tool=%s missing cli.command", tool), ErrInvalidToolRuntimePolicy, map[string]string{"tool": tool})
+	}
+	image := strings.TrimSpace(spec.Cli.Image)
+	if image == "" {
+		return "", NewToolError(ToolStatusError, ToolCodeRuntimePolicyInvalid, ToolReasonRuntimePolicyInvalid, false,
+			fmt.Sprintf("tool=%s missing cli.image for container isolation", tool), ErrInvalidToolRuntimePolicy, map[string]string{"tool": tool})
+	}
+
+	args, err := evaluateCLIArgs(spec.Cli.Args, input)
+	if err != nil {
+		return "", err
+	}
+
+	containerEnv := make(map[string]string)
+	for k, v := range spec.Cli.Env {
+		containerEnv[k] = v
+	}
+	for _, ref := range spec.Cli.EnvFrom {
+		secretRef := ref.SecretRef
+		if ref.Key != "" {
+			secretRef = secretRef + ":" + ref.Key
+		}
+		value, resolveErr := r.secrets.Resolve(ctx, secretRef)
+		if resolveErr != nil {
+			return "", NewToolError(ToolStatusError, ToolCodeExecutionFailed, ToolReasonBackendFailure, false,
+				fmt.Sprintf("failed to resolve secret for env var %s: %v", ref.Name, resolveErr),
+				fmt.Errorf("%w: %v", ErrToolSecretResolution, resolveErr),
+				map[string]string{"env_var": ref.Name, "secretRef": ref.SecretRef})
+		}
+		containerEnv[ref.Name] = value
+	}
+
+	dockerArgs := r.containerCLIRunArgs(spec.Cli, image, command, args, containerEnv)
+
+	stdinData := ""
+	if spec.Cli.StdinFromInput {
+		stdinData = strings.TrimSpace(input)
+	}
+
+	stdout, stderr, runErr := runContainerCommandBounded(ctx, r.runner, r.config.RuntimeBinary, dockerArgs, stdinData, nil)
+	if runErr != nil {
+		if errors.Is(runErr, context.DeadlineExceeded) || errors.Is(runErr, context.Canceled) {
+			return "", mapContainerContextError(tool, runErr)
+		}
+		return "", NewToolError(ToolStatusError, ToolCodeExecutionFailed, ToolReasonBackendFailure, true,
+			fmt.Sprintf("container CLI execution failed for tool=%s stderr=%s", tool, RedactSensitive(compactStderr(stderr))),
+			runErr, map[string]string{"tool": tool, "runtime": strings.TrimSpace(r.config.RuntimeBinary), "isolation_mode": "container"})
+	}
+
+	return formatCLIOutput(spec.Cli.Output, stdout, stderr), nil
+}
+
+func (r *ContainerToolRuntime) containerCLIRunArgs(cli resources.ToolCliSpec, image string, command string, args []string, env map[string]string) []string {
+	network := strings.TrimSpace(cli.Network)
+	if network == "" {
+		network = "bridge"
+	}
+	dockerArgs := []string{
+		"run", "--rm", "-i",
+		"--network", network,
+		"--read-only",
+		"--cap-drop=ALL",
+		"--security-opt", "no-new-privileges",
+	}
+	if strings.TrimSpace(r.config.User) != "" {
+		dockerArgs = append(dockerArgs, "--user", strings.TrimSpace(r.config.User))
+	}
+	if strings.TrimSpace(r.config.Memory) != "" {
+		dockerArgs = append(dockerArgs, "--memory", strings.TrimSpace(r.config.Memory))
+	}
+	if strings.TrimSpace(r.config.CPUs) != "" {
+		dockerArgs = append(dockerArgs, "--cpus", strings.TrimSpace(r.config.CPUs))
+	}
+	if r.config.PidsLimit > 0 {
+		dockerArgs = append(dockerArgs, "--pids-limit", strconv.Itoa(r.config.PidsLimit))
+	}
+	if strings.TrimSpace(cli.WorkingDir) != "" {
+		dockerArgs = append(dockerArgs, "--workdir", strings.TrimSpace(cli.WorkingDir))
+	}
+	for k, v := range env {
+		dockerArgs = append(dockerArgs, "-e", k+"="+v)
+	}
+	dockerArgs = append(dockerArgs, "--entrypoint", command, image)
+	dockerArgs = append(dockerArgs, args...)
+	return dockerArgs
 }
 
 func runContainerCommandBounded(

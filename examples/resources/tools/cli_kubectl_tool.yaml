@@ -1,0 +1,36 @@
+apiVersion: orloj.dev/v1
+kind: Tool
+metadata:
+  name: kubectl-get-pods
+spec:
+  type: cli
+  description: "List Kubernetes pods in a namespace with configurable output format"
+  input_schema:
+    type: object
+    properties:
+      namespace:
+        type: string
+        description: "Kubernetes namespace to query"
+      format:
+        type: string
+        enum: [json, yaml, wide]
+        description: "Output format"
+  cli:
+    command: kubectl
+    args:
+      - get
+      - pods
+      - -n
+      - "{{ .namespace }}"
+      - -o
+      - "{{ .format }}"
+    image: bitnami/kubectl:1.30
+    output: stdout
+    env_from:
+      - name: KUBECONFIG
+        secretRef: k8s-kubeconfig
+  risk_level: medium
+  operation_classes:
+    - read
+  runtime:
+    timeout: 15s

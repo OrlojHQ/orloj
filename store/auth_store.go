@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"sync"
@@ -298,6 +299,8 @@ func (s *LocalAdminStore) UpsertUser(username, passwordHash, role string) (Local
 	if ok {
 		if parsed, parseErr := time.Parse(time.RFC3339Nano, existing.CreatedAt); parseErr == nil {
 			createdAt = parsed
+		} else {
+			log.Printf("WARNING: user %q has unparseable CreatedAt %q, falling back to current time", username, existing.CreatedAt)
 		}
 	}
 	account := LocalAdminAccount{

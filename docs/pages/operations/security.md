@@ -111,6 +111,21 @@ Outbound HTTP, gRPC, and MCP connections validate the target endpoint before con
 
 Private network addresses (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `fc00::/7`) are also blocked unless explicitly allowed. These checks apply when the host is a literal IP address; hostname-based endpoints are validated at the network dialer level.
 
+### MCP Server Security
+
+`McpServer` resources connect to external MCP (Model Context Protocol) servers that expose tools for agent use. Security considerations vary by transport:
+
+- **stdio** (`transport: stdio`): The MCP server runs as a subprocess managed by Orloj. The `command` and `args` fields control exactly what binary is executed. The subprocess inherits only the environment variables explicitly listed in `spec.env` and resolved `spec.env[].secretRef` values -- no host environment leaks into the child process.
+- **HTTP** (`transport: http`): The MCP server is a remote endpoint. SSRF validation (above) applies to the `spec.endpoint` URL, blocking loopback, link-local, and private-network targets by default. Use `spec.auth` to attach bearer or API-key credentials to outbound requests.
+
+**Tool scoping:** Use `spec.tool_filter.include` to restrict which tools the MCP server exposes. Without a filter, all tools reported by `tools/list` are generated as `Tool` resources. In production, prefer an explicit allowlist to minimize attack surface.
+
+**Credential injection:** Secrets referenced via `spec.env[].secretRef` follow the same [secret resolution chain](#secret-handling) as other resources. Avoid placing credentials in `spec.env[].value` plaintext fields outside of development.
+
+**Governed runtime:** Tools discovered from MCP servers are generated as standard `Tool` resources with `spec.type: mcp`. They flow through the same governed runtime pipeline (policy enforcement, retry, auth injection, approvals) as all other tool types.
+
+See [MCP Server concept](../concepts/tools/mcp-server.md) and the [Connect an MCP Server](../guides/connect-mcp-server.md) guide for setup details.
+
 ## Isolation Modes
 
 - `none` -- direct execution with real HTTP/gRPC calls (no isolation boundary)
@@ -138,6 +153,21 @@ When `isolation_mode=sandboxed` (the default for `high`/`critical` risk tools), 
 | Process limit | `64` PIDs |
 
 These defaults are enforced by `SandboxedContainerDefaults()` in the runtime and validated by conformance tests. Override with `--tool-container-*` flags only when necessary.
+
+### CLI Tool Isolation
+
+CLI tools (`spec.type: cli`) default to `container` isolation regardless of risk level. Unlike HTTP container isolation, CLI containers use **bridge networking** by default because the binary itself is the network client (e.g., `kubectl` reaches the K8s API, `gh` reaches GitHub).
+
+**Security properties:**
+
+- **No shell**: invocations use `exec.CommandContext` (execve-style argv). There is no `sh -c` path and no opt-in for shell mode.
+- **Arg templates are per-entry**: each Go template produces exactly one argv element. No shell splitting or word expansion occurs.
+- **Secrets via env_from only**: process environment is constructed exclusively from `spec.cli.env` (literals) and `spec.cli.env_from` (resolved secrets). No host environment variables leak into the container.
+- **Binary allowlist** (optional): `--cli-tool-allowed-commands` rejects commands not on the list before exec.
+- **Argv length limit**: `--cli-tool-max-argv-length` (default 4096 bytes) prevents oversized argument lists.
+- **`spec.auth` rejected**: CLI tools must use `env_from` for credentials; setting `spec.auth` produces a validation error to prevent silent misconfiguration.
+
+Operators can restrict per-tool networking with `spec.cli.network: none` for tools that do not need outbound access (e.g., `jq`, `yq`).
 
 ## Secret Handling
 
@@ -281,3 +311,5 @@ All approval-related outcomes are non-retryable and do not consume retry budget.
 ## Related Docs
 
 - [Tool](../concepts/tools/tool.md)
+- [MCP Server](../concepts/tools/mcp-server.md)
+- [Connect an MCP Server](../guides/connect-mcp-server.md)

@@ -67,6 +67,8 @@ func main() {
 	toolWASMMemoryBytes := flag.Int64("tool-wasm-memory-bytes", envInt64("ORLOJ_TOOL_WASM_MEMORY_BYTES", 64*1024*1024), "max wasm runtime memory bytes for tool isolation runtime")
 	toolWASMFuel := flag.Uint64("tool-wasm-fuel", envUint64("ORLOJ_TOOL_WASM_FUEL", 0), "optional wasm execution fuel limit (0 disables fuel limiting)")
 	toolWASMWASI := flag.Bool("tool-wasm-wasi", envBool("ORLOJ_TOOL_WASM_WASI", true), "enable WASI host functions for wasm tool isolation runtime")
+	cliToolAllowedCommands := flag.String("cli-tool-allowed-commands", env("ORLOJ_CLI_TOOL_ALLOWED_COMMANDS", ""), "comma-separated allowlist of commands for CLI tools (empty allows all)")
+	cliToolMaxArgvLength := flag.Int("cli-tool-max-argv-length", envInt("ORLOJ_CLI_TOOL_MAX_ARGV_LENGTH", 4096), "max total argv byte length for CLI tool invocations")
 	eventBusBackend := flag.String("event-bus-backend", env("ORLOJ_EVENT_BUS_BACKEND", "memory"), "event bus backend: memory|nats")
 	natsURL := flag.String("nats-url", env("ORLOJ_NATS_URL", "nats://127.0.0.1:4222"), "NATS server URL used when --event-bus-backend=nats")
 	natsSubjectPrefix := flag.String("nats-subject-prefix", env("ORLOJ_NATS_SUBJECT_PREFIX", "orloj.controlplane"), "NATS subject prefix used when --event-bus-backend=nats")
@@ -210,6 +212,14 @@ func main() {
 	}
 	taskController.SetIsolatedToolRuntime(isolatedToolRuntime)
 	taskController.SetMcpRuntime(mcpSessionManager, stores.McpServers)
+
+	cliStoreResolver := agentruntime.NewStoreSecretResolver(stores.Secrets, "value")
+	cliEnvResolver := agentruntime.NewEnvSecretResolver(strings.TrimSpace(*toolSecretEnvPrefix))
+	cliSecretResolver := agentruntime.NewChainSecretResolver(cliStoreResolver, cliEnvResolver)
+	taskController.SetCliToolRuntime(agentruntime.CLIToolRuntimeConfig{
+		AllowedCommands: startup.ParseCSV(*cliToolAllowedCommands),
+		MaxArgvLength:   *cliToolMaxArgvLength,
+	}, cliSecretResolver)
 
 	var requestAuthorizer api.RequestAuthorizer
 	if strings.TrimSpace(*apiKey) != "" {
