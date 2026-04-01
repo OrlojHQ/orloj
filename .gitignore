@@ -41,3 +41,7 @@ coverage.out
 
 # Testing artifacts
 /testing/artifacts/
+
+# Python bytecode/cache
+__pycache__/
+*.py[cod]

@@ -76,6 +76,16 @@ Run the smallest relevant checks first, then run broader checks before review:
 - Update docs/examples/changelog when applicable.
 - Avoid unrelated refactors in feature or fix PRs.
 
+## README Orloj in Action Media Maintenance
+
+The root README includes visual media for **Orloj in Action** backed by assets in `docs/public/readme/`.
+
+- Refresh these assets when UI layout, navigation structure, or key task views materially change.
+- Use the reproducible workflow: `scripts/capture_readme_media.sh`.
+- Keep filenames stable so README links remain valid.
+- Verify no sensitive/local-identifying content appears before committing.
+- Keep media payload reasonable (target under ~8 MB total for screenshots + GIF).
+
 ## OpenAPI
 
 - **[openapi/openapi.yaml](openapi/openapi.yaml)** is **generated**. Do not edit it by hand for `paths`, `info`, or `tags`—changes are overwritten when someone runs the generator.

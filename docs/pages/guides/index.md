@@ -32,3 +32,7 @@ Register an MCP server (stdio or HTTP), verify tool discovery, filter imported t
 **[Build a Custom Tool](./build-custom-tool.md)**
 *For developers who need to extend agent capabilities with external tools.*
 Implement the Tool Contract v1, register the tool as a resource, configure isolation and retry, and validate with the conformance harness.
+
+**[Capture README Orloj in Action Media](./readme-media-capture.md)**
+*For maintainers refreshing repository branding assets.*
+Generate reproducible frontend screenshots and lifecycle GIF media for the README Orloj in Action section.

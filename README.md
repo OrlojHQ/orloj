@@ -19,6 +19,34 @@ Declare your agents, tools, and policies as YAML. Orloj schedules, executes, rou
 
 > **Status:** Orloj is under active development. APIs and resource schemas may change between minor versions before 1.0.
 
+**Start here:** [See Orloj in Action](#orloj-in-action) · [5-minute tutorial](https://docs.orloj.dev/guides/five-minute-tutorial)
+
+## Orloj in Action
+
+Orloj is API/CLI-first; the web console is an optional operator UI.
+
+### Web Console Walkthrough
+
+These captures are from the web console running the `testing/scenarios-real/01-pipeline` scenario locally.
+
+### Run Lifecycle (GIF)
+
+![Orloj task lifecycle animation](docs/public/readme/task-run-lifecycle.gif)
+
+Watch a full run flow from task creation through running to success in the live frontend.
+
+### Dashboard Overview
+
+![Orloj dashboard overview](docs/public/readme/dashboard-overview.png)
+
+View the operator dashboard with system status and active workload at a glance.
+
+### System Topology
+
+![Orloj system topology view](docs/public/readme/system-topology.png)
+
+Inspect the agent-system graph topology and understand how nodes connect.
+
 ## Why Orloj
 
 Running AI agents in production today looks a lot like running containers before container orchestration: ad-hoc scripts, no governance, no observability, and no standard way to manage an agent fleet. Orloj provides:
@@ -160,6 +188,20 @@ Orloj manages 15 resource types, all defined as declarative YAML with `apiVersio
 | TaskWebhook  | Event-triggered task creation              |
 | Worker       | Execution unit with capability declaration |
 
+
+## More Screenshots
+
+### Task Detail and Graph
+
+![Orloj task detail graph view](docs/public/readme/task-detail-graph.png)
+
+Drill into a task to see node-level execution state and graph progress.
+
+### Trace and Logs
+
+![Orloj task trace and logs view](docs/public/readme/task-trace-logs.png)
+
+Open trace and log detail to debug runtime behavior without leaving the task view.
 
 ## Documentation
 
