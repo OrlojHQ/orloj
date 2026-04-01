@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-04-01
+
 ### Added
 
 - Native CLI tool type (`spec.type: cli`) for invoking local binaries with execve-style argv, Go `text/template` argument mapping, and container-sandboxed execution by default. Credentials are injected via `spec.cli.env_from` (no `spec.auth` for CLI tools). Worker flags `--cli-tool-allowed-commands` and `--cli-tool-max-argv-length` provide additional safety controls.
@@ -126,7 +128,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Homebrew tap distribution (`OrlojHQ/orloj`)
 - Blueprint scaffolding via `orlojctl init`
 
-[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/OrlojHQ/orloj/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/OrlojHQ/orloj/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/OrlojHQ/orloj/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/OrlojHQ/orloj/compare/v0.1.1...v0.2.0
