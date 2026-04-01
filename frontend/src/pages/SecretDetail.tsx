@@ -1,19 +1,29 @@
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useDetailReturnNav } from "../hooks/useDetailReturnNav";
 import { useDeleteResource, useSecret, useUpdateResource } from "../api/hooks";
+import { useAppStore } from "../store";
+import { saveNamespacedResourceYaml } from "../hooks/saveDetailYamlWithFreshRv";
 import { StatusBadge } from "../components/StatusBadge";
 import { YamlEditor } from "../components/YamlEditor";
+import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
 import { ArrowLeft } from "lucide-react";
 import clsx from "clsx";
 import { toast } from "../components/Toast";
+import type { Secret } from "../api/types";
+import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
 
 type Tab = "overview" | "yaml";
 
 export function SecretDetail() {
-  const { name } = useParams<{ name: string }>();
+  const { name: nameParam } = useParams<{ name: string }>();
+  const navigate = useNavigate();
   const { goBack } = useDetailReturnNav("/secrets");
-  const { data: secret, isLoading } = useSecret(name ?? "");
+  const routeName = nameParam ?? "";
+  const { data: secret, isLoading, isError, error } = useSecret(routeName);
+  const queryClient = useQueryClient();
+  const namespace = useAppStore((s) => s.namespace);
   const deleteMutation = useDeleteResource("Secret");
   const updateMutation = useUpdateResource("Secret");
   const [tab, setTab] = useState<Tab>("overview");
@@ -22,6 +32,16 @@ export function SecretDetail() {
     { id: "overview", label: "Overview" },
     { id: "yaml", label: "YAML" },
   ];
+
+  if (isError) {
+    return (
+      <ResourceDetailLoadError
+        title="Secret"
+        message={error instanceof Error ? error.message : "Failed to load"}
+        goBack={goBack}
+      />
+    );
+  }
 
   if (isLoading || !secret) {
     return <div className="page"><div className="loading-placeholder">Loading secret...</div></div>;
@@ -32,7 +52,7 @@ export function SecretDetail() {
   const handleDelete = async () => {
     if (!window.confirm(`Delete Secret ${secret.metadata.name}?`)) return;
     try {
-      await deleteMutation.mutateAsync(secret.metadata.name);
+      await deleteMutation.mutateAsync(routeName);
       toast("success", "Secret deleted successfully");
       goBack();
     } catch (err) {
@@ -124,8 +144,21 @@ export function SecretDetail() {
             value={JSON.stringify(redactedSecret, null, 2)}
             editable
             onSave={async (body) => {
-              await updateMutation.mutateAsync({ name: secret.metadata.name, body, rv: secret.metadata.resourceVersion });
+              const updated = await saveNamespacedResourceYaml<Secret>(
+                queryClient,
+                "Secret",
+                namespace,
+                routeName,
+                body,
+                (a) => updateMutation.mutateAsync(a) as Promise<Secret>,
+              );
               toast("success", "Secret updated");
+              if (updated.metadata.name !== routeName) {
+                navigate(
+                  `${RESOURCE_DETAIL_BASE_PATH.Secret}/${encodeURIComponent(updated.metadata.name)}`,
+                  { replace: true },
+                );
+              }
             }}
           />
         )}

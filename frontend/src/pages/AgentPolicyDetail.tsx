@@ -1,18 +1,27 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAgentPolicy, useDeleteResource, useUpdateResource } from "../api/hooks";
+import { useAppStore } from "../store";
+import { saveNamespacedResourceYaml } from "../hooks/saveDetailYamlWithFreshRv";
 import { StatusBadge } from "../components/StatusBadge";
 import { YamlEditor } from "../components/YamlEditor";
+import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
 import { ArrowLeft } from "lucide-react";
 import clsx from "clsx";
 import { toast } from "../components/Toast";
+import type { AgentPolicy } from "../api/types";
+import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
 
 type Tab = "overview" | "yaml";
 
 export function AgentPolicyDetail() {
-  const { name } = useParams<{ name: string }>();
+  const { name: nameParam } = useParams<{ name: string }>();
   const navigate = useNavigate();
-  const { data: policy, isLoading } = useAgentPolicy(name ?? "");
+  const routeName = nameParam ?? "";
+  const { data: policy, isLoading, isError, error } = useAgentPolicy(routeName);
+  const queryClient = useQueryClient();
+  const namespace = useAppStore((s) => s.namespace);
   const deleteMutation = useDeleteResource("AgentPolicy");
   const updateMutation = useUpdateResource("AgentPolicy");
   const [tab, setTab] = useState<Tab>("overview");
@@ -22,6 +31,16 @@ export function AgentPolicyDetail() {
     { id: "yaml", label: "YAML" },
   ];
 
+  if (isError) {
+    return (
+      <ResourceDetailLoadError
+        title="Agent policy"
+        message={error instanceof Error ? error.message : "Failed to load"}
+        goBack={() => navigate("/policies")}
+      />
+    );
+  }
+
   if (isLoading || !policy) {
     return <div className="page"><div className="loading-placeholder">Loading agent policy...</div></div>;
   }
@@ -29,7 +48,7 @@ export function AgentPolicyDetail() {
   const handleDelete = async () => {
     if (!window.confirm(`Delete AgentPolicy ${policy.metadata.name}?`)) return;
     try {
-      await deleteMutation.mutateAsync(policy.metadata.name);
+      await deleteMutation.mutateAsync(routeName);
       toast("success", "AgentPolicy deleted successfully");
       navigate("/policies");
     } catch (err) {
@@ -126,8 +145,21 @@ export function AgentPolicyDetail() {
             value={JSON.stringify(policy, null, 2)}
             editable
             onSave={async (body) => {
-              await updateMutation.mutateAsync({ name: policy.metadata.name, body, rv: policy.metadata.resourceVersion });
+              const updated = await saveNamespacedResourceYaml<AgentPolicy>(
+                queryClient,
+                "AgentPolicy",
+                namespace,
+                routeName,
+                body,
+                (a) => updateMutation.mutateAsync(a) as Promise<AgentPolicy>,
+              );
               toast("success", "Policy updated");
+              if (updated.metadata.name !== routeName) {
+                navigate(
+                  `${RESOURCE_DETAIL_BASE_PATH.AgentPolicy}/${encodeURIComponent(updated.metadata.name)}`,
+                  { replace: true },
+                );
+              }
             }}
           />
         )}

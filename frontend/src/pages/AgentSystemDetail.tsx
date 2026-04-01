@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useAgentSystem,
   useAgents,
@@ -15,14 +16,18 @@ import {
   useDeleteResource,
   useUpdateResource,
 } from "../api/hooks";
+import { useAppStore } from "../store";
+import { saveNamespacedResourceYaml } from "../hooks/saveDetailYamlWithFreshRv";
 import { toast } from "../components/Toast";
+import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
 import { GraphView } from "../components/GraphView";
 import { StatusBadge } from "../components/StatusBadge";
 import { YamlEditor } from "../components/YamlEditor";
 import { ResourceTable, type Column } from "../components/ResourceTable";
 import { ArrowLeft } from "lucide-react";
 import clsx from "clsx";
-import type { Task } from "../api/types";
+import type { AgentSystem, Task } from "../api/types";
+import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
 
 type Tab = "graph" | "tasks" | "yaml" | "status";
 
@@ -35,10 +40,13 @@ function parseTab(raw: string | null): Tab | null {
 }
 
 export function AgentSystemDetail() {
-  const { name } = useParams<{ name: string }>();
+  const { name: nameParam } = useParams<{ name: string }>();
   const navigate = useNavigate();
+  const routeName = nameParam ?? "";
   const [searchParams, setSearchParams] = useSearchParams();
-  const { data: system, isLoading } = useAgentSystem(name ?? "");
+  const { data: system, isLoading, isError, error } = useAgentSystem(routeName);
+  const queryClient = useQueryClient();
+  const namespace = useAppStore((s) => s.namespace);
   const agents = useAgents();
   const modelEndpoints = useModelEndpoints();
   const tools = useTools();
@@ -55,7 +63,7 @@ export function AgentSystemDetail() {
 
   useEffect(() => {
     setTab(parseTab(searchParams.get(TAB_PARAM)) ?? "graph");
-  }, [name, searchParams]);
+  }, [routeName, searchParams]);
 
   const setTabInUrl = useCallback(
     (t: Tab) => {
@@ -75,11 +83,11 @@ export function AgentSystemDetail() {
 
   const returnToWithTab = useCallback(
     (t: Tab) => {
-      const base = `/systems/${encodeURIComponent(name ?? "")}`;
+      const base = `/systems/${encodeURIComponent(routeName)}`;
       if (t === "graph") return base;
       return `${base}?${TAB_PARAM}=${t}`;
     },
-    [name],
+    [routeName],
   );
 
   const related = useMemo(() => ({
@@ -127,13 +135,23 @@ export function AgentSystemDetail() {
   const handleDelete = async () => {
     if (!system || !window.confirm(`Delete AgentSystem ${system.metadata.name}?`)) return;
     try {
-      await deleteMutation.mutateAsync(system.metadata.name);
+      await deleteMutation.mutateAsync(routeName);
       toast("success", "AgentSystem deleted successfully");
       navigate("/systems");
     } catch (err) {
       toast("error", err instanceof Error ? err.message : "Failed to delete AgentSystem");
     }
   };
+
+  if (isError) {
+    return (
+      <ResourceDetailLoadError
+        title="Agent system"
+        message={error instanceof Error ? error.message : "Failed to load"}
+        goBack={() => navigate("/systems")}
+      />
+    );
+  }
 
   if (isLoading || !system) {
     return (
@@ -253,8 +271,21 @@ export function AgentSystemDetail() {
             value={yamlContent}
             editable
             onSave={async (body) => {
-              await updateMutation.mutateAsync({ name: system.metadata.name, body, rv: system.metadata.resourceVersion });
+              const updated = await saveNamespacedResourceYaml<AgentSystem>(
+                queryClient,
+                "AgentSystem",
+                namespace,
+                routeName,
+                body,
+                (a) => updateMutation.mutateAsync(a) as Promise<AgentSystem>,
+              );
               toast("success", "Agent system updated");
+              if (updated.metadata.name !== routeName) {
+                navigate(
+                  `${RESOURCE_DETAIL_BASE_PATH.AgentSystem}/${encodeURIComponent(updated.metadata.name)}`,
+                  { replace: true },
+                );
+              }
             }}
           />
         )}

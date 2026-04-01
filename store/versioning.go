@@ -1,6 +1,7 @@
 package store
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -8,6 +9,9 @@ import (
 
 	"github.com/OrlojHQ/orloj/resources"
 )
+
+// ErrResourceAlreadyExists indicates a create/rename target key is already taken.
+var ErrResourceAlreadyExists = errors.New("resource already exists")
 
 type ConflictError struct {
 	Resource string

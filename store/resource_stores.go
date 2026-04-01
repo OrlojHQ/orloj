@@ -241,6 +241,87 @@ func (s *ModelEndpointStore) Upsert(ctx context.Context, item resources.ModelEnd
 	return item, nil
 }
 
+// UpsertMovingKey updates a model endpoint and moves it from oldStoreKey to the key derived from
+// item.Metadata when those keys differ. Caller must load current state, merge status, and satisfy
+// update preconditions on item.Metadata before calling.
+func (s *ModelEndpointStore) UpsertMovingKey(ctx context.Context, oldStoreKey string, item resources.ModelEndpoint) (resources.ModelEndpoint, error) {
+	if err := item.Normalize(); err != nil {
+		return resources.ModelEndpoint{}, err
+	}
+	oldKey := normalizeLookupName(oldStoreKey)
+	newKey := scopedNameFromMeta(item.Metadata)
+	if oldKey == newKey {
+		return s.Upsert(ctx, item)
+	}
+
+	if s.db != nil {
+		tx, err := s.db.Begin()
+		if err != nil {
+			return resources.ModelEndpoint{}, err
+		}
+		defer tx.Rollback()
+
+		existingAtOld, foundOld, err := getFromTableForUpdate[resources.ModelEndpoint](ctx, tx, tableModelEndpoints, oldKey)
+		if err != nil {
+			return resources.ModelEndpoint{}, err
+		}
+		if !foundOld {
+			return resources.ModelEndpoint{}, fmt.Errorf("modelendpoint %q not found", oldStoreKey)
+		}
+
+		_, foundNew, err := getFromTableForUpdate[resources.ModelEndpoint](ctx, tx, tableModelEndpoints, newKey)
+		if err != nil {
+			return resources.ModelEndpoint{}, err
+		}
+		if foundNew {
+			return resources.ModelEndpoint{}, fmt.Errorf("cannot rename modelendpoint to %q: %w", item.Metadata.Name, ErrResourceAlreadyExists)
+		}
+
+		specChanged := !reflect.DeepEqual(existingAtOld.Spec, item.Spec)
+		if err := initializeUpdateMetadata("ModelEndpoint", &item.Metadata, existingAtOld.Metadata, specChanged); err != nil {
+			return resources.ModelEndpoint{}, err
+		}
+
+		res, err := tx.ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE name = $1`, tableModelEndpoints), oldKey)
+		if err != nil {
+			return resources.ModelEndpoint{}, err
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return resources.ModelEndpoint{}, err
+		}
+		if n == 0 {
+			return resources.ModelEndpoint{}, fmt.Errorf("modelendpoint %q not found during rename", oldKey)
+		}
+
+		if err := upsertModelEndpointSQL(ctx, tx, newKey, item); err != nil {
+			return resources.ModelEndpoint{}, err
+		}
+		if err := tx.Commit(); err != nil {
+			return resources.ModelEndpoint{}, err
+		}
+		return item, nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	existingAtOld, foundOld := s.items[oldKey]
+	if !foundOld {
+		return resources.ModelEndpoint{}, fmt.Errorf("modelendpoint %q not found", oldStoreKey)
+	}
+	if _, taken := s.items[newKey]; taken {
+		return resources.ModelEndpoint{}, fmt.Errorf("cannot rename modelendpoint to %q: %w", item.Metadata.Name, ErrResourceAlreadyExists)
+	}
+
+	specChanged := !reflect.DeepEqual(existingAtOld.Spec, item.Spec)
+	if err := initializeUpdateMetadata("ModelEndpoint", &item.Metadata, existingAtOld.Metadata, specChanged); err != nil {
+		return resources.ModelEndpoint{}, err
+	}
+	delete(s.items, oldKey)
+	s.items[newKey] = item
+	return item, nil
+}
+
 func (s *ModelEndpointStore) Get(ctx context.Context, name string) (resources.ModelEndpoint, bool, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
@@ -2044,6 +2125,7 @@ func (s *TaskStore) ListCursor(ctx context.Context, limit int, after, namespace 
 func (s *TaskStore) Delete(ctx context.Context, name string) error {
 	key := normalizeLookupName(name)
 	if s.db != nil {
+		// task_logs rows are removed by ON DELETE CASCADE (see migration 005 fk_task_logs_task_name).
 		deleted, err := deleteFromTable(ctx, s.db, tableTasks, key)
 		if err != nil {
 			return err

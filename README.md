@@ -119,7 +119,7 @@ Persistence is backed by Postgres (or in-memory for local dev). Message-driven m
 
 ## HTTP API (OpenAPI)
 
-The v1 REST API is described in [openapi/openapi.yaml](openapi/openapi.yaml) (OpenAPI 3.1, split schemas under [openapi/schemas/](openapi/schemas/)). CI runs `npx @redocly/cli lint openapi/openapi.yaml`. To regenerate the root document from [openapi/build_openapi.py](openapi/build_openapi.py), run `python3 openapi/build_openapi.py` from the repo root.
+The v1 REST API is described in [openapi/openapi.yaml](openapi/openapi.yaml) (OpenAPI 3.1). Shared request/response models live under [openapi/schemas/](openapi/schemas/); the root file is **generated** by [openapi/build_openapi.py](openapi/build_openapi.py) (`python3 openapi/build_openapi.py`). CI runs `npx @redocly/cli lint openapi/openapi.yaml`. Contributors: see [Contributing — OpenAPI](CONTRIBUTING.md#openapi) for what to edit and what not to hand-edit.
 
 ## Resources
 

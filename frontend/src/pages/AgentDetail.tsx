@@ -1,21 +1,31 @@
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useDetailReturnNav } from "../hooks/useDetailReturnNav";
 import { useAgent, useAgentLogs, useDeleteResource, useUpdateResource } from "../api/hooks";
+import { useAppStore } from "../store";
+import { saveNamespacedResourceYaml } from "../hooks/saveDetailYamlWithFreshRv";
 import { toast } from "../components/Toast";
 import { StatusBadge } from "../components/StatusBadge";
 import { YamlEditor } from "../components/YamlEditor";
 import { LogViewer } from "../components/LogViewer";
+import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
 import { ArrowLeft } from "lucide-react";
 import clsx from "clsx";
+import type { Agent } from "../api/types";
+import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
 
 type Tab = "overview" | "yaml" | "logs";
 
 export function AgentDetail() {
-  const { name } = useParams<{ name: string }>();
+  const { name: nameParam } = useParams<{ name: string }>();
+  const navigate = useNavigate();
   const { goBack } = useDetailReturnNav("/agents");
-  const { data: agent, isLoading } = useAgent(name ?? "");
-  const logs = useAgentLogs(name ?? "");
+  const routeName = nameParam ?? "";
+  const { data: agent, isLoading, isError, error } = useAgent(routeName);
+  const logs = useAgentLogs(routeName);
+  const queryClient = useQueryClient();
+  const namespace = useAppStore((s) => s.namespace);
   const deleteMutation = useDeleteResource("Agent");
   const updateMutation = useUpdateResource("Agent");
   const [tab, setTab] = useState<Tab>("overview");
@@ -23,13 +33,23 @@ export function AgentDetail() {
   const handleDelete = async () => {
     if (!agent || !window.confirm(`Delete Agent ${agent.metadata.name}?`)) return;
     try {
-      await deleteMutation.mutateAsync(agent.metadata.name);
+      await deleteMutation.mutateAsync(routeName);
       toast("success", "Agent deleted successfully");
       goBack();
     } catch (err) {
       toast("error", err instanceof Error ? err.message : "Failed to delete Agent");
     }
   };
+
+  if (isError) {
+    return (
+      <ResourceDetailLoadError
+        title="Agent"
+        message={error instanceof Error ? error.message : "Failed to load"}
+        goBack={goBack}
+      />
+    );
+  }
 
   if (isLoading || !agent) {
     return <div className="page"><div className="loading-placeholder">Loading agent...</div></div>;
@@ -117,8 +137,21 @@ export function AgentDetail() {
             value={JSON.stringify(agent, null, 2)}
             editable
             onSave={async (body) => {
-              await updateMutation.mutateAsync({ name: agent.metadata.name, body, rv: agent.metadata.resourceVersion });
+              const updated = await saveNamespacedResourceYaml<Agent>(
+                queryClient,
+                "Agent",
+                namespace,
+                routeName,
+                body,
+                (a) => updateMutation.mutateAsync(a) as Promise<Agent>,
+              );
               toast("success", "Agent updated");
+              if (updated.metadata.name !== routeName) {
+                navigate(
+                  `${RESOURCE_DETAIL_BASE_PATH.Agent}/${encodeURIComponent(updated.metadata.name)}`,
+                  { replace: true },
+                );
+              }
             }}
           />
         )}

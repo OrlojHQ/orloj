@@ -83,6 +83,87 @@ func (s *AgentStore) Upsert(ctx context.Context, agent resources.Agent) (resourc
 	return agent, nil
 }
 
+// UpsertMovingKey updates an agent and moves it from oldStoreKey to the key derived from
+// agent.Metadata when those keys differ. Caller must load current state, merge status, and satisfy
+// update preconditions on agent.Metadata before calling.
+func (s *AgentStore) UpsertMovingKey(ctx context.Context, oldStoreKey string, agent resources.Agent) (resources.Agent, error) {
+	if err := agent.Normalize(); err != nil {
+		return resources.Agent{}, err
+	}
+	oldKey := normalizeLookupName(oldStoreKey)
+	newKey := scopedNameFromMeta(agent.Metadata)
+	if oldKey == newKey {
+		return s.Upsert(ctx, agent)
+	}
+
+	if s.db != nil {
+		tx, err := s.db.Begin()
+		if err != nil {
+			return resources.Agent{}, err
+		}
+		defer tx.Rollback()
+
+		existingAtOld, foundOld, err := getFromTableForUpdate[resources.Agent](ctx, tx, tableAgents, oldKey)
+		if err != nil {
+			return resources.Agent{}, err
+		}
+		if !foundOld {
+			return resources.Agent{}, fmt.Errorf("agent %q not found", oldStoreKey)
+		}
+
+		_, foundNew, err := getFromTableForUpdate[resources.Agent](ctx, tx, tableAgents, newKey)
+		if err != nil {
+			return resources.Agent{}, err
+		}
+		if foundNew {
+			return resources.Agent{}, fmt.Errorf("cannot rename agent to %q: %w", agent.Metadata.Name, ErrResourceAlreadyExists)
+		}
+
+		specChanged := !reflect.DeepEqual(existingAtOld.Spec, agent.Spec)
+		if err := initializeUpdateMetadata("Agent", &agent.Metadata, existingAtOld.Metadata, specChanged); err != nil {
+			return resources.Agent{}, err
+		}
+
+		res, err := tx.ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE name = $1`, tableAgents), oldKey)
+		if err != nil {
+			return resources.Agent{}, err
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return resources.Agent{}, err
+		}
+		if n == 0 {
+			return resources.Agent{}, fmt.Errorf("agent %q not found during rename", oldKey)
+		}
+
+		if err := upsertAgentSQL(ctx, tx, newKey, agent); err != nil {
+			return resources.Agent{}, err
+		}
+		if err := tx.Commit(); err != nil {
+			return resources.Agent{}, err
+		}
+		return agent, nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	existingAtOld, foundOld := s.agents[oldKey]
+	if !foundOld {
+		return resources.Agent{}, fmt.Errorf("agent %q not found", oldStoreKey)
+	}
+	if _, taken := s.agents[newKey]; taken {
+		return resources.Agent{}, fmt.Errorf("cannot rename agent to %q: %w", agent.Metadata.Name, ErrResourceAlreadyExists)
+	}
+
+	specChanged := !reflect.DeepEqual(existingAtOld.Spec, agent.Spec)
+	if err := initializeUpdateMetadata("Agent", &agent.Metadata, existingAtOld.Metadata, specChanged); err != nil {
+		return resources.Agent{}, err
+	}
+	delete(s.agents, oldKey)
+	s.agents[newKey] = agent
+	return agent, nil
+}
+
 func (s *AgentStore) getWithErr(ctx context.Context, name string) (resources.Agent, bool, error) {
 	if s.db != nil {
 		return getFromTable[resources.Agent](ctx, s.db, tableAgents, name)

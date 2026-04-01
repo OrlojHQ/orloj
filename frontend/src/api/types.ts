@@ -692,3 +692,22 @@ export const RESOURCE_ENDPOINTS: Record<ResourceKind, string> = {
   Worker: "workers",
   McpServer: "mcp-servers",
 };
+
+/** React Router base path for resource detail pages (before `/:name`). */
+export const RESOURCE_DETAIL_BASE_PATH: Record<ResourceKind, string> = {
+  Agent: "/agents",
+  AgentSystem: "/systems",
+  ModelEndpoint: "/models",
+  Tool: "/tools",
+  Secret: "/secrets",
+  Memory: "/memories",
+  AgentPolicy: "/policies",
+  AgentRole: "/roles",
+  ToolPermission: "/permissions",
+  ToolApproval: "/approvals",
+  Task: "/tasks",
+  TaskSchedule: "/task-schedules",
+  TaskWebhook: "/task-webhooks",
+  Worker: "/workers",
+  McpServer: "/mcp-servers",
+};

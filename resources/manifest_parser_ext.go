@@ -485,15 +485,12 @@ func ParseToolManifest(data []byte) (Tool, error) {
 	return out, nil
 }
 
-// ParseSecretManifest parses Secret resources from JSON or constrained YAML.
-func ParseSecretManifest(data []byte) (Secret, error) {
+// parseSecretManifestWithoutNormalize decodes JSON or constrained YAML into a Secret without Normalize().
+func parseSecretManifestWithoutNormalize(data []byte) (Secret, error) {
 	var out Secret
 	if json.Valid(data) {
 		if err := json.Unmarshal(data, &out); err != nil {
 			return Secret{}, fmt.Errorf("failed to decode JSON manifest: %w", err)
-		}
-		if err := out.Normalize(); err != nil {
-			return Secret{}, err
 		}
 		return out, nil
 	}
@@ -571,6 +568,15 @@ func ParseSecretManifest(data []byte) (Secret, error) {
 		}
 	}
 
+	return out, nil
+}
+
+// ParseSecretManifest parses Secret resources from JSON or constrained YAML.
+func ParseSecretManifest(data []byte) (Secret, error) {
+	out, err := parseSecretManifestWithoutNormalize(data)
+	if err != nil {
+		return Secret{}, err
+	}
 	if err := out.Normalize(); err != nil {
 		return Secret{}, err
 	}

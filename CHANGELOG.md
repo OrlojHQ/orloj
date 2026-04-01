@@ -11,8 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Native CLI tool type (`spec.type: cli`) for invoking local binaries with execve-style argv, Go `text/template` argument mapping, and container-sandboxed execution by default. Credentials are injected via `spec.cli.env_from` (no `spec.auth` for CLI tools). Worker flags `--cli-tool-allowed-commands` and `--cli-tool-max-argv-length` provide additional safety controls.
 
+### Changed
+
+- **OpenAPI**: Regenerated `openapi/openapi.yaml` from `openapi/build_openapi.py` with concise `info.description`, **secrets** tag documentation for redaction/`***` merge, a supported replacement-style namespaced PUT rename note in `info`, model-endpoint/secret operation summaries, and `openapi/schemas/secret.yaml` field/resource descriptions. [CONTRIBUTING.md](CONTRIBUTING.md#openapi) documents the generator workflow.
+
 ### Fixed
 
+- **API PUT rename (namespaced resources)**: For agents, agent systems, tools, secrets, memories, agent policies, agent roles, tool permissions, tasks (including **task log** rows in Postgres), task schedules, task webhooks, workers, model endpoints, and MCP servers, PUT keeps `metadata.name` from the body when it differs from the URL path and **moves** the stored object to the new scoped key (409 if the target name already exists). Previously many handlers overwrote the body name from the path, so YAML renames appeared to save but reverted.
+- **MCP server detail save**: Added `PUT /v1/mcp-servers/{name}` support in the API handler/store path (including `If-Match` preconditions and rename conflict handling), so MCP server edits from the UI YAML tab now persist instead of returning method-not-allowed.
+- **Secret PUT / YAML tab**: Bodies that still contain the API redaction placeholder `***` in `spec.data` / `spec.stringData` (as returned by GET) are merged with the stored secret before validation, so renaming or editing metadata without re-entering secret material no longer fails with invalid base64.
+- **Resource YAML detail tabs (frontend, all kinds)** — agents, agent systems, tools, secrets, memories, MCP servers, policies, roles, tool permissions, tool approvals, tasks, task schedules, task webhooks, workers, model endpoints: YAML saves use the **route** name for PUT/DELETE, **re-fetch** the resource immediately before PUT to merge a current `resourceVersion` (avoids 404/409 from stale cache or editor JSON), **update** the detail query cache from the PUT response, **navigate** when `metadata.name` changes after save, and show a **load error** instead of stuck loading when GET fails. Workers use the existing cluster-wide list lookup and a dedicated `["Worker","detail",name]` query key.
 - Token and user name path segments containing encoded slashes (`%2F`) are now rejected. Previously the slash check ran before URL-decoding, so `%2F` bypassed validation.
 - Token CRUD audit events now explicitly attach caller identity in the handler, matching the pattern used by user CRUD handlers for consistency.
 - In-memory `UpsertUser` logs a warning when an existing user's `CreatedAt` timestamp is unparseable instead of silently resetting it.

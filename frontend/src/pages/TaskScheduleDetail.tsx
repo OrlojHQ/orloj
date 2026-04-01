@@ -1,13 +1,18 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useDetailReturnNav } from "../hooks/useDetailReturnNav";
 import { useDeleteResource, useTaskSchedule, useTasks, useUpdateResource } from "../api/hooks";
+import { useAppStore } from "../store";
+import { saveNamespacedResourceYaml } from "../hooks/saveDetailYamlWithFreshRv";
 import { StatusBadge } from "../components/StatusBadge";
 import { YamlEditor } from "../components/YamlEditor";
 import { ResourceTable, type Column } from "../components/ResourceTable";
+import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
 import { ArrowLeft } from "lucide-react";
 import clsx from "clsx";
-import type { Task } from "../api/types";
+import type { Task, TaskSchedule } from "../api/types";
+import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
 import { toast } from "../components/Toast";
 
 type Tab = "overview" | "runs" | "yaml";
@@ -17,10 +22,13 @@ function formatDateTime(value?: string): string {
 }
 
 export function TaskScheduleDetail() {
-  const { name } = useParams<{ name: string }>();
+  const { name: nameParam } = useParams<{ name: string }>();
   const navigate = useNavigate();
   const { goBack } = useDetailReturnNav("/task-schedules");
-  const { data: taskSchedule, isLoading } = useTaskSchedule(name ?? "");
+  const routeName = nameParam ?? "";
+  const { data: taskSchedule, isLoading, isError, error } = useTaskSchedule(routeName);
+  const queryClient = useQueryClient();
+  const namespace = useAppStore((s) => s.namespace);
   const tasks = useTasks();
   const deleteMutation = useDeleteResource("TaskSchedule");
   const updateMutation = useUpdateResource("TaskSchedule");
@@ -60,16 +68,26 @@ export function TaskScheduleDetail() {
     { id: "yaml", label: "YAML" },
   ];
 
+  if (isError) {
+    return (
+      <ResourceDetailLoadError
+        title="Task schedule"
+        message={error instanceof Error ? error.message : "Failed to load"}
+        goBack={goBack}
+      />
+    );
+  }
+
   if (isLoading || !taskSchedule) {
     return <div className="page"><div className="loading-placeholder">Loading task schedule...</div></div>;
   }
 
-  const scheduleDetailPath = `/task-schedules/${encodeURIComponent(name ?? "")}`;
+  const scheduleDetailPath = `/task-schedules/${encodeURIComponent(routeName)}`;
 
   const handleDelete = async () => {
     if (!window.confirm(`Delete TaskSchedule ${taskSchedule.metadata.name}?`)) return;
     try {
-      await deleteMutation.mutateAsync(taskSchedule.metadata.name);
+      await deleteMutation.mutateAsync(routeName);
       toast("success", "TaskSchedule deleted successfully");
       goBack();
     } catch (err) {
@@ -217,8 +235,21 @@ export function TaskScheduleDetail() {
             value={JSON.stringify(taskSchedule, null, 2)}
             editable
             onSave={async (body) => {
-              await updateMutation.mutateAsync({ name: taskSchedule.metadata.name, body, rv: taskSchedule.metadata.resourceVersion });
+              const updated = await saveNamespacedResourceYaml<TaskSchedule>(
+                queryClient,
+                "TaskSchedule",
+                namespace,
+                routeName,
+                body,
+                (a) => updateMutation.mutateAsync(a) as Promise<TaskSchedule>,
+              );
               toast("success", "Task schedule updated");
+              if (updated.metadata.name !== routeName) {
+                navigate(
+                  `${RESOURCE_DETAIL_BASE_PATH.TaskSchedule}/${encodeURIComponent(updated.metadata.name)}`,
+                  { replace: true },
+                );
+              }
             }}
           />
         )}

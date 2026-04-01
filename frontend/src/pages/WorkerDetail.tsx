@@ -1,12 +1,17 @@
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useDetailReturnNav } from "../hooks/useDetailReturnNav";
 import { useDeleteResource, useWorker, useUpdateResource } from "../api/hooks";
+import { saveWorkerYaml } from "../hooks/saveDetailYamlWithFreshRv";
 import { StatusBadge } from "../components/StatusBadge";
 import { YamlEditor } from "../components/YamlEditor";
+import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
 import { ArrowLeft } from "lucide-react";
 import clsx from "clsx";
 import { toast } from "../components/Toast";
+import type { Worker } from "../api/types";
+import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
 
 type Tab = "overview" | "yaml";
 
@@ -15,9 +20,12 @@ function formatDateTime(value?: string): string {
 }
 
 export function WorkerDetail() {
-  const { name } = useParams<{ name: string }>();
+  const { name: nameParam } = useParams<{ name: string }>();
+  const navigate = useNavigate();
   const { goBack } = useDetailReturnNav("/workers");
-  const { data: worker, isLoading } = useWorker(name ?? "");
+  const routeName = nameParam ?? "";
+  const { data: worker, isLoading, isError, error } = useWorker(routeName);
+  const queryClient = useQueryClient();
   const deleteMutation = useDeleteResource("Worker");
   const updateMutation = useUpdateResource("Worker");
   const [tab, setTab] = useState<Tab>("overview");
@@ -27,6 +35,16 @@ export function WorkerDetail() {
     { id: "yaml", label: "YAML" },
   ];
 
+  if (isError) {
+    return (
+      <ResourceDetailLoadError
+        title="Worker"
+        message={error instanceof Error ? error.message : "Failed to load"}
+        goBack={goBack}
+      />
+    );
+  }
+
   if (isLoading || !worker) {
     return <div className="page"><div className="loading-placeholder">Loading worker...</div></div>;
   }
@@ -35,7 +53,7 @@ export function WorkerDetail() {
     if (!window.confirm(`Delete Worker ${worker.metadata.name}?`)) return;
     try {
       await deleteMutation.mutateAsync({
-        name: worker.metadata.name,
+        name: routeName,
         namespace: worker.metadata.namespace?.trim() || "default",
       });
       toast("success", "Worker deleted successfully");
@@ -128,13 +146,16 @@ export function WorkerDetail() {
             value={JSON.stringify(worker, null, 2)}
             editable
             onSave={async (body) => {
-              await updateMutation.mutateAsync({
-                name: worker.metadata.name,
-                body,
-                rv: worker.metadata.resourceVersion,
-                namespace: worker.metadata.namespace?.trim() || "default",
-              });
+              const updated = await saveWorkerYaml(queryClient, routeName, body, (a) =>
+                updateMutation.mutateAsync(a) as Promise<Worker>,
+              );
               toast("success", "Worker updated");
+              if (updated.metadata.name !== routeName) {
+                navigate(
+                  `${RESOURCE_DETAIL_BASE_PATH.Worker}/${encodeURIComponent(updated.metadata.name)}`,
+                  { replace: true },
+                );
+              }
             }}
           />
         )}

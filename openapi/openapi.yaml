@@ -15,12 +15,21 @@ info:
     Most error responses use `text/plain` bodies. A future release may standardize errors as JSON for clients and tooling.
 
     Authentication: bearer token (`Authorization: Bearer ...`) and/or session cookie (`orloj_session`, or `__Host-orloj_session` over HTTPS). Effective requirements depend on server configuration (`ORLOJ_API_TOKEN` / `ORLOJ_API_TOKENS`, native auth mode, etc.).
+
+    Namespaced PUT behavior: for supported replacement-style `/v1/<resource>/{name}` endpoints, request-body `metadata.name` is authoritative. When it differs from the path, the server renames the stored resource within the same namespace (HTTP 409 if the destination name already exists).
 tags:
 - name: agents
 - name: agent-systems
 - name: model-endpoints
 - name: tools
 - name: secrets
+  description: GET responses redact `spec.data` entry values as the literal string
+    `***` and omit `spec.stringData`. PUT merges `***` placeholders for existing keys
+    (from `spec.data`, and from `spec.stringData` when present) so clients can rename
+    or edit metadata without re-entering unchanged secrets; new keys still require
+    real base64 (`spec.data`) or plaintext (`spec.stringData`). PUT may rename the
+    secret when `metadata.name` differs from the path (HTTP 409 if the target name
+    exists).
 - name: memories
 - name: agent-policies
 - name: agent-roles
@@ -1066,6 +1075,10 @@ paths:
             text/plain:
               schema:
                 "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+      summary: Replace a model endpoint (supports rename)
+      description: |-
+        Updates the model endpoint identified by the path `name`. If `metadata.name` in the body differs from the path,
+        the stored resource is renamed to match the body (HTTP 409 if that name already exists in the namespace).
     delete:
       tags:
       - model-endpoints
@@ -1535,7 +1548,8 @@ paths:
       - sessionCookie: []
       responses:
         '200':
-          description: OK
+          description: OK (sensitive values redacted in `spec.data`; `spec.stringData`
+            omitted)
           content:
             application/json:
               schema:
@@ -1558,6 +1572,9 @@ paths:
             text/plain:
               schema:
                 "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+      summary: Get a secret
+      description: Returns the secret with `spec.data` values redacted as `***`; `spec.stringData`
+        is omitted (see **secrets** tag).
     put:
       tags:
       - secrets
@@ -1622,6 +1639,9 @@ paths:
             text/plain:
               schema:
                 "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+      summary: Replace a secret (supports rename)
+      description: See the **secrets** tag for redaction (`***`) and PUT merge behavior;
+        PUT rename follows the same rules as other namespaced resources.
     delete:
       tags:
       - secrets

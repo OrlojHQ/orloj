@@ -1,19 +1,29 @@
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useDetailReturnNav } from "../hooks/useDetailReturnNav";
+import { useQueryClient } from "@tanstack/react-query";
 import { useDeleteResource, useModelEndpoint, useUpdateResource } from "../api/hooks";
+import { useAppStore } from "../store";
 import { StatusBadge } from "../components/StatusBadge";
 import { YamlEditor } from "../components/YamlEditor";
+import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
 import { ArrowLeft } from "lucide-react";
 import clsx from "clsx";
 import { toast } from "../components/Toast";
+import type { ModelEndpoint } from "../api/types";
+import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
+import { saveNamespacedResourceYaml } from "../hooks/saveDetailYamlWithFreshRv";
 
 type Tab = "overview" | "yaml";
 
 export function ModelEndpointDetail() {
-  const { name } = useParams<{ name: string }>();
+  const { name: nameParam } = useParams<{ name: string }>();
+  const navigate = useNavigate();
   const { goBack } = useDetailReturnNav("/models");
-  const { data: ep, isLoading } = useModelEndpoint(name ?? "");
+  const routeName = nameParam ?? "";
+  const { data: ep, isLoading, isError, error } = useModelEndpoint(routeName);
+  const queryClient = useQueryClient();
+  const namespace = useAppStore((s) => s.namespace);
   const deleteMutation = useDeleteResource("ModelEndpoint");
   const updateMutation = useUpdateResource("ModelEndpoint");
   const [tab, setTab] = useState<Tab>("overview");
@@ -23,6 +33,16 @@ export function ModelEndpointDetail() {
     { id: "yaml", label: "YAML" },
   ];
 
+  if (isError) {
+    return (
+      <ResourceDetailLoadError
+        title="Model endpoint"
+        message={error instanceof Error ? error.message : "Failed to load"}
+        goBack={goBack}
+      />
+    );
+  }
+
   if (isLoading || !ep) {
     return <div className="page"><div className="loading-placeholder">Loading model endpoint...</div></div>;
   }
@@ -30,7 +50,7 @@ export function ModelEndpointDetail() {
   const handleDelete = async () => {
     if (!window.confirm(`Delete ModelEndpoint ${ep.metadata.name}?`)) return;
     try {
-      await deleteMutation.mutateAsync(ep.metadata.name);
+      await deleteMutation.mutateAsync(routeName);
       toast("success", "ModelEndpoint deleted successfully");
       goBack();
     } catch (err) {
@@ -111,8 +131,21 @@ export function ModelEndpointDetail() {
             value={JSON.stringify(ep, null, 2)}
             editable
             onSave={async (body) => {
-              await updateMutation.mutateAsync({ name: ep.metadata.name, body, rv: ep.metadata.resourceVersion });
+              const updated = await saveNamespacedResourceYaml<ModelEndpoint>(
+                queryClient,
+                "ModelEndpoint",
+                namespace,
+                routeName,
+                body,
+                (a) => updateMutation.mutateAsync(a) as Promise<ModelEndpoint>,
+              );
               toast("success", "Model endpoint updated");
+              if (updated.metadata.name !== routeName) {
+                navigate(
+                  `${RESOURCE_DETAIL_BASE_PATH.ModelEndpoint}/${encodeURIComponent(updated.metadata.name)}`,
+                  { replace: true },
+                );
+              }
             }}
           />
         )}

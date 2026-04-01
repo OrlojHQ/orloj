@@ -55,7 +55,8 @@ def list_tasks(tag: str, list_ref: str) -> dict:
     op = list_op(tag, list_ref)
     op["parameters"].insert(
         3,
-        {"name": "offset", "in": "query", "schema": {"type": "integer", "minimum": 0}},
+        {"name": "offset", "in": "query", "schema": {
+            "type": "integer", "minimum": 0}},
     )
     return op
 
@@ -78,7 +79,8 @@ def get_one(tag: str, item_ref: str) -> dict:
     return {
         "tags": [tag],
         "parameters": [
-            {"name": "name", "in": "path", "required": True, "schema": {"type": "string"}},
+            {"name": "name", "in": "path", "required": True,
+                "schema": {"type": "string"}},
             {"name": "namespace", "in": "query", "schema": {"type": "string"}},
         ],
         "security": SEC_READER,
@@ -95,7 +97,8 @@ def put_one(tag: str, item_ref: str) -> dict:
     return {
         "tags": [tag],
         "parameters": [
-            {"name": "name", "in": "path", "required": True, "schema": {"type": "string"}},
+            {"name": "name", "in": "path", "required": True,
+                "schema": {"type": "string"}},
             {"name": "namespace", "in": "query", "schema": {"type": "string"}},
             {
                 "name": "If-Match",
@@ -121,7 +124,8 @@ def delete_one(tag: str) -> dict:
     return {
         "tags": [tag],
         "parameters": [
-            {"name": "name", "in": "path", "required": True, "schema": {"type": "string"}},
+            {"name": "name", "in": "path", "required": True,
+                "schema": {"type": "string"}},
             {"name": "namespace", "in": "query", "schema": {"type": "string"}},
         ],
         "security": SEC_WRITER,
@@ -136,7 +140,8 @@ def delete_one(tag: str) -> dict:
 
 def status_get_put(tag: str) -> tuple[dict, dict]:
     base_params = [
-        {"name": "name", "in": "path", "required": True, "schema": {"type": "string"}},
+        {"name": "name", "in": "path", "required": True,
+            "schema": {"type": "string"}},
         {"name": "namespace", "in": "query", "schema": {"type": "string"}},
     ]
     env = "./schemas/common.yaml#/components/schemas/StatusEnvelope"
@@ -203,7 +208,8 @@ def add_crud(
     *,
     with_status: bool = False,
 ) -> None:
-    paths[base] = {"get": list_op(tag, list_ref), "post": post_create(tag, item_ref)}
+    paths[base] = {"get": list_op(tag, list_ref),
+                   "post": post_create(tag, item_ref)}
     if with_status:
         g, p = status_get_put(tag)
         paths[f"{base}/{{name}}/status"] = {"get": g, "put": p}
@@ -281,6 +287,16 @@ def build() -> dict:
         "./schemas/model-endpoint.yaml#/components/schemas/ModelEndpoint",
         with_status=True,
     )
+    mep = paths["/v1/model-endpoints/{name}"]
+    mep["put"] = {
+        **mep["put"],
+        "summary": "Replace a model endpoint (supports rename)",
+        "description": (
+            "Updates the model endpoint identified by the path `name`. If `metadata.name` in the "
+            "body differs from the path,\nthe stored resource is renamed to match the body "
+            "(HTTP 409 if that name already exists in the namespace)."
+        ),
+    }
     add_crud(
         paths,
         "/v1/tools",
@@ -297,6 +313,26 @@ def build() -> dict:
         "./schemas/secret.yaml#/components/schemas/Secret",
         with_status=False,
     )
+    sec = paths["/v1/secrets/{name}"]
+    sec["get"] = {
+        **sec["get"],
+        "summary": "Get a secret",
+        "description": (
+            "Returns the secret with `spec.data` values redacted as `***`; "
+            "`spec.stringData` is omitted (see **secrets** tag)."
+        ),
+    }
+    sec["get"]["responses"]["200"]["description"] = (
+        "OK (sensitive values redacted in `spec.data`; `spec.stringData` omitted)"
+    )
+    sec["put"] = {
+        **sec["put"],
+        "summary": "Replace a secret (supports rename)",
+        "description": (
+            "See the **secrets** tag for redaction (`***`) and PUT merge behavior; "
+            "PUT rename follows the same rules as other namespaced resources."
+        ),
+    }
     add_crud(
         paths,
         "/v1/memories",
@@ -382,7 +418,8 @@ def build() -> dict:
             "tags": ["tool-approvals"],
             "summary": "Not supported",
             "parameters": [
-                {"name": "name", "in": "path", "required": True, "schema": {"type": "string"}}
+                {"name": "name", "in": "path", "required": True,
+                    "schema": {"type": "string"}}
             ],
             "security": SEC_WRITER,
             "responses": {
@@ -409,7 +446,8 @@ def build() -> dict:
                         "required": True,
                         "schema": {"type": "string"},
                     },
-                    {"name": "namespace", "in": "query", "schema": {"type": "string"}},
+                    {"name": "namespace", "in": "query",
+                        "schema": {"type": "string"}},
                 ],
                 "security": SEC_WRITER,
                 "requestBody": {
@@ -465,7 +503,8 @@ def build() -> dict:
         {"name": "to_agent", "in": "query", "schema": {"type": "string"}},
         {"name": "branch_id", "in": "query", "schema": {"type": "string"}},
         {"name": "trace_id", "in": "query", "schema": {"type": "string"}},
-        {"name": "limit", "in": "query", "schema": {"type": "integer", "minimum": 0}},
+        {"name": "limit", "in": "query", "schema": {
+            "type": "integer", "minimum": 0}},
     ]
 
     paths["/v1/tasks/{name}/logs"] = {
@@ -552,7 +591,8 @@ def build() -> dict:
             "security": SEC_READER,
             "parameters": [
                 {"name": "namespace", "in": "query", "schema": {"type": "string"}},
-                {"name": "labelSelector", "in": "query", "schema": {"type": "string"}},
+                {"name": "labelSelector", "in": "query",
+                    "schema": {"type": "string"}},
             ],
             "responses": {
                 "200": {
@@ -1067,7 +1107,10 @@ def build() -> dict:
     return {
         "openapi": "3.1.0",
         "servers": [
-            {"url": "/", "description": "Server root (set host/port when calling the API)"}
+            {
+                "url": "/",
+                "description": "Server root (set host/port when calling the API)",
+            }
         ],
         "info": {
             "title": "Orloj API",
@@ -1080,7 +1123,12 @@ def build() -> dict:
                 "Authentication: bearer token (`Authorization: Bearer ...`) and/or "
                 "session cookie (`orloj_session`, or `__Host-orloj_session` over HTTPS). "
                 "Effective requirements depend on server configuration "
-                "(`ORLOJ_API_TOKEN` / `ORLOJ_API_TOKENS`, native auth mode, etc.)."
+                "(`ORLOJ_API_TOKEN` / `ORLOJ_API_TOKENS`, native auth mode, etc.).\n\n"
+                "Namespaced PUT behavior: for supported replacement-style "
+                "`/v1/<resource>/{name}` endpoints, request-body `metadata.name` "
+                "is authoritative. When it differs from the path, the server "
+                "renames the stored resource within the same namespace "
+                "(HTTP 409 if the destination name already exists)."
             ),
         },
         "tags": [
@@ -1088,7 +1136,17 @@ def build() -> dict:
             {"name": "agent-systems"},
             {"name": "model-endpoints"},
             {"name": "tools"},
-            {"name": "secrets"},
+            {
+                "name": "secrets",
+                "description": (
+                    "GET responses redact `spec.data` entry values as the literal string `***` and "
+                    "omit `spec.stringData`. PUT merges `***` placeholders for existing keys "
+                    "(from `spec.data`, and from `spec.stringData` when present) so clients can "
+                    "rename or edit metadata without re-entering unchanged secrets; new keys still "
+                    "require real base64 (`spec.data`) or plaintext (`spec.stringData`). "
+                    "PUT may rename the secret when `metadata.name` differs from the path (HTTP 409 if the target name exists)."
+                ),
+            },
             {"name": "memories"},
             {"name": "agent-policies"},
             {"name": "agent-roles"},

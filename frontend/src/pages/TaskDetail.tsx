@@ -1,7 +1,10 @@
 import { useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useDetailReturnNav } from "../hooks/useDetailReturnNav";
 import { useTask, useTaskMessages, useTaskMetrics, useTaskLogs, useAgentSystem, useDeleteResource, useUpdateResource } from "../api/hooks";
+import { useAppStore } from "../store";
+import { saveNamespacedResourceYaml } from "../hooks/saveDetailYamlWithFreshRv";
 import { toast } from "../components/Toast";
 import { StatusBadge } from "../components/StatusBadge";
 import { YamlEditor } from "../components/YamlEditor";
@@ -9,8 +12,11 @@ import { LogViewer } from "../components/LogViewer";
 import { GraphView } from "../components/GraphView";
 import { MetricCard } from "../components/MetricCard";
 import { TraceView } from "../components/TraceView";
+import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
 import { ArrowLeft, Clock, Activity, Hash, Zap } from "lucide-react";
 import clsx from "clsx";
+import type { Task } from "../api/types";
+import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
 
 type Tab = "overview" | "messages" | "metrics" | "trace" | "logs" | "graph" | "yaml";
 
@@ -21,10 +27,13 @@ const TOOLTIP_P95_LATENCY_MS =
   "The 95th percentile of those same end-to-end latencies: about 95% of measured messages finished within this time or faster (the slowest few are above it).";
 
 export function TaskDetail() {
-  const { name } = useParams<{ name: string }>();
+  const { name: nameParam } = useParams<{ name: string }>();
   const navigate = useNavigate();
   const { goBack } = useDetailReturnNav("/tasks");
-  const { data: task, isLoading } = useTask(name ?? "");
+  const routeName = nameParam ?? "";
+  const { data: task, isLoading, isError, error } = useTask(routeName);
+  const queryClient = useQueryClient();
+  const namespace = useAppStore((s) => s.namespace);
   const [msgPhase, setMsgPhase] = useState("");
   const [msgFrom, setMsgFrom] = useState("");
   const [msgTo, setMsgTo] = useState("");
@@ -45,11 +54,11 @@ export function TaskDetail() {
   }, [msgPhase, msgFrom, msgTo, msgBranch, msgTrace, msgLimit]);
 
   const messages = useTaskMessages(
-    name ?? "",
+    routeName,
     Object.keys(msgFiltersApplied).length > 0 ? msgFiltersApplied : undefined,
   );
-  const metrics = useTaskMetrics(name ?? "");
-  const logs = useTaskLogs(name ?? "");
+  const metrics = useTaskMetrics(routeName);
+  const logs = useTaskLogs(routeName);
   const system = useAgentSystem(task?.spec.system ?? "");
   const deleteMutation = useDeleteResource("Task");
   const updateMutation = useUpdateResource("Task");
@@ -58,13 +67,23 @@ export function TaskDetail() {
   const handleDelete = async () => {
     if (!task || !window.confirm(`Delete Task ${task.metadata.name}?`)) return;
     try {
-      await deleteMutation.mutateAsync(task.metadata.name);
+      await deleteMutation.mutateAsync(routeName);
       toast("success", "Task deleted successfully");
       goBack();
     } catch (err) {
       toast("error", err instanceof Error ? err.message : "Failed to delete Task");
     }
   };
+
+  if (isError) {
+    return (
+      <ResourceDetailLoadError
+        title="Task"
+        message={error instanceof Error ? error.message : "Failed to load"}
+        goBack={goBack}
+      />
+    );
+  }
 
   if (isLoading || !task) {
     return <div className="page"><div className="loading-placeholder">Loading task...</div></div>;
@@ -297,8 +316,21 @@ export function TaskDetail() {
             value={JSON.stringify(task, null, 2)}
             editable
             onSave={async (body) => {
-              await updateMutation.mutateAsync({ name: task.metadata.name, body, rv: task.metadata.resourceVersion });
+              const updated = await saveNamespacedResourceYaml<Task>(
+                queryClient,
+                "Task",
+                namespace,
+                routeName,
+                body,
+                (a) => updateMutation.mutateAsync(a) as Promise<Task>,
+              );
               toast("success", "Task updated");
+              if (updated.metadata.name !== routeName) {
+                navigate(
+                  `${RESOURCE_DETAIL_BASE_PATH.Task}/${encodeURIComponent(updated.metadata.name)}`,
+                  { replace: true },
+                );
+              }
             }}
           />
         )}
