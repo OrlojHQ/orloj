@@ -39,6 +39,32 @@ spec:
 	}
 }
 
+func TestParseSecretManifestForPutMergesRedactedPlaceholders(t *testing.T) {
+	current := Secret{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Secret",
+		Metadata:   ObjectMeta{Name: "s", Namespace: "ns"},
+		Spec: SecretSpec{
+			Data: map[string]string{
+				"value": "c2tfc2VjcmV0", // base64 "sk_secret"
+			},
+		},
+	}
+	raw := []byte(`{
+		"apiVersion": "orloj.dev/v1",
+		"kind": "Secret",
+		"metadata": { "name": "s", "namespace": "ns" },
+		"spec": { "data": { "value": "***" } }
+	}`)
+	got, err := ParseSecretManifestForPut(raw, current)
+	if err != nil {
+		t.Fatalf("ParseSecretManifestForPut: %v", err)
+	}
+	if got.Spec.Data["value"] != current.Spec.Data["value"] {
+		t.Fatalf("expected merged base64 value, got %q", got.Spec.Data["value"])
+	}
+}
+
 func TestSecretNormalizeRejectsInvalidBase64Data(t *testing.T) {
 	secret := Secret{
 		APIVersion: "orloj.dev/v1",

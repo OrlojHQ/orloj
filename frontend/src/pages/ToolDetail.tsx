@@ -1,19 +1,29 @@
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useDetailReturnNav } from "../hooks/useDetailReturnNav";
 import { useDeleteResource, useTool, useUpdateResource } from "../api/hooks";
+import { useAppStore } from "../store";
+import { saveNamespacedResourceYaml } from "../hooks/saveDetailYamlWithFreshRv";
 import { StatusBadge } from "../components/StatusBadge";
 import { YamlEditor } from "../components/YamlEditor";
+import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
 import { ArrowLeft } from "lucide-react";
 import clsx from "clsx";
 import { toast } from "../components/Toast";
+import type { Tool } from "../api/types";
+import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
 
 type Tab = "overview" | "yaml";
 
 export function ToolDetail() {
-  const { name } = useParams<{ name: string }>();
+  const { name: nameParam } = useParams<{ name: string }>();
+  const navigate = useNavigate();
   const { goBack } = useDetailReturnNav("/tools");
-  const { data: tool, isLoading } = useTool(name ?? "");
+  const routeName = nameParam ?? "";
+  const { data: tool, isLoading, isError, error } = useTool(routeName);
+  const queryClient = useQueryClient();
+  const namespace = useAppStore((s) => s.namespace);
   const deleteMutation = useDeleteResource("Tool");
   const updateMutation = useUpdateResource("Tool");
   const [tab, setTab] = useState<Tab>("overview");
@@ -23,6 +33,16 @@ export function ToolDetail() {
     { id: "yaml", label: "YAML" },
   ];
 
+  if (isError) {
+    return (
+      <ResourceDetailLoadError
+        title="Tool"
+        message={error instanceof Error ? error.message : "Failed to load"}
+        goBack={goBack}
+      />
+    );
+  }
+
   if (isLoading || !tool) {
     return <div className="page"><div className="loading-placeholder">Loading tool...</div></div>;
   }
@@ -30,7 +50,7 @@ export function ToolDetail() {
   const handleDelete = async () => {
     if (!window.confirm(`Delete Tool ${tool.metadata.name}?`)) return;
     try {
-      await deleteMutation.mutateAsync(tool.metadata.name);
+      await deleteMutation.mutateAsync(routeName);
       toast("success", "Tool deleted successfully");
       goBack();
     } catch (err) {
@@ -133,8 +153,21 @@ export function ToolDetail() {
             value={JSON.stringify(tool, null, 2)}
             editable
             onSave={async (body) => {
-              await updateMutation.mutateAsync({ name: tool.metadata.name, body, rv: tool.metadata.resourceVersion });
+              const updated = await saveNamespacedResourceYaml<Tool>(
+                queryClient,
+                "Tool",
+                namespace,
+                routeName,
+                body,
+                (a) => updateMutation.mutateAsync(a) as Promise<Tool>,
+              );
               toast("success", "Tool updated");
+              if (updated.metadata.name !== routeName) {
+                navigate(
+                  `${RESOURCE_DETAIL_BASE_PATH.Tool}/${encodeURIComponent(updated.metadata.name)}`,
+                  { replace: true },
+                );
+              }
             }}
           />
         )}

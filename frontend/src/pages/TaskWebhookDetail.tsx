@@ -1,14 +1,19 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useDetailReturnNav } from "../hooks/useDetailReturnNav";
 import { ArrowLeft, Clipboard } from "lucide-react";
 import clsx from "clsx";
 import { useDeleteResource, useTaskWebhook, useTasks, useUpdateResource } from "../api/hooks";
+import { useAppStore } from "../store";
+import { saveNamespacedResourceYaml } from "../hooks/saveDetailYamlWithFreshRv";
 import { StatusBadge } from "../components/StatusBadge";
 import { YamlEditor } from "../components/YamlEditor";
 import { ResourceTable, type Column } from "../components/ResourceTable";
+import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
 import { toast } from "../components/Toast";
-import type { Task } from "../api/types";
+import type { Task, TaskWebhook } from "../api/types";
+import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
 
 type Tab = "overview" | "runs" | "yaml";
 
@@ -28,10 +33,13 @@ function taskNameFromRef(ref?: string): string | null {
 }
 
 export function TaskWebhookDetail() {
-  const { name } = useParams<{ name: string }>();
+  const { name: nameParam } = useParams<{ name: string }>();
   const navigate = useNavigate();
   const { goBack } = useDetailReturnNav("/task-webhooks");
-  const { data: taskWebhook, isLoading } = useTaskWebhook(name ?? "");
+  const routeName = nameParam ?? "";
+  const { data: taskWebhook, isLoading, isError, error } = useTaskWebhook(routeName);
+  const queryClient = useQueryClient();
+  const namespace = useAppStore((s) => s.namespace);
   const tasks = useTasks();
   const deleteMutation = useDeleteResource("TaskWebhook");
   const updateMutation = useUpdateResource("TaskWebhook");
@@ -70,16 +78,26 @@ export function TaskWebhookDetail() {
     { id: "yaml", label: "YAML" },
   ];
 
+  if (isError) {
+    return (
+      <ResourceDetailLoadError
+        title="Task webhook"
+        message={error instanceof Error ? error.message : "Failed to load"}
+        goBack={goBack}
+      />
+    );
+  }
+
   if (isLoading || !taskWebhook) {
     return <div className="page"><div className="loading-placeholder">Loading task webhook...</div></div>;
   }
 
-  const webhookDetailPath = `/task-webhooks/${encodeURIComponent(name ?? "")}`;
+  const webhookDetailPath = `/task-webhooks/${encodeURIComponent(routeName)}`;
 
   const handleDelete = async () => {
     if (!window.confirm(`Delete TaskWebhook ${taskWebhook.metadata.name}?`)) return;
     try {
-      await deleteMutation.mutateAsync(taskWebhook.metadata.name);
+      await deleteMutation.mutateAsync(routeName);
       toast("success", "TaskWebhook deleted successfully");
       goBack();
     } catch (err) {
@@ -274,8 +292,21 @@ export function TaskWebhookDetail() {
             value={JSON.stringify(taskWebhook, null, 2)}
             editable
             onSave={async (body) => {
-              await updateMutation.mutateAsync({ name: taskWebhook.metadata.name, body, rv: taskWebhook.metadata.resourceVersion });
+              const updated = await saveNamespacedResourceYaml<TaskWebhook>(
+                queryClient,
+                "TaskWebhook",
+                namespace,
+                routeName,
+                body,
+                (a) => updateMutation.mutateAsync(a) as Promise<TaskWebhook>,
+              );
               toast("success", "Task webhook updated");
+              if (updated.metadata.name !== routeName) {
+                navigate(
+                  `${RESOURCE_DETAIL_BASE_PATH.TaskWebhook}/${encodeURIComponent(updated.metadata.name)}`,
+                  { replace: true },
+                );
+              }
             }}
           />
         )}

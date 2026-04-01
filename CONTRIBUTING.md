@@ -76,6 +76,14 @@ Run the smallest relevant checks first, then run broader checks before review:
 - Update docs/examples/changelog when applicable.
 - Avoid unrelated refactors in feature or fix PRs.
 
+## OpenAPI
+
+- **[openapi/openapi.yaml](openapi/openapi.yaml)** is **generated**. Do not edit it by hand for `paths`, `info`, or `tags`—changes are overwritten when someone runs the generator.
+- **Regenerate** from the repo root: `python3 openapi/build_openapi.py` (uses Ruby to emit YAML). CI lints with `npx @redocly/cli lint openapi/openapi.yaml`.
+- **Where to edit:**
+  - **[openapi/schemas/*.yaml](openapi/schemas/)** — `components` schemas (fields, types, `description` on properties). Referenced by `$ref` from the root spec.
+  - **[openapi/build_openapi.py](openapi/build_openapi.py)** — `info.description` (keep it high-level), **`tags`** (including tag `description` for groups like secrets), and all **path operations** (`get` / `put` / …). Use operation-level text for resource-specific notes; use tag descriptions for behavior shared by all operations under that tag.
+
 ## Review and Response SLA
 
 We target a maintainer first response within **72 hours** for new PRs and issues.

@@ -113,3 +113,76 @@ func TestModelEndpointStatusSubresource(t *testing.T) {
 		t.Fatalf("expected 200, got %d body=%s", statusResp.StatusCode, string(respBody))
 	}
 }
+
+func TestModelEndpointPutRenameFromYAMLBody(t *testing.T) {
+	server := newTestServer(t)
+	defer server.Close()
+
+	postJSON(t, server.URL+"/v1/model-endpoints", resources.ModelEndpoint{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "ModelEndpoint",
+		Metadata:   resources.ObjectMeta{Name: "orig-name"},
+		Spec:       resources.ModelEndpointSpec{Provider: "openai", DefaultModel: "gpt-4o-mini"},
+	})
+
+	resp, err := http.Get(server.URL + "/v1/model-endpoints/orig-name")
+	if err != nil {
+		t.Fatalf("get endpoint failed: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d body=%s", resp.StatusCode, string(body))
+	}
+	var cur resources.ModelEndpoint
+	if err := json.NewDecoder(resp.Body).Decode(&cur); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+
+	cur.Metadata.Name = "new-name"
+	body, err := json.Marshal(cur)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	req, err := http.NewRequest(http.MethodPut, server.URL+"/v1/model-endpoints/orig-name", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("If-Match", cur.Metadata.ResourceVersion)
+	putResp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("put: %v", err)
+	}
+	defer putResp.Body.Close()
+	if putResp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(putResp.Body)
+		t.Fatalf("expected 200, got %d body=%s", putResp.StatusCode, string(b))
+	}
+	var updated resources.ModelEndpoint
+	if err := json.NewDecoder(putResp.Body).Decode(&updated); err != nil {
+		t.Fatalf("decode put response: %v", err)
+	}
+	if updated.Metadata.Name != "new-name" {
+		t.Fatalf("expected renamed metadata.name %q, got %q", "new-name", updated.Metadata.Name)
+	}
+
+	getOld, err := http.Get(server.URL + "/v1/model-endpoints/orig-name")
+	if err != nil {
+		t.Fatalf("get old: %v", err)
+	}
+	defer getOld.Body.Close()
+	if getOld.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404 for old name, got %d", getOld.StatusCode)
+	}
+
+	getNew, err := http.Get(server.URL + "/v1/model-endpoints/new-name")
+	if err != nil {
+		t.Fatalf("get new: %v", err)
+	}
+	defer getNew.Body.Close()
+	if getNew.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(getNew.Body)
+		t.Fatalf("expected 200 for new name, got %d body=%s", getNew.StatusCode, string(b))
+	}
+}

@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from "react";
+import { useState, useEffect, useSyncExternalStore } from "react";
 import Editor from "@monaco-editor/react";
 import { useAppStore } from "../store";
 import { Pencil, Save, X } from "lucide-react";
@@ -27,6 +27,10 @@ export function YamlEditor({ value, onChange, readOnly = true, height = "400px",
   const [draft, setDraft] = useState(value);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!editing) setDraft(value);
+  }, [value, editing]);
 
   const isEditable = editable && onSave;
   const isReadOnly = isEditable ? !editing : readOnly;

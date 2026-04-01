@@ -141,10 +141,6 @@ func listFromTable[T any](ctx context.Context, db dbExecer, table string) ([]T, 
 	return listFromTableFiltered[T](ctx, db, table, defaultListLimit, 0, "")
 }
 
-func listFromTablePaged[T any](ctx context.Context, db dbExecer, table string, limit, offset int) ([]T, error) {
-	return listFromTableFiltered[T](ctx, db, table, limit, offset, "")
-}
-
 // listFromTableFiltered is the core list helper. When namespace is non-empty
 // the WHERE clause uses the per-table namespace index so LIMIT/OFFSET operate
 // on the correct subset of rows.
@@ -888,8 +884,9 @@ func listTaskLogsSQL(ctx context.Context, db *sql.DB, taskName string) ([]string
 	return out, nil
 }
 
-func deleteTaskLogsSQL(ctx context.Context, db *sql.DB, taskName string) error {
-	_, err := db.ExecContext(ctx, `DELETE FROM task_logs WHERE task_name = $1`, taskName)
+// renameTaskLogsSQL rekeys log rows when a task's store key (scoped name) changes.
+func renameTaskLogsSQL(ctx context.Context, db dbExecer, oldTaskName, newTaskName string) error {
+	_, err := db.ExecContext(ctx, `UPDATE task_logs SET task_name = $2 WHERE task_name = $1`, oldTaskName, newTaskName)
 	return err
 }
 

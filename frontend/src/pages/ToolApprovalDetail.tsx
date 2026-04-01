@@ -1,11 +1,17 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useToolApproval, useDeleteResource, useApproveToolApproval, useDenyToolApproval, useUpdateResource } from "../api/hooks";
+import { useAppStore } from "../store";
+import { saveNamespacedResourceYaml } from "../hooks/saveDetailYamlWithFreshRv";
 import { StatusBadge } from "../components/StatusBadge";
 import { YamlEditor } from "../components/YamlEditor";
+import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
 import { ArrowLeft, CheckCircle, XCircle } from "lucide-react";
 import clsx from "clsx";
 import { toast } from "../components/Toast";
+import type { ToolApproval } from "../api/types";
+import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
 
 type Tab = "overview" | "yaml";
 
@@ -14,14 +20,27 @@ function formatDateTime(value?: string): string {
 }
 
 export function ToolApprovalDetail() {
-  const { name } = useParams<{ name: string }>();
+  const { name: nameParam } = useParams<{ name: string }>();
   const navigate = useNavigate();
-  const { data: approval, isLoading } = useToolApproval(name ?? "");
+  const routeName = nameParam ?? "";
+  const { data: approval, isLoading, isError, error } = useToolApproval(routeName);
+  const queryClient = useQueryClient();
+  const namespace = useAppStore((s) => s.namespace);
   const deleteMutation = useDeleteResource("ToolApproval");
   const updateMutation = useUpdateResource("ToolApproval");
   const approveMutation = useApproveToolApproval();
   const denyMutation = useDenyToolApproval();
   const [tab, setTab] = useState<Tab>("overview");
+
+  if (isError) {
+    return (
+      <ResourceDetailLoadError
+        title="Tool approval"
+        message={error instanceof Error ? error.message : "Failed to load"}
+        goBack={() => navigate("/approvals")}
+      />
+    );
+  }
 
   if (isLoading || !approval) {
     return <div className="page"><div className="loading-placeholder">Loading approval...</div></div>;
@@ -31,7 +50,7 @@ export function ToolApprovalDetail() {
 
   const handleApprove = async () => {
     try {
-      await approveMutation.mutateAsync(approval.metadata.name);
+      await approveMutation.mutateAsync(routeName);
       toast("success", "Approval granted");
     } catch (err) {
       toast("error", err instanceof Error ? err.message : "Failed to approve");
@@ -40,7 +59,7 @@ export function ToolApprovalDetail() {
 
   const handleDeny = async () => {
     try {
-      await denyMutation.mutateAsync(approval.metadata.name);
+      await denyMutation.mutateAsync(routeName);
       toast("success", "Approval denied");
     } catch (err) {
       toast("error", err instanceof Error ? err.message : "Failed to deny");
@@ -50,7 +69,7 @@ export function ToolApprovalDetail() {
   const handleDelete = async () => {
     if (!window.confirm(`Delete ToolApproval ${approval.metadata.name}?`)) return;
     try {
-      await deleteMutation.mutateAsync(approval.metadata.name);
+      await deleteMutation.mutateAsync(routeName);
       toast("success", "ToolApproval deleted");
       navigate("/approvals");
     } catch (err) {
@@ -178,8 +197,21 @@ export function ToolApprovalDetail() {
             value={JSON.stringify(approval, null, 2)}
             editable
             onSave={async (body) => {
-              await updateMutation.mutateAsync({ name: approval.metadata.name, body, rv: approval.metadata.resourceVersion });
+              const updated = await saveNamespacedResourceYaml<ToolApproval>(
+                queryClient,
+                "ToolApproval",
+                namespace,
+                routeName,
+                body,
+                (a) => updateMutation.mutateAsync(a) as Promise<ToolApproval>,
+              );
               toast("success", "Approval updated");
+              if (updated.metadata.name !== routeName) {
+                navigate(
+                  `${RESOURCE_DETAIL_BASE_PATH.ToolApproval}/${encodeURIComponent(updated.metadata.name)}`,
+                  { replace: true },
+                );
+              }
             }}
           />
         )}

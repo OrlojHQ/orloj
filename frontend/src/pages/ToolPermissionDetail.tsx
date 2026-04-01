@@ -1,18 +1,27 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useDeleteResource, useToolPermission, useUpdateResource } from "../api/hooks";
+import { useAppStore } from "../store";
+import { saveNamespacedResourceYaml } from "../hooks/saveDetailYamlWithFreshRv";
 import { StatusBadge } from "../components/StatusBadge";
 import { YamlEditor } from "../components/YamlEditor";
+import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
 import { ArrowLeft } from "lucide-react";
 import clsx from "clsx";
 import { toast } from "../components/Toast";
+import type { ToolPermission } from "../api/types";
+import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
 
 type Tab = "overview" | "yaml";
 
 export function ToolPermissionDetail() {
-  const { name } = useParams<{ name: string }>();
+  const { name: nameParam } = useParams<{ name: string }>();
   const navigate = useNavigate();
-  const { data: perm, isLoading } = useToolPermission(name ?? "");
+  const routeName = nameParam ?? "";
+  const { data: perm, isLoading, isError, error } = useToolPermission(routeName);
+  const queryClient = useQueryClient();
+  const namespace = useAppStore((s) => s.namespace);
   const deleteMutation = useDeleteResource("ToolPermission");
   const updateMutation = useUpdateResource("ToolPermission");
   const [tab, setTab] = useState<Tab>("overview");
@@ -22,6 +31,16 @@ export function ToolPermissionDetail() {
     { id: "yaml", label: "YAML" },
   ];
 
+  if (isError) {
+    return (
+      <ResourceDetailLoadError
+        title="Tool permission"
+        message={error instanceof Error ? error.message : "Failed to load"}
+        goBack={() => navigate("/permissions")}
+      />
+    );
+  }
+
   if (isLoading || !perm) {
     return <div className="page"><div className="loading-placeholder">Loading tool permission...</div></div>;
   }
@@ -29,7 +48,7 @@ export function ToolPermissionDetail() {
   const handleDelete = async () => {
     if (!window.confirm(`Delete ToolPermission ${perm.metadata.name}?`)) return;
     try {
-      await deleteMutation.mutateAsync(perm.metadata.name);
+      await deleteMutation.mutateAsync(routeName);
       toast("success", "ToolPermission deleted successfully");
       navigate("/permissions");
     } catch (err) {
@@ -130,8 +149,21 @@ export function ToolPermissionDetail() {
             value={JSON.stringify(perm, null, 2)}
             editable
             onSave={async (body) => {
-              await updateMutation.mutateAsync({ name: perm.metadata.name, body, rv: perm.metadata.resourceVersion });
+              const updated = await saveNamespacedResourceYaml<ToolPermission>(
+                queryClient,
+                "ToolPermission",
+                namespace,
+                routeName,
+                body,
+                (a) => updateMutation.mutateAsync(a) as Promise<ToolPermission>,
+              );
               toast("success", "Permission updated");
+              if (updated.metadata.name !== routeName) {
+                navigate(
+                  `${RESOURCE_DETAIL_BASE_PATH.ToolPermission}/${encodeURIComponent(updated.metadata.name)}`,
+                  { replace: true },
+                );
+              }
             }}
           />
         )}

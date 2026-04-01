@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -484,7 +485,6 @@ func (s *Server) handleAgentByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("agent %q not found", name), http.StatusNotFound)
 			return
 		}
-		agent.Metadata.Name = name
 		if err := applyRequestNamespace(r, &agent.Metadata); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -494,8 +494,17 @@ func (s *Server) handleAgentByName(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		agent.Status = current.Status
-		agent, err = s.stores.Agents.Upsert(r.Context(), agent)
+		bodyKey := store.ScopedName(requestNamespace(r), strings.TrimSpace(agent.Metadata.Name))
+		if bodyKey != key {
+			agent, err = s.stores.Agents.UpsertMovingKey(r.Context(), key, agent)
+		} else {
+			agent, err = s.stores.Agents.Upsert(r.Context(), agent)
+		}
 		if err != nil {
+			if errors.Is(err, store.ErrResourceAlreadyExists) {
+				http.Error(w, err.Error(), http.StatusConflict)
+				return
+			}
 			writeStoreError(w, err)
 			return
 		}
@@ -731,7 +740,6 @@ func (s *Server) handleAgentSystemByName(w http.ResponseWriter, r *http.Request)
 			http.Error(w, fmt.Sprintf("agentsystem %q not found", name), http.StatusNotFound)
 			return
 		}
-		obj.Metadata.Name = name
 		if err := applyRequestNamespace(r, &obj.Metadata); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -741,8 +749,17 @@ func (s *Server) handleAgentSystemByName(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		obj.Status = current.Status
-		obj, err = s.stores.AgentSystems.Upsert(r.Context(), obj)
+		bodyKey := store.ScopedName(requestNamespace(r), strings.TrimSpace(obj.Metadata.Name))
+		if bodyKey != key {
+			obj, err = s.stores.AgentSystems.UpsertMovingKey(r.Context(), key, obj)
+		} else {
+			obj, err = s.stores.AgentSystems.Upsert(r.Context(), obj)
+		}
 		if err != nil {
+			if errors.Is(err, store.ErrResourceAlreadyExists) {
+				http.Error(w, err.Error(), http.StatusConflict)
+				return
+			}
 			writeStoreError(w, err)
 			return
 		}
@@ -875,7 +892,6 @@ func (s *Server) handleModelEndpointByName(w http.ResponseWriter, r *http.Reques
 			http.Error(w, fmt.Sprintf("modelendpoint %q not found", name), http.StatusNotFound)
 			return
 		}
-		obj.Metadata.Name = name
 		if err := applyRequestNamespace(r, &obj.Metadata); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -885,8 +901,17 @@ func (s *Server) handleModelEndpointByName(w http.ResponseWriter, r *http.Reques
 			return
 		}
 		obj.Status = current.Status
-		obj, err = s.stores.ModelEPs.Upsert(r.Context(), obj)
+		bodyKey := store.ScopedName(requestNamespace(r), strings.TrimSpace(obj.Metadata.Name))
+		if bodyKey != key {
+			obj, err = s.stores.ModelEPs.UpsertMovingKey(r.Context(), key, obj)
+		} else {
+			obj, err = s.stores.ModelEPs.Upsert(r.Context(), obj)
+		}
 		if err != nil {
+			if errors.Is(err, store.ErrResourceAlreadyExists) {
+				http.Error(w, err.Error(), http.StatusConflict)
+				return
+			}
 			writeStoreError(w, err)
 			return
 		}
@@ -1019,7 +1044,6 @@ func (s *Server) handleToolByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("tool %q not found", name), http.StatusNotFound)
 			return
 		}
-		obj.Metadata.Name = name
 		if err := applyRequestNamespace(r, &obj.Metadata); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -1029,8 +1053,17 @@ func (s *Server) handleToolByName(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		obj.Status = current.Status
-		obj, err = s.stores.Tools.Upsert(r.Context(), obj)
+		bodyKey := store.ScopedName(requestNamespace(r), strings.TrimSpace(obj.Metadata.Name))
+		if bodyKey != key {
+			obj, err = s.stores.Tools.UpsertMovingKey(r.Context(), key, obj)
+		} else {
+			obj, err = s.stores.Tools.Upsert(r.Context(), obj)
+		}
 		if err != nil {
+			if errors.Is(err, store.ErrResourceAlreadyExists) {
+				http.Error(w, err.Error(), http.StatusConflict)
+				return
+			}
 			writeStoreError(w, err)
 			return
 		}
@@ -1147,11 +1180,6 @@ func (s *Server) handleSecretByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "failed to read request body", http.StatusBadRequest)
 			return
 		}
-		obj, err := resources.ParseSecretManifest(body)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
 		current, ok, err := s.stores.Secrets.Get(r.Context(), key)
 		if writeStoreFetchError(w, err) {
 			return
@@ -1160,7 +1188,11 @@ func (s *Server) handleSecretByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("secret %q not found", name), http.StatusNotFound)
 			return
 		}
-		obj.Metadata.Name = name
+		obj, err := resources.ParseSecretManifestForPut(body, current)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		if err := applyRequestNamespace(r, &obj.Metadata); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -1170,8 +1202,17 @@ func (s *Server) handleSecretByName(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		obj.Status = current.Status
-		obj, err = s.stores.Secrets.Upsert(r.Context(), obj)
+		bodyKey := store.ScopedName(requestNamespace(r), strings.TrimSpace(obj.Metadata.Name))
+		if bodyKey != key {
+			obj, err = s.stores.Secrets.UpsertMovingKey(r.Context(), key, obj)
+		} else {
+			obj, err = s.stores.Secrets.Upsert(r.Context(), obj)
+		}
 		if err != nil {
+			if errors.Is(err, store.ErrResourceAlreadyExists) {
+				http.Error(w, err.Error(), http.StatusConflict)
+				return
+			}
 			writeStoreError(w, err)
 			return
 		}
@@ -1331,7 +1372,6 @@ func (s *Server) handleMemoryByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("memory %q not found", name), http.StatusNotFound)
 			return
 		}
-		obj.Metadata.Name = name
 		if err := applyRequestNamespace(r, &obj.Metadata); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -1341,8 +1381,17 @@ func (s *Server) handleMemoryByName(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		obj.Status = current.Status
-		obj, err = s.stores.Memories.Upsert(r.Context(), obj)
+		bodyKey := store.ScopedName(requestNamespace(r), strings.TrimSpace(obj.Metadata.Name))
+		if bodyKey != key {
+			obj, err = s.stores.Memories.UpsertMovingKey(r.Context(), key, obj)
+		} else {
+			obj, err = s.stores.Memories.Upsert(r.Context(), obj)
+		}
 		if err != nil {
+			if errors.Is(err, store.ErrResourceAlreadyExists) {
+				http.Error(w, err.Error(), http.StatusConflict)
+				return
+			}
 			writeStoreError(w, err)
 			return
 		}
@@ -1531,7 +1580,6 @@ func (s *Server) handlePolicyByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("agentpolicy %q not found", name), http.StatusNotFound)
 			return
 		}
-		obj.Metadata.Name = name
 		if err := applyRequestNamespace(r, &obj.Metadata); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -1541,8 +1589,17 @@ func (s *Server) handlePolicyByName(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		obj.Status = current.Status
-		obj, err = s.stores.Policies.Upsert(r.Context(), obj)
+		bodyKey := store.ScopedName(requestNamespace(r), strings.TrimSpace(obj.Metadata.Name))
+		if bodyKey != key {
+			obj, err = s.stores.Policies.UpsertMovingKey(r.Context(), key, obj)
+		} else {
+			obj, err = s.stores.Policies.Upsert(r.Context(), obj)
+		}
 		if err != nil {
+			if errors.Is(err, store.ErrResourceAlreadyExists) {
+				http.Error(w, err.Error(), http.StatusConflict)
+				return
+			}
 			writeStoreError(w, err)
 			return
 		}
@@ -1666,7 +1723,6 @@ func (s *Server) handleAgentRoleByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("agentrole %q not found", name), http.StatusNotFound)
 			return
 		}
-		obj.Metadata.Name = name
 		if err := applyRequestNamespace(r, &obj.Metadata); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -1676,8 +1732,17 @@ func (s *Server) handleAgentRoleByName(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		obj.Status = current.Status
-		obj, err = s.stores.AgentRoles.Upsert(r.Context(), obj)
+		bodyKey := store.ScopedName(requestNamespace(r), strings.TrimSpace(obj.Metadata.Name))
+		if bodyKey != key {
+			obj, err = s.stores.AgentRoles.UpsertMovingKey(r.Context(), key, obj)
+		} else {
+			obj, err = s.stores.AgentRoles.Upsert(r.Context(), obj)
+		}
 		if err != nil {
+			if errors.Is(err, store.ErrResourceAlreadyExists) {
+				http.Error(w, err.Error(), http.StatusConflict)
+				return
+			}
 			writeStoreError(w, err)
 			return
 		}
@@ -1801,7 +1866,6 @@ func (s *Server) handleToolPermissionByName(w http.ResponseWriter, r *http.Reque
 			http.Error(w, fmt.Sprintf("toolpermission %q not found", name), http.StatusNotFound)
 			return
 		}
-		obj.Metadata.Name = name
 		if err := applyRequestNamespace(r, &obj.Metadata); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -1811,8 +1875,17 @@ func (s *Server) handleToolPermissionByName(w http.ResponseWriter, r *http.Reque
 			return
 		}
 		obj.Status = current.Status
-		obj, err = s.stores.ToolPerms.Upsert(r.Context(), obj)
+		bodyKey := store.ScopedName(requestNamespace(r), strings.TrimSpace(obj.Metadata.Name))
+		if bodyKey != key {
+			obj, err = s.stores.ToolPerms.UpsertMovingKey(r.Context(), key, obj)
+		} else {
+			obj, err = s.stores.ToolPerms.Upsert(r.Context(), obj)
+		}
 		if err != nil {
+			if errors.Is(err, store.ErrResourceAlreadyExists) {
+				http.Error(w, err.Error(), http.StatusConflict)
+				return
+			}
 			writeStoreError(w, err)
 			return
 		}
@@ -2167,7 +2240,6 @@ func (s *Server) handleTaskByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("task %q not found", name), http.StatusNotFound)
 			return
 		}
-		obj.Metadata.Name = name
 		if err := applyRequestNamespace(r, &obj.Metadata); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -2187,8 +2259,17 @@ func (s *Server) handleTaskByName(w http.ResponseWriter, r *http.Request) {
 				obj.Metadata.Annotations[telemetry.AnnotationTracestate] = ts
 			}
 		}
-		obj, err = s.stores.Tasks.Upsert(r.Context(), obj)
+		bodyKey := store.ScopedName(requestNamespace(r), strings.TrimSpace(obj.Metadata.Name))
+		if bodyKey != key {
+			obj, err = s.stores.Tasks.UpsertMovingKey(r.Context(), key, obj)
+		} else {
+			obj, err = s.stores.Tasks.Upsert(r.Context(), obj)
+		}
 		if err != nil {
+			if errors.Is(err, store.ErrResourceAlreadyExists) {
+				http.Error(w, err.Error(), http.StatusConflict)
+				return
+			}
 			writeStoreError(w, err)
 			return
 		}
@@ -2343,7 +2424,6 @@ func (s *Server) handleTaskScheduleByName(w http.ResponseWriter, r *http.Request
 			http.Error(w, fmt.Sprintf("taskschedule %q not found", name), http.StatusNotFound)
 			return
 		}
-		obj.Metadata.Name = name
 		if err := applyRequestNamespace(r, &obj.Metadata); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -2353,8 +2433,17 @@ func (s *Server) handleTaskScheduleByName(w http.ResponseWriter, r *http.Request
 			return
 		}
 		obj.Status = current.Status
-		obj, err = s.stores.TaskSchedules.Upsert(r.Context(), obj)
+		bodyKey := store.ScopedName(requestNamespace(r), strings.TrimSpace(obj.Metadata.Name))
+		if bodyKey != key {
+			obj, err = s.stores.TaskSchedules.UpsertMovingKey(r.Context(), key, obj)
+		} else {
+			obj, err = s.stores.TaskSchedules.Upsert(r.Context(), obj)
+		}
 		if err != nil {
+			if errors.Is(err, store.ErrResourceAlreadyExists) {
+				http.Error(w, err.Error(), http.StatusConflict)
+				return
+			}
 			writeStoreError(w, err)
 			return
 		}
@@ -2487,7 +2576,6 @@ func (s *Server) handleWorkerByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("worker %q not found", name), http.StatusNotFound)
 			return
 		}
-		obj.Metadata.Name = name
 		if err := applyRequestNamespace(r, &obj.Metadata); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -2497,8 +2585,17 @@ func (s *Server) handleWorkerByName(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		obj.Status = current.Status
-		obj, err = s.stores.Workers.Upsert(r.Context(), obj)
+		bodyKey := store.ScopedName(requestNamespace(r), strings.TrimSpace(obj.Metadata.Name))
+		if bodyKey != key {
+			obj, err = s.stores.Workers.UpsertMovingKey(r.Context(), key, obj)
+		} else {
+			obj, err = s.stores.Workers.Upsert(r.Context(), obj)
+		}
 		if err != nil {
+			if errors.Is(err, store.ErrResourceAlreadyExists) {
+				http.Error(w, err.Error(), http.StatusConflict)
+				return
+			}
 			writeStoreError(w, err)
 			return
 		}
@@ -2616,6 +2713,50 @@ func (s *Server) handleMcpServerByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("mcp-server %q not found", name), http.StatusNotFound)
 			return
 		}
+		writeJSON(w, http.StatusOK, obj)
+	case http.MethodPut:
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "failed to read request body", http.StatusBadRequest)
+			return
+		}
+		obj, err := resources.ParseMcpServerManifest(body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		current, ok, err := s.stores.McpServers.Get(r.Context(), key)
+		if writeStoreFetchError(w, err) {
+			return
+		}
+		if !ok {
+			http.Error(w, fmt.Sprintf("mcp-server %q not found", name), http.StatusNotFound)
+			return
+		}
+		if err := applyRequestNamespace(r, &obj.Metadata); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if err := requireUpdatePrecondition(r.Header.Get("If-Match"), &obj.Metadata, current.Metadata); err != nil {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+		obj.Status = current.Status
+		bodyKey := store.ScopedName(requestNamespace(r), strings.TrimSpace(obj.Metadata.Name))
+		if bodyKey != key {
+			obj, err = s.stores.McpServers.UpsertMovingKey(r.Context(), key, obj)
+		} else {
+			obj, err = s.stores.McpServers.Upsert(r.Context(), obj)
+		}
+		if err != nil {
+			if errors.Is(err, store.ErrResourceAlreadyExists) {
+				http.Error(w, err.Error(), http.StatusConflict)
+				return
+			}
+			writeStoreError(w, err)
+			return
+		}
+		s.publishResourceEvent("McpServer", obj.Metadata.Name, "updated", obj)
 		writeJSON(w, http.StatusOK, obj)
 	case http.MethodDelete:
 		if err := s.stores.McpServers.Delete(r.Context(), key); err != nil {

@@ -1,19 +1,29 @@
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useDetailReturnNav } from "../hooks/useDetailReturnNav";
 import { useAgentRole, useDeleteResource, useUpdateResource } from "../api/hooks";
+import { useAppStore } from "../store";
+import { saveNamespacedResourceYaml } from "../hooks/saveDetailYamlWithFreshRv";
 import { StatusBadge } from "../components/StatusBadge";
 import { YamlEditor } from "../components/YamlEditor";
+import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
 import { ArrowLeft } from "lucide-react";
 import clsx from "clsx";
 import { toast } from "../components/Toast";
+import type { AgentRole } from "../api/types";
+import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
 
 type Tab = "overview" | "yaml";
 
 export function AgentRoleDetail() {
-  const { name } = useParams<{ name: string }>();
+  const { name: nameParam } = useParams<{ name: string }>();
+  const navigate = useNavigate();
   const { goBack } = useDetailReturnNav("/roles");
-  const { data: role, isLoading } = useAgentRole(name ?? "");
+  const routeName = nameParam ?? "";
+  const { data: role, isLoading, isError, error } = useAgentRole(routeName);
+  const queryClient = useQueryClient();
+  const namespace = useAppStore((s) => s.namespace);
   const deleteMutation = useDeleteResource("AgentRole");
   const updateMutation = useUpdateResource("AgentRole");
   const [tab, setTab] = useState<Tab>("overview");
@@ -23,6 +33,16 @@ export function AgentRoleDetail() {
     { id: "yaml", label: "YAML" },
   ];
 
+  if (isError) {
+    return (
+      <ResourceDetailLoadError
+        title="Agent role"
+        message={error instanceof Error ? error.message : "Failed to load"}
+        goBack={goBack}
+      />
+    );
+  }
+
   if (isLoading || !role) {
     return <div className="page"><div className="loading-placeholder">Loading agent role...</div></div>;
   }
@@ -30,7 +50,7 @@ export function AgentRoleDetail() {
   const handleDelete = async () => {
     if (!window.confirm(`Delete AgentRole ${role.metadata.name}?`)) return;
     try {
-      await deleteMutation.mutateAsync(role.metadata.name);
+      await deleteMutation.mutateAsync(routeName);
       toast("success", "AgentRole deleted successfully");
       goBack();
     } catch (err) {
@@ -103,8 +123,21 @@ export function AgentRoleDetail() {
             value={JSON.stringify(role, null, 2)}
             editable
             onSave={async (body) => {
-              await updateMutation.mutateAsync({ name: role.metadata.name, body, rv: role.metadata.resourceVersion });
+              const updated = await saveNamespacedResourceYaml<AgentRole>(
+                queryClient,
+                "AgentRole",
+                namespace,
+                routeName,
+                body,
+                (a) => updateMutation.mutateAsync(a) as Promise<AgentRole>,
+              );
               toast("success", "Role updated");
+              if (updated.metadata.name !== routeName) {
+                navigate(
+                  `${RESOURCE_DETAIL_BASE_PATH.AgentRole}/${encodeURIComponent(updated.metadata.name)}`,
+                  { replace: true },
+                );
+              }
             }}
           />
         )}

@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -149,7 +150,6 @@ func (s *Server) handleTaskWebhookByName(w http.ResponseWriter, r *http.Request)
 			http.Error(w, fmt.Sprintf("taskwebhook %q not found", name), http.StatusNotFound)
 			return
 		}
-		obj.Metadata.Name = name
 		if err := applyRequestNamespace(r, &obj.Metadata); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -159,8 +159,17 @@ func (s *Server) handleTaskWebhookByName(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		obj.Status = current.Status
-		obj, err = s.stores.TaskWebhooks.Upsert(r.Context(), obj)
+		bodyKey := store.ScopedName(requestNamespace(r), strings.TrimSpace(obj.Metadata.Name))
+		if bodyKey != key {
+			obj, err = s.stores.TaskWebhooks.UpsertMovingKey(r.Context(), key, obj)
+		} else {
+			obj, err = s.stores.TaskWebhooks.Upsert(r.Context(), obj)
+		}
 		if err != nil {
+			if errors.Is(err, store.ErrResourceAlreadyExists) {
+				http.Error(w, err.Error(), http.StatusConflict)
+				return
+			}
 			writeStoreError(w, err)
 			return
 		}

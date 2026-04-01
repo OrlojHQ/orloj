@@ -1,19 +1,29 @@
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useDetailReturnNav } from "../hooks/useDetailReturnNav";
 import { useDeleteResource, useMemory, useMemoryEntries, useUpdateResource } from "../api/hooks";
+import { useAppStore } from "../store";
+import { saveNamespacedResourceYaml } from "../hooks/saveDetailYamlWithFreshRv";
 import { StatusBadge } from "../components/StatusBadge";
 import { YamlEditor } from "../components/YamlEditor";
+import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
 import { ArrowLeft, Search } from "lucide-react";
 import clsx from "clsx";
 import { toast } from "../components/Toast";
+import type { Memory } from "../api/types";
+import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
 
 type Tab = "overview" | "entries" | "yaml";
 
 export function MemoryDetail() {
-  const { name } = useParams<{ name: string }>();
+  const { name: nameParam } = useParams<{ name: string }>();
+  const navigate = useNavigate();
   const { goBack } = useDetailReturnNav("/memories");
-  const { data: memory, isLoading } = useMemory(name ?? "");
+  const routeName = nameParam ?? "";
+  const { data: memory, isLoading, isError, error } = useMemory(routeName);
+  const queryClient = useQueryClient();
+  const namespace = useAppStore((s) => s.namespace);
   const deleteMutation = useDeleteResource("Memory");
   const updateMutation = useUpdateResource("Memory");
   const [tab, setTab] = useState<Tab>("overview");
@@ -24,6 +34,16 @@ export function MemoryDetail() {
     { id: "yaml", label: "YAML" },
   ];
 
+  if (isError) {
+    return (
+      <ResourceDetailLoadError
+        title="Memory"
+        message={error instanceof Error ? error.message : "Failed to load"}
+        goBack={goBack}
+      />
+    );
+  }
+
   if (isLoading || !memory) {
     return <div className="page"><div className="loading-placeholder">Loading memory...</div></div>;
   }
@@ -31,7 +51,7 @@ export function MemoryDetail() {
   const handleDelete = async () => {
     if (!window.confirm(`Delete Memory ${memory.metadata.name}?`)) return;
     try {
-      await deleteMutation.mutateAsync(memory.metadata.name);
+      await deleteMutation.mutateAsync(routeName);
       toast("success", "Memory deleted successfully");
       goBack();
     } catch (err) {
@@ -115,15 +135,28 @@ export function MemoryDetail() {
           </div>
         )}
 
-        {tab === "entries" && <MemoryEntriesTab name={name ?? ""} />}
+        {tab === "entries" && <MemoryEntriesTab name={routeName} />}
 
         {tab === "yaml" && (
           <YamlEditor
             value={JSON.stringify(memory, null, 2)}
             editable
             onSave={async (body) => {
-              await updateMutation.mutateAsync({ name: memory.metadata.name, body, rv: memory.metadata.resourceVersion });
+              const updated = await saveNamespacedResourceYaml<Memory>(
+                queryClient,
+                "Memory",
+                namespace,
+                routeName,
+                body,
+                (a) => updateMutation.mutateAsync(a) as Promise<Memory>,
+              );
               toast("success", "Memory updated");
+              if (updated.metadata.name !== routeName) {
+                navigate(
+                  `${RESOURCE_DETAIL_BASE_PATH.Memory}/${encodeURIComponent(updated.metadata.name)}`,
+                  { replace: true },
+                );
+              }
             }}
           />
         )}

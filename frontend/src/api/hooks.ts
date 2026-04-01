@@ -41,7 +41,8 @@ function useNamespace() {
   return useAppStore((s) => s.namespace);
 }
 
-function resourceKey(kind: string, ns: string, name?: string) {
+/** React Query key for resource list/detail; exported for `setQueryData` after mutations. */
+export function resourceKey(kind: string, ns: string, name?: string) {
   return name ? [kind, ns, name] : [kind, ns];
 }
 
