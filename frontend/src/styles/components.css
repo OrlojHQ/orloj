@@ -2630,6 +2630,26 @@
   padding: 0;
 }
 
+.create-dialog__warnings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 20px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+
+.create-dialog__warning {
+  border: 1px solid var(--orange);
+  border-left: 3px solid var(--orange);
+  border-radius: 8px;
+  background: var(--card-bg);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  line-height: 1.4;
+  padding: 8px 10px;
+}
+
 .create-dialog__footer {
   display: flex;
   justify-content: flex-end;

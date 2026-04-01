@@ -168,9 +168,11 @@ spec:
   default_model: llama3.1
 ```
 
+Use the Ollama server root as `base_url` for `provider: ollama`. Do not append `/v1` in this mode.
+
 ## Using OpenAI-Compatible Providers
 
-The `openai-compatible` provider lets you connect to any service that speaks the OpenAI Chat Completions protocol. Set `base_url` to the provider's API base:
+The `openai-compatible` provider lets you connect to any service that speaks the OpenAI Chat Completions protocol. Set `base_url` to the provider's API base. `auth.secretRef` is optional.
 
 **Groq:**
 ```yaml

@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { YamlEditor } from "./YamlEditor";
 import { useCreateResource } from "../api/hooks";
 import { toast } from "./Toast";
 import type { ResourceKind } from "../api/types";
+import { getModelEndpointDraftWarnings } from "./modelEndpointDraftWarnings";
 
 const TEMPLATES: Record<string, string> = {
   Agent: JSON.stringify({
@@ -175,6 +176,10 @@ interface CreateResourceDialogProps {
 export function CreateResourceDialog({ kind, open, onClose }: CreateResourceDialogProps) {
   const [yaml, setYaml] = useState(TEMPLATES[kind] ?? JSON.stringify({ apiVersion: "orloj.dev/v1", kind, metadata: { name: "", namespace: "default" }, spec: {} }, null, 2));
   const createMutation = useCreateResource(kind);
+  const draftWarnings = useMemo(
+    () => (kind === "ModelEndpoint" ? getModelEndpointDraftWarnings(yaml) : []),
+    [kind, yaml],
+  );
 
   if (!open) return null;
 
@@ -199,6 +204,13 @@ export function CreateResourceDialog({ kind, open, onClose }: CreateResourceDial
           </button>
         </div>
         <div className="create-dialog__body">
+          {draftWarnings.length > 0 && (
+            <div className="create-dialog__warnings">
+              {draftWarnings.map((warning) => (
+                <div key={warning} className="create-dialog__warning">{warning}</div>
+              ))}
+            </div>
+          )}
           <YamlEditor value={yaml} onChange={setYaml} readOnly={false} height="clamp(200px, 50vh, 400px)" />
         </div>
         <div className="create-dialog__footer">

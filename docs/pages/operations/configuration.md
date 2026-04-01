@@ -25,9 +25,6 @@ Example:
 | `ORLOJ_TASK_WORKER_REGION` | `orlojd` | `--task-worker-region` | Region for embedded worker registration. |
 | `ORLOJ_WORKER_HEALTHZ_ADDR` | `orlojworker` | `--healthz-addr` | Optional worker liveness endpoint bind address. |
 | `ORLOJ_MODEL_SECRET_ENV_PREFIX` | `orlojd`, `orlojworker` | `--model-secret-env-prefix` | Env prefix for model endpoint `secretRef` lookups. |
-| `OPENAI_API_KEY` | `orlojd`, `orlojworker` | none | Fallback key for OpenAI provider integrations. |
-| `ANTHROPIC_API_KEY` | `orlojd`, `orlojworker` | none | Fallback key for Anthropic provider integrations. |
-| `AZURE_OPENAI_API_KEY` | `orlojd`, `orlojworker` | none | Fallback key for Azure OpenAI provider integrations. |
 | `ORLOJ_TOOL_ISOLATION_BACKEND` | `orlojd`, `orlojworker` | `--tool-isolation-backend` | Tool runtime backend: `none`, `container`, or `wasm`. |
 | `ORLOJ_TOOL_CONTAINER_RUNTIME` | `orlojd`, `orlojworker` | `--tool-container-runtime` | Container runtime binary for tool isolation. |
 | `ORLOJ_TOOL_CONTAINER_IMAGE` | `orlojd`, `orlojworker` | `--tool-container-image` | Container image used by isolated tool execution. |

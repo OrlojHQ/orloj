@@ -110,7 +110,8 @@ func (r *ModelRouter) gatewayForEndpoint(ctx context.Context, endpoint resources
 		return nil, fmt.Errorf("unsupported model endpoint provider %q for %s", endpoint.Spec.Provider, endpointKey)
 	}
 	apiKey := ""
-	if plugin.RequiresAPIKey() {
+	needsSecret := plugin.RequiresAPIKey() || strings.TrimSpace(endpoint.Spec.Auth.SecretRef) != ""
+	if needsSecret {
 		var err error
 		apiKey, err = r.resolveEndpointAPIKey(ctx, endpoint)
 		if err != nil {

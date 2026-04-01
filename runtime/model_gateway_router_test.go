@@ -273,3 +273,77 @@ func TestModelRouterOllamaDoesNotRequireAPIKey(t *testing.T) {
 		t.Fatalf("expected OllamaModelGateway cache type, got %T", cached.Gateway)
 	}
 }
+
+func TestModelRouterOpenAICompatibleDoesNotRequireAPIKey(t *testing.T) {
+	lookup := &stubModelEndpointLookup{items: map[string]resources.ModelEndpoint{
+		"team-a/compatible-local": {
+			Metadata: resources.ObjectMeta{Name: "compatible-local", Namespace: "team-a", ResourceVersion: "10"},
+			Spec: resources.ModelEndpointSpec{
+				Provider:     "openai-compatible",
+				BaseURL:      "http://127.0.0.1:11434/v1",
+				DefaultModel: "llama3.2",
+			},
+		},
+	}}
+	router := NewModelRouter(ModelRouterConfig{
+		Endpoints: lookup,
+	})
+	_, err := router.gatewayForEndpoint(context.Background(), lookup.items["team-a/compatible-local"], "team-a/compatible-local")
+	if err != nil {
+		t.Fatalf("expected openai-compatible gateway build to succeed without key, got %v", err)
+	}
+
+	router.mu.RLock()
+	cached := router.cache["team-a/compatible-local"]
+	router.mu.RUnlock()
+	if cached.Gateway == nil {
+		t.Fatal("expected cached gateway for openai-compatible endpoint")
+	}
+	gw, ok := cached.Gateway.(*OpenAIModelGateway)
+	if !ok {
+		t.Fatalf("expected OpenAIModelGateway cache type, got %T", cached.Gateway)
+	}
+	if gw.apiKey != "" {
+		t.Fatalf("expected empty api key for openai-compatible without auth, got %q", gw.apiKey)
+	}
+}
+
+func TestModelRouterOpenAICompatibleUsesProvidedSecretWhenPresent(t *testing.T) {
+	secretValue := "compat-secret"
+	lookup := &stubModelEndpointLookup{items: map[string]resources.ModelEndpoint{
+		"team-a/compatible-auth": {
+			Metadata: resources.ObjectMeta{Name: "compatible-auth", Namespace: "team-a", ResourceVersion: "11"},
+			Spec: resources.ModelEndpointSpec{
+				Provider:     "openai-compatible",
+				BaseURL:      "https://example.invalid/v1",
+				DefaultModel: "llama3.2",
+				Auth:         resources.ModelEndpointAuth{SecretRef: "compatible-key"},
+			},
+		},
+	}}
+	secrets := &stubSecretLookup{items: map[string]resources.Secret{
+		"team-a/compatible-key": {
+			Metadata: resources.ObjectMeta{Name: "compatible-key", Namespace: "team-a"},
+			Spec:     resources.SecretSpec{Data: map[string]string{"value": base64.StdEncoding.EncodeToString([]byte(secretValue))}},
+		},
+	}}
+	router := NewModelRouter(ModelRouterConfig{
+		Endpoints: lookup,
+		Secrets:   secrets,
+	})
+	_, err := router.gatewayForEndpoint(context.Background(), lookup.items["team-a/compatible-auth"], "team-a/compatible-auth")
+	if err != nil {
+		t.Fatalf("expected openai-compatible gateway build with secret to succeed, got %v", err)
+	}
+
+	router.mu.RLock()
+	cached := router.cache["team-a/compatible-auth"]
+	router.mu.RUnlock()
+	gw, ok := cached.Gateway.(*OpenAIModelGateway)
+	if !ok {
+		t.Fatalf("expected OpenAIModelGateway cache type, got %T", cached.Gateway)
+	}
+	if gw.apiKey != secretValue {
+		t.Fatalf("expected resolved api key %q, got %q", secretValue, gw.apiKey)
+	}
+}

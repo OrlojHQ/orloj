@@ -86,8 +86,9 @@ Cause:
 
 Fix:
 
-- verify the ModelEndpoint `auth.secretRef` points to a valid Secret containing the provider API key.
-- alternatively, set the provider env var (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `AZURE_OPENAI_API_KEY`) as a fallback.
+- verify `auth.secretRef` is set for providers that require auth (`openai`, `anthropic`, `azure-openai`).
+- for `openai-compatible`, auth is optional, but if `auth.secretRef` is set, verify that Secret exists and is valid.
+- if you use env-based secret resolution, set `ORLOJ_SECRET_<name>` (or your configured prefix) to match the `secretRef` value.
 
 ### Wasm/container runtime errors
 

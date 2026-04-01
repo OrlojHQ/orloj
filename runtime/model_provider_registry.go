@@ -97,6 +97,7 @@ func mustRegisterBuiltinModelProviders(registry *ModelProviderRegistry) {
 	builtins := []ModelProviderPlugin{
 		&mockModelProviderPlugin{},
 		&openAIModelProviderPlugin{},
+		&openAICompatibleModelProviderPlugin{},
 		&anthropicModelProviderPlugin{},
 		&azureOpenAIModelProviderPlugin{},
 		&ollamaModelProviderPlugin{},
