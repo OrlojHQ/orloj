@@ -72,14 +72,42 @@ type openAIModelProviderPlugin struct{}
 
 func (p *openAIModelProviderPlugin) Name() string { return "openai" }
 
-func (p *openAIModelProviderPlugin) Aliases() []string {
-	return []string{"openai-compatible", "openai_compatible"}
-}
+func (p *openAIModelProviderPlugin) Aliases() []string { return nil }
 
 func (p *openAIModelProviderPlugin) RequiresAPIKey() bool { return true }
 
 func (p *openAIModelProviderPlugin) BuildGateway(cfg ModelGatewayConfig) (ModelGateway, error) {
 	openaiCfg := DefaultOpenAIModelGatewayConfig()
+	openaiCfg.RequireAPIKey = true
+	if strings.TrimSpace(cfg.APIKey) != "" {
+		openaiCfg.APIKey = strings.TrimSpace(cfg.APIKey)
+	}
+	if strings.TrimSpace(cfg.BaseURL) != "" {
+		openaiCfg.BaseURL = strings.TrimSpace(cfg.BaseURL)
+	}
+	if strings.TrimSpace(cfg.DefaultModel) != "" {
+		openaiCfg.DefaultModel = strings.TrimSpace(cfg.DefaultModel)
+	}
+	if cfg.Timeout > 0 {
+		openaiCfg.Timeout = cfg.Timeout
+	}
+	openaiCfg.HTTPClient = cfg.HTTPClient
+	return NewOpenAIModelGateway(openaiCfg)
+}
+
+type openAICompatibleModelProviderPlugin struct{}
+
+func (p *openAICompatibleModelProviderPlugin) Name() string { return "openai-compatible" }
+
+func (p *openAICompatibleModelProviderPlugin) Aliases() []string {
+	return []string{"openai_compatible"}
+}
+
+func (p *openAICompatibleModelProviderPlugin) RequiresAPIKey() bool { return false }
+
+func (p *openAICompatibleModelProviderPlugin) BuildGateway(cfg ModelGatewayConfig) (ModelGateway, error) {
+	openaiCfg := DefaultOpenAIModelGatewayConfig()
+	openaiCfg.RequireAPIKey = false
 	if strings.TrimSpace(cfg.APIKey) != "" {
 		openaiCfg.APIKey = strings.TrimSpace(cfg.APIKey)
 	}

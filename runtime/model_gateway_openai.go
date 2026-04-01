@@ -14,18 +14,20 @@ import (
 
 // OpenAIModelGatewayConfig defines OpenAI-compatible model gateway settings.
 type OpenAIModelGatewayConfig struct {
-	APIKey       string
-	BaseURL      string
-	DefaultModel string
-	Timeout      time.Duration
-	HTTPClient   *http.Client
+	APIKey        string
+	RequireAPIKey bool
+	BaseURL       string
+	DefaultModel  string
+	Timeout       time.Duration
+	HTTPClient    *http.Client
 }
 
 // DefaultOpenAIModelGatewayConfig returns OpenAI gateway defaults.
 func DefaultOpenAIModelGatewayConfig() OpenAIModelGatewayConfig {
 	return OpenAIModelGatewayConfig{
-		BaseURL: "https://api.openai.com/v1",
-		Timeout: 30 * time.Second,
+		RequireAPIKey: true,
+		BaseURL:       "https://api.openai.com/v1",
+		Timeout:       30 * time.Second,
 	}
 }
 
@@ -39,7 +41,7 @@ type OpenAIModelGateway struct {
 
 func NewOpenAIModelGateway(cfg OpenAIModelGatewayConfig) (*OpenAIModelGateway, error) {
 	normalized := cfg.normalized()
-	if strings.TrimSpace(normalized.APIKey) == "" {
+	if normalized.RequireAPIKey && strings.TrimSpace(normalized.APIKey) == "" {
 		return nil, fmt.Errorf("openai api key is required")
 	}
 	if strings.TrimSpace(normalized.BaseURL) == "" {
@@ -119,7 +121,9 @@ func (g *OpenAIModelGateway) Complete(ctx context.Context, req ModelRequest) (Mo
 		return ModelResponse{}, fmt.Errorf("build model request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+g.apiKey)
+	if g.apiKey != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+g.apiKey)
+	}
 
 	httpResp, err := g.client.Do(httpReq)
 	if err != nil {

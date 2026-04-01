@@ -105,6 +105,53 @@ func TestOpenAIModelGatewayCompleteSuccess(t *testing.T) {
 	}
 }
 
+func TestOpenAIModelGatewayCompleteWithoutAuthHeaderWhenKeyNotProvided(t *testing.T) {
+	var capturedAuth string
+	client := &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			capturedAuth = req.Header.Get("Authorization")
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(`{"choices":[{"message":{"content":"ok"}}]}`)),
+				Header:     make(http.Header),
+			}, nil
+		}),
+		Timeout: time.Second,
+	}
+
+	cfg := DefaultOpenAIModelGatewayConfig()
+	cfg.RequireAPIKey = false
+	cfg.BaseURL = "https://example.invalid/v1"
+	cfg.HTTPClient = client
+
+	gateway, err := NewOpenAIModelGateway(cfg)
+	if err != nil {
+		t.Fatalf("new gateway failed: %v", err)
+	}
+
+	_, err = gateway.Complete(context.Background(), ModelRequest{
+		Model:  "gpt-test",
+		Prompt: "test",
+		Step:   1,
+	})
+	if err != nil {
+		t.Fatalf("complete failed: %v", err)
+	}
+	if capturedAuth != "" {
+		t.Fatalf("expected no auth header, got %q", capturedAuth)
+	}
+}
+
+func TestNewOpenAIModelGatewayAllowsMissingKeyWhenOptional(t *testing.T) {
+	cfg := DefaultOpenAIModelGatewayConfig()
+	cfg.RequireAPIKey = false
+	cfg.BaseURL = "https://example.invalid/v1"
+
+	if _, err := NewOpenAIModelGateway(cfg); err != nil {
+		t.Fatalf("expected gateway creation without key when optional, got %v", err)
+	}
+}
+
 func TestOpenAIModelGatewayCompleteUsesDefaultModel(t *testing.T) {
 	var capturedModel string
 	client := &http.Client{

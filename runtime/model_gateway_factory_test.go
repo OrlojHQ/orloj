@@ -25,14 +25,23 @@ func TestNewModelGatewayFromConfigOpenAIMissingKey(t *testing.T) {
 	}
 }
 
-func TestNewModelGatewayFromConfigOpenAICompatibleAlias(t *testing.T) {
+func TestNewModelGatewayFromConfigOpenAICompatibleNoKey(t *testing.T) {
 	_, err := NewModelGatewayFromConfig(ModelGatewayConfig{
 		Provider: "openai-compatible",
-		APIKey:   "test-key",
 		BaseURL:  "https://example.invalid/v1",
 	})
 	if err != nil {
-		t.Fatalf("expected alias provider to be accepted, got %v", err)
+		t.Fatalf("expected openai-compatible provider without key to be accepted, got %v", err)
+	}
+}
+
+func TestNewModelGatewayFromConfigOpenAICompatibleUnderscoreAlias(t *testing.T) {
+	_, err := NewModelGatewayFromConfig(ModelGatewayConfig{
+		Provider: "openai_compatible",
+		BaseURL:  "https://example.invalid/v1",
+	})
+	if err != nil {
+		t.Fatalf("expected openai_compatible alias provider to be accepted, got %v", err)
 	}
 }
 

@@ -44,7 +44,10 @@ func TestDefaultModelProviderRegistryBuiltins(t *testing.T) {
 		t.Fatal("expected openai provider to be registered")
 	}
 	if _, ok := registry.Lookup("openai-compatible"); !ok {
-		t.Fatal("expected openai-compatible alias to be registered")
+		t.Fatal("expected openai-compatible provider to be registered")
+	}
+	if _, ok := registry.Lookup("openai_compatible"); !ok {
+		t.Fatal("expected openai_compatible alias to be registered")
 	}
 	if _, ok := registry.Lookup("anthropic"); !ok {
 		t.Fatal("expected anthropic provider to be registered")

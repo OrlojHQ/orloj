@@ -20,6 +20,10 @@
   - `ollama` -> `http://127.0.0.1:11434`
   - `openai-compatible` -> (no default; must be set explicitly)
 - `options` keys are normalized to lowercase; keys/values are trimmed.
+- auth behavior by provider:
+  - `openai`, `anthropic`, `azure-openai`: `auth.secretRef` is required.
+  - `openai-compatible`: `auth.secretRef` is optional.
+  - `ollama`: `auth.secretRef` is optional and usually omitted.
 
 ## status
 

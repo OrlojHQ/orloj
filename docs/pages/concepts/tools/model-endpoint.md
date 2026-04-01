@@ -65,9 +65,11 @@ spec:
   default_model: llama3.1
 ```
 
+> **Ollama base URL tip:** For `provider: ollama`, use the server root (`http://host:11434`) and do **not** append `/v1`.
+
 ### OpenAI-Compatible Providers
 
-The `openai-compatible` provider uses the OpenAI Chat Completions protocol (`/chat/completions`) with a custom `base_url`. This lets you connect to any service that exposes an OpenAI-compatible API, including Groq, Together AI, Fireworks AI, local vLLM/TGI servers, and Ollama's OpenAI-compatible endpoint.
+The `openai-compatible` provider uses the OpenAI Chat Completions protocol (`/chat/completions`) with a custom `base_url`. This lets you connect to any service that exposes an OpenAI-compatible API, including Groq, Together AI, Fireworks AI, local vLLM/TGI servers, and Ollama's OpenAI-compatible endpoint. `auth.secretRef` is optional for this provider.
 
 **Groq:**
 ```yaml
@@ -134,7 +136,13 @@ ModelEndpoint references are resolved by name within the same namespace, or by `
 
 ## Authentication
 
-Model authentication is managed through [Secret](./secret.md) resources referenced by `auth.secretRef`. The simplest way to create one is the imperative CLI command:
+Model authentication is managed through [Secret](./secret.md) resources referenced by `auth.secretRef`.
+
+- `openai`, `anthropic`, and `azure-openai` require `auth.secretRef`.
+- `openai-compatible` accepts either with or without `auth.secretRef`.
+- `ollama` usually runs without `auth.secretRef`.
+
+The simplest way to create a Secret is the imperative CLI command:
 
 ```bash
 orlojctl create secret openai-api-key --from-literal value=sk-your-api-key-here
