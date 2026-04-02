@@ -696,23 +696,20 @@ func claimNextDueTaskSQL(ctx context.Context, db *sql.DB, workerID string, lease
 	// cannot execute, which would starve workers with specialized requirements.
 	extraWhere := ""
 	args := []any{}
-	argIdx := 1
 
 	if hints.Region != "" {
-		argIdx++
 		extraWhere += fmt.Sprintf(` AND (
 			payload->'spec'->'requirements'->>'region' IS NULL
 			OR payload->'spec'->'requirements'->>'region' = ''
 			OR LOWER(payload->'spec'->'requirements'->>'region') = LOWER($%d)
-		)`, argIdx)
+		)`, len(args)+1)
 		args = append(args, hints.Region)
 	}
 	if hints.AssignedWorker != "" {
-		argIdx++
 		extraWhere += fmt.Sprintf(` AND (
 			assigned_worker = ''
 			OR LOWER(assigned_worker) = LOWER($%d)
-		)`, argIdx)
+		)`, len(args)+1)
 		args = append(args, hints.AssignedWorker)
 	}
 
@@ -827,7 +824,7 @@ func renewTaskLeaseSQL(ctx context.Context, db *sql.DB, name, workerID string, l
 		 WHERE name = $1
 		   AND status_phase = 'running'
 		   AND LOWER(TRIM(claimed_by)) = LOWER(TRIM($5))`,
-		name, &leaseUntilTS, leaseUntilStr, heartbeatStr, workerID,
+		name, leaseUntilTS, leaseUntilStr, heartbeatStr, workerID,
 	)
 	if err != nil {
 		return err
