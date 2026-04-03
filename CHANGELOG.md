@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-04-02
+
 ### Added
 
 - **`GET /v1/auth/config`**: `setup_token_required` indicates when `ORLOJ_SETUP_TOKEN` is set so clients can require `setup_token` on initial setup; the web console setup page shows a setup-token field when applicable. `orlojctl status` includes `setup_token_required` in table/JSON output.
@@ -137,7 +139,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Homebrew tap distribution (`OrlojHQ/orloj`)
 - Blueprint scaffolding via `orlojctl init`
 
-[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/OrlojHQ/orloj/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/OrlojHQ/orloj/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/OrlojHQ/orloj/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/OrlojHQ/orloj/compare/v0.2.0...v0.3.0
