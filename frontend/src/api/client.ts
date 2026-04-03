@@ -288,6 +288,8 @@ export async function healthCheck(): Promise<boolean> {
 export interface AuthConfigResponse {
   mode: "off" | "native" | "sso" | string;
   setup_required: boolean;
+  /** True when the server has `ORLOJ_SETUP_TOKEN` set; setup must include `setup_token`. */
+  setup_token_required?: boolean;
   login_methods: string[];
 }
 
@@ -327,13 +329,22 @@ export async function getAuthMe(): Promise<AuthMeResponse> {
   return (await resp.json()) as AuthMeResponse;
 }
 
-export async function setupLocalAuth(username: string, password: string): Promise<AuthMeResponse> {
+export async function setupLocalAuth(
+  username: string,
+  password: string,
+  setupToken?: string,
+): Promise<AuthMeResponse> {
   const { apiBase } = getConnection();
   const base = apiBase.replace(/\/$/, "");
+  const body: Record<string, string> = { username, password };
+  const trimmed = setupToken?.trim();
+  if (trimmed) {
+    body.setup_token = trimmed;
+  }
   const resp = await fetchOrThrow(`${base}/v1/auth/setup`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify(body),
   });
   if (!resp.ok) {
     const body = await resp.text();

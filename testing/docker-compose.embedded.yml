@@ -1,0 +1,63 @@
+# Orloj stack: Postgres + orlojd with embedded worker (memory bus, no NATS).
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-orloj}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-orloj}
+    # Postgres 18+ expects the mount at the parent dir (versioned PGDATA below it).
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-orloj} -d ${POSTGRES_DB:-orloj}",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  orlojd:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      target: orlojd
+    image: orloj-orlojd:local
+    environment:
+      ORLOJ_POSTGRES_DSN: ${ORLOJ_POSTGRES_DSN}
+      ORLOJ_AUTH_MODE: ${ORLOJ_AUTH_MODE}
+      ORLOJ_API_TOKEN: ${ORLOJ_API_TOKEN}
+      ORLOJ_SETUP_TOKEN: ${ORLOJ_SETUP_TOKEN:-}
+      ORLOJ_SECRET_ENCRYPTION_KEY: ${ORLOJ_SECRET_ENCRYPTION_KEY:-}
+      ORLOJ_EMBEDDED_WORKER_MAX_CONCURRENT_TASKS: ${ORLOJ_EMBEDDED_WORKER_MAX_CONCURRENT_TASKS}
+      ORLOJ_TASK_WORKER_REGION: ${ORLOJ_TASK_WORKER_REGION:-default}
+    command:
+      - --addr=:8080
+      - --storage-backend=postgres
+      - --task-execution-mode=message-driven
+      - --agent-message-bus-backend=memory
+      - --tool-isolation-backend=container
+      - --tool-container-network=bridge
+      - --embedded-worker
+    ports:
+      - "${ORLOJ_HTTP_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -O - http://127.0.0.1:8080/healthz >/dev/null 2>&1",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

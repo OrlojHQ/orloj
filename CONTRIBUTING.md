@@ -59,14 +59,14 @@ go run ./cmd/orlojctl get task bp-pipeline-task
 
 Run the smallest relevant checks first, then run broader checks before review:
 
-| Change type | Recommended command |
-| --- | --- |
-| Single package change | `go test ./path/to/package -count=1` |
-| API/runtime touched | `go test ./api ./controllers ./store -count=1` |
-| Frontend touched | `cd frontend && bun run build` |
-| Docs touched | `cd docs && bun run build` |
-| Examples/manifests touched | `go run ./cmd/orlojctl validate -f examples/` |
-| Pre-PR full pass | `go test ./... -count=1 -timeout 120s` |
+| Change type                | Recommended command                            |
+| -------------------------- | ---------------------------------------------- |
+| Single package change      | `go test ./path/to/package -count=1`           |
+| API/runtime touched        | `go test ./api ./controllers ./store -count=1` |
+| Frontend touched           | `cd frontend && bun run build`                 |
+| Docs touched               | `cd docs && bun run build`                     |
+| Examples/manifests touched | `go run ./cmd/orlojctl validate -f examples/`  |
+| Pre-PR full pass           | `go test ./... -count=1 -timeout 120s`         |
 
 ## Pull Request Expectations
 
@@ -91,7 +91,7 @@ The root README includes visual media for **Orloj in Action** backed by assets i
 - **[openapi/openapi.yaml](openapi/openapi.yaml)** is **generated**. Do not edit it by hand for `paths`, `info`, or `tags`—changes are overwritten when someone runs the generator.
 - **Regenerate** from the repo root: `python3 openapi/build_openapi.py` (uses Ruby to emit YAML). CI lints with `npx @redocly/cli lint openapi/openapi.yaml`.
 - **Where to edit:**
-  - **[openapi/schemas/*.yaml](openapi/schemas/)** — `components` schemas (fields, types, `description` on properties). Referenced by `$ref` from the root spec.
+  - **[openapi/schemas/\*.yaml](openapi/schemas/)** — `components` schemas (fields, types, `description` on properties). Referenced by `$ref` from the root spec.
   - **[openapi/build_openapi.py](openapi/build_openapi.py)** — `info.description` (keep it high-level), **`tags`** (including tag `description` for groups like secrets), and all **path operations** (`get` / `put` / …). Use operation-level text for resource-specific notes; use tag descriptions for behavior shared by all operations under that tag.
 
 ## Review and Response SLA
@@ -125,6 +125,20 @@ You can add this automatically with:
 ```bash
 git commit -s
 ```
+
+## Commit Identity and Contributor Credit
+
+To ensure your commits are attributed to your GitHub account:
+
+1. Use an email that is added and verified in GitHub **Settings -> Emails**, or use your GitHub `noreply` email.
+2. Check your local commit email before committing:
+   ```bash
+   git config --get user.email
+   ```
+3. (Optional) Set your global GitHub noreply email:
+   ```bash
+   git config --global user.email "YOUR_ID+YOUR_USERNAME@users.noreply.github.com"
+   ```
 
 ## License
 

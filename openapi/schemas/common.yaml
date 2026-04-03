@@ -52,6 +52,9 @@ components:
       properties:
         mode: { type: string }
         setup_required: { type: boolean }
+        setup_token_required:
+          type: boolean
+          description: When true, native initial setup requires `setup_token` in `POST /v1/auth/setup` (matches `ORLOJ_SETUP_TOKEN` on the server).
         login_methods: { type: array, items: { type: string } }
     AuthMeResponse:
       type: object

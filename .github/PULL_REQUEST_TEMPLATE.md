@@ -19,6 +19,7 @@ go run ./cmd/orlojctl validate -f examples/
 - [ ] I added a changelog entry under `[Unreleased]` when user-visible behavior changed.
 - [ ] I kept this PR focused and avoided unrelated refactors.
 - [ ] I included DCO sign-off (`git commit -s`).
+- [ ] I confirmed my commit author email is linked to my GitHub account (or GitHub `noreply`) so contributor attribution works.
 
 ## Risk and Rollback
 
