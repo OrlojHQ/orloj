@@ -13,9 +13,10 @@ import (
 )
 
 type authConfigResponse struct {
-	Mode          string   `json:"mode"`
-	SetupRequired bool     `json:"setup_required"`
-	LoginMethods  []string `json:"login_methods"`
+	Mode               string   `json:"mode"`
+	SetupRequired      bool     `json:"setup_required"`
+	SetupTokenRequired bool     `json:"setup_token_required"`
+	LoginMethods       []string `json:"login_methods"`
 }
 
 type authRequest struct {
@@ -51,6 +52,7 @@ func (s *Server) handleAuthConfig(w http.ResponseWriter, r *http.Request) {
 	switch s.authMode {
 	case AuthModeNative:
 		resp.LoginMethods = []string{"password"}
+		resp.SetupTokenRequired = strings.TrimSpace(os.Getenv("ORLOJ_SETUP_TOKEN")) != ""
 		userCount, err := s.stores.LocalAdmins.CountUsers()
 		if err != nil {
 			http.Error(w, "auth store error", http.StatusInternalServerError)

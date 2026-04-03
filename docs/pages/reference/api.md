@@ -34,7 +34,7 @@ Namespace defaults to `default` and can be overridden with `?namespace=<ns>`.
 ## Authentication Endpoints
 
 - `GET /v1/auth/config`
-  - returns auth mode and login/setup requirements
+  - returns auth mode and login/setup requirements; when mode is `native`, `setup_token_required` is true if the server was started with `ORLOJ_SETUP_TOKEN` (the UI shows a setup-token field; `POST /v1/auth/setup` must include `setup_token`)
 - `POST /v1/auth/setup`
   - one-time native admin bootstrap when auth mode is `native`
 - `POST /v1/auth/login`

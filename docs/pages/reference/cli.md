@@ -388,6 +388,8 @@ Checks `/healthz`.
 
 Composite status view using `/healthz`, `/v1/auth/config`, `/v1/capabilities`, `/v1/workers`, and `/v1/namespaces`.
 
+Table output includes `auth_mode`, `setup_required`, and `setup_token_required` (from auth config; the last is true when `ORLOJ_SETUP_TOKEN` is set on the server). JSON/YAML snapshots include `auth_setup_token_required`.
+
 | Flag | Default | Description |
 |---|---|---|
 | `--server` | resolved server | API server URL. |

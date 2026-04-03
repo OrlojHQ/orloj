@@ -5,13 +5,16 @@ import { AuthShell } from "../components/AuthShell";
 
 interface SetupProps {
   onSuccess: () => void;
+  /** From `GET /v1/auth/config` when `ORLOJ_SETUP_TOKEN` is configured on the server. */
+  setupTokenRequired?: boolean;
 }
 
-export function Setup({ onSuccess }: SetupProps) {
+export function Setup({ onSuccess, setupTokenRequired = false }: SetupProps) {
   const navigate = useNavigate();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [setupToken, setSetupToken] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
@@ -21,10 +24,14 @@ export function Setup({ onSuccess }: SetupProps) {
       setError("Passwords do not match");
       return;
     }
+    if (setupTokenRequired && !setupToken.trim()) {
+      setError("Setup token is required");
+      return;
+    }
     setSubmitting(true);
     setError("");
     try {
-      await setupLocalAuth(username, password);
+      await setupLocalAuth(username, password, setupTokenRequired ? setupToken : undefined);
       onSuccess();
       navigate("/", { replace: true });
     } catch (err) {
@@ -41,6 +48,21 @@ export function Setup({ onSuccess }: SetupProps) {
       subtitle="Set up initial credentials to secure this installation."
     >
       <form onSubmit={onSubmit} className="auth-form">
+        {setupTokenRequired && (
+          <label className="auth-form__field">
+            <span className="auth-form__label">Setup token</span>
+            <input
+              type="password"
+              value={setupToken}
+              onChange={(e) => setSetupToken(e.target.value)}
+              autoComplete="off"
+              required
+            />
+            <span className="auth-form__hint">
+              Value of <code>ORLOJ_SETUP_TOKEN</code> on the server.
+            </span>
+          </label>
+        )}
         <label className="auth-form__field">
           <span className="auth-form__label">Username</span>
           <input

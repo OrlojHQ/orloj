@@ -643,8 +643,9 @@ func runStatus(args []string) error {
 		Namespaces []string `json:"namespaces"`
 	}
 	var auth struct {
-		Mode          string `json:"mode"`
-		SetupRequired bool   `json:"setup_required"`
+		Mode               string `json:"mode"`
+		SetupRequired      bool   `json:"setup_required"`
+		SetupTokenRequired bool   `json:"setup_token_required"`
 	}
 	_ = json.Unmarshal(healthRaw, &health)
 	_ = json.Unmarshal(capRaw, &caps)
@@ -661,7 +662,8 @@ func runStatus(args []string) error {
 		"server":              base,
 		"health":              health.Status,
 		"auth_mode":           auth.Mode,
-		"auth_setup_required": auth.SetupRequired,
+		"auth_setup_required":       auth.SetupRequired,
+		"auth_setup_token_required": auth.SetupTokenRequired,
 		"capabilities_count":  len(caps.Capabilities),
 		"capabilities_at":     caps.GeneratedAt,
 		"workers_count":       len(workers.Items),
@@ -673,7 +675,7 @@ func runStatus(args []string) error {
 	}
 	fmt.Printf("server=%s\n", base)
 	fmt.Printf("health=%s\n", health.Status)
-	fmt.Printf("auth_mode=%s setup_required=%t\n", auth.Mode, auth.SetupRequired)
+	fmt.Printf("auth_mode=%s setup_required=%t setup_token_required=%t\n", auth.Mode, auth.SetupRequired, auth.SetupTokenRequired)
 	fmt.Printf("capabilities=%d generated_at=%s\n", len(caps.Capabilities), caps.GeneratedAt)
 	fmt.Printf("workers=%d\n", len(workers.Items))
 	fmt.Printf("namespaces=%d\n", len(namespaces.Namespaces))

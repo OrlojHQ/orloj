@@ -67,6 +67,9 @@ func TestNativeAuthSetupLoginAndProtectedRoutes(t *testing.T) {
 	if cfg["setup_required"] != true {
 		t.Fatalf("expected setup_required=true, got %v", cfg["setup_required"])
 	}
+	if cfg["setup_token_required"] != false {
+		t.Fatalf("expected setup_token_required=false when ORLOJ_SETUP_TOKEN unset, got %v", cfg["setup_token_required"])
+	}
 
 	resp, err = client.Get(server.URL + "/v1/tasks")
 	if err != nil {
@@ -387,6 +390,47 @@ func TestNativeAuthSessionExpiryEnforced(t *testing.T) {
 	if resp.StatusCode != http.StatusUnauthorized {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("expected 401 after session expiry, got %d body=%s", resp.StatusCode, string(body))
+	}
+	resp.Body.Close()
+}
+
+func TestNativeAuthConfigSetupTokenRequired(t *testing.T) {
+	t.Setenv("ORLOJ_SETUP_TOKEN", "bootstrap-secret")
+	server := newNativeAuthServer(t)
+	defer server.Close()
+
+	resp, err := http.Get(server.URL + "/v1/auth/config")
+	if err != nil {
+		t.Fatalf("config request failed: %v", err)
+	}
+	var cfg map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&cfg); err != nil {
+		t.Fatalf("decode config failed: %v", err)
+	}
+	resp.Body.Close()
+	if cfg["setup_token_required"] != true {
+		t.Fatalf("expected setup_token_required=true when ORLOJ_SETUP_TOKEN set, got %v", cfg["setup_token_required"])
+	}
+
+	noToken := []byte(`{"username":"admin","password":"very-strong-pass-12"}`)
+	resp, err = http.Post(server.URL+"/v1/auth/setup", "application/json", bytes.NewReader(noToken))
+	if err != nil {
+		t.Fatalf("setup without token failed: %v", err)
+	}
+	if resp.StatusCode != http.StatusForbidden {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 403 without setup_token, got %d body=%s", resp.StatusCode, string(body))
+	}
+	resp.Body.Close()
+
+	withToken := []byte(`{"username":"admin","password":"very-strong-pass-12","setup_token":"bootstrap-secret"}`)
+	resp, err = http.Post(server.URL+"/v1/auth/setup", "application/json", bytes.NewReader(withToken))
+	if err != nil {
+		t.Fatalf("setup with token failed: %v", err)
+	}
+	if resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 201 with valid setup_token, got %d body=%s", resp.StatusCode, string(body))
 	}
 	resp.Body.Close()
 }

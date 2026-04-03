@@ -217,7 +217,12 @@ export function App() {
         if (!cancelled) {
           setAuth({
             loading: false,
-            config: { mode: "off", setup_required: false, login_methods: [] },
+            config: {
+              mode: "off",
+              setup_required: false,
+              setup_token_required: false,
+              login_methods: [],
+            },
             authenticated: true,
             me: null,
           });
@@ -239,9 +244,17 @@ export function App() {
                 <h1 className="page__title">Loading</h1>
               </div>
             </div>
-          ) : isNativeAuthMode(auth.config?.mode) && auth.config.setup_required ? (
+          ) : isNativeAuthMode(auth.config?.mode) && auth.config?.setup_required ? (
             <Routes>
-              <Route path="/setup" element={<Setup onSuccess={refreshAuth} />} />
+              <Route
+                path="/setup"
+                element={
+                  <Setup
+                    onSuccess={refreshAuth}
+                    setupTokenRequired={auth.config?.setup_token_required === true}
+                  />
+                }
+              />
               <Route path="*" element={<Navigate to="/setup" replace />} />
             </Routes>
           ) : isNativeAuthMode(auth.config?.mode) && !auth.authenticated ? (
