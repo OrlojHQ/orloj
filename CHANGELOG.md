@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Sequential agent handoffs**: Downstream agents in sequential task execution now receive the upstream agent's actual output (`result.Output`) before falling back to the last event message, instead of being handed generic values such as `worker completed`.
 - **Postgres task claiming**: Worker claim SQL used placeholder indices `$2`/`$3` while the driver bound arguments as `$1`/`$2`, causing `could not determine data type of parameter $1` (SQLSTATE 42P18) during embedded worker reconcile when both region and assigned-worker hints were set.
 
 ## [0.5.0] - 2026-04-01

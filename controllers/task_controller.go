@@ -1315,7 +1315,10 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 
 		if idx+1 < len(order) {
 			nextAgent := order[idx+1]
-			content := strings.TrimSpace(result.LastEvent)
+			content := strings.TrimSpace(result.Output)
+			if content == "" {
+				content = strings.TrimSpace(result.LastEvent)
+			}
 			if content == "" {
 				content = fmt.Sprintf("steps=%d tool_calls=%d tokens=%d usage_source=%s", result.Steps, result.ToolCalls, result.TokensUsed, strings.TrimSpace(result.TokenSource))
 			}

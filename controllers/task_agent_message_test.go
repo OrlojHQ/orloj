@@ -149,7 +149,17 @@ func TestTaskControllerPublishesAgentHandoffMessages(t *testing.T) {
 	if published[0].Namespace != "default" {
 		t.Fatalf("expected published namespace default, got %q", published[0].Namespace)
 	}
+	if message.Content != "model=gpt-4o step=1" {
+		t.Fatalf("expected handoff content from result output, got %q", message.Content)
+	}
+	if published[0].Payload != "model=gpt-4o step=1" {
+		t.Fatalf("expected published payload from result output, got %q", published[0].Payload)
+	}
+	if got := task.Status.Output["agent.1.message_content"]; got != "model=gpt-4o step=1" {
+		t.Fatalf("expected task output message content from result output, got %q", got)
+	}
 }
+
 
 func TestTaskControllerFailsTaskWhenMessagePublishFails(t *testing.T) {
 	controller, stores := newTaskControllerHarness()
