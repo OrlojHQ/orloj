@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Task controller**: `reconcilePending` no longer increments `status.attempts`; attempts are counted when a task is claimed in the store (`applyTaskClaim`), avoiding duplicate increments if a pending task is reconciled after claim.
+
 ## [0.5.1] - 2026-04-02
 
 ### Added

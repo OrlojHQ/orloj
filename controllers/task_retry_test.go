@@ -45,7 +45,10 @@ func TestTaskRetrySchedulesNextAttemptOnTimeout(t *testing.T) {
 		Metadata:   resources.ObjectMeta{Name: "retry-task"},
 		Spec: resources.TaskSpec{
 			System: "retry-system",
-			Retry:  resources.TaskRetryPolicy{MaxAttempts: 3, Backoff: "1ms"},
+			// Backoff must exceed worst-case time for one claim+timeout+retry pass inside
+			// ReconcileOnce; otherwise the inner loop can claim the same task twice in one
+			// call when CI is slow (1ms backoff + fast machine passes, slow machine fails).
+			Retry: resources.TaskRetryPolicy{MaxAttempts: 3, Backoff: "100ms"},
 		},
 	}
 	if _, err := stores.taskStore.Upsert(context.Background(), task); err != nil {
@@ -76,7 +79,7 @@ func TestTaskRetrySchedulesNextAttemptOnTimeout(t *testing.T) {
 		t.Fatalf("expected retry scheduled in lastError, got %q", taskAfterFirst.Status.LastError)
 	}
 
-	time.Sleep(3 * time.Millisecond)
+	time.Sleep(150 * time.Millisecond)
 	if err := controller.ReconcileOnce(context.Background()); err != nil {
 		t.Fatalf("second reconcile: %v", err)
 	}
@@ -98,7 +101,8 @@ func TestTaskRetrySchedulesNextAttemptOnTimeout(t *testing.T) {
 		t.Fatalf("expected retry scheduled in lastError, got %q", taskAfterSecond.Status.LastError)
 	}
 
-	time.Sleep(3 * time.Millisecond)
+	// After the second timeout, attempts=2 so retryDelay uses 2^(2-1)=2× backoff (200ms with 100ms base).
+	time.Sleep(250 * time.Millisecond)
 	if err := controller.ReconcileOnce(context.Background()); err != nil {
 		t.Fatalf("third reconcile: %v", err)
 	}

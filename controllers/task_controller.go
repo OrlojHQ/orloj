@@ -308,7 +308,6 @@ func (c *TaskController) reconcilePending(ctx context.Context, task resources.Ta
 	task.Status.NextAttemptAt = ""
 	task.Status.Output = nil
 	task.Status.Messages = nil
-	task.Status.Attempts++
 	task.Status.ObservedGeneration = task.Metadata.Generation
 	task.Status.AssignedWorker = c.workerID
 	task.Status.ClaimedBy = c.workerID
