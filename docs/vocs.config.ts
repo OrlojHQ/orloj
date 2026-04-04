@@ -66,13 +66,14 @@ export default defineConfig({
             { text: "ModelEndpoint", link: "/concepts/tools/model-endpoint" },
             { text: "McpServer", link: "/concepts/tools/mcp-server" },
             { text: "Secret", link: "/concepts/tools/secret" },
+            { text: "CLI Tool", link: "/concepts/tools/cli-tool" },
           ],
         },
         {
           text: "Memory",
           collapsed: false,
           items: [
-            { text: "Memory", link: "/concepts/memory/" },
+            { text: "Overview", link: "/concepts/memory/" },
             { text: "Memory Providers", link: "/concepts/memory/providers" },
           ],
         },
@@ -93,24 +94,18 @@ export default defineConfig({
             },
           ],
         },
-        {
-          text: "Infrastructure",
-          collapsed: false,
-          items: [
-            { text: "Worker", link: "/concepts/infrastructure/worker" },
-          ],
-        },
+        { text: "Worker", link: "/concepts/infrastructure/worker" },
       ],
     },
 
     {
       text: "Guides",
       items: [
+        { text: "Overview", link: "/guides/" },
         {
           text: "5-Minute Tutorial",
           link: "/guides/five-minute-tutorial",
         },
-        { text: "Overview", link: "/guides/" },
         {
           text: "Deploy Your First Pipeline",
           link: "/guides/deploy-pipeline",
@@ -169,7 +164,7 @@ export default defineConfig({
           text: "Observability",
           collapsed: false,
           items: [
-            { text: "Observability", link: "/operations/observability" },
+            { text: "Overview", link: "/operations/observability" },
             {
               text: "Monitoring & Alerts",
               link: "/operations/monitoring-alerts",
@@ -186,49 +181,60 @@ export default defineConfig({
     {
       text: "Reference",
       items: [
-        { text: "CLI", link: "/reference/cli" },
+        { text: "CLI (orlojctl)", link: "/reference/cli" },
         { text: "API", link: "/reference/api" },
+        { text: "Server Flags", link: "/reference/server-flags" },
+        { text: "Internal Tools", link: "/reference/internal-tools" },
         {
           text: "Resources",
           collapsed: false,
           items: [
             { text: "Overview", link: "/reference/resources/" },
-            { text: "Agent", link: "/reference/resources/agent" },
             {
-              text: "AgentSystem",
-              link: "/reference/resources/agent-system",
-            },
-            { text: "Task", link: "/reference/resources/task" },
-            {
-              text: "TaskSchedule",
-              link: "/reference/resources/task-schedule",
+              text: "Agents",
+              collapsed: false,
+              items: [
+                { text: "Agent", link: "/reference/resources/agent" },
+                { text: "AgentSystem", link: "/reference/resources/agent-system" },
+              ],
             },
             {
-              text: "TaskWebhook",
-              link: "/reference/resources/task-webhook",
-            },
-            { text: "Tool", link: "/reference/resources/tool" },
-            {
-              text: "ModelEndpoint",
-              link: "/reference/resources/model-endpoint",
-            },
-            { text: "McpServer", link: "/reference/resources/mcp-server" },
-            { text: "Memory", link: "/reference/resources/memory" },
-            { text: "Secret", link: "/reference/resources/secret" },
-            {
-              text: "AgentPolicy",
-              link: "/reference/resources/agent-policy",
-            },
-            { text: "AgentRole", link: "/reference/resources/agent-role" },
-            {
-              text: "ToolPermission",
-              link: "/reference/resources/tool-permission",
+              text: "Tasks",
+              collapsed: false,
+              items: [
+                { text: "Task", link: "/reference/resources/task" },
+                { text: "TaskSchedule", link: "/reference/resources/task-schedule" },
+                { text: "TaskWebhook", link: "/reference/resources/task-webhook" },
+              ],
             },
             {
-              text: "ToolApproval",
-              link: "/reference/resources/tool-approval",
+              text: "Tools & Models",
+              collapsed: false,
+              items: [
+                { text: "Tool", link: "/reference/resources/tool" },
+                { text: "ModelEndpoint", link: "/reference/resources/model-endpoint" },
+                { text: "McpServer", link: "/reference/resources/mcp-server" },
+                { text: "Memory", link: "/reference/resources/memory" },
+                { text: "Secret", link: "/reference/resources/secret" },
+              ],
             },
-            { text: "Worker", link: "/reference/resources/worker" },
+            {
+              text: "Governance",
+              collapsed: false,
+              items: [
+                { text: "AgentPolicy", link: "/reference/resources/agent-policy" },
+                { text: "AgentRole", link: "/reference/resources/agent-role" },
+                { text: "ToolPermission", link: "/reference/resources/tool-permission" },
+                { text: "ToolApproval", link: "/reference/resources/tool-approval" },
+              ],
+            },
+            {
+              text: "Infrastructure",
+              collapsed: false,
+              items: [
+                { text: "Worker", link: "/reference/resources/worker" },
+              ],
+            },
           ],
         },
         { text: "Glossary", link: "/reference/glossary" },

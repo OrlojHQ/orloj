@@ -169,5 +169,5 @@ Non-zero exit codes produce a tool error with the exit code and stderr tail in t
 
 ## See also
 
-- [Tool reference](../reference/resources/tool.md)
-- [Security and Isolation](../operations/security.md)
+- [Tool reference](../../reference/resources/tool.md)
+- [Security and Isolation](../../operations/security.md)

@@ -321,5 +321,4 @@ Orloj provides a tool runtime conformance harness that tests your tool against t
 ## Next Steps
 
 - [Tool](../concepts/tools/tool.md) -- tool types, isolation, and contract details
-- [Tools and Isolation](../concepts/tools/tool.md) -- concept deep-dive
 - [Connect an MCP Server](./connect-mcp-server.md) -- for MCP-compatible tool servers instead of custom implementations

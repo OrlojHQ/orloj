@@ -12,7 +12,7 @@ See also [CLI reference](../reference/cli.md) for exhaustive flag definitions.
 
 Example:
 
-- `--storage-backend` overrides `ORLOJ_TASK_EXECUTION_MODE`.
+- `--task-execution-mode` overrides `ORLOJ_TASK_EXECUTION_MODE`.
 - If neither is set, code defaults apply.
 
 ## Runtime Environment Matrix
