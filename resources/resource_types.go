@@ -549,6 +549,8 @@ type AgentPolicySpec struct {
 	ApplyMode       string   `json:"apply_mode,omitempty"`
 	TargetSystems   []string `json:"target_systems,omitempty"`
 	TargetTasks     []string `json:"target_tasks,omitempty"`
+	MaxChildDepth   int      `json:"max_child_depth,omitempty"`
+	MaxChildTasks   int      `json:"max_child_tasks,omitempty"`
 }
 
 type PolicyStatus struct {

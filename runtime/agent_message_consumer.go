@@ -461,6 +461,25 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 	ConfigureExternalRuntime(toolRT, m.secretResolver, ns)
 	ConfigureGRPCRuntime(toolRT, m.secretResolver, ns)
 	ConfigureWebhookCallbackRuntime(toolRT, m.secretResolver, ns)
+	if orlojStore, ok := m.tasks.(OrlojTaskStore); ok && AgentHasOrlojTools(agent) {
+		orlojCfg := OrlojToolConfig{
+			ParentNamespace: ns,
+			ParentTaskName:  task.Metadata.Name,
+			CurrentDepth:    parseDepthLabel(task.Metadata.Labels),
+		}
+		if m.policies != nil {
+			if allPolicies, policyErr := m.policies.List(ctx); policyErr == nil {
+				matched := MatchedPolicies(task, system, allPolicies)
+				orlojCfg.MaxDepth = MinimumChildDepth(matched)
+				orlojCfg.MaxChildren = MinimumChildTasks(matched)
+			}
+		}
+		toolRT = NewOrlojToolRuntime(toolRT, orlojStore, orlojCfg)
+		for _, name := range BuiltinOrlojToolNames() {
+			agent.Spec.Tools = append(agent.Spec.Tools, name)
+		}
+		agent.Spec.Tools = dedupeStrings(agent.Spec.Tools)
+	}
 	if memRef := strings.TrimSpace(agent.Spec.Memory.Ref); memRef != "" {
 		sharedMem := m.taskSharedMemory(taskKey)
 		memRT := NewMemoryToolRuntime(toolRT, sharedMem)

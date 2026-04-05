@@ -96,6 +96,6 @@ func builtinToolSchemaForName(name string) (builtinToolSchema, bool) {
 			},
 		}, true
 	default:
-		return builtinToolSchema{}, false
+		return builtinOrlojToolSchemaForName(name)
 	}
 }

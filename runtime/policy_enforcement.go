@@ -69,6 +69,36 @@ func policyAppliesTo(policy resources.AgentPolicy, task resources.Task, system r
 	return false
 }
 
+// MinimumChildDepth returns the smallest positive MaxChildDepth across the
+// given policies, or 0 when no limit is configured.
+func MinimumChildDepth(policies []resources.AgentPolicy) int {
+	min := 0
+	for _, policy := range policies {
+		if policy.Spec.MaxChildDepth <= 0 {
+			continue
+		}
+		if min == 0 || policy.Spec.MaxChildDepth < min {
+			min = policy.Spec.MaxChildDepth
+		}
+	}
+	return min
+}
+
+// MinimumChildTasks returns the smallest positive MaxChildTasks across the
+// given policies, or 0 when no limit is configured.
+func MinimumChildTasks(policies []resources.AgentPolicy) int {
+	min := 0
+	for _, policy := range policies {
+		if policy.Spec.MaxChildTasks <= 0 {
+			continue
+		}
+		if min == 0 || policy.Spec.MaxChildTasks < min {
+			min = policy.Spec.MaxChildTasks
+		}
+	}
+	return min
+}
+
 func containsFoldSlice(values []string, needle string) bool {
 	for _, value := range values {
 		if strings.EqualFold(strings.TrimSpace(value), strings.TrimSpace(needle)) {

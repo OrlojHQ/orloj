@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Built-in orloj tools**: `orloj.task.create` and `orloj.task.list` built-in tools for cross-task orchestration. Agents with these in `spec.allowed_tools` can create tasks from templates (fire-and-forget) and list tasks by label. Child tasks are linked via `orloj.dev/parent-task` and `orloj.dev/depth` labels. Governed like any other tool via ToolPermission, AgentPolicy `blocked_tools`, and ToolApproval.
+- **AgentPolicy child task limits**: `max_child_depth` and `max_child_tasks` fields on AgentPolicy to prevent runaway task creation chains. Defaults: depth 5, children 20.
 - **TaskWebhook auth profiles**: `hmac` and `shared_token` profiles for TaskWebhook, supporting configurable HMAC algorithm (`sha256`, `sha1`, `sha512`), payload format (`body`, `timestamp_dot_body`, `prefix_timestamp_body`), signature encoding (`hex`, `base64`), and structured header parsing (`kv_pairs` for Stripe-style combined headers). The `shared_token` profile enables constant-time token comparison for services like Telegram. Existing `generic` and `github` profiles are unchanged.
 - **README**: Document official [Python](https://pypi.org/project/orloj-sdk/) and [TypeScript](https://www.npmjs.com/package/orloj) HTTP API SDKs ([orloj-python-sdk](https://github.com/OrlojHQ/orloj-python-sdk), [orloj-js-sdk](https://github.com/OrlojHQ/orloj-js-sdk)), with PyPI and npm badges.
 
