@@ -51,7 +51,7 @@ components:
     ToolSpec:
       type: object
       properties:
-        type: { type: string }
+        type: { type: string, enum: [http, external, grpc, webhook-callback, mcp, wasm, cli] }
         endpoint: { type: string }
         description: { type: string }
         input_schema: { type: object, additionalProperties: true }

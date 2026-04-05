@@ -11,6 +11,8 @@ _Named after the [Prague Orloj](https://en.wikipedia.org/wiki/Prague_astronomica
 [![Docs](https://img.shields.io/github/actions/workflow/status/OrlojHQ/orloj/docs.yml?branch=main&label=docs)](https://docs.orloj.dev)
 [![Go Report Card](https://goreportcard.com/badge/github.com/OrlojHQ/orloj)](https://goreportcard.com/report/github.com/OrlojHQ/orloj)
 [![Go Reference](https://pkg.go.dev/badge/github.com/OrlojHQ/orloj.svg)](https://pkg.go.dev/github.com/OrlojHQ/orloj)
+[![PyPI - orloj-sdk](https://img.shields.io/pypi/v/orloj-sdk)](https://pypi.org/project/orloj-sdk/)
+[![npm - orloj](https://img.shields.io/npm/v/orloj)](https://www.npmjs.com/package/orloj)
 [![License](https://img.shields.io/github/license/OrlojHQ/orloj)](LICENSE)
 
 **An orchestration runtime for multi-agent AI systems.**
@@ -18,6 +20,15 @@ _Named after the [Prague Orloj](https://en.wikipedia.org/wiki/Prague_astronomica
 Declare your agents, tools, and policies as YAML. Orloj schedules, executes, routes, and governs them so you can run multi-agent systems in production with the same operational rigor you expect from infrastructure.
 
 > **Status:** Orloj is under active development. APIs and resource schemas may change between minor versions before 1.0.
+
+### Official SDKs
+
+Call the Orloj HTTP API from application code using the official clients (complementing **`orlojctl`** for operators). For REST shapes and generated types, see [HTTP API (OpenAPI)](#http-api-openapi).
+
+| Language     | Install                  | Links                                                                                    |
+| ------------ | ------------------------ | ---------------------------------------------------------------------------------------- |
+| Python       | `pip install orloj-sdk`  | [PyPI](https://pypi.org/project/orloj-sdk/) · [Repository](https://github.com/OrlojHQ/orloj-python-sdk) |
+| TypeScript   | `npm install orloj`      | [npm](https://www.npmjs.com/package/orloj) · [Repository](https://github.com/OrlojHQ/orloj-js-sdk)      |
 
 **Start here:** [See Orloj in Action](#orloj-in-action) · [5-minute tutorial](https://docs.orloj.dev/guides/five-minute-tutorial)
 

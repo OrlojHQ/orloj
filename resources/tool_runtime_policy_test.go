@@ -81,7 +81,7 @@ func TestToolNormalizeHighRiskDefaultsToSandboxedIsolation(t *testing.T) {
 }
 
 func TestToolNormalizeAcceptsValidToolTypes(t *testing.T) {
-	validTypes := []string{"http", "external", "grpc", "queue", "webhook-callback", "HTTP", "External", ""}
+	validTypes := []string{"http", "external", "grpc", "webhook-callback", "wasm", "HTTP", "External", ""}
 	for _, toolType := range validTypes {
 		tool := Tool{
 			APIVersion: "orloj.dev/v1",

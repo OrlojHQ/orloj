@@ -4,7 +4,7 @@
 
 ## spec
 
-- `type` (string): tool type. Allowed values: `http`, `external`, `grpc`, `webhook-callback`, `queue`, `mcp`, `cli`. Unknown values are rejected at apply time.
+- `type` (string): tool type. Allowed values: `http`, `external`, `grpc`, `webhook-callback`, `mcp`, `wasm`, `cli`. Unknown values are rejected at apply time.
 - `endpoint` (string): tool endpoint URL (or `host:port` for gRPC).
 - `description` (string): human-readable description of the tool. Passed to model gateways for richer tool definitions. Auto-populated for MCP-generated tools.
 - `input_schema` (object): JSON Schema for tool parameters. Passed to model gateways for structured parameter definitions. Auto-populated for MCP-generated tools.
