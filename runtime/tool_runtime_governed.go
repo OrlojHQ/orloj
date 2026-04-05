@@ -120,7 +120,7 @@ func NewGovernedToolRuntimeWithAuthorizer(
 	strict bool,
 ) *GovernedToolRuntime {
 	if baseRuntime == nil {
-		baseRuntime = NewHTTPToolClient(nil, nil, nil)
+		baseRuntime = NewHTTPToolClient(registry, nil, nil)
 	}
 	return &GovernedToolRuntime{
 		baseRuntime:     baseRuntime,
@@ -216,6 +216,9 @@ func buildGovernedToolRuntime(
 		if aware, ok := isolatedRuntime.(registryAwareToolRuntime); ok {
 			isolatedRuntime = aware.WithRegistry(NewStaticToolCapabilityRegistry(specs))
 		}
+	}
+	if aware, ok := baseRuntime.(registryAwareToolRuntime); ok {
+		baseRuntime = aware.WithRegistry(NewStaticToolCapabilityRegistry(specs))
 	}
 	governed := NewGovernedToolRuntimeWithAuthorizer(baseRuntime, isolatedRuntime, NewStaticToolCapabilityRegistry(specs), authorizer, true)
 	return governed

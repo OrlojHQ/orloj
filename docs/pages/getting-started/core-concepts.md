@@ -82,7 +82,7 @@ spec:
 
 ## Tools
 
-A [**Tool**](../concepts/tools/tool.md) is an external capability agents can invoke. Seven transport types (HTTP, external, gRPC, webhook-callback, MCP, CLI, WASM) and three isolation modes (none, container, WASM).
+A [**Tool**](../concepts/tools/tool.md) is an external capability agents can invoke. Seven transport types (HTTP, external, gRPC, webhook-callback, MCP, CLI, WASM) and four isolation modes (none, sandboxed, container, WASM).
 
 ```yaml
 kind: Tool
