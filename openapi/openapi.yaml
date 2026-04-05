@@ -4995,7 +4995,7 @@ paths:
     post:
       tags:
       - task-webhooks
-      summary: Inbound webhook (HMAC per TaskWebhook auth profile generic|github)
+      summary: Inbound webhook (verified per TaskWebhook auth profile generic|github|hmac|shared_token)
       security:
       - bearerAuth: []
       - sessionCookie: []

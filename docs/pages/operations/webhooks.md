@@ -10,7 +10,7 @@ Use `TaskWebhook` to trigger task runs from signed external HTTP events.
 
 - `orlojd` is running.
 - A template task exists with `spec.mode: template`.
-- A secret exists for HMAC signing.
+- A secret exists for signing or token verification.
 
 ## 1. Apply Prerequisites
 
@@ -101,10 +101,27 @@ Webhook-triggered run tasks include:
 - `webhook_received_at`
 - `webhook_source`
 
+## 4c. Shared Token Delivery (Telegram-style)
+
+Telegram and similar services send a static secret token in a header. No HMAC computation is needed.
+
+```bash
+BODY='{"update_id":12345,"message":{"text":"hello"}}'
+TOKEN='your-telegram-bot-secret'
+
+curl -i -X POST "http://127.0.0.1:8080<endpoint_path>" \
+  -H "Content-Type: application/json" \
+  -H "X-Telegram-Bot-Api-Secret-Token: ${TOKEN}" \
+  -H "X-Event-Id: tg-update-12345" \
+  --data "$BODY"
+```
+
 ## Profile Notes
 
 - `generic`: signs `timestamp + "." + rawBody` and checks timestamp skew. Default dedup window is 24 hours.
 - `github`: signs raw body and uses GitHub delivery id header defaults. Default dedup window is **72 hours** (vs 24h for generic) because GitHub webhooks do not include a timestamp in the HMAC payload, so replay protection relies entirely on event ID deduplication. The 72-hour window matches GitHub's maximum retry window.
+- `hmac`: fully configurable HMAC verification. Supports `sha256`, `sha1`, `sha512` algorithms; `body`, `timestamp_dot_body`, and `prefix_timestamp_body` payload formats; `hex` and `base64` signature encoding; and `plain` or `kv_pairs` header parsing. See [TaskWebhook concepts](../concepts/tasks/task-webhook.md) for field details and examples for Stripe and Slack.
+- `shared_token`: constant-time comparison of a static token in a header. No HMAC. Suitable for Telegram and similar services.
 
 ## Rotation and Operations
 

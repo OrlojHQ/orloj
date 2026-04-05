@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **TaskWebhook auth profiles**: `hmac` and `shared_token` profiles for TaskWebhook, supporting configurable HMAC algorithm (`sha256`, `sha1`, `sha512`), payload format (`body`, `timestamp_dot_body`, `prefix_timestamp_body`), signature encoding (`hex`, `base64`), and structured header parsing (`kv_pairs` for Stripe-style combined headers). The `shared_token` profile enables constant-time token comparison for services like Telegram. Existing `generic` and `github` profiles are unchanged.
 - **README**: Document official [Python](https://pypi.org/project/orloj-sdk/) and [TypeScript](https://www.npmjs.com/package/orloj) HTTP API SDKs ([orloj-python-sdk](https://github.com/OrlojHQ/orloj-python-sdk), [orloj-js-sdk](https://github.com/OrlojHQ/orloj-js-sdk)), with PyPI and npm badges.
 
 ### Changed
