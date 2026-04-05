@@ -342,6 +342,7 @@ func (c *TaskController) reconcileRunning(ctx context.Context, task resources.Ta
 	output, err := c.executeTask(ctx, &task, system)
 	if err != nil {
 		if agentruntime.IsApprovalRequiredError(err) {
+			c.createSyncToolApproval(ctx, task, err)
 			return c.transitionToWaitingApproval(task, err.Error())
 		}
 		return c.handleExecutionFailure(task, err.Error())
@@ -450,6 +451,49 @@ func (c *TaskController) reconcileWaitingApprovalSweep(ctx context.Context) erro
 	return nil
 }
 
+func (c *TaskController) createSyncToolApproval(ctx context.Context, task resources.Task, execErr error) {
+	if c.toolApprovalStore == nil {
+		return
+	}
+	toolName := agentruntime.ParseToolFromApprovalError(execErr)
+	if toolName == "" {
+		return
+	}
+	taskKey := taskScopedName(task)
+	syncMsgID := fmt.Sprintf("sync/a%d", task.Status.Attempts)
+	approvalName := agentruntime.ToolApprovalResourceName(taskKey, syncMsgID)
+	ns := resources.NormalizeNamespace(task.Metadata.Namespace)
+
+	reason := strings.TrimSpace(execErr.Error())
+	if len(reason) > 500 {
+		reason = reason[:500]
+	}
+
+	approval := resources.ToolApproval{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "ToolApproval",
+		Metadata: resources.ObjectMeta{
+			Namespace: ns,
+			Name:      approvalName,
+		},
+		Spec: resources.ToolApprovalSpec{
+			TaskRef:        taskKey,
+			Tool:           toolName,
+			Agent:          "",
+			Reason:         reason,
+			OperationClass: "write",
+		},
+		Status: resources.ToolApprovalStatus{
+			Phase: "Pending",
+		},
+	}
+	if _, err := c.toolApprovalStore.Upsert(ctx, approval); err != nil {
+		if c.logger != nil {
+			c.logger.Printf("task=%s failed to create tool approval: %v", task.Metadata.Name, err)
+		}
+	}
+}
+
 func (c *TaskController) transitionToWaitingApproval(task resources.Task, reason string) error {
 	task.Status.Phase = "WaitingApproval"
 	task.Status.LastError = agentruntime.RedactSensitive(reason)
@@ -544,8 +588,8 @@ func (c *TaskController) reconcileRunningMessageDriven(ctx context.Context, task
 			allPolicies = listed
 		}
 	}
-	policies := matchedPolicies(task, system, allPolicies)
-	tokenBudget := minimumTokenBudget(policies)
+	policies := agentruntime.MatchedPolicies(task, system, allPolicies)
+	tokenBudget := agentruntime.MinimumTokenBudget(policies)
 	if tokenBudget > 0 {
 		task.Status.Output["token_budget"] = strconv.Itoa(tokenBudget)
 	} else {
@@ -1110,8 +1154,8 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 			_allPolicies = listed
 		}
 	}
-	policies := matchedPolicies(*task, system, _allPolicies)
-	tokenBudget := minimumTokenBudget(policies)
+	policies := agentruntime.MatchedPolicies(*task, system, _allPolicies)
+	tokenBudget := agentruntime.MinimumTokenBudget(policies)
 	totalEstimatedTokens := 0
 	totalUsedTokens := 0
 
@@ -1182,7 +1226,7 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 		agentCtx, agentSpan := telemetry.StartAgentSpan(ctx, agent.Metadata.Name,
 			fmt.Sprintf("a%d.s%d", task.Status.Attempts, idx+1), task.Status.Attempts)
 
-		if err := enforcePoliciesForAgent(agent, effectiveModel, policies); err != nil {
+		if err := agentruntime.EnforcePoliciesForAgent(agent, effectiveModel, policies); err != nil {
 			c.appendTaskLog(taskScopedName(*task), fmt.Sprintf("agent policy violation: %s error=%s", agent.Metadata.Name, err))
 			c.appendTaskTrace(task, resources.TaskTraceEvent{
 				Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
@@ -1194,6 +1238,19 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 			return nil, err
 		}
 
+		var approvalCtx *agentruntime.GovernedToolApprovalContext
+		if c.toolApprovalStore != nil {
+			taskKey := taskScopedName(*task)
+			syncMsgID := fmt.Sprintf("sync/a%d/%s", task.Status.Attempts, agentName)
+			store := c.toolApprovalStore
+			approvalCtx = &agentruntime.GovernedToolApprovalContext{
+				Getter: func(key string) (resources.ToolApproval, bool, error) {
+					return store.Get(ctx, key)
+				},
+				TaskKey:   taskKey,
+				MessageID: syncMsgID,
+			}
+		}
 		toolRuntime := agentruntime.BuildGovernedToolRuntimeForAgentWithGovernance(
 			agentCtx,
 			nil,
@@ -1203,7 +1260,7 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 			c.toolPermStore,
 			task.Metadata.Namespace,
 			agent,
-			nil,
+			approvalCtx,
 		)
 		if c.mcpSessionMgr != nil && c.mcpServerStore != nil {
 			agentruntime.ConfigureMcpRuntime(toolRuntime, c.mcpSessionMgr, c.mcpServerStore, task.Metadata.Namespace)
@@ -1388,62 +1445,6 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 		Tokens:    totalUsedTokens,
 	})
 	return output, nil
-}
-
-func enforcePoliciesForAgent(agent resources.Agent, effectiveModel string, policies []resources.AgentPolicy) error {
-	for _, policy := range policies {
-		if len(policy.Spec.AllowedModels) > 0 && !containsFold(policy.Spec.AllowedModels, effectiveModel) {
-			return fmt.Errorf("policy %q disallows model %q (model_ref=%q) for agent %q", policy.Metadata.Name, effectiveModel, agent.Spec.ModelRef, agent.Metadata.Name)
-		}
-		for _, tool := range agent.Spec.Tools {
-			if containsFold(policy.Spec.BlockedTools, tool) {
-				return fmt.Errorf("policy %q blocks tool %q for agent %q", policy.Metadata.Name, tool, agent.Metadata.Name)
-			}
-		}
-	}
-	return nil
-}
-
-func matchedPolicies(task resources.Task, system resources.AgentSystem, all []resources.AgentPolicy) []resources.AgentPolicy {
-	out := make([]resources.AgentPolicy, 0, len(all))
-	for _, policy := range all {
-		if policyAppliesTo(policy, task, system) {
-			out = append(out, policy)
-		}
-	}
-	return out
-}
-
-func policyAppliesTo(policy resources.AgentPolicy, task resources.Task, system resources.AgentSystem) bool {
-	mode := strings.ToLower(strings.TrimSpace(policy.Spec.ApplyMode))
-	if mode == "" {
-		mode = "scoped"
-	}
-	if mode == "global" {
-		return true
-	}
-
-	// scoped mode: explicit task/system matches only
-	if len(policy.Spec.TargetTasks) > 0 && containsFold(policy.Spec.TargetTasks, task.Metadata.Name) {
-		return true
-	}
-	if len(policy.Spec.TargetSystems) > 0 && containsFold(policy.Spec.TargetSystems, system.Metadata.Name) {
-		return true
-	}
-	return false
-}
-
-func minimumTokenBudget(policies []resources.AgentPolicy) int {
-	min := 0
-	for _, policy := range policies {
-		if policy.Spec.MaxTokensPerRun <= 0 {
-			continue
-		}
-		if min == 0 || policy.Spec.MaxTokensPerRun < min {
-			min = policy.Spec.MaxTokensPerRun
-		}
-	}
-	return min
 }
 
 func containsFold(values []string, needle string) bool {

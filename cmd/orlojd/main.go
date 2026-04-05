@@ -343,6 +343,7 @@ func main() {
 						MemoryBackends:      memoryBackendRegistry,
 						ModelEndpoints:      stores.ModelEPs,
 						ToolApprovals:       stores.ToolApprovals,
+						Policies:            stores.Policies,
 					},
 				)
 				startBackground(func() { consumer.Start(ctx) })

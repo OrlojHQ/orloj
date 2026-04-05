@@ -223,6 +223,7 @@ func main() {
 					MemoryBackends:      memoryBackendRegistry,
 					ModelEndpoints:      stores.ModelEPs,
 					ToolApprovals:       stores.ToolApprovals,
+					Policies:            stores.Policies,
 				},
 			)
 			go consumer.Start(ctx)
