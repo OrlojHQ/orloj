@@ -17,6 +17,12 @@ components:
         target_tasks:
           type: array
           items: { type: string }
+        max_child_depth:
+          type: integer
+          description: Maximum nesting depth for tasks created by orloj.task.create. Default 5.
+        max_child_tasks:
+          type: integer
+          description: Maximum number of child tasks a single task execution can create via orloj.task.create. Default 20.
     PolicyStatus:
       type: object
       properties:

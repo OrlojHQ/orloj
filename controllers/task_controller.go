@@ -1156,6 +1156,9 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 	}
 	policies := agentruntime.MatchedPolicies(*task, system, _allPolicies)
 	tokenBudget := agentruntime.MinimumTokenBudget(policies)
+	orlojMaxDepth := agentruntime.MinimumChildDepth(policies)
+	orlojMaxChildren := agentruntime.MinimumChildTasks(policies)
+	orlojCurrentDepth := parseOrlojDepthLabel(task.Metadata.Labels)
 	totalEstimatedTokens := 0
 	totalUsedTokens := 0
 
@@ -1269,7 +1272,21 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 		agentruntime.ConfigureExternalRuntime(toolRuntime, c.cliSecretResolver, task.Metadata.Namespace)
 		agentruntime.ConfigureGRPCRuntime(toolRuntime, c.cliSecretResolver, task.Metadata.Namespace)
 		agentruntime.ConfigureWebhookCallbackRuntime(toolRuntime, c.cliSecretResolver, task.Metadata.Namespace)
-		result, err := c.executor.ExecuteAgentWithRuntime(agentCtx, agent, runtimeInput, toolRuntime)
+		var finalRT agentruntime.ToolRuntime = toolRuntime
+		if agentruntime.AgentHasOrlojTools(agent) {
+			finalRT = agentruntime.NewOrlojToolRuntime(toolRuntime, c.taskStore, agentruntime.OrlojToolConfig{
+				ParentNamespace: task.Metadata.Namespace,
+				ParentTaskName:  task.Metadata.Name,
+				CurrentDepth:    orlojCurrentDepth,
+				MaxDepth:        orlojMaxDepth,
+				MaxChildren:     orlojMaxChildren,
+			})
+			for _, name := range agentruntime.BuiltinOrlojToolNames() {
+				agent.Spec.Tools = append(agent.Spec.Tools, name)
+			}
+			agent.Spec.Tools = dedupeStringsController(agent.Spec.Tools)
+		}
+		result, err := c.executor.ExecuteAgentWithRuntime(agentCtx, agent, runtimeInput, finalRT)
 		if err != nil {
 			category := "failure"
 			if strings.Contains(strings.ToLower(err.Error()), "timed out") {
@@ -2042,5 +2059,30 @@ func parseControllerTimestamp(value string) (time.Time, error) {
 		return t, nil
 	}
 	return time.Parse(time.RFC3339, v)
+}
+
+func parseOrlojDepthLabel(labels map[string]string) int {
+	v, ok := labels["orloj.dev/depth"]
+	if !ok {
+		return 0
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(v))
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
+}
+
+func dedupeStringsController(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, v := range values {
+		if _, exists := seen[v]; exists {
+			continue
+		}
+		seen[v] = struct{}{}
+		out = append(out, v)
+	}
+	return out
 }
 
