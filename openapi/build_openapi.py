@@ -707,7 +707,7 @@ def build() -> dict:
     paths["/v1/webhook-deliveries/{endpoint_id}"] = {
         "post": {
             "tags": ["task-webhooks"],
-            "summary": "Inbound webhook (HMAC per TaskWebhook auth profile generic|github)",
+            "summary": "Inbound webhook (verified per TaskWebhook auth profile generic|github|hmac|shared_token)",
             "security": SEC_WRITER,
             "parameters": [
                 {

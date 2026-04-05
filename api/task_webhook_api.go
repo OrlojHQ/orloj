@@ -3,11 +3,15 @@ package api
 import (
 	"context"
 	"crypto/hmac"
+	"crypto/sha1"
 	"crypto/sha256"
+	"crypto/sha512"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"hash"
 	"io"
 	"net/http"
 	"sort"
@@ -333,55 +337,214 @@ func (s *Server) resolveWebhookSecret(ctx context.Context, hook resources.TaskWe
 }
 
 func verifyWebhookSignature(hook resources.TaskWebhook, r *http.Request, body []byte, secret []byte, now time.Time) error {
+	profile := strings.ToLower(strings.TrimSpace(hook.Spec.Auth.Profile))
+
+	if profile == "shared_token" {
+		return verifySharedToken(hook, r, secret)
+	}
+
 	sigHeaderName := strings.TrimSpace(hook.Spec.Auth.SignatureHeader)
 	if sigHeaderName == "" {
 		return fmt.Errorf("signature header is empty")
 	}
-	received := strings.TrimSpace(r.Header.Get(sigHeaderName))
-	if received == "" {
+	rawHeaderValue := strings.TrimSpace(r.Header.Get(sigHeaderName))
+	if rawHeaderValue == "" {
 		return fmt.Errorf("missing signature header %s", sigHeaderName)
 	}
 
-	prefix := strings.TrimSpace(hook.Spec.Auth.SignaturePrefix)
-	if prefix != "" {
-		trimmed, ok := trimCaseInsensitivePrefix(received, prefix)
-		if !ok {
-			return fmt.Errorf("invalid signature prefix")
-		}
-		received = trimmed
-	}
-	received = strings.TrimSpace(received)
-	if received == "" {
-		return fmt.Errorf("signature is empty")
+	received, timestamp, err := extractSignatureAndTimestamp(hook.Spec.Auth, rawHeaderValue, r)
+	if err != nil {
+		return err
 	}
 
-	var payload []byte
-	if strings.EqualFold(strings.TrimSpace(hook.Spec.Auth.Profile), "github") {
-		payload = body
-	} else {
-		timestampHeader := strings.TrimSpace(hook.Spec.Auth.TimestampHeader)
-		timestamp := strings.TrimSpace(r.Header.Get(timestampHeader))
-		if timestamp == "" {
-			return fmt.Errorf("missing timestamp header %s", timestampHeader)
-		}
-		if err := validateTimestampSkew(timestamp, hook.Spec.Auth.MaxSkewSeconds, now); err != nil {
-			return err
-		}
-		payload = []byte(timestamp + "." + string(body))
+	payload, err := buildHMACPayload(hook.Spec.Auth, profile, body, timestamp, now)
+	if err != nil {
+		return err
 	}
 
-	mac := hmac.New(sha256.New, secret)
+	hashFunc := resolveHMACAlgorithm(hook.Spec.Auth, profile)
+	mac := hmac.New(hashFunc, secret)
 	_, _ = mac.Write(payload)
 	expected := mac.Sum(nil)
 
-	provided, err := hex.DecodeString(received)
+	provided, err := decodeWebhookSignature(received, resolveSignatureEncoding(hook.Spec.Auth, profile))
 	if err != nil {
-		return fmt.Errorf("signature must be hex")
+		return err
 	}
 	if !hmac.Equal(expected, provided) {
 		return fmt.Errorf("signature mismatch")
 	}
 	return nil
+}
+
+func verifySharedToken(hook resources.TaskWebhook, r *http.Request, secret []byte) error {
+	headerName := strings.TrimSpace(hook.Spec.Auth.SignatureHeader)
+	if headerName == "" {
+		return fmt.Errorf("signature header is empty")
+	}
+	received := r.Header.Get(headerName)
+	if received == "" {
+		return fmt.Errorf("missing token header %s", headerName)
+	}
+	if subtle.ConstantTimeCompare([]byte(received), secret) != 1 {
+		return fmt.Errorf("signature mismatch")
+	}
+	return nil
+}
+
+func extractSignatureAndTimestamp(auth resources.TaskWebhookAuthSpec, rawHeaderValue string, r *http.Request) (signature string, timestamp string, err error) {
+	headerFormat := strings.ToLower(strings.TrimSpace(auth.HeaderFormat))
+
+	if headerFormat == "kv_pairs" {
+		parsed := parseKVPairsHeader(rawHeaderValue)
+		sigKey := strings.TrimSpace(auth.SignatureKey)
+		if sigKey == "" {
+			return "", "", fmt.Errorf("signature_key is required for kv_pairs header_format")
+		}
+		signature = strings.TrimSpace(parsed[sigKey])
+		if signature == "" {
+			return "", "", fmt.Errorf("signature key %q not found in header", sigKey)
+		}
+		tsKey := strings.TrimSpace(auth.TimestampKey)
+		if tsKey != "" {
+			timestamp = strings.TrimSpace(parsed[tsKey])
+		}
+		return signature, timestamp, nil
+	}
+
+	// plain header format (default)
+	received := rawHeaderValue
+	prefix := strings.TrimSpace(auth.SignaturePrefix)
+	if prefix != "" {
+		trimmed, ok := trimCaseInsensitivePrefix(received, prefix)
+		if !ok {
+			return "", "", fmt.Errorf("invalid signature prefix")
+		}
+		received = trimmed
+	}
+	received = strings.TrimSpace(received)
+	if received == "" {
+		return "", "", fmt.Errorf("signature is empty")
+	}
+
+	tsHeader := strings.TrimSpace(auth.TimestampHeader)
+	if tsHeader != "" {
+		timestamp = strings.TrimSpace(r.Header.Get(tsHeader))
+		if timestamp == "" {
+			return "", "", fmt.Errorf("missing timestamp header %s", tsHeader)
+		}
+	}
+	return received, timestamp, nil
+}
+
+func parseKVPairsHeader(value string) map[string]string {
+	result := make(map[string]string)
+	for _, pair := range strings.Split(value, ",") {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue
+		}
+		parts := strings.SplitN(pair, "=", 2)
+		if len(parts) == 2 {
+			result[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
+		}
+	}
+	return result
+}
+
+func buildHMACPayload(auth resources.TaskWebhookAuthSpec, profile string, body []byte, timestamp string, now time.Time) ([]byte, error) {
+	format := strings.ToLower(strings.TrimSpace(auth.PayloadFormat))
+
+	// Legacy profiles map to specific payload formats.
+	if format == "" {
+		switch profile {
+		case "github":
+			format = "body"
+		case "generic":
+			format = "timestamp_dot_body"
+		default:
+			format = "body"
+		}
+	}
+
+	switch format {
+	case "body":
+		return body, nil
+
+	case "timestamp_dot_body":
+		if timestamp == "" {
+			return nil, fmt.Errorf("missing timestamp for payload construction")
+		}
+		if err := validateTimestampSkew(timestamp, auth.MaxSkewSeconds, now); err != nil {
+			return nil, err
+		}
+		return []byte(timestamp + "." + string(body)), nil
+
+	case "prefix_timestamp_body":
+		if timestamp == "" {
+			return nil, fmt.Errorf("missing timestamp for payload construction")
+		}
+		if err := validateTimestampSkew(timestamp, auth.MaxSkewSeconds, now); err != nil {
+			return nil, err
+		}
+		sep := auth.PayloadSeparator
+		if sep == "" {
+			sep = "."
+		}
+		pfx := auth.PayloadPrefix
+		if pfx != "" {
+			return []byte(pfx + sep + timestamp + sep + string(body)), nil
+		}
+		return []byte(timestamp + sep + string(body)), nil
+
+	default:
+		return nil, fmt.Errorf("unsupported payload_format %q", format)
+	}
+}
+
+func resolveHMACAlgorithm(auth resources.TaskWebhookAuthSpec, profile string) func() hash.Hash {
+	algo := strings.ToLower(strings.TrimSpace(auth.Algorithm))
+	if algo == "" {
+		// Legacy profiles always use sha256.
+		return sha256.New
+	}
+	switch algo {
+	case "sha1":
+		return sha1.New
+	case "sha512":
+		return sha512.New
+	default:
+		return sha256.New
+	}
+}
+
+func resolveSignatureEncoding(auth resources.TaskWebhookAuthSpec, profile string) string {
+	enc := strings.ToLower(strings.TrimSpace(auth.SignatureEncoding))
+	if enc == "" {
+		return "hex"
+	}
+	return enc
+}
+
+func decodeWebhookSignature(encoded string, encoding string) ([]byte, error) {
+	switch encoding {
+	case "base64":
+		decoded, err := base64.StdEncoding.DecodeString(encoded)
+		if err != nil {
+			// Try URL-safe and raw variants.
+			decoded, err = base64.RawStdEncoding.DecodeString(encoded)
+			if err != nil {
+				return nil, fmt.Errorf("signature must be valid base64")
+			}
+		}
+		return decoded, nil
+	default:
+		decoded, err := hex.DecodeString(encoded)
+		if err != nil {
+			return nil, fmt.Errorf("signature must be hex")
+		}
+		return decoded, nil
+	}
 }
 
 func validateTimestampSkew(timestamp string, maxSkewSeconds int, now time.Time) error {

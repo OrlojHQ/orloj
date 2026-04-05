@@ -3,12 +3,20 @@ components:
     TaskWebhookAuthSpec:
       type: object
       properties:
-        profile: { type: string, description: generic or github }
+        profile: { type: string, description: "Auth profile: generic, github, hmac, or shared_token" }
         secret_ref: { type: string }
         signature_header: { type: string }
         signature_prefix: { type: string }
         timestamp_header: { type: string }
         max_skew_seconds: { type: integer }
+        algorithm: { type: string, description: "HMAC algorithm: sha256 (default), sha1, or sha512. Used with hmac profile." }
+        payload_format: { type: string, description: "HMAC payload construction: body, timestamp_dot_body, or prefix_timestamp_body. Used with hmac profile." }
+        payload_prefix: { type: string, description: "Literal prefix for prefix_timestamp_body format (e.g. v0 for Slack)." }
+        payload_separator: { type: string, description: "Separator between payload parts (default dot). Used with prefix_timestamp_body." }
+        signature_encoding: { type: string, description: "Signature encoding: hex (default) or base64. Used with hmac profile." }
+        header_format: { type: string, description: "How to parse the signature header: plain (default) or kv_pairs (comma-separated key=value)." }
+        signature_key: { type: string, description: "Key holding the signature in a kv_pairs header (e.g. v1 for Stripe)." }
+        timestamp_key: { type: string, description: "Key holding the timestamp in a kv_pairs header (e.g. t for Stripe)." }
     TaskWebhookIdempotency:
       type: object
       properties:

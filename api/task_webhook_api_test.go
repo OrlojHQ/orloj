@@ -4,11 +4,14 @@ import (
 	"bufio"
 	"bytes"
 	"crypto/hmac"
+	"crypto/sha1"
 	"crypto/sha256"
+	"crypto/sha512"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"hash"
 	"io"
 	"net/http"
 	"net/url"
@@ -842,4 +845,340 @@ func signGitHub(secret string, body []byte) string {
 	mac := hmac.New(sha256.New, []byte(secret))
 	_, _ = mac.Write(body)
 	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
+}
+
+func signHMAC(secret string, payload []byte, hashFunc func() hash.Hash, encoding string) string {
+	mac := hmac.New(hashFunc, []byte(secret))
+	_, _ = mac.Write(payload)
+	sum := mac.Sum(nil)
+	if encoding == "base64" {
+		return base64.StdEncoding.EncodeToString(sum)
+	}
+	return hex.EncodeToString(sum)
+}
+
+func createWebhookWithAuth(t *testing.T, baseURL, templateName, webhookName, secretValue string, auth resources.TaskWebhookAuthSpec) {
+	t.Helper()
+	postJSON(t, baseURL+"/v1/secrets", resources.Secret{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Secret",
+		Metadata:   resources.ObjectMeta{Name: webhookName + "-secret"},
+		Spec: resources.SecretSpec{
+			StringData: map[string]string{"value": secretValue},
+		},
+	})
+	postJSON(t, baseURL+"/v1/tasks", resources.Task{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Task",
+		Metadata:   resources.ObjectMeta{Name: templateName},
+		Spec: resources.TaskSpec{
+			Mode:   "template",
+			System: "report-system",
+			Input:  map[string]string{"topic": "webhook-triggered"},
+		},
+	})
+	auth.SecretRef = webhookName + "-secret"
+	postJSON(t, baseURL+"/v1/task-webhooks", resources.TaskWebhook{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "TaskWebhook",
+		Metadata:   resources.ObjectMeta{Name: webhookName},
+		Spec: resources.TaskWebhookSpec{
+			TaskRef: templateName,
+			Auth:    auth,
+		},
+	})
+}
+
+func TestWebhookDeliveryHMACBodySHA1(t *testing.T) {
+	server := newTestServer(t)
+	defer server.Close()
+
+	secret := "hmac-sha1-secret"
+	createWebhookWithAuth(t, server.URL, "tpl-hmac-sha1", "hmac-sha1-wh", secret, resources.TaskWebhookAuthSpec{
+		Profile:         "hmac",
+		Algorithm:       "sha1",
+		PayloadFormat:   "body",
+		SignatureHeader: "X-Signature",
+	})
+
+	hook := getTaskWebhook(t, server.URL, "hmac-sha1-wh", "default")
+	body := []byte(`{"event":"sha1-test"}`)
+	sig := signHMAC(secret, body, sha1.New, "hex")
+
+	status, payload, raw := deliverWebhook(t, server.URL, hook.Status.EndpointPath, body, map[string]string{
+		"X-Signature": sig,
+		"X-Event-Id":  "evt-hmac-sha1-1",
+	})
+	if status != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d body=%s", status, raw)
+	}
+	if !payload.Accepted {
+		t.Fatalf("expected accepted=true, got %t", payload.Accepted)
+	}
+}
+
+func TestWebhookDeliveryHMACBase64Encoding(t *testing.T) {
+	server := newTestServer(t)
+	defer server.Close()
+
+	secret := "hmac-base64-secret"
+	createWebhookWithAuth(t, server.URL, "tpl-hmac-b64", "hmac-b64-wh", secret, resources.TaskWebhookAuthSpec{
+		Profile:           "hmac",
+		Algorithm:         "sha256",
+		PayloadFormat:     "body",
+		SignatureEncoding: "base64",
+		SignatureHeader:   "X-Signature",
+	})
+
+	hook := getTaskWebhook(t, server.URL, "hmac-b64-wh", "default")
+	body := []byte(`{"event":"base64-test"}`)
+	sig := signHMAC(secret, body, sha256.New, "base64")
+
+	status, payload, raw := deliverWebhook(t, server.URL, hook.Status.EndpointPath, body, map[string]string{
+		"X-Signature": sig,
+		"X-Event-Id":  "evt-hmac-b64-1",
+	})
+	if status != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d body=%s", status, raw)
+	}
+	if !payload.Accepted {
+		t.Fatalf("expected accepted=true, got %t", payload.Accepted)
+	}
+}
+
+func TestWebhookDeliveryHMACTimestampDotBody(t *testing.T) {
+	server := newTestServer(t)
+	defer server.Close()
+
+	secret := "hmac-ts-dot-secret"
+	createWebhookWithAuth(t, server.URL, "tpl-hmac-ts", "hmac-ts-wh", secret, resources.TaskWebhookAuthSpec{
+		Profile:         "hmac",
+		Algorithm:       "sha256",
+		PayloadFormat:   "timestamp_dot_body",
+		SignatureHeader: "X-Sig",
+		TimestampHeader: "X-Ts",
+	})
+
+	hook := getTaskWebhook(t, server.URL, "hmac-ts-wh", "default")
+	body := []byte(`{"event":"ts-test"}`)
+	timestamp := strconv.FormatInt(time.Now().UTC().Unix(), 10)
+	payload := []byte(timestamp + "." + string(body))
+	sig := signHMAC(secret, payload, sha256.New, "hex")
+
+	status, dp, raw := deliverWebhook(t, server.URL, hook.Status.EndpointPath, body, map[string]string{
+		"X-Sig":      sig,
+		"X-Ts":       timestamp,
+		"X-Event-Id": "evt-hmac-ts-1",
+	})
+	if status != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d body=%s", status, raw)
+	}
+	if !dp.Accepted {
+		t.Fatalf("expected accepted=true, got %t", dp.Accepted)
+	}
+}
+
+func TestWebhookDeliveryHMACPrefixTimestampBody(t *testing.T) {
+	server := newTestServer(t)
+	defer server.Close()
+
+	secret := "slack-style-secret"
+	createWebhookWithAuth(t, server.URL, "tpl-hmac-slack", "hmac-slack-wh", secret, resources.TaskWebhookAuthSpec{
+		Profile:          "hmac",
+		Algorithm:        "sha256",
+		PayloadFormat:    "prefix_timestamp_body",
+		PayloadPrefix:    "v0",
+		PayloadSeparator: ":",
+		SignatureHeader:  "X-Slack-Signature",
+		SignaturePrefix:  "v0=",
+		TimestampHeader:  "X-Slack-Request-Timestamp",
+	})
+
+	hook := getTaskWebhook(t, server.URL, "hmac-slack-wh", "default")
+	body := []byte(`{"event":"slack-test"}`)
+	timestamp := strconv.FormatInt(time.Now().UTC().Unix(), 10)
+	sigPayload := []byte("v0:" + timestamp + ":" + string(body))
+	sig := "v0=" + signHMAC(secret, sigPayload, sha256.New, "hex")
+
+	status, dp, raw := deliverWebhook(t, server.URL, hook.Status.EndpointPath, body, map[string]string{
+		"X-Slack-Signature":         sig,
+		"X-Slack-Request-Timestamp": timestamp,
+		"X-Event-Id":                "evt-slack-1",
+	})
+	if status != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d body=%s", status, raw)
+	}
+	if !dp.Accepted {
+		t.Fatalf("expected accepted=true, got %t", dp.Accepted)
+	}
+}
+
+func TestWebhookDeliveryHMACKVPairs(t *testing.T) {
+	server := newTestServer(t)
+	defer server.Close()
+
+	secret := "stripe-style-secret"
+	createWebhookWithAuth(t, server.URL, "tpl-hmac-stripe", "hmac-stripe-wh", secret, resources.TaskWebhookAuthSpec{
+		Profile:         "hmac",
+		Algorithm:       "sha256",
+		PayloadFormat:   "timestamp_dot_body",
+		SignatureHeader: "Stripe-Signature",
+		HeaderFormat:    "kv_pairs",
+		SignatureKey:    "v1",
+		TimestampKey:    "t",
+	})
+
+	hook := getTaskWebhook(t, server.URL, "hmac-stripe-wh", "default")
+	body := []byte(`{"event":"stripe-test"}`)
+	timestamp := strconv.FormatInt(time.Now().UTC().Unix(), 10)
+	sigPayload := []byte(timestamp + "." + string(body))
+	sigHex := signHMAC(secret, sigPayload, sha256.New, "hex")
+	headerValue := "t=" + timestamp + ",v1=" + sigHex
+
+	status, dp, raw := deliverWebhook(t, server.URL, hook.Status.EndpointPath, body, map[string]string{
+		"Stripe-Signature": headerValue,
+		"X-Event-Id":       "evt-stripe-1",
+	})
+	if status != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d body=%s", status, raw)
+	}
+	if !dp.Accepted {
+		t.Fatalf("expected accepted=true, got %t", dp.Accepted)
+	}
+}
+
+func TestWebhookDeliveryHMACKVPairsWrongKey(t *testing.T) {
+	server := newTestServer(t)
+	defer server.Close()
+
+	secret := "stripe-wrong-key-secret"
+	createWebhookWithAuth(t, server.URL, "tpl-hmac-stripe-bad", "hmac-stripe-bad-wh", secret, resources.TaskWebhookAuthSpec{
+		Profile:         "hmac",
+		Algorithm:       "sha256",
+		PayloadFormat:   "timestamp_dot_body",
+		SignatureHeader: "Stripe-Signature",
+		HeaderFormat:    "kv_pairs",
+		SignatureKey:    "v1",
+		TimestampKey:    "t",
+	})
+
+	hook := getTaskWebhook(t, server.URL, "hmac-stripe-bad-wh", "default")
+	body := []byte(`{"event":"stripe-bad-key"}`)
+	timestamp := strconv.FormatInt(time.Now().UTC().Unix(), 10)
+	headerValue := "t=" + timestamp + ",v2=deadbeef"
+
+	status, _, raw := deliverWebhook(t, server.URL, hook.Status.EndpointPath, body, map[string]string{
+		"Stripe-Signature": headerValue,
+		"X-Event-Id":       "evt-stripe-bad-1",
+	})
+	if status != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for missing signature key, got %d body=%s", status, raw)
+	}
+}
+
+func TestWebhookDeliveryHMACSHA512(t *testing.T) {
+	server := newTestServer(t)
+	defer server.Close()
+
+	secret := "hmac-sha512-secret"
+	createWebhookWithAuth(t, server.URL, "tpl-hmac-sha512", "hmac-sha512-wh", secret, resources.TaskWebhookAuthSpec{
+		Profile:         "hmac",
+		Algorithm:       "sha512",
+		PayloadFormat:   "body",
+		SignatureHeader: "X-Signature",
+	})
+
+	hook := getTaskWebhook(t, server.URL, "hmac-sha512-wh", "default")
+	body := []byte(`{"event":"sha512-test"}`)
+	sig := signHMAC(secret, body, sha512.New, "hex")
+
+	status, dp, raw := deliverWebhook(t, server.URL, hook.Status.EndpointPath, body, map[string]string{
+		"X-Signature": sig,
+		"X-Event-Id":  "evt-hmac-sha512-1",
+	})
+	if status != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d body=%s", status, raw)
+	}
+	if !dp.Accepted {
+		t.Fatalf("expected accepted=true, got %t", dp.Accepted)
+	}
+}
+
+func TestWebhookDeliverySharedToken(t *testing.T) {
+	server := newTestServer(t)
+	defer server.Close()
+
+	secret := "telegram-bot-token-123"
+	createWebhookWithAuth(t, server.URL, "tpl-shared-token", "shared-token-wh", secret, resources.TaskWebhookAuthSpec{
+		Profile:         "shared_token",
+		SignatureHeader: "X-Telegram-Bot-Api-Secret-Token",
+	})
+
+	hook := getTaskWebhook(t, server.URL, "shared-token-wh", "default")
+	body := []byte(`{"update_id":12345,"message":{"text":"hello"}}`)
+
+	status, dp, raw := deliverWebhook(t, server.URL, hook.Status.EndpointPath, body, map[string]string{
+		"X-Telegram-Bot-Api-Secret-Token": secret,
+		"X-Event-Id":                      "evt-telegram-1",
+	})
+	if status != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d body=%s", status, raw)
+	}
+	if !dp.Accepted {
+		t.Fatalf("expected accepted=true, got %t", dp.Accepted)
+	}
+
+	runNS, runName := splitScopedTask(dp.Task)
+	runTask := getTask(t, server.URL, runName, runNS)
+	if got := runTask.Spec.Input["webhook_source"]; got != "shared_token" {
+		t.Fatalf("expected webhook_source=shared_token, got %q", got)
+	}
+}
+
+func TestWebhookDeliverySharedTokenWrongToken(t *testing.T) {
+	server := newTestServer(t)
+	defer server.Close()
+
+	secret := "correct-token"
+	createWebhookWithAuth(t, server.URL, "tpl-shared-token-bad", "shared-token-bad-wh", secret, resources.TaskWebhookAuthSpec{
+		Profile:         "shared_token",
+		SignatureHeader: "X-Telegram-Bot-Api-Secret-Token",
+	})
+
+	hook := getTaskWebhook(t, server.URL, "shared-token-bad-wh", "default")
+	body := []byte(`{"update_id":99999}`)
+
+	status, _, raw := deliverWebhook(t, server.URL, hook.Status.EndpointPath, body, map[string]string{
+		"X-Telegram-Bot-Api-Secret-Token": "wrong-token",
+		"X-Event-Id":                      "evt-telegram-bad-1",
+	})
+	if status != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for wrong shared token, got %d body=%s", status, raw)
+	}
+
+	hook = getTaskWebhook(t, server.URL, "shared-token-bad-wh", "default")
+	if hook.Status.RejectedCount != 1 {
+		t.Fatalf("expected rejectedCount=1, got %d", hook.Status.RejectedCount)
+	}
+}
+
+func TestWebhookDeliverySharedTokenMissingHeader(t *testing.T) {
+	server := newTestServer(t)
+	defer server.Close()
+
+	secret := "token-missing-header"
+	createWebhookWithAuth(t, server.URL, "tpl-shared-token-miss", "shared-token-miss-wh", secret, resources.TaskWebhookAuthSpec{
+		Profile:         "shared_token",
+		SignatureHeader: "X-Telegram-Bot-Api-Secret-Token",
+	})
+
+	hook := getTaskWebhook(t, server.URL, "shared-token-miss-wh", "default")
+	body := []byte(`{"update_id":99999}`)
+
+	status, _, raw := deliverWebhook(t, server.URL, hook.Status.EndpointPath, body, map[string]string{
+		"X-Event-Id": "evt-telegram-miss-1",
+	})
+	if status != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for missing token header, got %d body=%s", status, raw)
+	}
 }

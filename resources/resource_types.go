@@ -1250,12 +1250,20 @@ type TaskWebhookSpec struct {
 }
 
 type TaskWebhookAuthSpec struct {
-	Profile         string `json:"profile,omitempty"`
-	SecretRef       string `json:"secret_ref,omitempty"`
-	SignatureHeader string `json:"signature_header,omitempty"`
-	SignaturePrefix string `json:"signature_prefix,omitempty"`
-	TimestampHeader string `json:"timestamp_header,omitempty"`
-	MaxSkewSeconds  int    `json:"max_skew_seconds,omitempty"`
+	Profile           string `json:"profile,omitempty"`
+	SecretRef         string `json:"secret_ref,omitempty"`
+	SignatureHeader   string `json:"signature_header,omitempty"`
+	SignaturePrefix   string `json:"signature_prefix,omitempty"`
+	TimestampHeader   string `json:"timestamp_header,omitempty"`
+	MaxSkewSeconds    int    `json:"max_skew_seconds,omitempty"`
+	Algorithm         string `json:"algorithm,omitempty"`
+	PayloadFormat     string `json:"payload_format,omitempty"`
+	PayloadPrefix     string `json:"payload_prefix,omitempty"`
+	PayloadSeparator  string `json:"payload_separator,omitempty"`
+	SignatureEncoding string `json:"signature_encoding,omitempty"`
+	HeaderFormat      string `json:"header_format,omitempty"`
+	SignatureKey      string `json:"signature_key,omitempty"`
+	TimestampKey      string `json:"timestamp_key,omitempty"`
 }
 
 type TaskWebhookIdempotency struct {
@@ -1318,9 +1326,9 @@ func (t *TaskWebhook) Normalize() error {
 		t.Spec.Auth.Profile = "generic"
 	}
 	switch t.Spec.Auth.Profile {
-	case "generic", "github":
+	case "generic", "github", "hmac", "shared_token":
 	default:
-		return fmt.Errorf("invalid spec.auth.profile %q: expected generic or github", t.Spec.Auth.Profile)
+		return fmt.Errorf("invalid spec.auth.profile %q: expected generic, github, hmac, or shared_token", t.Spec.Auth.Profile)
 	}
 
 	t.Spec.Auth.SecretRef = strings.TrimSpace(t.Spec.Auth.SecretRef)
@@ -1328,8 +1336,17 @@ func (t *TaskWebhook) Normalize() error {
 		return fmt.Errorf("spec.auth.secret_ref is required")
 	}
 
-	isGitHub := t.Spec.Auth.Profile == "github"
-	if isGitHub {
+	t.Spec.Auth.Algorithm = strings.ToLower(strings.TrimSpace(t.Spec.Auth.Algorithm))
+	t.Spec.Auth.PayloadFormat = strings.ToLower(strings.TrimSpace(t.Spec.Auth.PayloadFormat))
+	t.Spec.Auth.SignatureEncoding = strings.ToLower(strings.TrimSpace(t.Spec.Auth.SignatureEncoding))
+	t.Spec.Auth.HeaderFormat = strings.ToLower(strings.TrimSpace(t.Spec.Auth.HeaderFormat))
+	t.Spec.Auth.PayloadPrefix = strings.TrimSpace(t.Spec.Auth.PayloadPrefix)
+	t.Spec.Auth.PayloadSeparator = strings.TrimSpace(t.Spec.Auth.PayloadSeparator)
+	t.Spec.Auth.SignatureKey = strings.TrimSpace(t.Spec.Auth.SignatureKey)
+	t.Spec.Auth.TimestampKey = strings.TrimSpace(t.Spec.Auth.TimestampKey)
+
+	switch t.Spec.Auth.Profile {
+	case "github":
 		if strings.TrimSpace(t.Spec.Auth.SignatureHeader) == "" {
 			t.Spec.Auth.SignatureHeader = "X-Hub-Signature-256"
 		}
@@ -1346,7 +1363,8 @@ func (t *TaskWebhook) Normalize() error {
 		if strings.TrimSpace(t.Spec.Idempotency.EventIDHeader) == "" {
 			t.Spec.Idempotency.EventIDHeader = "X-GitHub-Delivery"
 		}
-	} else {
+
+	case "generic":
 		if strings.TrimSpace(t.Spec.Auth.SignatureHeader) == "" {
 			t.Spec.Auth.SignatureHeader = "X-Signature"
 		}
@@ -1365,7 +1383,80 @@ func (t *TaskWebhook) Normalize() error {
 		if strings.TrimSpace(t.Spec.Idempotency.EventIDHeader) == "" {
 			t.Spec.Idempotency.EventIDHeader = "X-Event-Id"
 		}
+
+	case "hmac":
+		if t.Spec.Auth.Algorithm == "" {
+			t.Spec.Auth.Algorithm = "sha256"
+		}
+		switch t.Spec.Auth.Algorithm {
+		case "sha256", "sha1", "sha512":
+		default:
+			return fmt.Errorf("invalid spec.auth.algorithm %q: expected sha256, sha1, or sha512", t.Spec.Auth.Algorithm)
+		}
+		if t.Spec.Auth.PayloadFormat == "" {
+			t.Spec.Auth.PayloadFormat = "body"
+		}
+		switch t.Spec.Auth.PayloadFormat {
+		case "body", "timestamp_dot_body", "prefix_timestamp_body":
+		default:
+			return fmt.Errorf("invalid spec.auth.payload_format %q: expected body, timestamp_dot_body, or prefix_timestamp_body", t.Spec.Auth.PayloadFormat)
+		}
+		if t.Spec.Auth.SignatureEncoding == "" {
+			t.Spec.Auth.SignatureEncoding = "hex"
+		}
+		switch t.Spec.Auth.SignatureEncoding {
+		case "hex", "base64":
+		default:
+			return fmt.Errorf("invalid spec.auth.signature_encoding %q: expected hex or base64", t.Spec.Auth.SignatureEncoding)
+		}
+		if t.Spec.Auth.HeaderFormat == "" {
+			t.Spec.Auth.HeaderFormat = "plain"
+		}
+		switch t.Spec.Auth.HeaderFormat {
+		case "plain", "kv_pairs":
+		default:
+			return fmt.Errorf("invalid spec.auth.header_format %q: expected plain or kv_pairs", t.Spec.Auth.HeaderFormat)
+		}
+		if t.Spec.Auth.HeaderFormat == "kv_pairs" {
+			if t.Spec.Auth.SignatureKey == "" {
+				return fmt.Errorf("spec.auth.signature_key is required when header_format is kv_pairs")
+			}
+			payloadUsesTimestamp := t.Spec.Auth.PayloadFormat == "timestamp_dot_body" || t.Spec.Auth.PayloadFormat == "prefix_timestamp_body"
+			if payloadUsesTimestamp && t.Spec.Auth.TimestampKey == "" {
+				return fmt.Errorf("spec.auth.timestamp_key is required when header_format is kv_pairs and payload_format includes a timestamp")
+			}
+		}
+		if t.Spec.Auth.PayloadFormat == "prefix_timestamp_body" && t.Spec.Auth.PayloadSeparator == "" {
+			t.Spec.Auth.PayloadSeparator = "."
+		}
+		if strings.TrimSpace(t.Spec.Auth.SignatureHeader) == "" {
+			return fmt.Errorf("spec.auth.signature_header is required for hmac profile")
+		}
+		payloadUsesTimestamp := t.Spec.Auth.PayloadFormat == "timestamp_dot_body" || t.Spec.Auth.PayloadFormat == "prefix_timestamp_body"
+		if payloadUsesTimestamp && t.Spec.Auth.HeaderFormat != "kv_pairs" {
+			if strings.TrimSpace(t.Spec.Auth.TimestampHeader) == "" {
+				return fmt.Errorf("spec.auth.timestamp_header is required when payload_format includes a timestamp and header_format is plain")
+			}
+		}
+		if t.Spec.Auth.MaxSkewSeconds < 0 {
+			return fmt.Errorf("invalid spec.auth.max_skew_seconds %d: expected >= 0", t.Spec.Auth.MaxSkewSeconds)
+		}
+		if t.Spec.Auth.MaxSkewSeconds == 0 {
+			t.Spec.Auth.MaxSkewSeconds = 300
+		}
+		if strings.TrimSpace(t.Spec.Idempotency.EventIDHeader) == "" {
+			t.Spec.Idempotency.EventIDHeader = "X-Event-Id"
+		}
+
+	case "shared_token":
+		if strings.TrimSpace(t.Spec.Auth.SignatureHeader) == "" {
+			return fmt.Errorf("spec.auth.signature_header is required for shared_token profile")
+		}
+		if strings.TrimSpace(t.Spec.Idempotency.EventIDHeader) == "" {
+			t.Spec.Idempotency.EventIDHeader = "X-Event-Id"
+		}
 	}
+
 	if strings.TrimSpace(t.Spec.Auth.SignatureHeader) == "" {
 		return fmt.Errorf("spec.auth.signature_header is required")
 	}
@@ -1376,7 +1467,7 @@ func (t *TaskWebhook) Normalize() error {
 		return fmt.Errorf("invalid spec.idempotency.dedupe_window_seconds %d: expected >= 0", t.Spec.Idempotency.DedupeWindowSeconds)
 	}
 	if t.Spec.Idempotency.DedupeWindowSeconds == 0 {
-		if isGitHub {
+		if t.Spec.Auth.Profile == "github" {
 			// GitHub webhooks have no timestamp in the HMAC payload, so replay
 			// protection relies entirely on dedup. 72h matches GitHub's max
 			// retry window and provides adequate replay protection.
