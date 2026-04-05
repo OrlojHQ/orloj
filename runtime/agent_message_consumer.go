@@ -44,6 +44,11 @@ type MemoryResourceLookup interface {
 	Get(ctx context.Context, name string) (resources.Memory, bool, error)
 }
 
+// AgentPolicyLookup lists AgentPolicy resources for policy enforcement.
+type AgentPolicyLookup interface {
+	List(ctx context.Context) ([]resources.AgentPolicy, error)
+}
+
 // AgentMessageConsumerOptions configures inbox consumers in a worker.
 type AgentMessageConsumerOptions struct {
 	WorkerID            string
@@ -66,6 +71,7 @@ type AgentMessageConsumerOptions struct {
 	MemoryBackends      *PersistentMemoryBackendRegistry
 	ModelEndpoints      resources.ModelEndpointLookup
 	ToolApprovals       ToolApprovalUpserter
+	Policies            AgentPolicyLookup
 }
 
 // ToolApprovalUpserter persists ToolApproval resources when a governed tool requires approval.
@@ -101,6 +107,7 @@ type AgentMessageConsumerManager struct {
 	memBackends    *PersistentMemoryBackendRegistry
 	modelEPs       resources.ModelEndpointLookup
 	toolApprovals  ToolApprovalUpserter
+	policies       AgentPolicyLookup
 	mu             sync.Mutex
 	seenMu         sync.Mutex
 	consumers      map[string]context.CancelFunc
@@ -162,6 +169,7 @@ func NewAgentMessageConsumerManager(
 		memBackends:    opts.MemoryBackends,
 		modelEPs:       opts.ModelEndpoints,
 		toolApprovals:  opts.ToolApprovals,
+		policies:       opts.Policies,
 		extensions:     NormalizeExtensions(opts.Extensions),
 		consumers:      make(map[string]context.CancelFunc),
 		seenMessage:    make(map[string]time.Time),
@@ -387,6 +395,24 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 		return nil
 	}
 	agent.Spec.Model = effectiveModel
+
+	if m.policies != nil {
+		allPolicies, policyErr := m.policies.List(ctx)
+		if policyErr == nil && len(allPolicies) > 0 {
+			policies := MatchedPolicies(task, system, allPolicies)
+			if err := EnforcePoliciesForAgent(agent, effectiveModel, policies); err != nil {
+				_ = m.tasks.AppendLog(ctx, taskKey, fmt.Sprintf("agent policy violation: %s error=%s", agent.Metadata.Name, err))
+				retryScheduled, delay, markErr := m.recordRetryOrDeadLetter(ctx, taskKey, msg, record, fmt.Errorf("agent %s policy violation: %w", agent.Metadata.Name, err))
+				if markErr != nil {
+					return markErr
+				}
+				if retryScheduled {
+					return RetryAfter(delay, nil)
+				}
+				return nil
+			}
+		}
+	}
 
 	input := copyStringMap(task.Spec.Input)
 	input["inbox.from"] = strings.TrimSpace(msg.FromAgent)
@@ -2283,7 +2309,9 @@ func copyStringMap(in map[string]string) map[string]string {
 	return out
 }
 
-func parseToolFromApprovalChain(err error) string {
+// ParseToolFromApprovalError extracts the tool name from an approval-required
+// error chain by looking for "tool=..." in the error message.
+func ParseToolFromApprovalError(err error) string {
 	for e := err; e != nil; e = errors.Unwrap(e) {
 		msg := e.Error()
 		if i := strings.Index(msg, "tool="); i >= 0 {
@@ -2307,13 +2335,13 @@ func (m *AgentMessageConsumerManager) pauseTaskForToolApproval(ctx context.Conte
 	if m == nil || m.tasks == nil || m.toolApprovals == nil {
 		return fmt.Errorf("approval pause not configured")
 	}
-	toolName := parseToolFromApprovalChain(execErr)
+	toolName := ParseToolFromApprovalError(execErr)
 	if toolName == "" {
 		return fmt.Errorf("could not parse tool name from approval error")
 	}
 	ns, taskName := splitTaskKey(taskKey)
 	taskRef := scopedTaskName(ns, taskName)
-	approvalName := toolApprovalResourceName(taskKey, msg.MessageID)
+	approvalName := ToolApprovalResourceName(taskKey, msg.MessageID)
 
 	reason := strings.TrimSpace(execErr.Error())
 	if len(reason) > 500 {

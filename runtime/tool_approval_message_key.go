@@ -32,7 +32,9 @@ func splitTaskKeyForToolApproval(taskKey string) (namespace, taskName string) {
 	return resources.DefaultNamespace, taskKey
 }
 
-func toolApprovalResourceName(taskKey, messageID string) string {
+// ToolApprovalResourceName returns the deterministic resource name for a
+// ToolApproval keyed by (taskKey, messageID).
+func ToolApprovalResourceName(taskKey, messageID string) string {
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(strings.TrimSpace(taskKey)))
 	_, _ = h.Write([]byte{0})

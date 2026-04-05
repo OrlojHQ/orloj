@@ -1069,6 +1069,306 @@ func TestAppendRuntimeStepTraceCarriesModelOutputTokenBreakdown(t *testing.T) {
 	}
 }
 
+func TestAgentMessageConsumerEnforcesPolicyBlockedModel(t *testing.T) {
+	bus := NewMemoryAgentMessageBus("orloj.agentmsg", 256, time.Minute)
+	defer func() { _ = bus.Close() }()
+
+	agentStore := store.NewAgentStore()
+	systemStore := store.NewAgentSystemStore()
+	taskStore := store.NewTaskStore()
+	policyStore := store.NewAgentPolicyStore()
+
+	if _, err := agentStore.Upsert(context.Background(), resources.Agent{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Agent",
+		Metadata:   resources.ObjectMeta{Name: "policy-agent"},
+		Spec: resources.AgentSpec{
+			ModelRef: "openai-default",
+			Prompt:   "do work",
+			Limits:   resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
+		},
+	}); err != nil {
+		t.Fatalf("upsert agent failed: %v", err)
+	}
+	if _, err := systemStore.Upsert(context.Background(), resources.AgentSystem{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "AgentSystem",
+		Metadata:   resources.ObjectMeta{Name: "policy-system"},
+		Spec:       resources.AgentSystemSpec{Agents: []string{"policy-agent"}},
+	}); err != nil {
+		t.Fatalf("upsert system failed: %v", err)
+	}
+	if _, err := policyStore.Upsert(context.Background(), resources.AgentPolicy{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "AgentPolicy",
+		Metadata:   resources.ObjectMeta{Name: "restrict-models"},
+		Spec: resources.AgentPolicySpec{
+			ApplyMode:     "scoped",
+			TargetSystems: []string{"policy-system"},
+			AllowedModels: []string{"claude-3"},
+		},
+	}); err != nil {
+		t.Fatalf("upsert policy failed: %v", err)
+	}
+	if _, err := taskStore.Upsert(context.Background(), resources.Task{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Task",
+		Metadata:   resources.ObjectMeta{Name: "policy-task"},
+		Spec: resources.TaskSpec{
+			System: "policy-system",
+			Input:  map[string]string{"topic": "testing"},
+		},
+		Status: resources.TaskStatus{
+			Phase:     "Running",
+			ClaimedBy: "worker-a",
+			Attempts:  1,
+		},
+	}); err != nil {
+		t.Fatalf("upsert task failed: %v", err)
+	}
+
+	manager := NewAgentMessageConsumerManager(
+		bus,
+		agentStore,
+		systemStore,
+		taskStore,
+		nil,
+		AgentMessageConsumerOptions{
+			ModelEndpoints: newTestModelEndpointStore(t),
+			WorkerID:       "worker-a",
+			RefreshEvery:   20 * time.Millisecond,
+			DedupeWindow:   time.Minute,
+			Policies:       policyStore,
+		},
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go manager.Start(ctx)
+	time.Sleep(40 * time.Millisecond)
+
+	if _, err := bus.Publish(context.Background(), AgentMessage{
+		MessageID: "msg-policy-block",
+		TaskID:    "default/policy-task",
+		Namespace: "default",
+		FromAgent: "system",
+		ToAgent:   "policy-agent",
+		Type:      "task_start",
+		Payload:   "start",
+		Attempt:   1,
+	}); err != nil {
+		t.Fatalf("publish failed: %v", err)
+	}
+
+	waitForConsumer(t, 2*time.Second, func() bool {
+		task, ok, _ := taskStore.Get(context.Background(), "policy-task")
+		return ok && strings.EqualFold(task.Status.Phase, "deadletter")
+	})
+
+	task, _, _ := taskStore.Get(context.Background(), "policy-task")
+	if task.Status.Phase != "DeadLetter" {
+		t.Fatalf("expected DeadLetter for policy violation, got %q", task.Status.Phase)
+	}
+	if !strings.Contains(strings.ToLower(task.Status.LastError), "disallows model") {
+		t.Fatalf("expected policy violation in lastError, got %q", task.Status.LastError)
+	}
+}
+
+func TestAgentMessageConsumerEnforcesPolicyBlockedTool(t *testing.T) {
+	bus := NewMemoryAgentMessageBus("orloj.agentmsg", 256, time.Minute)
+	defer func() { _ = bus.Close() }()
+
+	agentStore := store.NewAgentStore()
+	systemStore := store.NewAgentSystemStore()
+	taskStore := store.NewTaskStore()
+	policyStore := store.NewAgentPolicyStore()
+
+	if _, err := agentStore.Upsert(context.Background(), resources.Agent{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Agent",
+		Metadata:   resources.ObjectMeta{Name: "tool-agent"},
+		Spec: resources.AgentSpec{
+			ModelRef: "openai-default",
+			Prompt:   "do work",
+			Tools:    []string{"web-search", "dangerous-tool"},
+			Limits:   resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
+		},
+	}); err != nil {
+		t.Fatalf("upsert agent failed: %v", err)
+	}
+	if _, err := systemStore.Upsert(context.Background(), resources.AgentSystem{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "AgentSystem",
+		Metadata:   resources.ObjectMeta{Name: "tool-system"},
+		Spec:       resources.AgentSystemSpec{Agents: []string{"tool-agent"}},
+	}); err != nil {
+		t.Fatalf("upsert system failed: %v", err)
+	}
+	if _, err := policyStore.Upsert(context.Background(), resources.AgentPolicy{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "AgentPolicy",
+		Metadata:   resources.ObjectMeta{Name: "block-tools"},
+		Spec: resources.AgentPolicySpec{
+			ApplyMode:    "global",
+			BlockedTools: []string{"dangerous-tool"},
+		},
+	}); err != nil {
+		t.Fatalf("upsert policy failed: %v", err)
+	}
+	if _, err := taskStore.Upsert(context.Background(), resources.Task{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Task",
+		Metadata:   resources.ObjectMeta{Name: "tool-task"},
+		Spec: resources.TaskSpec{
+			System: "tool-system",
+			Input:  map[string]string{"topic": "testing"},
+		},
+		Status: resources.TaskStatus{
+			Phase:     "Running",
+			ClaimedBy: "worker-a",
+			Attempts:  1,
+		},
+	}); err != nil {
+		t.Fatalf("upsert task failed: %v", err)
+	}
+
+	manager := NewAgentMessageConsumerManager(
+		bus,
+		agentStore,
+		systemStore,
+		taskStore,
+		nil,
+		AgentMessageConsumerOptions{
+			ModelEndpoints: newTestModelEndpointStore(t),
+			WorkerID:       "worker-a",
+			RefreshEvery:   20 * time.Millisecond,
+			DedupeWindow:   time.Minute,
+			Policies:       policyStore,
+		},
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go manager.Start(ctx)
+	time.Sleep(40 * time.Millisecond)
+
+	if _, err := bus.Publish(context.Background(), AgentMessage{
+		MessageID: "msg-tool-block",
+		TaskID:    "default/tool-task",
+		Namespace: "default",
+		FromAgent: "system",
+		ToAgent:   "tool-agent",
+		Type:      "task_start",
+		Payload:   "start",
+		Attempt:   1,
+	}); err != nil {
+		t.Fatalf("publish failed: %v", err)
+	}
+
+	waitForConsumer(t, 2*time.Second, func() bool {
+		task, ok, _ := taskStore.Get(context.Background(), "tool-task")
+		return ok && strings.EqualFold(task.Status.Phase, "deadletter")
+	})
+
+	task, _, _ := taskStore.Get(context.Background(), "tool-task")
+	if task.Status.Phase != "DeadLetter" {
+		t.Fatalf("expected DeadLetter for blocked tool, got %q", task.Status.Phase)
+	}
+	if !strings.Contains(strings.ToLower(task.Status.LastError), "blocks tool") {
+		t.Fatalf("expected blocked tool in lastError, got %q", task.Status.LastError)
+	}
+}
+
+func TestAgentMessageConsumerPassesWithNoPolicies(t *testing.T) {
+	bus := NewMemoryAgentMessageBus("orloj.agentmsg", 256, time.Minute)
+	defer func() { _ = bus.Close() }()
+
+	agentStore := store.NewAgentStore()
+	systemStore := store.NewAgentSystemStore()
+	taskStore := store.NewTaskStore()
+	policyStore := store.NewAgentPolicyStore()
+
+	if _, err := agentStore.Upsert(context.Background(), resources.Agent{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Agent",
+		Metadata:   resources.ObjectMeta{Name: "free-agent"},
+		Spec: resources.AgentSpec{
+			ModelRef: "openai-default",
+			Prompt:   "do work",
+			Limits:   resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
+		},
+	}); err != nil {
+		t.Fatalf("upsert agent failed: %v", err)
+	}
+	if _, err := systemStore.Upsert(context.Background(), resources.AgentSystem{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "AgentSystem",
+		Metadata:   resources.ObjectMeta{Name: "free-system"},
+		Spec:       resources.AgentSystemSpec{Agents: []string{"free-agent"}},
+	}); err != nil {
+		t.Fatalf("upsert system failed: %v", err)
+	}
+	if _, err := taskStore.Upsert(context.Background(), resources.Task{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Task",
+		Metadata:   resources.ObjectMeta{Name: "free-task"},
+		Spec: resources.TaskSpec{
+			System: "free-system",
+			Input:  map[string]string{"topic": "testing"},
+		},
+		Status: resources.TaskStatus{
+			Phase:     "Running",
+			ClaimedBy: "worker-a",
+			Attempts:  1,
+		},
+	}); err != nil {
+		t.Fatalf("upsert task failed: %v", err)
+	}
+
+	manager := NewAgentMessageConsumerManager(
+		bus,
+		agentStore,
+		systemStore,
+		taskStore,
+		nil,
+		AgentMessageConsumerOptions{
+			ModelEndpoints: newTestModelEndpointStore(t),
+			WorkerID:       "worker-a",
+			RefreshEvery:   20 * time.Millisecond,
+			DedupeWindow:   time.Minute,
+			Policies:       policyStore,
+		},
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go manager.Start(ctx)
+	time.Sleep(40 * time.Millisecond)
+
+	if _, err := bus.Publish(context.Background(), AgentMessage{
+		MessageID: "msg-free",
+		TaskID:    "default/free-task",
+		Namespace: "default",
+		FromAgent: "system",
+		ToAgent:   "free-agent",
+		Type:      "task_start",
+		Payload:   "start",
+		Attempt:   1,
+	}); err != nil {
+		t.Fatalf("publish failed: %v", err)
+	}
+
+	waitForConsumer(t, 2*time.Second, func() bool {
+		task, ok, _ := taskStore.Get(context.Background(), "free-task")
+		return ok && strings.EqualFold(task.Status.Phase, "succeeded")
+	})
+
+	task, _, _ := taskStore.Get(context.Background(), "free-task")
+	if task.Status.Phase != "Succeeded" {
+		t.Fatalf("expected Succeeded with no policies, got %q (error: %s)", task.Status.Phase, task.Status.LastError)
+	}
+}
+
 func waitForConsumer(t *testing.T, timeout time.Duration, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
