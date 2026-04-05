@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Tool runtime docs**: Core concepts, tool reference, and tool concept pages now list seven transport types (HTTP, external, gRPC, webhook-callback, MCP, CLI, WASM) and three isolation modes (none, container, WASM), correcting previous counts and removing references to the unimplemented `queue` type.
+- **Tool runtime docs**: Core concepts, tool reference, and tool concept pages now list seven transport types (HTTP, external, gRPC, webhook-callback, MCP, CLI, WASM) and four isolation modes (none, sandboxed, container, WASM), correcting previous counts and removing references to the unimplemented `queue` type.
 
 ### Removed
 
@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Tool type dispatch**: `GovernedToolRuntime` now explicitly routes every validated `spec.type` (`http`, `external`, `grpc`, `webhook-callback`, `mcp`, `cli`, `wasm`) to its correct transport runtime. Previously only `mcp` and `cli` were explicitly dispatched; all other types — including `external`, `grpc`, and `webhook-callback` — fell through to the base HTTP client regardless of their declared type. Unknown types now fail closed with an explicit error instead of silently executing as HTTP.
+- **HTTP tool registry propagation**: The default `HTTPToolClient` created when callers pass `nil` as the base runtime now receives the tool capability registry. Previously, both production call sites (`task_controller` and `agent_message_consumer`) passed `nil`, which created an `HTTPToolClient` without a registry — causing every low/medium-risk HTTP tool to fail with "unsupported tool" instead of executing.
 - **Task controller**: `reconcilePending` no longer increments `status.attempts`; attempts are counted when a task is claimed in the store (`applyTaskClaim`), avoiding duplicate increments if a pending task is reconciled after claim.
 
 ## [0.5.1] - 2026-04-02

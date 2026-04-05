@@ -95,7 +95,7 @@ Authentication endpoints (`/v1/auth/login`, `/v1/auth/setup`, `/v1/auth/change-p
 
 ## Tool Types
 
-All tool types (`http`, `external`, `grpc`, `webhook-callback`) flow through the governed runtime pipeline, so policy enforcement, retry, auth injection, and error handling behave identically regardless of transport. See [Tools](../concepts/tools/tool.md) for type details.
+All tool types (`http`, `external`, `grpc`, `webhook-callback`, `mcp`, `cli`, `wasm`) flow through the governed runtime pipeline, so policy enforcement, retry, timeout, and error handling behave identically regardless of transport. See [Tools](../concepts/tools/tool.md) for type details.
 
 ### gRPC TLS
 

@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -532,5 +535,57 @@ func TestIsApprovalRequiredError(t *testing.T) {
 	}
 	if IsApprovalRequiredError(errors.New("some other error")) {
 		t.Fatal("unrelated error should not be approval required")
+	}
+}
+
+func TestBuildGovernedToolRuntimeNilBaseHTTPToolSucceeds(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status":"ok","output":{"result":"search-result"}}`))
+	}))
+	defer srv.Close()
+
+	// Use hostname so the endpoint validator skips literal-IP checks;
+	// the HTTP client resolves localhost to the test server.
+	endpoint := strings.Replace(srv.URL, "127.0.0.1", "localhost", 1)
+
+	lookup := staticToolLookup{
+		items: map[string]resources.Tool{
+			"default/web_search": {
+				Metadata: resources.ObjectMeta{Name: "web_search", Namespace: "default"},
+				Spec: resources.ToolSpec{
+					Type:     "http",
+					Endpoint: endpoint,
+					Runtime: resources.ToolRuntimePolicy{
+						Timeout: "5s",
+						Retry:   resources.ToolRetryPolicy{MaxAttempts: 1},
+					},
+				},
+			},
+		},
+	}
+
+	rt := BuildGovernedToolRuntimeForAgent(
+		context.Background(),
+		nil,
+		nil,
+		lookup,
+		"default",
+		[]string{"web_search"},
+	)
+	if rt == nil {
+		t.Fatal("expected non-nil governed runtime")
+	}
+
+	out, err := rt.Call(context.Background(), "web_search", `{"q":"orloj"}`)
+	if err != nil {
+		if errors.Is(err, ErrUnsupportedTool) {
+			t.Fatalf("regression: nil baseRuntime produced unsupported-tool error; registry was not propagated to HTTPToolClient")
+		}
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out, "search-result") {
+		t.Fatalf("expected search-result in output, got %q", out)
 	}
 }
