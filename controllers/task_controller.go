@@ -1209,6 +1209,9 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 			agentruntime.ConfigureMcpRuntime(toolRuntime, c.mcpSessionMgr, c.mcpServerStore, task.Metadata.Namespace)
 		}
 		agentruntime.ConfigureCliRuntime(toolRuntime, c.cliSecretResolver, nil, c.cliToolConfig, task.Metadata.Namespace)
+		agentruntime.ConfigureExternalRuntime(toolRuntime, c.cliSecretResolver, task.Metadata.Namespace)
+		agentruntime.ConfigureGRPCRuntime(toolRuntime, c.cliSecretResolver, task.Metadata.Namespace)
+		agentruntime.ConfigureWebhookCallbackRuntime(toolRuntime, c.cliSecretResolver, task.Metadata.Namespace)
 		result, err := c.executor.ExecuteAgentWithRuntime(agentCtx, agent, runtimeInput, toolRuntime)
 		if err != nil {
 			category := "failure"

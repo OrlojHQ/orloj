@@ -91,13 +91,16 @@ func (r *UnsupportedIsolatedToolRuntime) Call(_ context.Context, tool string, _ 
 
 // GovernedToolRuntime enforces per-tool policy (timeout/retry/isolation) using Tool CRD runtime metadata.
 type GovernedToolRuntime struct {
-	baseRuntime     ToolRuntime
-	isolatedRuntime ToolRuntime
-	mcpRuntime      ToolRuntime
-	cliRuntime      ToolRuntime
-	registry        ToolCapabilityRegistry
-	authorizer      ToolCallAuthorizer
-	strict          bool
+	baseRuntime            ToolRuntime
+	isolatedRuntime        ToolRuntime
+	mcpRuntime             ToolRuntime
+	cliRuntime             ToolRuntime
+	externalRuntime        ToolRuntime
+	grpcRuntime            ToolRuntime
+	webhookCallbackRuntime ToolRuntime
+	registry               ToolCapabilityRegistry
+	authorizer             ToolCallAuthorizer
+	strict                 bool
 }
 
 func NewGovernedToolRuntime(
@@ -261,6 +264,66 @@ func ConfigureCliRuntime(rt ToolRuntime, secrets SecretResolver, runner CLIComma
 	governed.cliRuntime = cliRT
 }
 
+// ConfigureExternalRuntime builds and attaches a runtime for type=external tools.
+// The runtime is scoped to the governed runtime's registry and the provided namespace.
+func ConfigureExternalRuntime(rt ToolRuntime, secrets SecretResolver, namespace string) {
+	governed, ok := rt.(*GovernedToolRuntime)
+	if !ok || governed == nil {
+		return
+	}
+	if secrets == nil {
+		secrets = NewEnvSecretResolver("ORLOJ_SECRET_")
+	}
+	var extRT ToolRuntime = NewExternalToolRuntime(nil, secrets, nil)
+	if scoped, ok := extRT.(namespaceAwareToolRuntime); ok {
+		extRT = scoped.WithNamespace(namespace)
+	}
+	if aware, ok := extRT.(registryAwareToolRuntime); ok && governed.registry != nil {
+		extRT = aware.WithRegistry(governed.registry)
+	}
+	governed.externalRuntime = extRT
+}
+
+// ConfigureGRPCRuntime builds and attaches a runtime for type=grpc tools.
+// The runtime is scoped to the governed runtime's registry and the provided namespace.
+func ConfigureGRPCRuntime(rt ToolRuntime, secrets SecretResolver, namespace string) {
+	governed, ok := rt.(*GovernedToolRuntime)
+	if !ok || governed == nil {
+		return
+	}
+	if secrets == nil {
+		secrets = NewEnvSecretResolver("ORLOJ_SECRET_")
+	}
+	var grpcRT ToolRuntime = NewGRPCToolRuntime(nil, secrets, nil)
+	if scoped, ok := grpcRT.(namespaceAwareToolRuntime); ok {
+		grpcRT = scoped.WithNamespace(namespace)
+	}
+	if aware, ok := grpcRT.(registryAwareToolRuntime); ok && governed.registry != nil {
+		grpcRT = aware.WithRegistry(governed.registry)
+	}
+	governed.grpcRuntime = grpcRT
+}
+
+// ConfigureWebhookCallbackRuntime builds and attaches a runtime for type=webhook-callback tools.
+// The runtime is scoped to the governed runtime's registry and the provided namespace.
+func ConfigureWebhookCallbackRuntime(rt ToolRuntime, secrets SecretResolver, namespace string) {
+	governed, ok := rt.(*GovernedToolRuntime)
+	if !ok || governed == nil {
+		return
+	}
+	if secrets == nil {
+		secrets = NewEnvSecretResolver("ORLOJ_SECRET_")
+	}
+	var whRT ToolRuntime = NewWebhookCallbackToolRuntime(nil, secrets, nil, 0)
+	if scoped, ok := whRT.(namespaceAwareToolRuntime); ok {
+		whRT = scoped.WithNamespace(namespace)
+	}
+	if aware, ok := whRT.(registryAwareToolRuntime); ok && governed.registry != nil {
+		whRT = aware.WithRegistry(governed.registry)
+	}
+	governed.webhookCallbackRuntime = whRT
+}
+
 func (r *GovernedToolRuntime) Call(ctx context.Context, tool string, input string) (string, error) {
 	tool = strings.TrimSpace(tool)
 	if tool == "" {
@@ -348,12 +411,17 @@ func (r *GovernedToolRuntime) ResolveToolSchemas(toolNames []string) map[string]
 	return out
 }
 
-func (r *GovernedToolRuntime) callWithPolicy(ctx context.Context, tool string, input string, spec resources.ToolSpec) (string, error) {
-	target := r.baseRuntime
+// resolveTargetRuntime selects the correct transport runtime based on spec.type.
+// Every validated tool type must be explicitly handled here; unknown types fail closed.
+func (r *GovernedToolRuntime) resolveTargetRuntime(tool string, spec resources.ToolSpec) (ToolRuntime, error) {
 	toolType := strings.ToLower(strings.TrimSpace(spec.Type))
-	if toolType == "mcp" {
+	switch toolType {
+	case "http", "":
+		// HTTP tools use the base runtime (HTTPToolClient) unless isolation is required.
+		return r.resolveWithIsolationOverride(tool, spec, r.baseRuntime)
+	case "mcp":
 		if r.mcpRuntime == nil {
-			return "", NewToolError(
+			return nil, NewToolError(
 				ToolStatusError,
 				ToolCodeIsolationUnavailable,
 				ToolReasonIsolationUnavailable,
@@ -363,15 +431,15 @@ func (r *GovernedToolRuntime) callWithPolicy(ctx context.Context, tool string, i
 				map[string]string{"tool": tool, "type": "mcp"},
 			)
 		}
-		target = r.mcpRuntime
-	} else if toolType == "cli" {
+		return r.mcpRuntime, nil
+	case "cli":
 		mode := strings.ToLower(strings.TrimSpace(spec.Runtime.IsolationMode))
 		if mode == "" {
 			mode = "container"
 		}
 		if mode != "none" {
 			if r.isolatedRuntime == nil {
-				return "", NewToolError(
+				return nil, NewToolError(
 					ToolStatusError,
 					ToolCodeIsolationUnavailable,
 					ToolReasonIsolationUnavailable,
@@ -381,48 +449,122 @@ func (r *GovernedToolRuntime) callWithPolicy(ctx context.Context, tool string, i
 					map[string]string{"tool": tool, "isolation_mode": mode, "type": "cli"},
 				)
 			}
-			target = r.isolatedRuntime
+			return r.isolatedRuntime, nil
+		}
+		if r.cliRuntime == nil {
+			return nil, NewToolError(
+				ToolStatusError,
+				ToolCodeIsolationUnavailable,
+				ToolReasonIsolationUnavailable,
+				false,
+				fmt.Sprintf("cli runtime unavailable for tool=%s", tool),
+				ErrToolIsolationUnavailable,
+				map[string]string{"tool": tool, "type": "cli"},
+			)
+		}
+		return r.cliRuntime, nil
+	case "external":
+		if r.externalRuntime == nil {
+			return nil, NewToolError(
+				ToolStatusError,
+				ToolCodeIsolationUnavailable,
+				ToolReasonIsolationUnavailable,
+				false,
+				fmt.Sprintf("external runtime unavailable for tool=%s; configure an external tool runtime", tool),
+				ErrToolIsolationUnavailable,
+				map[string]string{"tool": tool, "type": "external"},
+			)
+		}
+		return r.resolveWithIsolationOverride(tool, spec, r.externalRuntime)
+	case "grpc":
+		if r.grpcRuntime == nil {
+			return nil, NewToolError(
+				ToolStatusError,
+				ToolCodeIsolationUnavailable,
+				ToolReasonIsolationUnavailable,
+				false,
+				fmt.Sprintf("grpc runtime unavailable for tool=%s; configure a gRPC tool runtime", tool),
+				ErrToolIsolationUnavailable,
+				map[string]string{"tool": tool, "type": "grpc"},
+			)
+		}
+		return r.resolveWithIsolationOverride(tool, spec, r.grpcRuntime)
+	case "webhook-callback":
+		if r.webhookCallbackRuntime == nil {
+			return nil, NewToolError(
+				ToolStatusError,
+				ToolCodeIsolationUnavailable,
+				ToolReasonIsolationUnavailable,
+				false,
+				fmt.Sprintf("webhook-callback runtime unavailable for tool=%s; configure a webhook-callback tool runtime", tool),
+				ErrToolIsolationUnavailable,
+				map[string]string{"tool": tool, "type": "webhook-callback"},
+			)
+		}
+		return r.resolveWithIsolationOverride(tool, spec, r.webhookCallbackRuntime)
+	case "wasm":
+		// WASM tools always require isolation; route directly to the isolated runtime.
+		if r.isolatedRuntime == nil {
+			return nil, NewToolError(
+				ToolStatusError,
+				ToolCodeIsolationUnavailable,
+				ToolReasonIsolationUnavailable,
+				false,
+				fmt.Sprintf("wasm isolation runtime unavailable for tool=%s", tool),
+				ErrToolIsolationUnavailable,
+				map[string]string{"tool": tool, "type": "wasm"},
+			)
+		}
+		return r.isolatedRuntime, nil
+	default:
+		return nil, NewToolError(
+			ToolStatusError,
+			ToolCodeUnsupportedTool,
+			ToolReasonToolUnsupported,
+			false,
+			fmt.Sprintf("unsupported tool type %q for tool=%s", toolType, tool),
+			ErrUnsupportedTool,
+			map[string]string{"tool": tool, "type": toolType},
+		)
+	}
+}
+
+// resolveWithIsolationOverride returns the isolated runtime instead of the
+// given default when the tool's isolation mode or risk level requires sandboxing.
+func (r *GovernedToolRuntime) resolveWithIsolationOverride(tool string, spec resources.ToolSpec, defaultRT ToolRuntime) (ToolRuntime, error) {
+	mode := strings.ToLower(strings.TrimSpace(spec.Runtime.IsolationMode))
+	if mode == "" {
+		risk := strings.ToLower(strings.TrimSpace(spec.RiskLevel))
+		if risk == "high" || risk == "critical" {
+			mode = "sandboxed"
 		} else {
-			if r.cliRuntime == nil {
-				return "", NewToolError(
-					ToolStatusError,
-					ToolCodeIsolationUnavailable,
-					ToolReasonIsolationUnavailable,
-					false,
-					fmt.Sprintf("cli runtime unavailable for tool=%s", tool),
-					ErrToolIsolationUnavailable,
-					map[string]string{"tool": tool, "type": "cli"},
-				)
-			}
-			target = r.cliRuntime
+			mode = "none"
 		}
-	} else {
-		mode := strings.ToLower(strings.TrimSpace(spec.Runtime.IsolationMode))
-		if mode == "" {
-			risk := strings.ToLower(strings.TrimSpace(spec.RiskLevel))
-			if risk == "high" || risk == "critical" {
-				mode = "sandboxed"
-			} else {
-				mode = "none"
-			}
+	}
+	if mode != "" && mode != "none" {
+		if r.isolatedRuntime == nil {
+			return nil, NewToolError(
+				ToolStatusError,
+				ToolCodeIsolationUnavailable,
+				ToolReasonIsolationUnavailable,
+				false,
+				fmt.Sprintf("tool isolation runtime unavailable for tool=%s mode=%s", tool, mode),
+				ErrToolIsolationUnavailable,
+				map[string]string{
+					"tool":           tool,
+					"isolation_mode": mode,
+				},
+			)
 		}
-		if mode != "" && mode != "none" {
-			if r.isolatedRuntime == nil {
-				return "", NewToolError(
-					ToolStatusError,
-					ToolCodeIsolationUnavailable,
-					ToolReasonIsolationUnavailable,
-					false,
-					fmt.Sprintf("tool isolation runtime unavailable for tool=%s mode=%s", tool, mode),
-					ErrToolIsolationUnavailable,
-					map[string]string{
-						"tool":           tool,
-						"isolation_mode": mode,
-					},
-				)
-			}
-			target = r.isolatedRuntime
-		}
+		return r.isolatedRuntime, nil
+	}
+	return defaultRT, nil
+}
+
+func (r *GovernedToolRuntime) callWithPolicy(ctx context.Context, tool string, input string, spec resources.ToolSpec) (string, error) {
+	target, err := r.resolveTargetRuntime(tool, spec)
+	if err != nil {
+		return "", err
 	}
 
 	maxAttempts := spec.Runtime.Retry.MaxAttempts

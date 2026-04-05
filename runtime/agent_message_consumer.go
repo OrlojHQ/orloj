@@ -432,6 +432,9 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 		ConfigureMcpRuntime(toolRT, m.mcpSessionMgr, m.mcpServerStore, ns)
 	}
 	ConfigureCliRuntime(toolRT, m.secretResolver, nil, m.cliConfig, ns)
+	ConfigureExternalRuntime(toolRT, m.secretResolver, ns)
+	ConfigureGRPCRuntime(toolRT, m.secretResolver, ns)
+	ConfigureWebhookCallbackRuntime(toolRT, m.secretResolver, ns)
 	if memRef := strings.TrimSpace(agent.Spec.Memory.Ref); memRef != "" {
 		sharedMem := m.taskSharedMemory(taskKey)
 		memRT := NewMemoryToolRuntime(toolRT, sharedMem)

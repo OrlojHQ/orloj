@@ -236,10 +236,10 @@ func (t *Tool) Normalize() error {
 		toolType = "http"
 	}
 	switch toolType {
-	case "http", "external", "grpc", "queue", "webhook-callback", "mcp", "wasm", "cli":
+	case "http", "external", "grpc", "webhook-callback", "mcp", "wasm", "cli":
 		t.Spec.Type = toolType
 	default:
-		return fmt.Errorf("invalid spec.type %q: expected http, external, grpc, queue, webhook-callback, mcp, wasm, or cli", t.Spec.Type)
+		return fmt.Errorf("invalid spec.type %q: expected http, external, grpc, webhook-callback, mcp, wasm, or cli", t.Spec.Type)
 	}
 	t.Spec.McpServerRef = strings.TrimSpace(t.Spec.McpServerRef)
 	t.Spec.McpToolName = strings.TrimSpace(t.Spec.McpToolName)

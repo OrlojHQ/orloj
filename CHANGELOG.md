@@ -7,8 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **README**: Document official [Python](https://pypi.org/project/orloj-sdk/) and [TypeScript](https://www.npmjs.com/package/orloj) HTTP API SDKs ([orloj-python-sdk](https://github.com/OrlojHQ/orloj-python-sdk), [orloj-js-sdk](https://github.com/OrlojHQ/orloj-js-sdk)), with PyPI and npm badges.
+
+### Changed
+
+- **Tool runtime docs**: Core concepts, tool reference, and tool concept pages now list seven transport types (HTTP, external, gRPC, webhook-callback, MCP, CLI, WASM) and three isolation modes (none, container, WASM), correcting previous counts and removing references to the unimplemented `queue` type.
+
+### Removed
+
+- **`queue` tool type**: Removed from validation and documentation. The type was accepted by `spec.type` validation and documented, but no queue runtime existed — tools with `type: queue` silently fell through to the HTTP client at runtime. A future queue transport can be re-introduced when a `QueueToolRuntime` implementation is available.
+
 ### Fixed
 
+- **Tool type dispatch**: `GovernedToolRuntime` now explicitly routes every validated `spec.type` (`http`, `external`, `grpc`, `webhook-callback`, `mcp`, `cli`, `wasm`) to its correct transport runtime. Previously only `mcp` and `cli` were explicitly dispatched; all other types — including `external`, `grpc`, and `webhook-callback` — fell through to the base HTTP client regardless of their declared type. Unknown types now fail closed with an explicit error instead of silently executing as HTTP.
 - **Task controller**: `reconcilePending` no longer increments `status.attempts`; attempts are counted when a task is claimed in the store (`applyTaskClaim`), avoiding duplicate increments if a pending task is reconciled after claim.
 
 ## [0.5.1] - 2026-04-02
