@@ -504,21 +504,34 @@ function buildTree(
   for (const webhook of related.taskWebhooks ?? []) {
     const webhookNamespace = webhook.metadata.namespace ?? systemNamespace;
     const ref = resolveTaskRef(webhook.spec.task_ref, webhookNamespace);
-    if (!ref) continue;
 
-    const template = taskMap.get(`${ref.namespace}/${ref.name}`);
-    if (!template || template.spec.system !== system.metadata.name) continue;
+    if (ref) {
+      const template = taskMap.get(`${ref.namespace}/${ref.name}`);
+      if (!template || template.spec.system !== system.metadata.name) continue;
 
-    const webhookId = nid("webhook", webhook.metadata.name);
-    const templateTaskId = nid("task", template.metadata.name);
-    regNode(
-      webhookId,
-      "webhook",
-      webhook.metadata.name,
-      webhook.status?.phase,
-      webhook.status?.endpointID ?? webhook.spec.auth?.profile ?? "generic",
-    );
-    regEdge(webhookId, templateTaskId, false);
+      const webhookId = nid("webhook", webhook.metadata.name);
+      const templateTaskId = nid("task", template.metadata.name);
+      regNode(
+        webhookId,
+        "webhook",
+        webhook.metadata.name,
+        webhook.status?.phase,
+        webhook.status?.endpointID ?? webhook.spec.auth?.profile ?? "generic",
+      );
+      regEdge(webhookId, templateTaskId, false);
+    } else if (webhook.spec.task_template) {
+      if (webhook.spec.task_template.system !== system.metadata.name) continue;
+
+      const webhookId = nid("webhook", webhook.metadata.name);
+      regNode(
+        webhookId,
+        "webhook",
+        webhook.metadata.name,
+        webhook.status?.phase,
+        webhook.status?.endpointID ?? webhook.spec.auth?.profile ?? "generic",
+      );
+      regEdge(sysId, webhookId, false);
+    }
   }
 
   // -- Run dagre layout -------------------------------------------------------

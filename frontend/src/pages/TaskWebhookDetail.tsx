@@ -126,7 +126,7 @@ export function TaskWebhookDetail() {
           <div>
             <h1 className="page__title">{taskWebhook.metadata.name}</h1>
             <p className="page__subtitle">
-              {taskWebhook.spec.task_ref ?? "-"} · {taskWebhook.metadata.namespace}
+              {taskWebhook.spec.task_ref ? taskWebhook.spec.task_ref : taskWebhook.spec.task_template ? "(inline template)" : "-"} · {taskWebhook.metadata.namespace}
             </p>
           </div>
           <StatusBadge phase={taskWebhook.status?.phase} size="md" />
@@ -161,7 +161,7 @@ export function TaskWebhookDetail() {
             </div>
             <div className="detail-field">
               <span className="detail-field__label">Task Template</span>
-              <span className="detail-field__value mono">{taskWebhook.spec.task_ref ?? "-"}</span>
+              <span className="detail-field__value mono">{taskWebhook.spec.task_ref ? taskWebhook.spec.task_ref : taskWebhook.spec.task_template ? `(inline · ${taskWebhook.spec.task_template.system ?? "?"})` : "-"}</span>
             </div>
             <div className="detail-field">
               <span className="detail-field__label">Suspended</span>

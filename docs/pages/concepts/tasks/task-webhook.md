@@ -4,6 +4,10 @@ A **TaskWebhook** creates [Tasks](./task.md) in response to external HTTP events
 
 ## Defining a TaskWebhook
 
+A TaskWebhook can reference a separate template Task via `task_ref`, or define the task spec inline via `task_template`. Exactly one must be set.
+
+### Using a template reference
+
 ```yaml
 apiVersion: orloj.dev/v1
 kind: TaskWebhook
@@ -19,6 +23,30 @@ spec:
     dedupe_window_seconds: 86400
   payload:
     mode: raw
+    input_key: webhook_payload
+```
+
+### Using an inline template
+
+When only one webhook uses a template, you can embed the task spec directly in the webhook to avoid creating a separate Task resource:
+
+```yaml
+apiVersion: orloj.dev/v1
+kind: TaskWebhook
+metadata:
+  name: ingest-events
+spec:
+  task_template:
+    system: event-pipeline
+    priority: normal
+    input:
+      webhook_payload: ""
+  auth:
+    profile: generic
+    secret_ref: ingest-secret
+  idempotency:
+    event_id_header: X-Event-Id
+  payload:
     input_key: webhook_payload
 ```
 

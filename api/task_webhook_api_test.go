@@ -1350,3 +1350,79 @@ func TestWebhookDeliveryEventIDFromBodyDedupe(t *testing.T) {
 		t.Fatalf("second delivery should be duplicate")
 	}
 }
+
+func TestWebhookDeliveryInlineTemplate(t *testing.T) {
+	server := newTestServer(t)
+	defer server.Close()
+
+	secret := "inline-secret"
+	postJSON(t, server.URL+"/v1/secrets", resources.Secret{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Secret",
+		Metadata:   resources.ObjectMeta{Name: "inline-webhook-secret"},
+		Spec: resources.SecretSpec{
+			StringData: map[string]string{"value": secret},
+		},
+	})
+	postJSON(t, server.URL+"/v1/task-webhooks", resources.TaskWebhook{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "TaskWebhook",
+		Metadata:   resources.ObjectMeta{Name: "inline-hook"},
+		Spec: resources.TaskWebhookSpec{
+			TaskTemplate: &resources.TaskSpec{
+				System: "inline-system",
+				Input:  map[string]string{"topic": "from-template"},
+			},
+			Auth: resources.TaskWebhookAuthSpec{
+				Profile:   "generic",
+				SecretRef: "inline-webhook-secret",
+			},
+		},
+	})
+
+	hook := getTaskWebhook(t, server.URL, "inline-hook", "default")
+	if hook.Spec.TaskTemplate == nil {
+		t.Fatal("expected task_template to be set on fetched webhook")
+	}
+
+	body := []byte(`{"event":"test"}`)
+	eventID := "evt-inline-001"
+	timestamp := strconv.FormatInt(time.Now().UTC().Unix(), 10)
+	signature := signGeneric(secret, timestamp, body)
+
+	status, payload, raw := deliverWebhook(t, server.URL, hook.Status.EndpointPath, body, map[string]string{
+		"X-Signature": signature,
+		"X-Timestamp": timestamp,
+		"X-Event-Id":  eventID,
+	})
+	if status != http.StatusAccepted {
+		t.Fatalf("expected 202 accepted, got %d body=%s", status, raw)
+	}
+	if !payload.Accepted {
+		t.Fatalf("expected accepted=true, got %t", payload.Accepted)
+	}
+	if payload.Task == "" {
+		t.Fatalf("expected task in delivery response, body=%s", raw)
+	}
+
+	runNS, runName := splitScopedTask(payload.Task)
+	runTask := getTask(t, server.URL, runName, runNS)
+	if runTask.Spec.Mode != "run" {
+		t.Fatalf("expected run mode=run, got %q", runTask.Spec.Mode)
+	}
+	if runTask.Spec.System != "inline-system" {
+		t.Fatalf("expected system=inline-system, got %q", runTask.Spec.System)
+	}
+	if runTask.Spec.Input["topic"] != "from-template" {
+		t.Fatalf("expected input topic=from-template, got %q", runTask.Spec.Input["topic"])
+	}
+	if got := runTask.Spec.Input["webhook_payload"]; got != string(body) {
+		t.Fatalf("expected payload input to equal raw body, got %q", got)
+	}
+	if runTask.Metadata.Labels["orloj.dev/task-webhook"] != "inline-hook" {
+		t.Fatalf("expected webhook label, got %v", runTask.Metadata.Labels)
+	}
+	if runNS != "default" {
+		t.Fatalf("expected run namespace=default, got %q", runNS)
+	}
+}

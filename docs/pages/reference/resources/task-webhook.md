@@ -4,7 +4,8 @@
 
 ## spec
 
-- `task_ref` (string): template task reference (`name` or `namespace/name`).
+- `task_ref` (string): template task reference (`name` or `namespace/name`). Mutually exclusive with `task_template`.
+- `task_template` (object): inline task spec used instead of a separate template Task. Mutually exclusive with `task_ref`. Fields: `system` (required), `priority`, `input`, `max_turns`, `retry`, `message_retry`.
 - `suspend` (bool): rejects deliveries when `true`.
 - `auth` (object):
   - `profile` (string): `generic` (default), `github`, `hmac`, or `shared_token`.
@@ -30,7 +31,9 @@
 
 ## Defaults and Validation
 
-- `task_ref` is required and must be `name` or `namespace/name`.
+- Exactly one of `task_ref` or `task_template` must be set.
+- `task_ref` must be `name` or `namespace/name`.
+- When `task_template` is set, `system` is required; `priority` defaults to `normal`; retry/message_retry defaults mirror Task defaults.
 - `auth.secret_ref` is required.
 - `auth.profile` defaults to `generic`; supported values: `generic`, `github`, `hmac`, `shared_token`.
 - profile defaults:

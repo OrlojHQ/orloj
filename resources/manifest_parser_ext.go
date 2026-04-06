@@ -1375,6 +1375,9 @@ func ParseTaskWebhookManifest(data []byte) (TaskWebhook, error) {
 		if section == "metadata" && indent <= 2 && !strings.HasSuffix(trimmed, ":") && !strings.HasPrefix(trimmed, "- ") {
 			subsection = ""
 		}
+		if section == "spec" && strings.HasPrefix(subsection, "task_template_") && indent <= 4 && !strings.HasSuffix(trimmed, ":") {
+			subsection = "task_template"
+		}
 
 		if strings.HasSuffix(trimmed, ":") {
 			switch strings.TrimSuffix(trimmed, ":") {
@@ -1391,6 +1394,25 @@ func ParseTaskWebhookManifest(data []byte) (TaskWebhook, error) {
 			case "auth", "idempotency", "payload":
 				if section == "spec" {
 					subsection = strings.TrimSuffix(trimmed, ":")
+				}
+			case "task_template":
+				if section == "spec" {
+					subsection = "task_template"
+					if out.Spec.TaskTemplate == nil {
+						out.Spec.TaskTemplate = &TaskSpec{}
+					}
+				}
+			case "input":
+				if section == "spec" && strings.HasPrefix(subsection, "task_template") {
+					subsection = "task_template_input"
+				}
+			case "retry":
+				if section == "spec" && strings.HasPrefix(subsection, "task_template") {
+					subsection = "task_template_retry"
+				}
+			case "message_retry":
+				if section == "spec" && strings.HasPrefix(subsection, "task_template") {
+					subsection = "task_template_message_retry"
 				}
 			}
 			continue
@@ -1420,6 +1442,41 @@ func ParseTaskWebhookManifest(data []byte) (TaskWebhook, error) {
 			out.Spec.TaskRef = value
 		case section == "spec" && subsection == "" && key == "suspend":
 			out.Spec.Suspend = strings.EqualFold(value, "true") || value == "1"
+		case section == "spec" && subsection == "task_template" && key == "system":
+			out.Spec.TaskTemplate.System = value
+		case section == "spec" && subsection == "task_template" && key == "priority":
+			out.Spec.TaskTemplate.Priority = value
+		case section == "spec" && subsection == "task_template" && (key == "max_turns" || key == "maxTurns"):
+			v, err := strconv.Atoi(value)
+			if err != nil {
+				return TaskWebhook{}, fmt.Errorf("invalid spec.task_template.max_turns value %q", value)
+			}
+			out.Spec.TaskTemplate.MaxTurns = v
+		case section == "spec" && subsection == "task_template_input":
+			if out.Spec.TaskTemplate.Input == nil {
+				out.Spec.TaskTemplate.Input = make(map[string]string)
+			}
+			out.Spec.TaskTemplate.Input[key] = value
+		case section == "spec" && subsection == "task_template_retry" && (key == "max_attempts" || key == "maxAttempts"):
+			v, err := strconv.Atoi(value)
+			if err != nil {
+				return TaskWebhook{}, fmt.Errorf("invalid spec.task_template.retry.max_attempts value %q", value)
+			}
+			out.Spec.TaskTemplate.Retry.MaxAttempts = v
+		case section == "spec" && subsection == "task_template_retry" && key == "backoff":
+			out.Spec.TaskTemplate.Retry.Backoff = value
+		case section == "spec" && subsection == "task_template_message_retry" && (key == "max_attempts" || key == "maxAttempts"):
+			v, err := strconv.Atoi(value)
+			if err != nil {
+				return TaskWebhook{}, fmt.Errorf("invalid spec.task_template.message_retry.max_attempts value %q", value)
+			}
+			out.Spec.TaskTemplate.MessageRetry.MaxAttempts = v
+		case section == "spec" && subsection == "task_template_message_retry" && key == "backoff":
+			out.Spec.TaskTemplate.MessageRetry.Backoff = value
+		case section == "spec" && subsection == "task_template_message_retry" && (key == "max_backoff" || key == "maxBackoff"):
+			out.Spec.TaskTemplate.MessageRetry.MaxBackoff = value
+		case section == "spec" && subsection == "task_template_message_retry" && key == "jitter":
+			out.Spec.TaskTemplate.MessageRetry.Jitter = value
 		case section == "spec" && subsection == "auth" && key == "profile":
 			out.Spec.Auth.Profile = value
 		case section == "spec" && subsection == "auth" && (key == "secret_ref" || key == "secretRef"):

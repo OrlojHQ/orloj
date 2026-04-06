@@ -644,25 +644,36 @@ func trimCaseInsensitivePrefix(value, prefix string) (string, bool) {
 }
 
 func (s *Server) createTaskFromWebhook(ctx context.Context, hook resources.TaskWebhook, eventID string, body []byte, now time.Time) (string, error) {
-	templateNS, templateName, err := resolveRef(hook.Metadata.Namespace, hook.Spec.TaskRef)
-	if err != nil {
-		return "", err
-	}
-	templateKey := store.ScopedName(templateNS, templateName)
-	template, ok, err := s.stores.Tasks.Get(ctx, templateKey)
-	if err != nil {
-		return "", fmt.Errorf("task template %q lookup failed: %w", hook.Spec.TaskRef, err)
-	}
-	if !ok {
-		return "", fmt.Errorf("task template %q not found", hook.Spec.TaskRef)
-	}
-	if !strings.EqualFold(strings.TrimSpace(template.Spec.Mode), "template") {
-		return "", fmt.Errorf("task template %q must set spec.mode=template", hook.Spec.TaskRef)
+	var templateSpec resources.TaskSpec
+	var templateLabels map[string]string
+	var runNamespace string
+
+	if hook.Spec.TaskTemplate != nil {
+		templateSpec = *hook.Spec.TaskTemplate
+		runNamespace = resources.NormalizeNamespace(hook.Metadata.Namespace)
+	} else {
+		templateNS, templateName, err := resolveRef(hook.Metadata.Namespace, hook.Spec.TaskRef)
+		if err != nil {
+			return "", err
+		}
+		templateKey := store.ScopedName(templateNS, templateName)
+		template, ok, err := s.stores.Tasks.Get(ctx, templateKey)
+		if err != nil {
+			return "", fmt.Errorf("task template %q lookup failed: %w", hook.Spec.TaskRef, err)
+		}
+		if !ok {
+			return "", fmt.Errorf("task template %q not found", hook.Spec.TaskRef)
+		}
+		if !strings.EqualFold(strings.TrimSpace(template.Spec.Mode), "template") {
+			return "", fmt.Errorf("task template %q must set spec.mode=template", hook.Spec.TaskRef)
+		}
+		templateSpec = template.Spec
+		templateLabels = template.Metadata.Labels
+		runNamespace = template.Metadata.Namespace
 	}
 
 	eventIDHash := shortHex(eventID)
 	runName := webhookTaskName(hook.Metadata.Name, eventID)
-	runNamespace := template.Metadata.Namespace
 	runKey := store.ScopedName(runNamespace, runName)
 	existing, ok, err := s.stores.Tasks.Get(ctx, runKey)
 	if err != nil {
@@ -678,7 +689,7 @@ func (s *Server) createTaskFromWebhook(ctx context.Context, hook resources.TaskW
 		return "", fmt.Errorf("webhook run task name conflict for %q", runKey)
 	}
 
-	labels := copyStringMap(template.Metadata.Labels)
+	labels := copyStringMap(templateLabels)
 	if labels == nil {
 		labels = make(map[string]string)
 	}
@@ -686,7 +697,7 @@ func (s *Server) createTaskFromWebhook(ctx context.Context, hook resources.TaskW
 	labels[taskWebhookNamespaceLabel] = resources.NormalizeNamespace(hook.Metadata.Namespace)
 	labels[taskWebhookEventIDLabel] = eventIDHash
 
-	spec := cloneTaskSpecForWebhook(template.Spec)
+	spec := cloneTaskSpecForWebhook(templateSpec)
 	spec.Mode = "run"
 	if spec.Input == nil {
 		spec.Input = make(map[string]string)

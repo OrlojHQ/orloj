@@ -21,7 +21,7 @@ export function TaskWebhooks() {
 
   const columns: Column<TaskWebhook>[] = [
     { key: "name", header: "Name", render: (r) => <span className="mono">{r.metadata.name}</span> },
-    { key: "taskRef", header: "Task Template", render: (r) => <span className="mono">{r.spec.task_ref ?? "-"}</span> },
+    { key: "taskRef", header: "Task Template", render: (r) => <span className="mono">{r.spec.task_ref ? r.spec.task_ref : r.spec.task_template ? "(inline)" : "-"}</span> },
     { key: "profile", header: "Auth Profile", render: (r) => r.spec.auth?.profile ?? "generic", width: "120px" },
     { key: "endpointID", header: "Endpoint ID", render: (r) => <span className="mono">{r.status?.endpointID ?? "-"}</span> },
     { key: "suspend", header: "Suspended", render: (r) => (r.spec.suspend ? "Yes" : "No"), width: "95px" },
