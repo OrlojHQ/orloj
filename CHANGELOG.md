@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-04-06
+
 ### Added
 
 - **`event_id_from_body` for TaskWebhook idempotency**: extract the deduplication event ID from the JSON request body using a dot-separated field path (e.g. `update_id`, `data.event_id`), instead of requiring an HTTP header. Enables direct Telegram-to-Orloj webhook integration without a proxy, since Telegram puts `update_id` in the body, not a header. When `event_id_from_body` is set, `event_id_header` is no longer required.
@@ -179,7 +181,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Homebrew tap distribution (`OrlojHQ/orloj`)
 - Blueprint scaffolding via `orlojctl init`
 
-[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/OrlojHQ/orloj/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/OrlojHQ/orloj/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/OrlojHQ/orloj/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/OrlojHQ/orloj/compare/v0.5.0...v0.5.1
