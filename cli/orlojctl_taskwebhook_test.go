@@ -47,3 +47,34 @@ spec:
 		t.Fatal("expected non-empty payload")
 	}
 }
+
+func TestParseApplyPayloadTaskWebhookInlineTemplate(t *testing.T) {
+	raw := []byte(`
+apiVersion: orloj.dev/v1
+kind: TaskWebhook
+metadata:
+  name: inline-hook
+spec:
+  task_template:
+    system: event-pipeline
+    priority: high
+    input:
+      webhook_payload: ""
+  auth:
+    profile: generic
+    secret_ref: hook-secret
+`)
+	endpoint, payload, name, err := buildApplyRequest("TaskWebhook", raw)
+	if err != nil {
+		t.Fatalf("parseApplyPayload failed: %v", err)
+	}
+	if endpoint != "/v1/task-webhooks" {
+		t.Fatalf("unexpected endpoint %q", endpoint)
+	}
+	if name != "inline-hook" {
+		t.Fatalf("unexpected resource name %q", name)
+	}
+	if len(payload) == 0 {
+		t.Fatal("expected non-empty payload")
+	}
+}

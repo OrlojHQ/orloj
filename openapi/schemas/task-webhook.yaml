@@ -31,7 +31,8 @@ components:
     TaskWebhookSpec:
       type: object
       properties:
-        task_ref: { type: string }
+        task_ref: { type: string, description: "Reference to a template Task (name or namespace/name). Mutually exclusive with task_template." }
+        task_template: { $ref: "task.yaml#/components/schemas/TaskSpec", description: "Inline task spec used instead of a separate template Task. Mutually exclusive with task_ref." }
         suspend: { type: boolean }
         auth: { $ref: "#/components/schemas/TaskWebhookAuthSpec" }
         idempotency: { $ref: "#/components/schemas/TaskWebhookIdempotency" }

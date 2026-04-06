@@ -366,8 +366,18 @@ export interface TaskWebhook {
   status?: TaskWebhookStatus;
 }
 
+export interface TaskWebhookInlineTemplate {
+  system?: string;
+  priority?: string;
+  input?: Record<string, string>;
+  max_turns?: number;
+  retry?: { max_attempts?: number; backoff?: string };
+  message_retry?: { max_attempts?: number; backoff?: string; max_backoff?: string; jitter?: string };
+}
+
 export interface TaskWebhookSpec {
   task_ref?: string;
+  task_template?: TaskWebhookInlineTemplate;
   suspend?: boolean;
   auth?: TaskWebhookAuthSpec;
   idempotency?: TaskWebhookIdempotency;

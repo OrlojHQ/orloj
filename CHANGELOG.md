@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Inline task templates for TaskWebhook**: `spec.task_template` can now be used as an alternative to `spec.task_ref`, allowing a webhook to embed its task spec directly without creating a separate Task resource. Exactly one of `task_ref` or `task_template` must be set.
+
 ## [0.6.2] - 2026-04-06
 
 ### Added

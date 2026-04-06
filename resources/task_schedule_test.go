@@ -272,3 +272,128 @@ spec:
 		t.Fatalf("expected dedupe window 300, got %d", item.Spec.Idempotency.DedupeWindowSeconds)
 	}
 }
+
+func TestTaskWebhookNormalizeInlineTemplate(t *testing.T) {
+	hook := TaskWebhook{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "TaskWebhook",
+		Metadata:   ObjectMeta{Name: "inline-hook"},
+		Spec: TaskWebhookSpec{
+			TaskTemplate: &TaskSpec{
+				System: "my-system",
+			},
+			Auth: TaskWebhookAuthSpec{
+				SecretRef: "hook-secret",
+			},
+		},
+	}
+	if err := hook.Normalize(); err != nil {
+		t.Fatalf("normalize failed: %v", err)
+	}
+	if hook.Spec.TaskTemplate.Priority != "normal" {
+		t.Fatalf("expected default priority normal, got %q", hook.Spec.TaskTemplate.Priority)
+	}
+	if hook.Spec.TaskTemplate.Retry.MaxAttempts != 1 {
+		t.Fatalf("expected default retry.max_attempts 1, got %d", hook.Spec.TaskTemplate.Retry.MaxAttempts)
+	}
+	if hook.Spec.TaskTemplate.Input == nil {
+		t.Fatal("expected input map to be initialized")
+	}
+	if hook.Spec.TaskRef != "" {
+		t.Fatalf("expected empty task_ref, got %q", hook.Spec.TaskRef)
+	}
+}
+
+func TestTaskWebhookNormalizeMutualExclusivity(t *testing.T) {
+	both := TaskWebhook{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "TaskWebhook",
+		Metadata:   ObjectMeta{Name: "both-set"},
+		Spec: TaskWebhookSpec{
+			TaskRef:      "some-template",
+			TaskTemplate: &TaskSpec{System: "sys"},
+			Auth:         TaskWebhookAuthSpec{SecretRef: "s"},
+		},
+	}
+	if err := both.Normalize(); err == nil {
+		t.Fatal("expected error when both task_ref and task_template are set")
+	}
+
+	neither := TaskWebhook{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "TaskWebhook",
+		Metadata:   ObjectMeta{Name: "neither-set"},
+		Spec: TaskWebhookSpec{
+			Auth: TaskWebhookAuthSpec{SecretRef: "s"},
+		},
+	}
+	if err := neither.Normalize(); err == nil {
+		t.Fatal("expected error when neither task_ref nor task_template is set")
+	}
+}
+
+func TestTaskWebhookNormalizeInlineTemplateMissingSystem(t *testing.T) {
+	hook := TaskWebhook{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "TaskWebhook",
+		Metadata:   ObjectMeta{Name: "no-system"},
+		Spec: TaskWebhookSpec{
+			TaskTemplate: &TaskSpec{},
+			Auth:         TaskWebhookAuthSpec{SecretRef: "s"},
+		},
+	}
+	if err := hook.Normalize(); err == nil {
+		t.Fatal("expected error for inline template missing system")
+	}
+}
+
+func TestParseTaskWebhookManifestYAMLInlineTemplate(t *testing.T) {
+	raw := []byte(`
+apiVersion: orloj.dev/v1
+kind: TaskWebhook
+metadata:
+  name: inline-webhook
+spec:
+  task_template:
+    system: event-pipeline
+    priority: high
+    input:
+      webhook_payload: ""
+      topic: default
+    retry:
+      max_attempts: 3
+      backoff: 5s
+  auth:
+    profile: generic
+    secret_ref: ingest-secret
+  idempotency:
+    event_id_header: X-Event-Id
+  payload:
+    input_key: webhook_payload
+`)
+	item, err := ParseTaskWebhookManifest(raw)
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+	if item.Spec.TaskRef != "" {
+		t.Fatalf("expected empty task_ref, got %q", item.Spec.TaskRef)
+	}
+	if item.Spec.TaskTemplate == nil {
+		t.Fatal("expected task_template to be set")
+	}
+	if item.Spec.TaskTemplate.System != "event-pipeline" {
+		t.Fatalf("expected system event-pipeline, got %q", item.Spec.TaskTemplate.System)
+	}
+	if item.Spec.TaskTemplate.Priority != "high" {
+		t.Fatalf("expected priority high, got %q", item.Spec.TaskTemplate.Priority)
+	}
+	if item.Spec.TaskTemplate.Input["topic"] != "default" {
+		t.Fatalf("expected input topic=default, got %q", item.Spec.TaskTemplate.Input["topic"])
+	}
+	if item.Spec.TaskTemplate.Retry.MaxAttempts != 3 {
+		t.Fatalf("expected retry.max_attempts=3, got %d", item.Spec.TaskTemplate.Retry.MaxAttempts)
+	}
+	if item.Spec.TaskTemplate.Retry.Backoff != "5s" {
+		t.Fatalf("expected retry.backoff=5s, got %q", item.Spec.TaskTemplate.Retry.Backoff)
+	}
+}

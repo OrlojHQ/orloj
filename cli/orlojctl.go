@@ -1191,9 +1191,13 @@ func runGet(args []string) error {
 		tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
 		fmt.Fprintln(tw, "NAME\tTASK_REF\tENDPOINT_ID\tENDPOINT_PATH\tSUSPEND\tSTATUS\tLAST_DELIVERY\tLAST_EVENT\tLAST_TASK\tLAST_ERROR")
 		for _, item := range list.Items {
+			taskRefCol := item.Spec.TaskRef
+			if taskRefCol == "" && item.Spec.TaskTemplate != nil {
+				taskRefCol = "<inline>"
+			}
 			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%t\t%s\t%s\t%s\t%s\t%s\n",
 				item.Metadata.Name,
-				item.Spec.TaskRef,
+				taskRefCol,
 				item.Status.EndpointID,
 				item.Status.EndpointPath,
 				item.Spec.Suspend,
