@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.3] - 2026-04-06
+
 ### Added
 
 - **Inline task templates for TaskWebhook**: `spec.task_template` can now be used as an alternative to `spec.task_ref`, allowing a webhook to embed its task spec directly without creating a separate Task resource. Exactly one of `task_ref` or `task_template` must be set.
@@ -185,7 +187,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Homebrew tap distribution (`OrlojHQ/orloj`)
 - Blueprint scaffolding via `orlojctl init`
 
-[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.6.2...HEAD
+[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.6.3...HEAD
+[0.6.3]: https://github.com/OrlojHQ/orloj/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/OrlojHQ/orloj/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/OrlojHQ/orloj/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/OrlojHQ/orloj/compare/v0.5.1...v0.6.0
