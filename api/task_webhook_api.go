@@ -9,6 +9,7 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"hash"
@@ -229,9 +230,15 @@ func (s *Server) handleWebhookDelivery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	eventID := strings.TrimSpace(r.Header.Get(strings.TrimSpace(hook.Spec.Idempotency.EventIDHeader)))
+	var eventID string
+	if h := strings.TrimSpace(hook.Spec.Idempotency.EventIDHeader); h != "" {
+		eventID = strings.TrimSpace(r.Header.Get(h))
+	}
+	if eventID == "" && hook.Spec.Idempotency.EventIDFromBody != "" {
+		eventID = extractEventIDFromBody(body, hook.Spec.Idempotency.EventIDFromBody)
+	}
 	if eventID == "" {
-		s.recordTaskWebhookDeliveryResult(hook, "", "", "missing_event_id", true, false, "missing event id header")
+		s.recordTaskWebhookDeliveryResult(hook, "", "", "missing_event_id", true, false, "missing event id")
 		http.Error(w, "missing event id", http.StatusBadRequest)
 		return
 	}
@@ -390,6 +397,41 @@ func verifySharedToken(hook resources.TaskWebhook, r *http.Request, secret []byt
 		return fmt.Errorf("signature mismatch")
 	}
 	return nil
+}
+
+// extractEventIDFromBody extracts an event ID from a JSON request body using a
+// dot-separated field path (e.g. "update_id" or "data.id"). Numeric values are
+// converted to their string representation.
+func extractEventIDFromBody(body []byte, fieldPath string) string {
+	var obj map[string]any
+	if err := json.Unmarshal(body, &obj); err != nil {
+		return ""
+	}
+	parts := strings.Split(fieldPath, ".")
+	var current any = obj
+	for _, part := range parts {
+		m, ok := current.(map[string]any)
+		if !ok {
+			return ""
+		}
+		current, ok = m[part]
+		if !ok {
+			return ""
+		}
+	}
+	switch v := current.(type) {
+	case string:
+		return strings.TrimSpace(v)
+	case float64:
+		if v == float64(int64(v)) {
+			return strconv.FormatInt(int64(v), 10)
+		}
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	case json.Number:
+		return v.String()
+	default:
+		return fmt.Sprintf("%v", v)
+	}
 }
 
 func extractSignatureAndTimestamp(auth resources.TaskWebhookAuthSpec, rawHeaderValue string, r *http.Request) (signature string, timestamp string, err error) {

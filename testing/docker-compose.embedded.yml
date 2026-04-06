@@ -43,6 +43,10 @@ services:
       - --tool-isolation-backend=container
       - --tool-container-network=bridge
       - --embedded-worker
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      - "0"   # grant access to Docker socket (root-owned inside container)
     ports:
       - "${ORLOJ_HTTP_PORT:-8080}:8080"
     depends_on:

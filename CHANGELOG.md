@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`event_id_from_body` for TaskWebhook idempotency**: extract the deduplication event ID from the JSON request body using a dot-separated field path (e.g. `update_id`, `data.event_id`), instead of requiring an HTTP header. Enables direct Telegram-to-Orloj webhook integration without a proxy, since Telegram puts `update_id` in the body, not a header. When `event_id_from_body` is set, `event_id_header` is no longer required.
+
+### Fixed
+
+- **Tool `description` and `input_schema` dropped by YAML parser**: the constrained YAML manifest parser for Tool resources did not populate `spec.description` or `spec.input_schema`, causing the model to receive a generic fallback schema instead of the tool's actual JSON Schema. This led to malformed tool call arguments (e.g. `invalid character 'ð'` errors) when the model wrapped its response in the fallback `{input: string}` envelope.
+- **Docker socket access for container tool isolation**: all Docker Compose files now mount `/var/run/docker.sock` and set `group_add: ["0"]` on `orlojd` and `orlojworker` services, and both images include `docker-cli`. Previously, containerized tool execution silently failed because the Docker CLI was missing and the socket was not accessible.
+
 ## [0.6.1] - 2026-04-05
 
 ### Fixed

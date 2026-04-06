@@ -9,7 +9,7 @@ spec:
     secret_ref: telegram-bot-secret
     signature_header: X-Telegram-Bot-Api-Secret-Token
   idempotency:
-    event_id_header: X-Event-Id
+    event_id_from_body: update_id
     dedupe_window_seconds: 86400
   payload:
     mode: raw
