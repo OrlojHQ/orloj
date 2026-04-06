@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-04-05
+
 ### Fixed
 
 - **Webhook delivery auth bypass**: `POST /v1/webhook-deliveries/*` is now exempt from global API token authentication, allowing external senders (Telegram, GitHub, etc.) to deliver webhooks without an Orloj Bearer token. Authentication for these endpoints is handled by the TaskWebhook resource's own auth profile (HMAC signature or shared token).
@@ -168,7 +170,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Homebrew tap distribution (`OrlojHQ/orloj`)
 - Blueprint scaffolding via `orlojctl init`
 
-[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/OrlojHQ/orloj/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/OrlojHQ/orloj/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/OrlojHQ/orloj/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/OrlojHQ/orloj/compare/v0.4.0...v0.5.0
