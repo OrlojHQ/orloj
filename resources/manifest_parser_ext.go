@@ -431,6 +431,8 @@ func ParseToolManifest(data []byte) (Tool, error) {
 			}
 		case section == "spec" && subsection == "" && key == "type":
 			out.Spec.Type = value
+		case section == "spec" && subsection == "" && key == "description":
+			out.Spec.Description = value
 		case section == "spec" && subsection == "" && key == "endpoint":
 			out.Spec.Endpoint = value
 		case section == "spec" && subsection == "" && (key == "risk_level" || key == "riskLevel"):
@@ -476,6 +478,38 @@ func ParseToolManifest(data []byte) (Tool, error) {
 			out.Spec.Cli.WorkingDir = value
 		case section == "spec" && subsection == "cli" && runtimeSubsection == "" && (key == "stdin_from_input" || key == "stdinFromInput"):
 			out.Spec.Cli.StdinFromInput = strings.EqualFold(value, "true")
+		}
+	}
+
+	if len(out.Spec.InputSchema) == 0 {
+		for i, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			ind := leadingSpaces(line)
+			if (trimmed == "input_schema:" || trimmed == "inputSchema:") && ind >= 2 {
+				blockIndent := -1
+				var blockLines []string
+				for j := i + 1; j < len(lines); j++ {
+					ct := strings.TrimSpace(lines[j])
+					if ct == "" || strings.HasPrefix(ct, "#") {
+						continue
+					}
+					ci := leadingSpaces(lines[j])
+					if ci <= ind {
+						break
+					}
+					if blockIndent < 0 {
+						blockIndent = ci
+					}
+					if ci < blockIndent {
+						break
+					}
+					blockLines = append(blockLines, lines[j])
+				}
+				if blockIndent > 0 && len(blockLines) > 0 {
+					out.Spec.InputSchema = parseSimpleYAMLMap(blockLines, blockIndent)
+				}
+				break
+			}
 		}
 	}
 
@@ -1404,6 +1438,8 @@ func ParseTaskWebhookManifest(data []byte) (TaskWebhook, error) {
 			out.Spec.Auth.MaxSkewSeconds = v
 		case section == "spec" && subsection == "idempotency" && (key == "event_id_header" || key == "eventIdHeader"):
 			out.Spec.Idempotency.EventIDHeader = value
+		case section == "spec" && subsection == "idempotency" && (key == "event_id_from_body" || key == "eventIdFromBody"):
+			out.Spec.Idempotency.EventIDFromBody = value
 		case section == "spec" && subsection == "idempotency" && (key == "dedupe_window_seconds" || key == "dedupeWindowSeconds"):
 			v, err := strconv.Atoi(value)
 			if err != nil {

@@ -20,7 +20,8 @@ components:
     TaskWebhookIdempotency:
       type: object
       properties:
-        event_id_header: { type: string }
+        event_id_header: { type: string, description: "HTTP header name containing the event ID for deduplication (e.g. X-Event-Id, X-GitHub-Delivery)." }
+        event_id_from_body: { type: string, description: "Dot-separated field path to extract the event ID from the JSON request body (e.g. update_id, data.id). Used when the sender puts the dedup key in the body instead of a header." }
         dedupe_window_seconds: { type: integer }
     TaskWebhookPayloadSpec:
       type: object

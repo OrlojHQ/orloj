@@ -36,6 +36,10 @@ services:
     command:
       - --addr=:8080
       - --storage-backend=postgres
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      - "0"
     ports:
       - "${ORLOJ_HTTP_PORT}:8080"
     depends_on:
@@ -66,6 +70,10 @@ services:
       - --worker-id=worker-a
       - --region=${ORLOJ_WORKER_REGION}
       - --max-concurrent-tasks=${ORLOJ_WORKER_MAX_CONCURRENCY}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      - "0"
     depends_on:
       postgres:
         condition: service_healthy
@@ -91,6 +99,10 @@ services:
       - --worker-id=worker-b
       - --region=${ORLOJ_WORKER_REGION}
       - --max-concurrent-tasks=${ORLOJ_WORKER_MAX_CONCURRENCY}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      - "0"
     depends_on:
       postgres:
         condition: service_healthy

@@ -234,6 +234,77 @@ func stripQuotes(s string) string {
 	return s
 }
 
+// parseSimpleYAMLMap parses a block of indented YAML lines into a map[string]any.
+// It handles nested maps, arrays of strings, and scalar values — enough for
+// JSON Schema objects used in tool input_schema definitions.
+func parseSimpleYAMLMap(lines []string, baseIndent int) map[string]any {
+	out := make(map[string]any)
+	i := 0
+	for i < len(lines) {
+		line := lines[i]
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			i++
+			continue
+		}
+		ind := leadingSpaces(line)
+		if ind < baseIndent {
+			break
+		}
+		if ind > baseIndent {
+			i++
+			continue
+		}
+		if strings.HasPrefix(trimmed, "- ") {
+			i++
+			continue
+		}
+		k, v, ok := parseKeyValue(trimmed)
+		if !ok {
+			i++
+			continue
+		}
+		v = strings.TrimSpace(v)
+		if v == "" {
+			childIndent := -1
+			var childLines []string
+			for j := i + 1; j < len(lines); j++ {
+				ct := strings.TrimSpace(lines[j])
+				if ct == "" || strings.HasPrefix(ct, "#") {
+					continue
+				}
+				ci := leadingSpaces(lines[j])
+				if ci <= baseIndent {
+					break
+				}
+				if childIndent < 0 {
+					childIndent = ci
+				}
+				if ci < childIndent {
+					break
+				}
+				childLines = append(childLines, lines[j])
+			}
+			if len(childLines) > 0 && strings.HasPrefix(strings.TrimSpace(childLines[0]), "- ") {
+				arr := make([]any, 0, len(childLines))
+				for _, cl := range childLines {
+					ct := strings.TrimSpace(cl)
+					if strings.HasPrefix(ct, "- ") {
+						arr = append(arr, stripQuotes(strings.TrimSpace(strings.TrimPrefix(ct, "- "))))
+					}
+				}
+				out[k] = arr
+			} else if childIndent > 0 {
+				out[k] = parseSimpleYAMLMap(childLines, childIndent)
+			}
+		} else {
+			out[k] = stripQuotes(v)
+		}
+		i++
+	}
+	return out
+}
+
 func rejectLegacyModelFieldFromAgentJSON(data []byte) error {
 	var probe struct {
 		Spec map[string]json.RawMessage `json:"spec"`

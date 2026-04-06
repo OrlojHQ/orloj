@@ -1270,6 +1270,7 @@ type TaskWebhookAuthSpec struct {
 
 type TaskWebhookIdempotency struct {
 	EventIDHeader       string `json:"event_id_header,omitempty"`
+	EventIDFromBody     string `json:"event_id_from_body,omitempty"`
 	DedupeWindowSeconds int    `json:"dedupe_window_seconds,omitempty"`
 }
 
@@ -1362,7 +1363,7 @@ func (t *TaskWebhook) Normalize() error {
 		if t.Spec.Auth.MaxSkewSeconds == 0 {
 			t.Spec.Auth.MaxSkewSeconds = 300
 		}
-		if strings.TrimSpace(t.Spec.Idempotency.EventIDHeader) == "" {
+		if strings.TrimSpace(t.Spec.Idempotency.EventIDHeader) == "" && strings.TrimSpace(t.Spec.Idempotency.EventIDFromBody) == "" {
 			t.Spec.Idempotency.EventIDHeader = "X-GitHub-Delivery"
 		}
 
@@ -1382,7 +1383,7 @@ func (t *TaskWebhook) Normalize() error {
 		if t.Spec.Auth.MaxSkewSeconds == 0 {
 			t.Spec.Auth.MaxSkewSeconds = 300
 		}
-		if strings.TrimSpace(t.Spec.Idempotency.EventIDHeader) == "" {
+		if strings.TrimSpace(t.Spec.Idempotency.EventIDHeader) == "" && strings.TrimSpace(t.Spec.Idempotency.EventIDFromBody) == "" {
 			t.Spec.Idempotency.EventIDHeader = "X-Event-Id"
 		}
 
@@ -1446,7 +1447,7 @@ func (t *TaskWebhook) Normalize() error {
 		if t.Spec.Auth.MaxSkewSeconds == 0 {
 			t.Spec.Auth.MaxSkewSeconds = 300
 		}
-		if strings.TrimSpace(t.Spec.Idempotency.EventIDHeader) == "" {
+		if strings.TrimSpace(t.Spec.Idempotency.EventIDHeader) == "" && strings.TrimSpace(t.Spec.Idempotency.EventIDFromBody) == "" {
 			t.Spec.Idempotency.EventIDHeader = "X-Event-Id"
 		}
 
@@ -1454,16 +1455,18 @@ func (t *TaskWebhook) Normalize() error {
 		if strings.TrimSpace(t.Spec.Auth.SignatureHeader) == "" {
 			return fmt.Errorf("spec.auth.signature_header is required for shared_token profile")
 		}
-		if strings.TrimSpace(t.Spec.Idempotency.EventIDHeader) == "" {
+		if strings.TrimSpace(t.Spec.Idempotency.EventIDHeader) == "" && strings.TrimSpace(t.Spec.Idempotency.EventIDFromBody) == "" {
 			t.Spec.Idempotency.EventIDHeader = "X-Event-Id"
 		}
 	}
 
+	t.Spec.Idempotency.EventIDFromBody = strings.TrimSpace(t.Spec.Idempotency.EventIDFromBody)
+
 	if strings.TrimSpace(t.Spec.Auth.SignatureHeader) == "" {
 		return fmt.Errorf("spec.auth.signature_header is required")
 	}
-	if strings.TrimSpace(t.Spec.Idempotency.EventIDHeader) == "" {
-		return fmt.Errorf("spec.idempotency.event_id_header is required")
+	if strings.TrimSpace(t.Spec.Idempotency.EventIDHeader) == "" && t.Spec.Idempotency.EventIDFromBody == "" {
+		return fmt.Errorf("spec.idempotency.event_id_header is required (or set event_id_from_body to extract from the request body)")
 	}
 	if t.Spec.Idempotency.DedupeWindowSeconds < 0 {
 		return fmt.Errorf("invalid spec.idempotency.dedupe_window_seconds %d: expected >= 0", t.Spec.Idempotency.DedupeWindowSeconds)

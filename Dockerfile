@@ -42,14 +42,14 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
 
 # --- Runtime images (default final stage: orlojd) ---
 FROM alpine:3.20 AS orlojworker
-RUN apk add --no-cache ca-certificates tzdata \
+RUN apk add --no-cache ca-certificates tzdata docker-cli \
     && adduser -D -u 10001 appuser
 COPY --from=build-orlojworker /out/orlojworker /usr/local/bin/app
 USER appuser
 ENTRYPOINT ["/usr/local/bin/app"]
 
 FROM alpine:3.20 AS orlojd
-RUN apk add --no-cache ca-certificates tzdata wget \
+RUN apk add --no-cache ca-certificates tzdata wget docker-cli \
     && adduser -D -u 10001 appuser
 COPY --from=build-orlojd /out/orlojd /usr/local/bin/app
 USER appuser

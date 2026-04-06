@@ -1182,3 +1182,171 @@ func TestWebhookDeliverySharedTokenMissingHeader(t *testing.T) {
 		t.Fatalf("expected 401 for missing token header, got %d body=%s", status, raw)
 	}
 }
+
+func TestWebhookDeliverySharedTokenEventIDFromBody(t *testing.T) {
+	server := newTestServer(t)
+	defer server.Close()
+
+	secret := "telegram-body-id-token"
+	postJSON(t, server.URL+"/v1/secrets", resources.Secret{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Secret",
+		Metadata:   resources.ObjectMeta{Name: "body-id-wh-secret"},
+		Spec:       resources.SecretSpec{StringData: map[string]string{"value": secret}},
+	})
+	postJSON(t, server.URL+"/v1/tasks", resources.Task{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Task",
+		Metadata:   resources.ObjectMeta{Name: "tpl-body-id"},
+		Spec:       resources.TaskSpec{Mode: "template", System: "s", Input: map[string]string{"x": "y"}},
+	})
+	postJSON(t, server.URL+"/v1/task-webhooks", resources.TaskWebhook{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "TaskWebhook",
+		Metadata:   resources.ObjectMeta{Name: "body-id-wh"},
+		Spec: resources.TaskWebhookSpec{
+			TaskRef: "tpl-body-id",
+			Auth: resources.TaskWebhookAuthSpec{
+				Profile:         "shared_token",
+				SecretRef:       "body-id-wh-secret",
+				SignatureHeader: "X-Telegram-Bot-Api-Secret-Token",
+			},
+			Idempotency: resources.TaskWebhookIdempotency{
+				EventIDFromBody: "update_id",
+			},
+		},
+	})
+
+	hook := getTaskWebhook(t, server.URL, "body-id-wh", "default")
+	if hook.Spec.Idempotency.EventIDFromBody != "update_id" {
+		t.Fatalf("expected event_id_from_body=update_id, got %q", hook.Spec.Idempotency.EventIDFromBody)
+	}
+	if hook.Spec.Idempotency.EventIDHeader != "" {
+		t.Fatalf("expected event_id_header to be empty when event_id_from_body is set, got %q", hook.Spec.Idempotency.EventIDHeader)
+	}
+
+	body := []byte(`{"update_id":12345,"message":{"text":"hello"}}`)
+	status, dp, raw := deliverWebhook(t, server.URL, hook.Status.EndpointPath, body, map[string]string{
+		"X-Telegram-Bot-Api-Secret-Token": secret,
+	})
+	if status != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d body=%s", status, raw)
+	}
+	if !dp.Accepted {
+		t.Fatalf("expected accepted=true, got %t", dp.Accepted)
+	}
+	if dp.EventID != "12345" {
+		t.Fatalf("expected event_id=12345, got %q", dp.EventID)
+	}
+
+	runNS, runName := splitScopedTask(dp.Task)
+	runTask := getTask(t, server.URL, runName, runNS)
+	if got := runTask.Spec.Input["webhook_event_id"]; got != "12345" {
+		t.Fatalf("expected webhook_event_id=12345 in task input, got %q", got)
+	}
+}
+
+func TestWebhookDeliveryEventIDFromBodyNestedPath(t *testing.T) {
+	server := newTestServer(t)
+	defer server.Close()
+
+	secret := "nested-body-token"
+	postJSON(t, server.URL+"/v1/secrets", resources.Secret{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Secret",
+		Metadata:   resources.ObjectMeta{Name: "nested-body-wh-secret"},
+		Spec:       resources.SecretSpec{StringData: map[string]string{"value": secret}},
+	})
+	postJSON(t, server.URL+"/v1/tasks", resources.Task{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Task",
+		Metadata:   resources.ObjectMeta{Name: "tpl-nested-body"},
+		Spec:       resources.TaskSpec{Mode: "template", System: "s", Input: map[string]string{"x": "y"}},
+	})
+	postJSON(t, server.URL+"/v1/task-webhooks", resources.TaskWebhook{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "TaskWebhook",
+		Metadata:   resources.ObjectMeta{Name: "nested-body-wh"},
+		Spec: resources.TaskWebhookSpec{
+			TaskRef: "tpl-nested-body",
+			Auth: resources.TaskWebhookAuthSpec{
+				Profile:         "shared_token",
+				SecretRef:       "nested-body-wh-secret",
+				SignatureHeader: "X-Token",
+			},
+			Idempotency: resources.TaskWebhookIdempotency{
+				EventIDFromBody: "data.event_id",
+			},
+		},
+	})
+
+	hook := getTaskWebhook(t, server.URL, "nested-body-wh", "default")
+	body := []byte(`{"data":{"event_id":"evt-nested-1","value":"test"}}`)
+	status, dp, raw := deliverWebhook(t, server.URL, hook.Status.EndpointPath, body, map[string]string{
+		"X-Token": secret,
+	})
+	if status != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d body=%s", status, raw)
+	}
+	if dp.EventID != "evt-nested-1" {
+		t.Fatalf("expected event_id=evt-nested-1, got %q", dp.EventID)
+	}
+}
+
+func TestWebhookDeliveryEventIDFromBodyDedupe(t *testing.T) {
+	server := newTestServer(t)
+	defer server.Close()
+
+	secret := "dedupe-body-token"
+	postJSON(t, server.URL+"/v1/secrets", resources.Secret{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Secret",
+		Metadata:   resources.ObjectMeta{Name: "dedupe-body-wh-secret"},
+		Spec:       resources.SecretSpec{StringData: map[string]string{"value": secret}},
+	})
+	postJSON(t, server.URL+"/v1/tasks", resources.Task{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Task",
+		Metadata:   resources.ObjectMeta{Name: "tpl-dedupe-body"},
+		Spec:       resources.TaskSpec{Mode: "template", System: "s", Input: map[string]string{"x": "y"}},
+	})
+	postJSON(t, server.URL+"/v1/task-webhooks", resources.TaskWebhook{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "TaskWebhook",
+		Metadata:   resources.ObjectMeta{Name: "dedupe-body-wh"},
+		Spec: resources.TaskWebhookSpec{
+			TaskRef: "tpl-dedupe-body",
+			Auth: resources.TaskWebhookAuthSpec{
+				Profile:         "shared_token",
+				SecretRef:       "dedupe-body-wh-secret",
+				SignatureHeader: "X-Token",
+			},
+			Idempotency: resources.TaskWebhookIdempotency{
+				EventIDFromBody: "update_id",
+			},
+		},
+	})
+
+	hook := getTaskWebhook(t, server.URL, "dedupe-body-wh", "default")
+	body := []byte(`{"update_id":77777}`)
+
+	status1, dp1, raw1 := deliverWebhook(t, server.URL, hook.Status.EndpointPath, body, map[string]string{
+		"X-Token": secret,
+	})
+	if status1 != http.StatusAccepted {
+		t.Fatalf("first delivery: expected 202, got %d body=%s", status1, raw1)
+	}
+	if dp1.Duplicate {
+		t.Fatalf("first delivery should not be duplicate")
+	}
+
+	status2, dp2, raw2 := deliverWebhook(t, server.URL, hook.Status.EndpointPath, body, map[string]string{
+		"X-Token": secret,
+	})
+	if status2 != http.StatusAccepted {
+		t.Fatalf("second delivery: expected 202, got %d body=%s", status2, raw2)
+	}
+	if !dp2.Duplicate {
+		t.Fatalf("second delivery should be duplicate")
+	}
+}

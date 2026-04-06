@@ -38,6 +38,10 @@ services:
       - --nats-url=nats://nats:4222
       - --agent-message-bus-backend=nats-jetstream
       - --agent-message-nats-url=nats://nats:4222
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      - "0"
     ports:
       - "${ORLOJ_PORT:-8080}:8080"
     depends_on:
@@ -71,6 +75,10 @@ services:
       - --agent-message-nats-url=nats://nats:4222
       - --agent-message-consume
       - --healthz-addr=:8081
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      - "0"
     depends_on:
       postgres:
         condition: service_healthy
@@ -104,6 +112,10 @@ services:
       - --agent-message-nats-url=nats://nats:4222
       - --agent-message-consume
       - --healthz-addr=:8081
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      - "0"
     depends_on:
       postgres:
         condition: service_healthy
