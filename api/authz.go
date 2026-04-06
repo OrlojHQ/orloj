@@ -391,7 +391,7 @@ func requiredRoleForRequest(r *http.Request, uiBasePath string) string {
 		return "admin"
 	}
 	if strings.HasPrefix(path, "/v1/webhook-deliveries/") {
-		return "writer"
+		return ""
 	}
 	// MCP server manifests control host command execution; restrict mutations
 	// to admin to prevent writer-role tokens from achieving code execution.

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Webhook delivery auth bypass**: `POST /v1/webhook-deliveries/*` is now exempt from global API token authentication, allowing external senders (Telegram, GitHub, etc.) to deliver webhooks without an Orloj Bearer token. Authentication for these endpoints is handled by the TaskWebhook resource's own auth profile (HMAC signature or shared token).
+
 ## [0.6.0] - 2026-04-05
 
 ### Added
