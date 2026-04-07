@@ -3,6 +3,8 @@ package agentruntime
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -687,6 +689,59 @@ func TestMcpServerNormalizeImage(t *testing.T) {
 	})
 }
 
+func TestMcpServerNormalizeMountPath(t *testing.T) {
+	t.Run("mount_path_with_image", func(t *testing.T) {
+		s := resources.McpServer{
+			Metadata: resources.ObjectMeta{Name: "test"},
+			Spec: resources.McpServerSpec{
+				Transport: "stdio",
+				Image:     "my-mcp:latest",
+				Env: []resources.McpServerEnvVar{
+					{Name: "CREDS", SecretRef: "my-secret", MountPath: "/secrets/creds.json"},
+				},
+			},
+		}
+		if err := s.Normalize(); err != nil {
+			t.Fatalf("normalize failed: %v", err)
+		}
+		if s.Spec.Env[0].MountPath != "/secrets/creds.json" {
+			t.Errorf("expected mountPath=/secrets/creds.json, got %q", s.Spec.Env[0].MountPath)
+		}
+	})
+
+	t.Run("mount_path_requires_image", func(t *testing.T) {
+		s := resources.McpServer{
+			Metadata: resources.ObjectMeta{Name: "test"},
+			Spec: resources.McpServerSpec{
+				Transport: "stdio",
+				Command:   "npx",
+				Env: []resources.McpServerEnvVar{
+					{Name: "CREDS", SecretRef: "my-secret", MountPath: "/secrets/creds.json"},
+				},
+			},
+		}
+		if err := s.Normalize(); err == nil {
+			t.Fatal("expected error for mountPath without image")
+		}
+	})
+
+	t.Run("mount_path_must_be_absolute", func(t *testing.T) {
+		s := resources.McpServer{
+			Metadata: resources.ObjectMeta{Name: "test"},
+			Spec: resources.McpServerSpec{
+				Transport: "stdio",
+				Image:     "my-mcp:latest",
+				Env: []resources.McpServerEnvVar{
+					{Name: "CREDS", SecretRef: "my-secret", MountPath: "relative/path.json"},
+				},
+			},
+		}
+		if err := s.Normalize(); err == nil {
+			t.Fatal("expected error for relative mountPath")
+		}
+	})
+}
+
 func TestBuildContainerStdioTransport(t *testing.T) {
 	mgr := NewMcpSessionManager(nil)
 	mgr.SetContainerConfig(ContainerToolRuntimeConfig{
@@ -704,7 +759,7 @@ func TestBuildContainerStdioTransport(t *testing.T) {
 		}
 		_ = server.Normalize()
 
-		transport, err := mgr.buildContainerStdioTransport(server, "", nil)
+		transport, err := mgr.buildContainerStdioTransport(server, "", &resolvedMcpEnv{})
 		if err != nil {
 			t.Fatalf("build failed: %v", err)
 		}
@@ -745,7 +800,7 @@ func TestBuildContainerStdioTransport(t *testing.T) {
 		}
 		_ = server.Normalize()
 
-		transport, err := mgr.buildContainerStdioTransport(server, "npx", nil)
+		transport, err := mgr.buildContainerStdioTransport(server, "npx", &resolvedMcpEnv{})
 		if err != nil {
 			t.Fatalf("build failed: %v", err)
 		}
@@ -775,8 +830,8 @@ func TestBuildContainerStdioTransport(t *testing.T) {
 		}
 		_ = server.Normalize()
 
-		env := []string{"FOO=bar", "BAZ=qux"}
-		transport, err := mgr.buildContainerStdioTransport(server, "", env)
+		resolved := &resolvedMcpEnv{EnvVars: []string{"FOO=bar", "BAZ=qux"}}
+		transport, err := mgr.buildContainerStdioTransport(server, "", resolved)
 		if err != nil {
 			t.Fatalf("build failed: %v", err)
 		}
@@ -799,7 +854,7 @@ func TestBuildContainerStdioTransport(t *testing.T) {
 		}
 		_ = server.Normalize()
 
-		transport, err := mgr.buildContainerStdioTransport(server, "", nil)
+		transport, err := mgr.buildContainerStdioTransport(server, "", &resolvedMcpEnv{})
 		if err != nil {
 			t.Fatalf("build failed: %v", err)
 		}
@@ -819,6 +874,123 @@ func TestBuildContainerStdioTransport(t *testing.T) {
 		}
 		if !hasMemory {
 			t.Errorf("expected --memory 256m in args: %v", stdio.args)
+		}
+	})
+
+	t.Run("mount_path_bind_mounts", func(t *testing.T) {
+		server := resources.McpServer{
+			Metadata: resources.ObjectMeta{Name: "test"},
+			Spec:     resources.McpServerSpec{Transport: "stdio", Image: "my-mcp:latest"},
+		}
+		_ = server.Normalize()
+
+		resolved := &resolvedMcpEnv{
+			EnvVars: []string{"CREDS_PATH=/secrets/creds.json"},
+			Mounts: []secretMount{
+				{Content: `{"token":"secret"}`, ContainerPath: "/secrets/creds.json"},
+			},
+		}
+		transport, err := mgr.buildContainerStdioTransport(server, "", resolved)
+		if err != nil {
+			t.Fatalf("build failed: %v", err)
+		}
+		stdio := transport.(*StdioMcpTransport)
+
+		hasMount := false
+		for i, arg := range stdio.args {
+			if arg == "--mount" && i+1 < len(stdio.args) {
+				val := stdio.args[i+1]
+				if strings.Contains(val, "type=bind") &&
+					strings.Contains(val, "target=/secrets/creds.json") &&
+					strings.Contains(val, "readonly") {
+					hasMount = true
+				}
+			}
+		}
+		if !hasMount {
+			t.Errorf("expected --mount with bind,target=/secrets/creds.json,readonly in args: %v", stdio.args)
+		}
+
+		hasEnv := false
+		for _, arg := range stdio.args {
+			if arg == "CREDS_PATH=/secrets/creds.json" {
+				hasEnv = true
+			}
+		}
+		if !hasEnv {
+			t.Errorf("expected env var CREDS_PATH=/secrets/creds.json in args: %v", stdio.args)
+		}
+
+		if stdio.onClose == nil {
+			t.Error("expected onClose to be set for cleanup")
+		}
+		// Invoke cleanup (removes temp dir)
+		stdio.onClose()
+	})
+
+	t.Run("mount_cleanup_removes_temp_dir", func(t *testing.T) {
+		server := resources.McpServer{
+			Metadata: resources.ObjectMeta{Name: "test"},
+			Spec:     resources.McpServerSpec{Transport: "stdio", Image: "my-mcp:latest"},
+		}
+		_ = server.Normalize()
+
+		resolved := &resolvedMcpEnv{
+			EnvVars: []string{"KEY_PATH=/secrets/key.json"},
+			Mounts: []secretMount{
+				{Content: "key-data", ContainerPath: "/secrets/key.json"},
+			},
+		}
+		transport, err := mgr.buildContainerStdioTransport(server, "", resolved)
+		if err != nil {
+			t.Fatalf("build failed: %v", err)
+		}
+		stdio := transport.(*StdioMcpTransport)
+
+		// Extract the temp dir from the --mount arg
+		var tmpDir string
+		for i, arg := range stdio.args {
+			if arg == "--mount" && i+1 < len(stdio.args) {
+				val := stdio.args[i+1]
+				for _, part := range strings.Split(val, ",") {
+					if strings.HasPrefix(part, "source=") {
+						hostFile := strings.TrimPrefix(part, "source=")
+						tmpDir = filepath.Dir(hostFile)
+					}
+				}
+			}
+		}
+		if tmpDir == "" {
+			t.Fatal("could not extract temp dir from mount args")
+		}
+
+		// Verify temp dir exists before cleanup
+		if _, err := os.Stat(tmpDir); os.IsNotExist(err) {
+			t.Fatalf("expected temp dir %s to exist", tmpDir)
+		}
+
+		// Verify the secret file was written with correct content
+		files, err := os.ReadDir(tmpDir)
+		if err != nil {
+			t.Fatalf("read temp dir: %v", err)
+		}
+		if len(files) != 1 {
+			t.Fatalf("expected 1 file in temp dir, got %d", len(files))
+		}
+		content, err := os.ReadFile(filepath.Join(tmpDir, files[0].Name()))
+		if err != nil {
+			t.Fatalf("read secret file: %v", err)
+		}
+		if string(content) != "key-data" {
+			t.Errorf("expected secret content %q, got %q", "key-data", string(content))
+		}
+
+		// Run cleanup
+		stdio.onClose()
+
+		// Verify temp dir is gone
+		if _, err := os.Stat(tmpDir); !os.IsNotExist(err) {
+			t.Errorf("expected temp dir %s to be removed after cleanup", tmpDir)
 		}
 	})
 }

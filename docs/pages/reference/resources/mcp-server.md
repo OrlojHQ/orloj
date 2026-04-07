@@ -7,12 +7,15 @@ Represents a connection to an external MCP (Model Context Protocol) server. The 
 ## spec
 
 - `transport` (string): **required**. `stdio` or `http`.
-- `command` (string): stdio transport: command to spawn the MCP server process.
+- `command` (string): stdio transport: command to spawn the MCP server process. Required unless `image` is set.
 - `args` ([]string): stdio transport: command arguments.
 - `env` ([]object): stdio transport: environment variables for the child process. Each entry has:
   - `name` (string): environment variable name.
   - `value` (string): literal value.
   - `secretRef` (string): resolve value from a Secret resource. Mutually exclusive with `value`.
+  - `mountPath` (string): absolute path inside the container where the resolved value is written as a file. Only valid when `image` is set. The env var is set to the mount path so the MCP server can locate the file.
+- `image` (string): stdio transport: container image. When set, the MCP server runs inside a Docker container (`docker run --rm -i`) with sandboxing.
+- `idle_timeout` (duration string): duration after which an idle session is shut down (e.g. `5m`). Default `0` means never evict.
 - `endpoint` (string): http transport: the MCP server URL.
 - `auth` (object): http transport: authentication configuration.
   - `secretRef` (string): secret reference for auth.
@@ -26,9 +29,12 @@ Represents a connection to an external MCP (Model Context Protocol) server. The 
 ## Defaults and Validation
 
 - `transport` is required. Must be `stdio` or `http`.
-- `command` is required when `transport=stdio`.
+- `command` or `image` is required when `transport=stdio`.
 - `endpoint` is required when `transport=http`.
+- `image` is only valid with `transport=stdio`.
 - `env[].secretRef` and `env[].value` are mutually exclusive.
+- `env[].mountPath` requires `image` to be set and must be an absolute path.
+- `idle_timeout` defaults to `0` (never evict).
 - `reconnect.max_attempts` defaults to `3`.
 - `reconnect.backoff` defaults to `2s`.
 

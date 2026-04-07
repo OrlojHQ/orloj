@@ -550,6 +550,7 @@ export interface McpServerEnvVar {
   name?: string;
   value?: string;
   secretRef?: string;
+  mountPath?: string;
 }
 
 export interface McpToolFilter {

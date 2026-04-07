@@ -17,6 +17,7 @@ type StdioMcpTransport struct {
 	command string
 	args    []string
 	env     []string
+	onClose func()
 
 	mu      sync.Mutex
 	cmd     *exec.Cmd
@@ -34,6 +35,7 @@ type StdioMcpTransportConfig struct {
 	Command string
 	Args    []string
 	Env     []string
+	OnClose func() // optional callback invoked after the process is killed
 }
 
 func NewStdioMcpTransport(cfg StdioMcpTransportConfig) *StdioMcpTransport {
@@ -41,6 +43,7 @@ func NewStdioMcpTransport(cfg StdioMcpTransportConfig) *StdioMcpTransport {
 		command: cfg.Command,
 		args:    cfg.Args,
 		env:     cfg.Env,
+		onClose: cfg.OnClose,
 		pending: make(map[int64]chan jsonrpcResponse),
 		done:    make(chan struct{}),
 	}
@@ -126,6 +129,9 @@ func (t *StdioMcpTransport) Close() error {
 	case <-t.done:
 	default:
 		close(t.done)
+	}
+	if t.onClose != nil {
+		t.onClose()
 	}
 	return nil
 }
