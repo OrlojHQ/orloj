@@ -166,6 +166,13 @@ func main() {
 		agentruntime.NewEnvSecretResolver("ORLOJ_SECRET_"),
 	)
 	mcpSessionManager := agentruntime.NewMcpSessionManager(mcpSecretResolver)
+	mcpSessionManager.SetContainerConfig(agentruntime.ContainerToolRuntimeConfig{
+		RuntimeBinary: *toolContainerRuntime,
+		Network:       "bridge",
+		Memory:        *toolContainerMemory,
+		CPUs:          *toolContainerCPUs,
+		PidsLimit:     *toolContainerPidsLimit,
+	})
 	mcpServerController.SetSessionManager(mcpSessionManager)
 	memoryBackendRegistry := agentruntime.NewPersistentMemoryBackendRegistry()
 	memoryController := controllers.NewMemoryController(stores.Memories, logger, 5*time.Second)
@@ -300,6 +307,7 @@ func main() {
 	startBackground(func() { taskScheduleController.Start(ctx) })
 	startBackground(func() { workerController.Start(ctx) })
 	startBackground(func() { mcpServerController.Start(ctx) })
+	startBackground(func() { mcpSessionManager.StartReaper(ctx, 30*time.Second) })
 	startBackground(func() {
 		ticker := time.NewTicker(60 * time.Second)
 		defer ticker.Stop()

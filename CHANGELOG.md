@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Ephemeral MCP sessions with idle timeout**: new `spec.idle_timeout` field on McpServer resources (e.g. `5m`). Sessions are automatically shut down after the configured idle period and transparently recreated on the next `tools/call`. Tool resources persist in the store so agents always know what tools are available. Default `0` preserves the current always-on behavior.
+- **Container-backed MCP stdio transport**: new `spec.image` field on McpServer resources. When set, the MCP server runs inside a Docker container (`docker run --rm -i`) with sandboxing (read-only FS, cap-drop=ALL, memory/CPU limits). If `command` is also set it overrides the image entrypoint; if only `image` is set the image's built-in entrypoint is used.
+
+### Fixed
+
+- **MCP spec-drift detection**: editing an McpServer spec (e.g. changing the image tag or command) now correctly tears down the stale session and rebuilds with the updated spec, instead of silently returning the cached session.
+
 ## [0.6.3] - 2026-04-06
 
 ### Added
