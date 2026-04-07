@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-04-07
+
 ### Added
 
 - **Ephemeral MCP sessions with idle timeout**: new `spec.idle_timeout` field on McpServer resources (e.g. `5m`). Sessions are automatically shut down after the configured idle period and transparently recreated on the next `tools/call`. Tool resources persist in the store so agents always know what tools are available. Default `0` preserves the current always-on behavior.
@@ -197,7 +199,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Homebrew tap distribution (`OrlojHQ/orloj`)
 - Blueprint scaffolding via `orlojctl init`
 
-[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.6.3...HEAD
+[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/OrlojHQ/orloj/compare/v0.6.3...v0.7.0
 [0.6.3]: https://github.com/OrlojHQ/orloj/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/OrlojHQ/orloj/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/OrlojHQ/orloj/compare/v0.6.0...v0.6.1
