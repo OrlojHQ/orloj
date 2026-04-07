@@ -1648,6 +1648,7 @@ type McpServerEnvVar struct {
 	Name      string `json:"name"`
 	Value     string `json:"value,omitempty"`
 	SecretRef string `json:"secretRef,omitempty"`
+	MountPath string `json:"mountPath,omitempty"`
 }
 
 type McpToolFilter struct {
@@ -1713,6 +1714,15 @@ func (m *McpServer) Normalize() error {
 		m.Spec.Env[i].Name = strings.TrimSpace(env.Name)
 		m.Spec.Env[i].Value = strings.TrimSpace(env.Value)
 		m.Spec.Env[i].SecretRef = strings.TrimSpace(env.SecretRef)
+		m.Spec.Env[i].MountPath = strings.TrimSpace(env.MountPath)
+		if m.Spec.Env[i].MountPath != "" {
+			if m.Spec.Image == "" {
+				return fmt.Errorf("env[%d].mountPath requires spec.image to be set", i)
+			}
+			if !strings.HasPrefix(m.Spec.Env[i].MountPath, "/") {
+				return fmt.Errorf("env[%d].mountPath must be an absolute path, got %q", i, m.Spec.Env[i].MountPath)
+			}
+		}
 	}
 	normalized := make([]string, 0, len(m.Spec.ToolFilter.Include))
 	for _, name := range m.Spec.ToolFilter.Include {

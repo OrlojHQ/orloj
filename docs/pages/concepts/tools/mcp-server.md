@@ -38,16 +38,20 @@ metadata:
   name: gmail
 spec:
   transport: stdio
-  image: example/image
+  image: mcp/gmail
   idle_timeout: "5m"
   env:
-    - name: EMAIL_ADDRESS
-      secretRef: gmail-creds
-    - name: EMAIL_PASSWORD
-      secretRef: gmail-creds
+    - name: GMAIL_OAUTH_PATH
+      secretRef: gmail-creds/oauth_keys
+      mountPath: /secrets/gcp-oauth.keys.json
+    - name: GMAIL_CREDENTIALS_PATH
+      secretRef: gmail-creds/credentials
+      mountPath: /secrets/credentials.json
 ```
 
 When `image` is set, the MCP server runs inside a container (`docker run --rm -i`) with sandboxing (read-only filesystem, no capabilities, no privilege escalation). If `command` is also set, it overrides the image's entrypoint. If only `image` is set, the image's built-in entrypoint is used.
+
+When `mountPath` is set on an env entry, the resolved value is written to an ephemeral host file and bind-mounted read-only into the container at that path. The env var is set to the mount path so the MCP server can locate the file. This enables MCP servers that require file-based credentials (OAuth JSON keys, service account files, TLS certificates).
 
 **HTTP transport** (connects to a running server):
 
@@ -72,6 +76,7 @@ spec:
 | `command`             | stdio: command to spawn the MCP server process. Required unless `image` is set.                           |
 | `args`                | stdio: command arguments.                                                                                 |
 | `env`                 | stdio: environment variables. Each entry supports `value` (literal) or `secretRef` (resolve from Secret). |
+| `env[].mountPath`     | Absolute path inside the container where the resolved value is written as a file. Only valid with `image`. |
 | `image`               | stdio: container image. When set, the MCP server runs inside a Docker container.                          |
 | `idle_timeout`        | Duration after which an idle session is shut down (e.g. `5m`). Default `0` means never evict.             |
 | `endpoint`            | http: the MCP server URL.                                                                                 |

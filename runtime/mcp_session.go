@@ -3,6 +3,8 @@ package agentruntime
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -212,23 +214,23 @@ func (m *McpSessionManager) buildStdioTransport(ctx context.Context, server reso
 		}
 	}
 
-	env, err := m.resolveEnv(ctx, server)
+	resolved, err := m.resolveEnv(ctx, server)
 	if err != nil {
 		return nil, err
 	}
 
 	if image != "" {
-		return m.buildContainerStdioTransport(server, command, env)
+		return m.buildContainerStdioTransport(server, command, resolved)
 	}
 
 	return NewStdioMcpTransport(StdioMcpTransportConfig{
 		Command: command,
 		Args:    server.Spec.Args,
-		Env:     env,
+		Env:     resolved.EnvVars,
 	}), nil
 }
 
-func (m *McpSessionManager) buildContainerStdioTransport(server resources.McpServer, command string, env []string) (McpTransport, error) {
+func (m *McpSessionManager) buildContainerStdioTransport(server resources.McpServer, command string, resolved *resolvedMcpEnv) (McpTransport, error) {
 	m.mu.Lock()
 	cfg := m.containerConfig
 	m.mu.Unlock()
@@ -261,7 +263,27 @@ func (m *McpSessionManager) buildContainerStdioTransport(server resources.McpSer
 		dockerArgs = append(dockerArgs, "--pids-limit", fmt.Sprintf("%d", cfg.PidsLimit))
 	}
 
-	for _, e := range env {
+	var cleanupDir string
+	if len(resolved.Mounts) > 0 {
+		tmpDir, err := os.MkdirTemp("", "orloj-mcp-*")
+		if err != nil {
+			return nil, fmt.Errorf("create temp dir for secret mounts: %w", err)
+		}
+		cleanupDir = tmpDir
+
+		for i, mount := range resolved.Mounts {
+			hostFile := filepath.Join(tmpDir, fmt.Sprintf("mount_%d", i))
+			if err := os.WriteFile(hostFile, []byte(mount.Content), 0600); err != nil {
+				_ = os.RemoveAll(tmpDir)
+				return nil, fmt.Errorf("write secret mount %q: %w", mount.ContainerPath, err)
+			}
+			dockerArgs = append(dockerArgs,
+				"--mount", fmt.Sprintf("type=bind,source=%s,target=%s,readonly", hostFile, mount.ContainerPath),
+			)
+		}
+	}
+
+	for _, e := range resolved.EnvVars {
 		dockerArgs = append(dockerArgs, "-e", e)
 	}
 
@@ -272,9 +294,15 @@ func (m *McpSessionManager) buildContainerStdioTransport(server resources.McpSer
 	dockerArgs = append(dockerArgs, image)
 	dockerArgs = append(dockerArgs, server.Spec.Args...)
 
+	var onClose func()
+	if cleanupDir != "" {
+		onClose = func() { _ = os.RemoveAll(cleanupDir) }
+	}
+
 	return NewStdioMcpTransport(StdioMcpTransportConfig{
 		Command: runtimeBinary,
 		Args:    dockerArgs,
+		OnClose: onClose,
 	}), nil
 }
 
@@ -333,11 +361,22 @@ func (m *McpSessionManager) buildHTTPTransport(ctx context.Context, server resou
 	}), nil
 }
 
-func (m *McpSessionManager) resolveEnv(ctx context.Context, server resources.McpServer) ([]string, error) {
+type secretMount struct {
+	Content       string
+	ContainerPath string
+}
+
+type resolvedMcpEnv struct {
+	EnvVars []string
+	Mounts  []secretMount
+}
+
+func (m *McpSessionManager) resolveEnv(ctx context.Context, server resources.McpServer) (*resolvedMcpEnv, error) {
+	result := &resolvedMcpEnv{}
 	if len(server.Spec.Env) == 0 {
-		return nil, nil
+		return result, nil
 	}
-	env := make([]string, 0, len(server.Spec.Env))
+	result.EnvVars = make([]string, 0, len(server.Spec.Env))
 	for _, e := range server.Spec.Env {
 		name := strings.TrimSpace(e.Name)
 		if name == "" {
@@ -351,9 +390,18 @@ func (m *McpSessionManager) resolveEnv(ctx context.Context, server resources.Mcp
 			}
 			value = resolved
 		}
-		env = append(env, name+"="+value)
+		mountPath := strings.TrimSpace(e.MountPath)
+		if mountPath != "" {
+			result.Mounts = append(result.Mounts, secretMount{
+				Content:       value,
+				ContainerPath: mountPath,
+			})
+			result.EnvVars = append(result.EnvVars, name+"="+mountPath)
+		} else {
+			result.EnvVars = append(result.EnvVars, name+"="+value)
+		}
 	}
-	return env, nil
+	return result, nil
 }
 
 func sessionKey(server resources.McpServer) string {

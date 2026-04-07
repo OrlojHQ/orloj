@@ -63,7 +63,55 @@ orlojctl apply -f github-token-secret.yaml
 orlojctl apply -f github-mcp.yaml
 ```
 
-## Step 2: Register an MCP Server (HTTP)
+## Step 2: Register an MCP Server (Docker with file-based secrets)
+
+Some MCP servers require file-based credentials (OAuth JSON keys, service account files, TLS certificates) instead of environment variables. Use `spec.image` to run the server in a container and `mountPath` to deliver secrets as files.
+
+Create the secret with the credential file contents:
+
+```yaml
+apiVersion: orloj.dev/v1
+kind: Secret
+metadata:
+  name: gmail-creds
+spec:
+  stringData:
+    oauth_keys: |
+      {"installed":{"client_id":"...","client_secret":"..."}}
+    credentials: |
+      {"refresh_token":"...","token_type":"bearer"}
+```
+
+Create the MCP server manifest (`gmail-mcp.yaml`):
+
+```yaml
+apiVersion: orloj.dev/v1
+kind: McpServer
+metadata:
+  name: gmail
+spec:
+  transport: stdio
+  image: mcp/gmail
+  idle_timeout: 5m
+  env:
+    - name: GMAIL_OAUTH_PATH
+      secretRef: gmail-creds/oauth_keys
+      mountPath: /secrets/gcp-oauth.keys.json
+    - name: GMAIL_CREDENTIALS_PATH
+      secretRef: gmail-creds/credentials
+      mountPath: /secrets/credentials.json
+```
+
+When `mountPath` is set, the resolved secret value is written to an ephemeral host file and bind-mounted read-only into the container at that path. The env var (`GMAIL_OAUTH_PATH`) is set to the mount path so the MCP server can locate the file. The files are automatically cleaned up when the session ends.
+
+Apply both:
+
+```bash
+orlojctl apply -f gmail-creds-secret.yaml
+orlojctl apply -f gmail-mcp.yaml
+```
+
+## Step 2b: Register an MCP Server (HTTP)
 
 Remote MCP servers communicate over HTTP using the Streamable HTTP transport. Use this for MCP servers running as hosted services.
 
@@ -225,9 +273,12 @@ Key implementation details:
 | Field | Description |
 |---|---|
 | `transport` | **Required**. `stdio` or `http`. |
-| `command` | stdio: command to spawn the MCP server process. |
+| `command` | stdio: command to spawn the MCP server process. Required unless `image` is set. |
 | `args` | stdio: command arguments. |
 | `env` | stdio: environment variables. Each entry has `name`, `value` (literal), or `secretRef` (resolved from Secret resource). |
+| `env[].mountPath` | Absolute path inside the container where the resolved value is written as a file. Only valid with `image`. |
+| `image` | stdio: container image. When set, the MCP server runs inside a Docker container. |
+| `idle_timeout` | Duration after which an idle session is shut down (e.g. `5m`). Default `0` means never evict. |
 | `endpoint` | http: the MCP server URL. |
 | `auth.secretRef` | http: secret for authentication. |
 | `auth.profile` | http: auth profile (`bearer`, `api_key_header`). Defaults to `bearer`. |
