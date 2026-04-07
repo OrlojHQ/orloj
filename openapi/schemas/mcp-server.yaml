@@ -31,6 +31,8 @@ components:
           type: array
           items: { $ref: "#/components/schemas/McpServerEnvVar" }
         endpoint: { type: string }
+        image: { type: string, description: "Container image for stdio transport. When set, the MCP server runs inside a Docker container." }
+        idle_timeout: { type: string, description: "Duration after which an idle session is reaped (e.g. 5m). 0 means never evict.", default: "0" }
         auth: { $ref: "tool.yaml#/components/schemas/ToolAuth" }
         tool_filter: { $ref: "#/components/schemas/McpToolFilter" }
         reconnect: { $ref: "#/components/schemas/McpReconnectPolicy" }

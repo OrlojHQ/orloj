@@ -1632,14 +1632,16 @@ type McpServer struct {
 }
 
 type McpServerSpec struct {
-	Transport  string             `json:"transport"`
-	Command    string             `json:"command,omitempty"`
-	Args       []string           `json:"args,omitempty"`
-	Env        []McpServerEnvVar  `json:"env,omitempty"`
-	Endpoint   string             `json:"endpoint,omitempty"`
-	Auth       ToolAuth           `json:"auth,omitempty"`
-	ToolFilter McpToolFilter      `json:"tool_filter,omitempty"`
-	Reconnect  McpReconnectPolicy `json:"reconnect,omitempty"`
+	Transport   string             `json:"transport"`
+	Command     string             `json:"command,omitempty"`
+	Args        []string           `json:"args,omitempty"`
+	Env         []McpServerEnvVar  `json:"env,omitempty"`
+	Endpoint    string             `json:"endpoint,omitempty"`
+	Image       string             `json:"image,omitempty"`
+	IdleTimeout string             `json:"idle_timeout,omitempty"`
+	Auth        ToolAuth           `json:"auth,omitempty"`
+	ToolFilter  McpToolFilter      `json:"tool_filter,omitempty"`
+	Reconnect   McpReconnectPolicy `json:"reconnect,omitempty"`
 }
 
 type McpServerEnvVar struct {
@@ -1695,14 +1697,18 @@ func (m *McpServer) Normalize() error {
 	default:
 		return fmt.Errorf("invalid spec.transport %q: expected stdio or http", m.Spec.Transport)
 	}
-	if transport == "stdio" && strings.TrimSpace(m.Spec.Command) == "" {
-		return fmt.Errorf("spec.command is required for stdio transport")
+	if transport == "stdio" && strings.TrimSpace(m.Spec.Command) == "" && strings.TrimSpace(m.Spec.Image) == "" {
+		return fmt.Errorf("spec.command or spec.image is required for stdio transport")
 	}
 	if transport == "http" && strings.TrimSpace(m.Spec.Endpoint) == "" {
 		return fmt.Errorf("spec.endpoint is required for http transport")
 	}
+	if transport == "http" && strings.TrimSpace(m.Spec.Image) != "" {
+		return fmt.Errorf("spec.image is only supported for stdio transport")
+	}
 	m.Spec.Command = strings.TrimSpace(m.Spec.Command)
 	m.Spec.Endpoint = strings.TrimSpace(m.Spec.Endpoint)
+	m.Spec.Image = strings.TrimSpace(m.Spec.Image)
 	for i, env := range m.Spec.Env {
 		m.Spec.Env[i].Name = strings.TrimSpace(env.Name)
 		m.Spec.Env[i].Value = strings.TrimSpace(env.Value)
@@ -1716,6 +1722,16 @@ func (m *McpServer) Normalize() error {
 		}
 	}
 	m.Spec.ToolFilter.Include = normalized
+	idleTimeout := strings.TrimSpace(m.Spec.IdleTimeout)
+	if idleTimeout == "" {
+		idleTimeout = "0"
+	}
+	if idleTimeout != "0" {
+		if _, err := time.ParseDuration(idleTimeout); err != nil {
+			return fmt.Errorf("invalid spec.idle_timeout %q: %w", m.Spec.IdleTimeout, err)
+		}
+	}
+	m.Spec.IdleTimeout = idleTimeout
 	if m.Spec.Reconnect.MaxAttempts <= 0 {
 		m.Spec.Reconnect.MaxAttempts = 3
 	}

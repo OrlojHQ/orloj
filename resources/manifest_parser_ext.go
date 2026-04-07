@@ -1729,6 +1729,10 @@ func ParseMcpServerManifest(data []byte) (McpServer, error) {
 			out.Spec.Command = value
 		case section == "spec" && subsection == "" && key == "endpoint":
 			out.Spec.Endpoint = value
+		case section == "spec" && subsection == "" && key == "image":
+			out.Spec.Image = value
+		case section == "spec" && subsection == "" && (key == "idle_timeout" || key == "idleTimeout"):
+			out.Spec.IdleTimeout = value
 		case section == "spec" && subsection == "auth" && (key == "secretRef" || key == "secret_ref"):
 			out.Spec.Auth.SecretRef = value
 		case section == "spec" && subsection == "auth" && key == "profile":

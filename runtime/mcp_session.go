@@ -15,15 +15,20 @@ type McpSession struct {
 	Transport  McpTransport
 	InitResult *McpInitResult
 	ServerName string
+
+	generation  int64
+	idleTimeout time.Duration
+	lastUsedAt  time.Time
 }
 
 // McpSessionManager maintains one session per McpServer, handling connection
-// pooling, initialization, and graceful shutdown.
+// pooling, initialization, idle eviction, and graceful shutdown.
 type McpSessionManager struct {
 	mu              sync.Mutex
 	sessions        map[string]*McpSession
 	secretResolver  SecretResolver
 	allowedCommands []string // if non-empty, only these binaries may be launched for stdio
+	containerConfig *ContainerToolRuntimeConfig
 }
 
 func NewMcpSessionManager(secretResolver SecretResolver) *McpSessionManager {
@@ -31,6 +36,14 @@ func NewMcpSessionManager(secretResolver SecretResolver) *McpSessionManager {
 		sessions:       make(map[string]*McpSession),
 		secretResolver: secretResolver,
 	}
+}
+
+// SetContainerConfig sets the container runtime configuration used when
+// McpServer resources specify spec.image for containerised stdio transport.
+func (m *McpSessionManager) SetContainerConfig(cfg ContainerToolRuntimeConfig) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.containerConfig = &cfg
 }
 
 // SetAllowedCommands restricts the binaries that stdio MCP transports may
@@ -44,16 +57,27 @@ func (m *McpSessionManager) SetAllowedCommands(cmds []string) {
 }
 
 // GetOrCreate returns an existing session or creates a new one for the given
-// McpServer spec. Sessions are keyed by namespace/name.
+// McpServer spec. Sessions are keyed by namespace/name. If the server's
+// generation has changed since the cached session was created, the old session
+// is torn down and a fresh one is built.
 func (m *McpSessionManager) GetOrCreate(ctx context.Context, server resources.McpServer) (*McpSession, error) {
 	key := sessionKey(server)
 
 	m.mu.Lock()
 	if session, ok := m.sessions[key]; ok {
+		if session.generation == server.Metadata.Generation {
+			session.lastUsedAt = time.Now()
+			m.mu.Unlock()
+			return session, nil
+		}
+		delete(m.sessions, key)
 		m.mu.Unlock()
-		return session, nil
+		if session.Transport != nil {
+			_ = session.Transport.Close()
+		}
+	} else {
+		m.mu.Unlock()
 	}
-	m.mu.Unlock()
 
 	transport, err := m.buildTransport(ctx, server)
 	if err != nil {
@@ -69,16 +93,22 @@ func (m *McpSessionManager) GetOrCreate(ctx context.Context, server resources.Mc
 		return nil, fmt.Errorf("mcp session %s: initialize failed: %w", key, err)
 	}
 
+	idleTimeout := parseIdleTimeout(server.Spec.IdleTimeout)
+
 	session := &McpSession{
-		Transport:  transport,
-		InitResult: initResult,
-		ServerName: server.Metadata.Name,
+		Transport:   transport,
+		InitResult:  initResult,
+		ServerName:  server.Metadata.Name,
+		generation:  server.Metadata.Generation,
+		idleTimeout: idleTimeout,
+		lastUsedAt:  time.Now(),
 	}
 
 	m.mu.Lock()
 	if existing, ok := m.sessions[key]; ok {
 		m.mu.Unlock()
 		_ = transport.Close()
+		existing.lastUsedAt = time.Now()
 		return existing, nil
 	}
 	m.sessions[key] = session
@@ -119,6 +149,48 @@ func (m *McpSessionManager) Close() {
 	}
 }
 
+// StartReaper runs a background goroutine that periodically evicts sessions
+// whose idle time exceeds their configured idle_timeout. Sessions with
+// idleTimeout == 0 are never evicted. The goroutine exits when ctx is done.
+func (m *McpSessionManager) StartReaper(ctx context.Context, interval time.Duration) {
+	if interval <= 0 {
+		interval = 30 * time.Second
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			m.evictIdle()
+		}
+	}
+}
+
+func (m *McpSessionManager) evictIdle() {
+	now := time.Now()
+	var toClose []*McpSession
+
+	m.mu.Lock()
+	for key, session := range m.sessions {
+		if session.idleTimeout <= 0 {
+			continue
+		}
+		if now.Sub(session.lastUsedAt) > session.idleTimeout {
+			toClose = append(toClose, session)
+			delete(m.sessions, key)
+		}
+	}
+	m.mu.Unlock()
+
+	for _, session := range toClose {
+		if session.Transport != nil {
+			_ = session.Transport.Close()
+		}
+	}
+}
+
 func (m *McpSessionManager) buildTransport(ctx context.Context, server resources.McpServer) (McpTransport, error) {
 	switch strings.ToLower(strings.TrimSpace(server.Spec.Transport)) {
 	case "stdio":
@@ -131,17 +203,78 @@ func (m *McpSessionManager) buildTransport(ctx context.Context, server resources
 }
 
 func (m *McpSessionManager) buildStdioTransport(ctx context.Context, server resources.McpServer) (McpTransport, error) {
-	if err := m.validateStdioCommand(server.Spec.Command); err != nil {
-		return nil, err
+	command := strings.TrimSpace(server.Spec.Command)
+	image := strings.TrimSpace(server.Spec.Image)
+
+	if command != "" {
+		if err := m.validateStdioCommand(command); err != nil {
+			return nil, err
+		}
 	}
+
 	env, err := m.resolveEnv(ctx, server)
 	if err != nil {
 		return nil, err
 	}
+
+	if image != "" {
+		return m.buildContainerStdioTransport(server, command, env)
+	}
+
 	return NewStdioMcpTransport(StdioMcpTransportConfig{
-		Command: server.Spec.Command,
+		Command: command,
 		Args:    server.Spec.Args,
 		Env:     env,
+	}), nil
+}
+
+func (m *McpSessionManager) buildContainerStdioTransport(server resources.McpServer, command string, env []string) (McpTransport, error) {
+	m.mu.Lock()
+	cfg := m.containerConfig
+	m.mu.Unlock()
+
+	runtimeBinary := "docker"
+	if cfg != nil && strings.TrimSpace(cfg.RuntimeBinary) != "" {
+		runtimeBinary = strings.TrimSpace(cfg.RuntimeBinary)
+	}
+
+	image := strings.TrimSpace(server.Spec.Image)
+	dockerArgs := []string{
+		"run", "--rm", "-i",
+		"--read-only",
+		"--cap-drop=ALL",
+		"--security-opt", "no-new-privileges",
+	}
+
+	if cfg != nil && strings.TrimSpace(cfg.Network) != "" {
+		dockerArgs = append(dockerArgs, "--network", strings.TrimSpace(cfg.Network))
+	} else {
+		dockerArgs = append(dockerArgs, "--network", "bridge")
+	}
+	if cfg != nil && strings.TrimSpace(cfg.Memory) != "" {
+		dockerArgs = append(dockerArgs, "--memory", strings.TrimSpace(cfg.Memory))
+	}
+	if cfg != nil && strings.TrimSpace(cfg.CPUs) != "" {
+		dockerArgs = append(dockerArgs, "--cpus", strings.TrimSpace(cfg.CPUs))
+	}
+	if cfg != nil && cfg.PidsLimit > 0 {
+		dockerArgs = append(dockerArgs, "--pids-limit", fmt.Sprintf("%d", cfg.PidsLimit))
+	}
+
+	for _, e := range env {
+		dockerArgs = append(dockerArgs, "-e", e)
+	}
+
+	if command != "" {
+		dockerArgs = append(dockerArgs, "--entrypoint", command)
+	}
+
+	dockerArgs = append(dockerArgs, image)
+	dockerArgs = append(dockerArgs, server.Spec.Args...)
+
+	return NewStdioMcpTransport(StdioMcpTransportConfig{
+		Command: runtimeBinary,
+		Args:    dockerArgs,
 	}), nil
 }
 
@@ -226,4 +359,16 @@ func (m *McpSessionManager) resolveEnv(ctx context.Context, server resources.Mcp
 func sessionKey(server resources.McpServer) string {
 	ns := resources.NormalizeNamespace(server.Metadata.Namespace)
 	return ns + "/" + strings.TrimSpace(server.Metadata.Name)
+}
+
+func parseIdleTimeout(s string) time.Duration {
+	s = strings.TrimSpace(s)
+	if s == "" || s == "0" {
+		return 0
+	}
+	d, err := time.ParseDuration(s)
+	if err != nil || d < 0 {
+		return 0
+	}
+	return d
 }

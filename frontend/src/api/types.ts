@@ -567,6 +567,8 @@ export interface McpServerSpec {
   args?: string[];
   env?: McpServerEnvVar[];
   endpoint?: string;
+  image?: string;
+  idle_timeout?: string;
   auth?: ToolAuth;
   tool_filter?: McpToolFilter;
   reconnect?: McpReconnectPolicy;
