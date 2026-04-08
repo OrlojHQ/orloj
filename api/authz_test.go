@@ -187,4 +187,108 @@ func TestAuthzEnforcement(t *testing.T) {
 		t.Fatalf("expected controller status PUT 200, got %d body=%s", resp.StatusCode, string(b))
 	}
 	resp.Body.Close()
+
+	// Writers must NOT be able to create cli tools that execute on the host
+	// (spec.type=cli + spec.runtime.isolation_mode=none). Writers can still
+	// create container/wasm CLI tools and other tool types; only the host
+	// execution path is admin-gated.
+	hostCliPayload, _ := json.Marshal(resources.Tool{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Tool",
+		Metadata:   resources.ObjectMeta{Name: "host-cli"},
+		Spec: resources.ToolSpec{
+			Type: "cli",
+			Cli: resources.ToolCliSpec{
+				Command: "kubectl",
+				Output:  "stdout",
+			},
+			Runtime: resources.ToolRuntimePolicy{
+				IsolationMode: "none",
+			},
+		},
+	})
+	req, _ = http.NewRequest(http.MethodPost, httpServer.URL+"/v1/tools", bytes.NewReader(hostCliPayload))
+	req.Header.Set("Authorization", "Bearer writer-token")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("writer host-cli post failed: %v", err)
+	}
+	if resp.StatusCode != http.StatusForbidden {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected writer POST host-cli tool 403, got %d body=%s", resp.StatusCode, string(b))
+	}
+	resp.Body.Close()
+
+	// Admins can create the same host CLI tool.
+	req, _ = http.NewRequest(http.MethodPost, httpServer.URL+"/v1/tools", bytes.NewReader(hostCliPayload))
+	req.Header.Set("Authorization", "Bearer admin-token")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("admin host-cli post failed: %v", err)
+	}
+	if resp.StatusCode != http.StatusCreated {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected admin POST host-cli tool 201, got %d body=%s", resp.StatusCode, string(b))
+	}
+	resp.Body.Close()
+
+	// YAML manifests must be classified the same way: a YAML cli+none body
+	// posted by a writer must also be rejected. This guards against a
+	// JSON-only probe accidentally letting YAML payloads through.
+	yamlHostCli := []byte(`apiVersion: orloj.dev/v1
+kind: Tool
+metadata:
+  name: host-cli-yaml
+spec:
+  type: cli
+  cli:
+    command: kubectl
+    output: stdout
+  runtime:
+    isolation_mode: none
+`)
+	req, _ = http.NewRequest(http.MethodPost, httpServer.URL+"/v1/tools", bytes.NewReader(yamlHostCli))
+	req.Header.Set("Authorization", "Bearer writer-token")
+	req.Header.Set("Content-Type", "application/yaml")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("writer yaml host-cli post failed: %v", err)
+	}
+	if resp.StatusCode != http.StatusForbidden {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected writer YAML POST host-cli tool 403, got %d body=%s", resp.StatusCode, string(b))
+	}
+	resp.Body.Close()
+
+	// Writers can still create container-isolated CLI tools.
+	containerCliPayload, _ := json.Marshal(resources.Tool{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Tool",
+		Metadata:   resources.ObjectMeta{Name: "container-cli"},
+		Spec: resources.ToolSpec{
+			Type: "cli",
+			Cli: resources.ToolCliSpec{
+				Command: "kubectl",
+				Image:   "bitnami/kubectl:1.30",
+				Output:  "stdout",
+			},
+			Runtime: resources.ToolRuntimePolicy{
+				IsolationMode: "container",
+			},
+		},
+	})
+	req, _ = http.NewRequest(http.MethodPost, httpServer.URL+"/v1/tools", bytes.NewReader(containerCliPayload))
+	req.Header.Set("Authorization", "Bearer writer-token")
+	req.Header.Set("Content-Type", "application/json")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("writer container-cli post failed: %v", err)
+	}
+	if resp.StatusCode != http.StatusCreated {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected writer POST container-cli tool 201, got %d body=%s", resp.StatusCode, string(b))
+	}
+	resp.Body.Close()
 }

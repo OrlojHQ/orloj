@@ -34,11 +34,14 @@ func NewOpenAIEmbeddingProvider(baseURL, apiKey, model string) *OpenAIEmbeddingP
 	if baseURL == "" {
 		baseURL = "https://api.openai.com/v1"
 	}
+	// Embedding providers may legitimately point at Ollama / LM Studio /
+	// vLLM on a private network, so allow private addresses. Loopback,
+	// link-local, metadata, and unspecified addresses remain blocked.
 	return &OpenAIEmbeddingProvider{
 		baseURL: baseURL,
 		apiKey:  strings.TrimSpace(apiKey),
 		model:   strings.TrimSpace(model),
-		client:  &http.Client{Timeout: 60 * time.Second},
+		client:  SafeHTTPClient(true, 60*time.Second),
 	}
 }
 

@@ -83,6 +83,46 @@ func TestModelEndpointNormalizeOllamaDefaults(t *testing.T) {
 	if endpoint.Spec.BaseURL != "http://127.0.0.1:11434" {
 		t.Fatalf("unexpected ollama base URL %q", endpoint.Spec.BaseURL)
 	}
+	if endpoint.Spec.AllowPrivate == nil || !*endpoint.Spec.AllowPrivate {
+		t.Fatalf("expected ollama to default to allowPrivate=true, got %+v", endpoint.Spec.AllowPrivate)
+	}
+}
+
+func TestModelEndpointNormalizeAllowPrivateDefaultFalse(t *testing.T) {
+	endpoint := ModelEndpoint{
+		Kind:     "ModelEndpoint",
+		Metadata: ObjectMeta{Name: "openai-prod"},
+		Spec: ModelEndpointSpec{
+			Provider:     "openai",
+			DefaultModel: "gpt-4o-mini",
+		},
+	}
+	if err := endpoint.Normalize(); err != nil {
+		t.Fatalf("normalize failed: %v", err)
+	}
+	if endpoint.Spec.AllowPrivate == nil || *endpoint.Spec.AllowPrivate {
+		t.Fatalf("expected openai to default to allowPrivate=false, got %+v", endpoint.Spec.AllowPrivate)
+	}
+}
+
+func TestModelEndpointNormalizeAllowPrivateExplicit(t *testing.T) {
+	truePtr := true
+	endpoint := ModelEndpoint{
+		Kind:     "ModelEndpoint",
+		Metadata: ObjectMeta{Name: "internal-vllm"},
+		Spec: ModelEndpointSpec{
+			Provider:     "openai-compatible",
+			BaseURL:      "http://vllm.internal:8000/v1",
+			DefaultModel: "llama3.1-70b",
+			AllowPrivate: &truePtr,
+		},
+	}
+	if err := endpoint.Normalize(); err != nil {
+		t.Fatalf("normalize failed: %v", err)
+	}
+	if endpoint.Spec.AllowPrivate == nil || !*endpoint.Spec.AllowPrivate {
+		t.Fatalf("expected explicit allowPrivate=true to survive normalization")
+	}
 }
 
 func TestModelEndpointNormalizeRequiresDefaultModel(t *testing.T) {

@@ -33,7 +33,9 @@ type oauth2TokenResponse struct {
 
 func NewOAuth2TokenCache(client HTTPDoer) *OAuth2TokenCache {
 	if client == nil {
-		client = &http.Client{Timeout: 10 * time.Second}
+		// OAuth2 token endpoints are always public SaaS endpoints in
+		// practice, so private destinations are denied by default.
+		client = SafeHTTPClient(false, 10*time.Second)
 	}
 	return &OAuth2TokenCache{
 		entries: make(map[string]*oauth2CacheEntry),
@@ -90,6 +92,9 @@ func (c *OAuth2TokenCache) Evict(tokenURL, clientID string) {
 }
 
 func (c *OAuth2TokenCache) exchange(ctx context.Context, tokenURL, clientID, clientSecret, scope string) (string, int64, error) {
+	if err := ValidateEndpointURL(tokenURL, false); err != nil {
+		return "", 0, fmt.Errorf("oauth2 token_url blocked: %w", err)
+	}
 	form := url.Values{
 		"grant_type":    {"client_credentials"},
 		"client_id":     {clientID},

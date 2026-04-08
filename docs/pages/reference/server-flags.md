@@ -26,6 +26,7 @@ go run ./cmd/orlojd -h
 | `--auth-session-ttl` | `24h` | Session TTL for local auth mode. | Env fallback: `ORLOJ_AUTH_SESSION_TTL`. |
 | `--auth-reset-admin-username` | empty | One-shot admin reset username. | Env fallback: `ORLOJ_AUTH_RESET_ADMIN_USERNAME`. |
 | `--auth-reset-admin-password` | empty | One-shot admin reset password and exit. | Env fallback: `ORLOJ_AUTH_RESET_ADMIN_PASSWORD`. |
+| `--trusted-proxies` | empty | Comma-separated CIDRs of reverse proxies whose `X-Forwarded-For` / `X-Real-IP` headers are trusted for client IP extraction. | Env fallback: `ORLOJ_TRUSTED_PROXIES`. Required for correct per-client auth rate limiting behind a proxy. See [Security — Trusted proxy configuration](../operations/security.md#trusted-proxy-configuration). |
 | `--secret-encryption-key` | empty | AES-256-GCM key for Secret encryption at rest. | Env fallback: `ORLOJ_SECRET_ENCRYPTION_KEY`. |
 | `--storage-backend` | `memory` | State backend. | `memory|postgres`. |
 | `--postgres-dsn` | empty | Postgres DSN. | Required when `--storage-backend=postgres`; env `ORLOJ_POSTGRES_DSN`. |

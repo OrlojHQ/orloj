@@ -20,6 +20,16 @@ type ModelEndpointSpec struct {
 	DefaultModel string            `json:"default_model,omitempty"`
 	Options      map[string]string `json:"options,omitempty"`
 	Auth         ModelEndpointAuth `json:"auth,omitempty"`
+	// AllowPrivate permits outbound connections from this endpoint's
+	// gateway to RFC 1918 / ULA / carrier-grade NAT addresses (e.g. a
+	// self-hosted Ollama, vLLM, LM Studio, or LiteLLM proxy running on
+	// a private network). Loopback, link-local, cloud metadata, and
+	// unspecified addresses remain blocked regardless.
+	//
+	// Pointer so that the schema can distinguish "unset" (defaulted by
+	// provider) from explicit true/false. Defaults: ollama -> true,
+	// everything else -> false.
+	AllowPrivate *bool `json:"allowPrivate,omitempty"`
 }
 
 type ModelEndpointAuth struct {
@@ -84,6 +94,15 @@ func (m *ModelEndpoint) Normalize() error {
 		m.Spec.Options = normalized
 	}
 	m.Spec.Auth.SecretRef = strings.TrimSpace(m.Spec.Auth.SecretRef)
+
+	if m.Spec.AllowPrivate == nil {
+		// Ollama is intended to run on localhost or a private network;
+		// default allowPrivate=true so existing configs keep working
+		// after the SSRF dial-time enforcement is enabled. All other
+		// providers default to allowPrivate=false.
+		defaultAllow := m.Spec.Provider == "ollama"
+		m.Spec.AllowPrivate = &defaultAllow
+	}
 
 	if m.Status.Phase == "" {
 		m.Status.Phase = "Pending"

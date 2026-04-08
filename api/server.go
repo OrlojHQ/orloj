@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"sort"
 	"strings"
@@ -54,6 +55,7 @@ type ServerOptions struct {
 	AuthMode           AuthMode
 	SessionTTL         time.Duration
 	UIBasePath         string // URL path prefix for the web console (default "/")
+	TrustedProxies     string // comma-separated CIDRs whose forwarding headers are trusted
 }
 
 // Server exposes CRUD endpoints for control plane resources.
@@ -71,6 +73,7 @@ type Server struct {
 	memoryBackends     *agentruntime.PersistentMemoryBackendRegistry
 	authRateLimiter    *authRateLimiter
 	requestRateLimiter *rate.Limiter // per-server; avoids test suites sharing one process-global bucket
+	trustedProxies     []*net.IPNet
 	uiBasePath         string
 }
 
@@ -130,6 +133,10 @@ func NewServerWithOptions(stores Stores, runtime *agentruntime.Manager, logger *
 		authorizer = newNativeModeAuthorizer(authorizer, stores.LocalAdmins, stores.AuthSessions, sessionTTL)
 	}
 	uiBase := normalizeUIBasePath(opts.UIBasePath)
+	trustedProxies, tpErr := parseTrustedProxies(opts.TrustedProxies)
+	if tpErr != nil && logger != nil {
+		logger.Printf("WARNING: invalid --trusted-proxies value: %v; forwarding headers will be ignored", tpErr)
+	}
 	s := &Server{
 		stores:             stores,
 		runtime:            runtime,
@@ -141,10 +148,11 @@ func NewServerWithOptions(stores Stores, runtime *agentruntime.Manager, logger *
 		sessionTTL:         sessionTTL,
 		bus:                eventbus.NewMemoryBus(4096),
 		extensions:         extensions,
-		authRateLimiter:    newAuthRateLimiter(),
+		authRateLimiter:    newAuthRateLimiter(trustedProxies, logger),
 		// 500 r/s sustained, burst 100 — same as previous package-global limiter, but per Server instance
 		// so concurrent httptest servers in tests do not share one token bucket.
 		requestRateLimiter: rate.NewLimiter(rate.Limit(500), 100),
+		trustedProxies:     trustedProxies,
 		uiBasePath:         uiBase,
 	}
 	s.routes()

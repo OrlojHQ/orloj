@@ -546,8 +546,10 @@ func TestBuildGovernedToolRuntimeNilBaseHTTPToolSucceeds(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	// Use hostname so the endpoint validator skips literal-IP checks;
-	// the HTTP client resolves localhost to the test server.
+	// Use hostname so ValidateEndpointURL skips literal-IP checks, and
+	// inject the test server's plain client so the safe dialer's
+	// loopback block is bypassed. Production code correctly blocks
+	// loopback at both URL validation and dial time.
 	endpoint := strings.Replace(srv.URL, "127.0.0.1", "localhost", 1)
 
 	lookup := staticToolLookup{
@@ -566,9 +568,11 @@ func TestBuildGovernedToolRuntimeNilBaseHTTPToolSucceeds(t *testing.T) {
 		},
 	}
 
+	base := NewHTTPToolClient(nil, nil, srv.Client())
+
 	rt := BuildGovernedToolRuntimeForAgent(
 		context.Background(),
-		nil,
+		base,
 		nil,
 		lookup,
 		"default",

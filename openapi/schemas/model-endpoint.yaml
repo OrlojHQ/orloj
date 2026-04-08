@@ -12,6 +12,15 @@ components:
         default_model: { type: string }
         options: { type: object, additionalProperties: { type: string } }
         auth: { $ref: "#/components/schemas/ModelEndpointAuth" }
+        allowPrivate:
+          type: boolean
+          description: |
+            Permit outbound connections from this endpoint's gateway to
+            RFC 1918 / ULA / carrier-grade NAT addresses (e.g. a
+            self-hosted Ollama, vLLM, LM Studio, or LiteLLM proxy on a
+            private network). Loopback, link-local, cloud metadata, and
+            unspecified addresses remain blocked regardless. Defaults:
+            ollama -> true, all other providers -> false.
     ModelEndpointStatus:
       type: object
       properties:

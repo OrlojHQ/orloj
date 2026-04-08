@@ -41,6 +41,7 @@ func main() {
 	authSessionTTL := flag.Duration("auth-session-ttl", envDuration("ORLOJ_AUTH_SESSION_TTL", 24*time.Hour), "session TTL for local auth mode")
 	authResetAdminUsername := flag.String("auth-reset-admin-username", env("ORLOJ_AUTH_RESET_ADMIN_USERNAME", ""), "optional username for one-shot local admin password reset")
 	authResetAdminPassword := flag.String("auth-reset-admin-password", env("ORLOJ_AUTH_RESET_ADMIN_PASSWORD", ""), "one-shot local admin password reset value; when set, reset password and exit")
+	trustedProxies := flag.String("trusted-proxies", env("ORLOJ_TRUSTED_PROXIES", ""), "comma-separated CIDRs of reverse proxies whose X-Forwarded-For/X-Real-IP headers are trusted (env: ORLOJ_TRUSTED_PROXIES)")
 	reconcile := flag.Duration("reconcile-interval", 2*time.Second, "agent reconcile interval")
 	runTaskWorker := flag.Bool("run-task-worker", false, "run embedded task worker in orlojd process")
 	embeddedWorker := flag.Bool("embedded-worker", false, "alias for --run-task-worker")
@@ -253,11 +254,12 @@ func main() {
 		APITokens:     stores.APITokens,
 		AuthSessions:  stores.AuthSessions,
 	}, runtime, logger, api.ServerOptions{
-		Authorizer: requestAuthorizer,
-		Extensions: extensions,
-		AuthMode:   authMode,
-		SessionTTL: *authSessionTTL,
-		UIBasePath: *uiPath,
+		Authorizer:     requestAuthorizer,
+		Extensions:     extensions,
+		AuthMode:       authMode,
+		SessionTTL:     *authSessionTTL,
+		UIBasePath:     *uiPath,
+		TrustedProxies: *trustedProxies,
 	})
 	bus, closeBus := newEventBus(logger, *eventBusBackend, *natsURL, *natsSubjectPrefix)
 	if closeBus != nil {

@@ -4,6 +4,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -484,7 +485,7 @@ func (s *Server) setSessionCookie(w http.ResponseWriter, r *http.Request, sessio
 	if ttl <= 0 {
 		ttl = 24 * time.Hour
 	}
-	secure := isSecureRequest(r)
+	secure := isSecureRequest(r, s.trustedProxies)
 	name := sessionCookieName
 	if secure {
 		name = sessionCookieNameHost
@@ -503,7 +504,7 @@ func (s *Server) setSessionCookie(w http.ResponseWriter, r *http.Request, sessio
 }
 
 func (s *Server) clearSessionCookie(w http.ResponseWriter, r *http.Request) {
-	secure := isSecureRequest(r)
+	secure := isSecureRequest(r, s.trustedProxies)
 	// Clear both cookie names in case the client has either variant.
 	for _, name := range []string{sessionCookieName, sessionCookieNameHost} {
 		http.SetCookie(w, &http.Cookie{
@@ -519,11 +520,14 @@ func (s *Server) clearSessionCookie(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func isSecureRequest(r *http.Request) bool {
+func isSecureRequest(r *http.Request, trustedProxies []*net.IPNet) bool {
 	if r != nil && r.TLS != nil {
 		return true
 	}
 	if r == nil {
+		return false
+	}
+	if !isTrustedPeer(r, trustedProxies) {
 		return false
 	}
 	proto := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto"))
