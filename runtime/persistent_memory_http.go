@@ -25,7 +25,11 @@ func NewHTTPMemoryBackend(endpoint, authToken string) *HTTPMemoryBackend {
 	return &HTTPMemoryBackend{
 		endpoint:  endpoint,
 		authToken: strings.TrimSpace(authToken),
-		client:    &http.Client{Timeout: 30 * time.Second},
+		// Persistent-memory backends are admin-configured (via the Memory
+		// resource) and typically point at an internal service, so allow
+		// private-network destinations. Loopback, link-local, metadata,
+		// and unspecified addresses are still blocked at dial time.
+		client: SafeHTTPClient(true, 30*time.Second),
 	}
 }
 

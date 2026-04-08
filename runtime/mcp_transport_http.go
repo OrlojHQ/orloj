@@ -32,7 +32,7 @@ type StreamableHTTPMcpTransportConfig struct {
 func NewStreamableHTTPMcpTransport(cfg StreamableHTTPMcpTransportConfig) *StreamableHTTPMcpTransport {
 	client := cfg.Client
 	if client == nil {
-		client = &http.Client{Timeout: 60 * time.Second}
+		client = SafeHTTPClient(cfg.AllowPrivate, 60*time.Second)
 	}
 	return &StreamableHTTPMcpTransport{
 		endpoint:     strings.TrimRight(cfg.Endpoint, "/"),

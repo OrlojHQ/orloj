@@ -9,24 +9,27 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/OrlojHQ/orloj/resources"
 )
 
-// defaultToolHTTPClient is a shared client with a safe default timeout.
-// Individual tools may override this via Tool.spec.timeout when that field
-// is added; for now this prevents a hung tool endpoint from blocking forever.
-var defaultToolHTTPClient = &http.Client{Timeout: 30 * time.Second}
+// defaultToolHTTPClient returns the shared safe HTTP client that enforces
+// SSRF policy at dial time. The returned client matches the requested
+// allowPrivate policy so that call-time validation and dial-time
+// enforcement agree.
+func defaultToolHTTPClient(allowPrivate bool) *http.Client {
+	return DefaultSafeHTTPClient(allowPrivate)
+}
 
 // HTTPToolClient executes tools via HTTP POST against Tool.spec.endpoint.
 // It replaces MockToolClient as the base runtime for isolation_mode=none.
 type HTTPToolClient struct {
-	registry     ToolCapabilityRegistry
-	secrets      SecretResolver
-	authInjector *AuthInjector
-	client       HTTPDoer
-	allowPrivate bool // allow requests to private/internal IPs (for dev)
+	registry       ToolCapabilityRegistry
+	secrets        SecretResolver
+	authInjector   *AuthInjector
+	client         HTTPDoer
+	clientInjected bool // true when caller passed a custom HTTPDoer
+	allowPrivate   bool // allow requests to private/internal IPs (for dev)
 }
 
 // HTTPDoer abstracts HTTP request execution for testing.
@@ -35,31 +38,41 @@ type HTTPDoer interface {
 }
 
 func NewHTTPToolClient(registry ToolCapabilityRegistry, secrets SecretResolver, client HTTPDoer) *HTTPToolClient {
-	if client == nil {
-		client = defaultToolHTTPClient
+	injected := client != nil
+	if !injected {
+		client = defaultToolHTTPClient(false)
 	}
 	return &HTTPToolClient{
-		registry:     registry,
-		secrets:      secrets,
-		authInjector: NewAuthInjector(secrets, nil),
-		client:       client,
+		registry:       registry,
+		secrets:        secrets,
+		authInjector:   NewAuthInjector(secrets, nil),
+		client:         client,
+		clientInjected: injected,
 	}
 }
 
 // SetAllowPrivateEndpoints permits HTTP tool calls to private/internal IP
 // ranges (RFC 1918). Loopback and cloud metadata addresses are always blocked.
+// When the runtime is using its internally-built safe HTTP client, this
+// swaps the client for one whose dial-time policy matches, so call-time
+// validation and dial-time enforcement stay consistent.
 func (r *HTTPToolClient) SetAllowPrivateEndpoints(allow bool) {
 	r.allowPrivate = allow
+	if !r.clientInjected {
+		r.client = defaultToolHTTPClient(allow)
+	}
 }
 
 func NewHTTPToolClientWithAuth(registry ToolCapabilityRegistry, injector *AuthInjector, client HTTPDoer) *HTTPToolClient {
-	if client == nil {
-		client = defaultToolHTTPClient
+	injected := client != nil
+	if !injected {
+		client = defaultToolHTTPClient(false)
 	}
 	return &HTTPToolClient{
-		registry:     registry,
-		authInjector: injector,
-		client:       client,
+		registry:       registry,
+		authInjector:   injector,
+		client:         client,
+		clientInjected: injected,
 	}
 }
 
@@ -68,10 +81,12 @@ func (r *HTTPToolClient) WithRegistry(registry ToolCapabilityRegistry) ToolRunti
 		return NewHTTPToolClient(registry, nil, nil)
 	}
 	return &HTTPToolClient{
-		registry:     registry,
-		secrets:      r.secrets,
-		authInjector: r.authInjector,
-		client:       r.client,
+		registry:       registry,
+		secrets:        r.secrets,
+		authInjector:   r.authInjector,
+		client:         r.client,
+		clientInjected: r.clientInjected,
+		allowPrivate:   r.allowPrivate,
 	}
 }
 

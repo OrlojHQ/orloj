@@ -25,13 +25,15 @@ import (
 //  2. Receive 202 Accepted (or 200 with immediate result)
 //  3. If 202: poll GET {endpoint}/{request_id} until status != "pending"
 type WebhookCallbackToolRuntime struct {
-	registry     ToolCapabilityRegistry
-	secrets      SecretResolver
-	authInjector *AuthInjector
-	client       HTTPDoer
-	namespace    string
-	pollInterval time.Duration
-	callbacks    *callbackRegistry
+	registry       ToolCapabilityRegistry
+	secrets        SecretResolver
+	authInjector   *AuthInjector
+	client         HTTPDoer
+	clientInjected bool
+	allowPrivate   bool
+	namespace      string
+	pollInterval   time.Duration
+	callbacks      *callbackRegistry
 }
 
 // callbackRegistry stores async responses delivered via push callback.
@@ -76,19 +78,31 @@ func (r *callbackRegistry) Remove(requestID string) {
 }
 
 func NewWebhookCallbackToolRuntime(registry ToolCapabilityRegistry, secrets SecretResolver, client HTTPDoer, pollInterval time.Duration) *WebhookCallbackToolRuntime {
-	if client == nil {
-		client = &http.Client{Timeout: 60 * time.Second}
+	injected := client != nil
+	if !injected {
+		client = SafeHTTPClient(false, 60*time.Second)
 	}
 	if pollInterval <= 0 {
 		pollInterval = 2 * time.Second
 	}
 	return &WebhookCallbackToolRuntime{
-		registry:     registry,
-		secrets:      secrets,
-		authInjector: NewAuthInjector(secrets, nil),
-		client:       client,
-		pollInterval: pollInterval,
-		callbacks:    newCallbackRegistry(),
+		registry:       registry,
+		secrets:        secrets,
+		authInjector:   NewAuthInjector(secrets, nil),
+		client:         client,
+		clientInjected: injected,
+		pollInterval:   pollInterval,
+		callbacks:      newCallbackRegistry(),
+	}
+}
+
+// SetAllowPrivateEndpoints permits webhook callbacks and polling against
+// private / internal IP ranges. Loopback, link-local, cloud metadata, and
+// unspecified addresses remain blocked.
+func (r *WebhookCallbackToolRuntime) SetAllowPrivateEndpoints(allow bool) {
+	r.allowPrivate = allow
+	if !r.clientInjected {
+		r.client = SafeHTTPClient(allow, 60*time.Second)
 	}
 }
 
@@ -97,13 +111,15 @@ func (r *WebhookCallbackToolRuntime) WithRegistry(registry ToolCapabilityRegistr
 		return NewWebhookCallbackToolRuntime(registry, nil, nil, 0)
 	}
 	return &WebhookCallbackToolRuntime{
-		registry:     registry,
-		secrets:      r.secrets,
-		authInjector: r.authInjector,
-		client:       r.client,
-		namespace:    r.namespace,
-		pollInterval: r.pollInterval,
-		callbacks:    r.callbacks,
+		registry:       registry,
+		secrets:        r.secrets,
+		authInjector:   r.authInjector,
+		client:         r.client,
+		clientInjected: r.clientInjected,
+		allowPrivate:   r.allowPrivate,
+		namespace:      r.namespace,
+		pollInterval:   r.pollInterval,
+		callbacks:      r.callbacks,
 	}
 }
 
@@ -176,6 +192,18 @@ func (r *WebhookCallbackToolRuntime) Call(ctx context.Context, tool string, inpu
 			false,
 			fmt.Sprintf("tool=%s missing endpoint for webhook-callback", tool),
 			ErrInvalidToolRuntimePolicy,
+			map[string]string{"tool": tool},
+		)
+	}
+
+	if err := ValidateEndpointURL(endpoint, r.allowPrivate); err != nil {
+		return "", NewToolError(
+			ToolStatusError,
+			ToolCodeRuntimePolicyInvalid,
+			ToolReasonRuntimePolicyInvalid,
+			false,
+			fmt.Sprintf("tool=%s endpoint blocked: %s", tool, err),
+			err,
 			map[string]string{"tool": tool},
 		)
 	}

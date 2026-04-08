@@ -135,7 +135,18 @@ func (r *CLIToolRuntime) Call(ctx context.Context, tool string, input string) (s
 			fmt.Sprintf("tool=%s missing cli.command", tool), ErrInvalidToolRuntimePolicy, map[string]string{"tool": tool})
 	}
 
-	if len(r.config.AllowedCommands) > 0 && !isCommandAllowed(command, r.config.AllowedCommands) {
+	// Defense in depth: any tool reaching this runtime is about to execute on
+	// the worker host (the governed dispatcher only routes cli+isolation_mode=none
+	// here). Refuse to run unless an explicit command allowlist has been
+	// configured. This protects against stored Tool objects that predate the
+	// admission gate or that were written via non-API code paths (controllers,
+	// migrations, direct store writes).
+	if len(r.config.AllowedCommands) == 0 {
+		return "", NewToolError(ToolStatusError, ToolCodeRuntimePolicyInvalid, ToolReasonRuntimePolicyInvalid, false,
+			fmt.Sprintf("tool=%s host CLI execution refused: no command allowlist configured (set ORLOJ_CLI_TOOL_ALLOWED_COMMANDS or use isolation_mode=container)", tool),
+			ErrInvalidToolRuntimePolicy, map[string]string{"tool": tool, "command": command})
+	}
+	if !isCommandAllowed(command, r.config.AllowedCommands) {
 		return "", NewToolError(ToolStatusError, ToolCodeUnsupportedTool, ToolReasonToolUnsupported, false,
 			fmt.Sprintf("tool=%s command=%s not in allowed commands list", tool, command), ErrUnsupportedTool,
 			map[string]string{"tool": tool, "command": command})

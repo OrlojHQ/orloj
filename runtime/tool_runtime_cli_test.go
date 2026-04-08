@@ -26,12 +26,18 @@ func (r *mockCLICommandRunner) Run(_ context.Context, command string, args []str
 	return r.stdout, r.stderr, r.exitCode, r.err
 }
 
+// newCLITestRuntime builds a CLIToolRuntime preconfigured with a permissive
+// allowlist covering every command name used by the tests in this file. The
+// runtime fails closed when AllowedCommands is empty, so tests that exercise
+// the happy path must provide an explicit allowlist.
 func newCLITestRuntime(specs map[string]resources.ToolSpec, runner *mockCLICommandRunner) *CLIToolRuntime {
+	cfg := DefaultCLIToolRuntimeConfig()
+	cfg.AllowedCommands = []string{"kubectl", "failing", "cmd", "rm", "echo"}
 	return NewCLIToolRuntime(
 		NewStaticToolCapabilityRegistry(specs),
 		NewEnvSecretResolver("TEST_SECRET_"),
 		runner,
-		DefaultCLIToolRuntimeConfig(),
+		cfg,
 	)
 }
 
@@ -185,11 +191,42 @@ func TestCLIToolRuntimeMaxArgvLength(t *testing.T) {
 		}),
 		NewEnvSecretResolver("TEST_SECRET_"),
 		runner,
-		CLIToolRuntimeConfig{MaxArgvLength: 10},
+		CLIToolRuntimeConfig{MaxArgvLength: 10, AllowedCommands: []string{"cmd"}},
 	)
 	_, err := rt.Call(context.Background(), "long-args", fmt.Sprintf(`{"value": "%s"}`, strings.Repeat("x", 20)))
 	if err == nil {
 		t.Fatal("expected error for argv exceeding max length")
+	}
+}
+
+// TestCLIToolRuntimeRefusesWhenAllowlistEmpty asserts the runtime fails closed
+// when no command allowlist is configured. This is the defense-in-depth check
+// that protects against stored Tool objects bypassing API admission.
+func TestCLIToolRuntimeRefusesWhenAllowlistEmpty(t *testing.T) {
+	runner := &mockCLICommandRunner{stdout: "ok", exitCode: 0}
+	rt := NewCLIToolRuntime(
+		NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
+			"any-tool": {
+				Type: "cli",
+				Cli: resources.ToolCliSpec{
+					Command: "kubectl",
+					Output:  "stdout",
+				},
+			},
+		}),
+		NewEnvSecretResolver("TEST_SECRET_"),
+		runner,
+		DefaultCLIToolRuntimeConfig(), // AllowedCommands intentionally empty
+	)
+	_, err := rt.Call(context.Background(), "any-tool", "")
+	if err == nil {
+		t.Fatal("expected error when AllowedCommands is empty")
+	}
+	if !strings.Contains(err.Error(), "no command allowlist configured") {
+		t.Fatalf("expected fail-closed error message, got: %v", err)
+	}
+	if runner.lastCmd != "" {
+		t.Fatalf("runner should not have been invoked, but lastCmd=%q", runner.lastCmd)
 	}
 }
 

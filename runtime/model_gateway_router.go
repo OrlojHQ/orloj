@@ -125,6 +125,14 @@ func (r *ModelRouter) gatewayForEndpoint(ctx context.Context, endpoint resources
 	cfg.BaseURL = strings.TrimSpace(endpoint.Spec.BaseURL)
 	cfg.DefaultModel = strings.TrimSpace(endpoint.Spec.DefaultModel)
 	cfg.Options = endpoint.Spec.Options
+	if endpoint.Spec.AllowPrivate != nil {
+		cfg.AllowPrivate = *endpoint.Spec.AllowPrivate
+	} else if provider == "ollama" {
+		// Back-compat: pre-normalized ModelEndpoints that reach the router
+		// without going through Normalize (e.g. constructed directly in
+		// tests) should still default Ollama to allowPrivate=true.
+		cfg.AllowPrivate = true
+	}
 
 	gateway, err := newModelGatewayFromConfigWithRegistry(cfg, registry)
 	if err != nil {

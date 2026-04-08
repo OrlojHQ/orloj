@@ -1,9 +1,11 @@
 package api
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -11,9 +13,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/OrlojHQ/orloj/resources"
 	agentruntime "github.com/OrlojHQ/orloj/runtime"
 	"github.com/OrlojHQ/orloj/store"
 )
+
+// maxToolMutationProbeBytes caps how much of a /v1/tools mutation body we read
+// when deciding whether the request requires admin. Real tool specs are well
+// under this size; anything larger is rejected as suspicious.
+const maxToolMutationProbeBytes = 1 << 20 // 1 MiB
 
 // RequestAuthorizer evaluates API authorization for one request+required role.
 type RequestAuthorizer interface {
@@ -405,7 +413,70 @@ func requiredRoleForRequest(r *http.Request, uiBasePath string) string {
 	if strings.HasSuffix(path, "/status") {
 		return "controller"
 	}
+	// Tool specs of type "cli" with isolation_mode "none" execute commands
+	// directly on the worker host. Treat that combination as privileged and
+	// require admin, mirroring the existing /v1/mcp-servers gate above. Other
+	// tool types (http, grpc, container/wasm CLI, etc.) remain writer-creatable.
+	if (path == "/v1/tools" || strings.HasPrefix(path, "/v1/tools/")) &&
+		!strings.HasSuffix(path, "/status") &&
+		(method == http.MethodPost || method == http.MethodPut || method == http.MethodPatch) {
+		if toolMutationRequiresAdmin(r) {
+			return "admin"
+		}
+	}
 	return "writer"
+}
+
+// toolMutationRequiresAdmin inspects an in-flight /v1/tools mutation body and
+// reports true when the spec requests host CLI execution
+// (spec.type == "cli" && spec.runtime.isolation_mode == "none").
+//
+// The body is read into memory, then re-attached to the request so downstream
+// handlers can decode it normally. The probe runs the same parser the handler
+// will run (resources.ParseToolManifest) so JSON and YAML manifests are
+// classified identically.
+//
+// Failure modes:
+//   - Body read error: fail closed (return true). The downstream handler will
+//     also error, but we never let an unreadable body sneak past.
+//   - Body exceeds the size cap: fail closed.
+//   - Manifest parse error: fall through to writer (return false). The handler
+//     will reject the request with 400, so writers can't exploit this to write
+//     a malformed cli+none object.
+func toolMutationRequiresAdmin(r *http.Request) bool {
+	if r == nil || r.Body == nil {
+		return false
+	}
+	limited := io.LimitReader(r.Body, maxToolMutationProbeBytes+1)
+	body, err := io.ReadAll(limited)
+	if err != nil {
+		// Restore an empty body so the downstream handler can produce its own
+		// error rather than panicking, but still fail closed on the auth check.
+		r.Body = io.NopCloser(bytes.NewReader(nil))
+		return true
+	}
+	// Re-attach the body for the actual handler.
+	r.Body = io.NopCloser(bytes.NewReader(body))
+	if int64(len(body)) > maxToolMutationProbeBytes {
+		return true
+	}
+	if len(bytes.TrimSpace(body)) == 0 {
+		// Empty body — let the regular handler reject it; no privilege upgrade.
+		return false
+	}
+	// Use the same manifest parser as the handler so JSON and YAML inputs are
+	// classified identically. Note that ParseToolManifest also runs Normalize,
+	// which defaults isolation_mode for cli to "container" when omitted; that
+	// means a cli manifest without an explicit isolation_mode will not be
+	// classified as host execution here, matching the runtime's behavior.
+	tool, err := resources.ParseToolManifest(body)
+	if err != nil {
+		// Malformed manifest: let the handler surface a 400. Writer-only.
+		return false
+	}
+	toolType := strings.ToLower(strings.TrimSpace(tool.Spec.Type))
+	mode := strings.ToLower(strings.TrimSpace(tool.Spec.Runtime.IsolationMode))
+	return toolType == "cli" && mode == "none"
 }
 
 // roleAllows checks whether the actual role satisfies the required role.

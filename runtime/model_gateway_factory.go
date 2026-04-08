@@ -20,6 +20,10 @@ type ModelGatewayConfig struct {
 	Options      map[string]string
 	Timeout      time.Duration
 	HTTPClient   *http.Client
+	// AllowPrivate permits outbound gateway requests to RFC 1918 / ULA /
+	// CGNAT addresses. Only honoured when HTTPClient is nil (otherwise the
+	// caller is responsible for the supplied client's egress policy).
+	AllowPrivate bool
 }
 
 // DefaultModelGatewayConfig returns conservative defaults that preserve existing behavior.
@@ -91,7 +95,7 @@ func (p *openAIModelProviderPlugin) BuildGateway(cfg ModelGatewayConfig) (ModelG
 	if cfg.Timeout > 0 {
 		openaiCfg.Timeout = cfg.Timeout
 	}
-	openaiCfg.HTTPClient = cfg.HTTPClient
+	openaiCfg.HTTPClient = resolveGatewayHTTPClient(cfg)
 	return NewOpenAIModelGateway(openaiCfg)
 }
 
@@ -120,7 +124,7 @@ func (p *openAICompatibleModelProviderPlugin) BuildGateway(cfg ModelGatewayConfi
 	if cfg.Timeout > 0 {
 		openaiCfg.Timeout = cfg.Timeout
 	}
-	openaiCfg.HTTPClient = cfg.HTTPClient
+	openaiCfg.HTTPClient = resolveGatewayHTTPClient(cfg)
 	return NewOpenAIModelGateway(openaiCfg)
 }
 
@@ -146,7 +150,7 @@ func (p *anthropicModelProviderPlugin) BuildGateway(cfg ModelGatewayConfig) (Mod
 	if cfg.Timeout > 0 {
 		anthropicCfg.Timeout = cfg.Timeout
 	}
-	anthropicCfg.HTTPClient = cfg.HTTPClient
+	anthropicCfg.HTTPClient = resolveGatewayHTTPClient(cfg)
 
 	options := normalizeModelProviderOptions(cfg.Options)
 	if value, ok := options["anthropic_version"]; ok && strings.TrimSpace(value) != "" {
@@ -186,7 +190,7 @@ func (p *azureOpenAIModelProviderPlugin) BuildGateway(cfg ModelGatewayConfig) (M
 	if cfg.Timeout > 0 {
 		azureCfg.Timeout = cfg.Timeout
 	}
-	azureCfg.HTTPClient = cfg.HTTPClient
+	azureCfg.HTTPClient = resolveGatewayHTTPClient(cfg)
 
 	options := normalizeModelProviderOptions(cfg.Options)
 	if value, ok := options["deployment"]; ok && strings.TrimSpace(value) != "" {
@@ -217,7 +221,7 @@ func (p *ollamaModelProviderPlugin) BuildGateway(cfg ModelGatewayConfig) (ModelG
 	if cfg.Timeout > 0 {
 		ollamaCfg.Timeout = cfg.Timeout
 	}
-	ollamaCfg.HTTPClient = cfg.HTTPClient
+	ollamaCfg.HTTPClient = resolveGatewayHTTPClient(cfg)
 
 	options := normalizeModelProviderOptions(cfg.Options)
 	if value, ok := options["base_url"]; ok && strings.TrimSpace(value) != "" {
@@ -227,6 +231,16 @@ func (p *ollamaModelProviderPlugin) BuildGateway(cfg ModelGatewayConfig) (ModelG
 		ollamaCfg.DefaultModel = strings.TrimSpace(value)
 	}
 	return NewOllamaModelGateway(ollamaCfg)
+}
+
+// resolveGatewayHTTPClient returns cfg.HTTPClient if non-nil, otherwise a
+// SafeHTTPClient with dial-time SSRF enforcement configured from
+// cfg.AllowPrivate and cfg.Timeout.
+func resolveGatewayHTTPClient(cfg ModelGatewayConfig) *http.Client {
+	if cfg.HTTPClient != nil {
+		return cfg.HTTPClient
+	}
+	return SafeHTTPClient(cfg.AllowPrivate, cfg.Timeout)
 }
 
 func normalizeModelProviderOptions(options map[string]string) map[string]string {

@@ -18,22 +18,36 @@ import (
 // Tools with spec.type=external have their ToolExecutionRequest forwarded
 // to spec.endpoint and the ToolExecutionResponse parsed from the reply.
 type ExternalToolRuntime struct {
-	registry     ToolCapabilityRegistry
-	secrets      SecretResolver
-	authInjector *AuthInjector
-	client       HTTPDoer
-	namespace    string
+	registry       ToolCapabilityRegistry
+	secrets        SecretResolver
+	authInjector   *AuthInjector
+	client         HTTPDoer
+	clientInjected bool
+	allowPrivate   bool
+	namespace      string
 }
 
 func NewExternalToolRuntime(registry ToolCapabilityRegistry, secrets SecretResolver, client HTTPDoer) *ExternalToolRuntime {
-	if client == nil {
-		client = &http.Client{Timeout: 60 * time.Second}
+	injected := client != nil
+	if !injected {
+		client = SafeHTTPClient(false, 60*time.Second)
 	}
 	return &ExternalToolRuntime{
-		registry:     registry,
-		secrets:      secrets,
-		authInjector: NewAuthInjector(secrets, nil),
-		client:       client,
+		registry:       registry,
+		secrets:        secrets,
+		authInjector:   NewAuthInjector(secrets, nil),
+		client:         client,
+		clientInjected: injected,
+	}
+}
+
+// SetAllowPrivateEndpoints permits external tool delegation to private /
+// internal IP ranges. Loopback, link-local, cloud metadata, and
+// unspecified addresses remain blocked.
+func (r *ExternalToolRuntime) SetAllowPrivateEndpoints(allow bool) {
+	r.allowPrivate = allow
+	if !r.clientInjected {
+		r.client = SafeHTTPClient(allow, 60*time.Second)
 	}
 }
 
@@ -42,11 +56,13 @@ func (r *ExternalToolRuntime) WithRegistry(registry ToolCapabilityRegistry) Tool
 		return NewExternalToolRuntime(registry, nil, nil)
 	}
 	return &ExternalToolRuntime{
-		registry:     registry,
-		secrets:      r.secrets,
-		authInjector: r.authInjector,
-		client:       r.client,
-		namespace:    r.namespace,
+		registry:       registry,
+		secrets:        r.secrets,
+		authInjector:   r.authInjector,
+		client:         r.client,
+		clientInjected: r.clientInjected,
+		allowPrivate:   r.allowPrivate,
+		namespace:      r.namespace,
 	}
 }
 
@@ -111,6 +127,18 @@ func (r *ExternalToolRuntime) Call(ctx context.Context, tool string, input strin
 			false,
 			fmt.Sprintf("tool=%s missing endpoint for external delegation", tool),
 			ErrInvalidToolRuntimePolicy,
+			map[string]string{"tool": tool},
+		)
+	}
+
+	if err := ValidateEndpointURL(endpoint, r.allowPrivate); err != nil {
+		return "", NewToolError(
+			ToolStatusError,
+			ToolCodeRuntimePolicyInvalid,
+			ToolReasonRuntimePolicyInvalid,
+			false,
+			fmt.Sprintf("tool=%s endpoint blocked: %s", tool, err),
+			err,
 			map[string]string{"tool": tool},
 		)
 	}
