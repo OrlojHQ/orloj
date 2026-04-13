@@ -1116,6 +1116,14 @@ func entryAgentsFromSystem(system resources.AgentSystem) []string {
 				indegree[to]++
 			}
 		}
+		// Delegates are reachable from this node and must not be treated as
+		// entry points, even though they don't appear in Edges.
+		for _, d := range edge.Delegates {
+			to := strings.TrimSpace(d.To)
+			if _, ok := indegree[to]; ok {
+				indegree[to]++
+			}
+		}
 	}
 	out := make([]string, 0, len(system.Spec.Agents))
 	for _, agent := range system.Spec.Agents {

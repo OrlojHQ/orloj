@@ -90,12 +90,13 @@ const (
 
 // AgentExecutionSpec configures optional per-agent execution contracts.
 type AgentExecutionSpec struct {
-	Profile                 string   `json:"profile,omitempty"`
-	ToolSequence            []string `json:"tool_sequence,omitempty"`
-	RequiredOutputMarkers   []string `json:"required_output_markers,omitempty"`
-	DuplicateToolCallPolicy string   `json:"duplicate_tool_call_policy,omitempty"`
-	OnContractViolation     string   `json:"on_contract_violation,omitempty"`
-	ToolUseBehavior         string   `json:"tool_use_behavior,omitempty"`
+	Profile                 string         `json:"profile,omitempty"`
+	ToolSequence            []string       `json:"tool_sequence,omitempty"`
+	RequiredOutputMarkers   []string       `json:"required_output_markers,omitempty"`
+	DuplicateToolCallPolicy string         `json:"duplicate_tool_call_policy,omitempty"`
+	OnContractViolation     string         `json:"on_contract_violation,omitempty"`
+	ToolUseBehavior         string         `json:"tool_use_behavior,omitempty"`
+	OutputSchema            map[string]any `json:"output_schema,omitempty"`
 }
 
 // MemorySpec configures runtime memory backend.

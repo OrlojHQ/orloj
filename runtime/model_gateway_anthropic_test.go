@@ -383,3 +383,110 @@ func TestChatMessagesToAnthropicStructuredToolMessages(t *testing.T) {
 		t.Fatalf("expected tool_use_id=toolu_01A, got %v", resultBlocks[0]["tool_use_id"])
 	}
 }
+
+func TestAnthropicModelGatewaySendsOutputConfig(t *testing.T) {
+	var capturedBody map[string]any
+
+	client := &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			body, _ := io.ReadAll(req.Body)
+			json.Unmarshal(body, &capturedBody)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(`{"content":[{"type":"text","text":"{\"route\":\"research\"}"}],"usage":{"input_tokens":5,"output_tokens":3}}`)),
+				Header:     make(http.Header),
+			}, nil
+		}),
+		Timeout: time.Second,
+	}
+
+	cfg := DefaultAnthropicModelGatewayConfig()
+	cfg.APIKey = "test-key"
+	cfg.HTTPClient = client
+
+	gateway, err := NewAnthropicModelGateway(cfg)
+	if err != nil {
+		t.Fatalf("new gateway failed: %v", err)
+	}
+
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"route": map[string]any{"type": "string"},
+		},
+		"required":             []string{"route"},
+		"additionalProperties": false,
+	}
+
+	_, err = gateway.Complete(context.Background(), ModelRequest{
+		Model:        "claude-test",
+		Prompt:       "Classify input",
+		Step:         1,
+		OutputSchema: schema,
+	})
+	if err != nil {
+		t.Fatalf("complete failed: %v", err)
+	}
+
+	oc, ok := capturedBody["output_config"]
+	if !ok {
+		t.Fatal("expected output_config in request body")
+	}
+	ocMap, ok := oc.(map[string]any)
+	if !ok {
+		t.Fatalf("output_config is not a map: %T", oc)
+	}
+	fmtMap, ok := ocMap["format"].(map[string]any)
+	if !ok {
+		t.Fatal("expected output_config.format to be a map")
+	}
+	if fmtMap["type"] != "json_schema" {
+		t.Fatalf("expected format.type=json_schema, got %v", fmtMap["type"])
+	}
+	schemaMap, ok := fmtMap["schema"].(map[string]any)
+	if !ok {
+		t.Fatal("expected format.schema to be a map")
+	}
+	if schemaMap["type"] != "object" {
+		t.Fatalf("expected schema.type=object, got %v", schemaMap["type"])
+	}
+}
+
+func TestAnthropicModelGatewayOmitsOutputConfigWhenNoSchema(t *testing.T) {
+	var capturedBody map[string]any
+
+	client := &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			body, _ := io.ReadAll(req.Body)
+			json.Unmarshal(body, &capturedBody)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(`{"content":[{"type":"text","text":"hello"}],"usage":{"input_tokens":5,"output_tokens":3}}`)),
+				Header:     make(http.Header),
+			}, nil
+		}),
+		Timeout: time.Second,
+	}
+
+	cfg := DefaultAnthropicModelGatewayConfig()
+	cfg.APIKey = "test-key"
+	cfg.HTTPClient = client
+
+	gateway, err := NewAnthropicModelGateway(cfg)
+	if err != nil {
+		t.Fatalf("new gateway failed: %v", err)
+	}
+
+	_, err = gateway.Complete(context.Background(), ModelRequest{
+		Model:  "claude-test",
+		Prompt: "Hello",
+		Step:   1,
+	})
+	if err != nil {
+		t.Fatalf("complete failed: %v", err)
+	}
+
+	if _, ok := capturedBody["output_config"]; ok {
+		t.Fatal("output_config should be omitted when no output schema is set")
+	}
+}

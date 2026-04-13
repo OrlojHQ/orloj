@@ -1,11 +1,46 @@
 components:
   schemas:
+    EdgeCondition:
+      type: object
+      description: Predicate evaluated against the completing agent's output to determine whether a graph edge should fire.
+      properties:
+        output_contains:
+          type: string
+          description: Matches if the output contains this string (case-insensitive).
+        output_not_contains:
+          type: string
+          description: Matches if the output does NOT contain this string (case-insensitive).
+        output_matches:
+          type: string
+          description: Matches if the output matches this regex pattern.
+        default:
+          type: boolean
+          description: Marks this edge as the fallback when no conditional edge matches.
+        output_json_path:
+          type: string
+          description: Dot-notation path (e.g. "$.route") to extract a value from JSON output. Requires a comparison operator.
+        equals:
+          type: string
+          description: Matches when the extracted JSON value equals this string.
+        not_equals:
+          type: string
+          description: Matches when the extracted JSON value does NOT equal this string.
+        contains:
+          type: string
+          description: For arrays, matches when any element equals this value. For strings, matches on substring (case-insensitive).
+        greater_than:
+          type: string
+          description: Matches when the extracted numeric JSON value exceeds this threshold.
+        less_than:
+          type: string
+          description: Matches when the extracted numeric JSON value is below this threshold.
     GraphRoute:
       type: object
       properties:
         to: { type: string }
         labels: { type: object, additionalProperties: { type: string } }
         policy: { type: object, additionalProperties: { type: string } }
+        condition: { $ref: "#/components/schemas/EdgeCondition" }
     GraphJoin:
       type: object
       properties:
@@ -21,6 +56,13 @@ components:
           type: array
           items: { $ref: "#/components/schemas/GraphRoute" }
         join: { $ref: "#/components/schemas/GraphJoin" }
+        delegates:
+          type: array
+          description: Agents dispatched after the node's first execution. Reports flow back and trigger a review re-execution before edges fire.
+          items: { $ref: "#/components/schemas/GraphRoute" }
+        delegate_join:
+          description: Controls how delegate returns are collected before the review phase.
+          $ref: "#/components/schemas/GraphJoin"
     AgentSystemSpec:
       type: object
       properties:

@@ -101,6 +101,12 @@ func (g *OllamaModelGateway) Complete(ctx context.Context, req ModelRequest) (Mo
 	if len(req.Tools) > 0 {
 		body.Tools = buildOpenAIChatTools(req.Tools, req.ToolSchemas)
 	}
+	if len(req.OutputSchema) > 0 {
+		schemaJSON, schemaErr := json.Marshal(req.OutputSchema)
+		if schemaErr == nil {
+			body.Format = schemaJSON
+		}
+	}
 
 	payload, err := json.Marshal(body)
 	if err != nil {
@@ -211,6 +217,7 @@ type ollamaChatRequest struct {
 	Messages []ollamaChatMessage `json:"messages"`
 	Stream   bool                `json:"stream"`
 	Tools    []openAIChatTool    `json:"tools,omitempty"`
+	Format   json.RawMessage     `json:"format,omitempty"`
 }
 
 type ollamaChatMessage struct {

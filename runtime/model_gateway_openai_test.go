@@ -377,3 +377,109 @@ func TestParseOpenAIModelToolCallsPreservesID(t *testing.T) {
 		t.Fatalf("expected Name=get_weather, got %q", calls[0].Name)
 	}
 }
+
+func TestOpenAIModelGatewaySendsResponseFormat(t *testing.T) {
+	var capturedBody map[string]any
+
+	client := &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			body, _ := io.ReadAll(req.Body)
+			json.Unmarshal(body, &capturedBody)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(`{"choices":[{"message":{"content":"{\"route\":\"research\"}"}}]}`)),
+				Header:     make(http.Header),
+			}, nil
+		}),
+		Timeout: time.Second,
+	}
+
+	cfg := DefaultOpenAIModelGatewayConfig()
+	cfg.APIKey = "test-key"
+	cfg.HTTPClient = client
+
+	gateway, err := NewOpenAIModelGateway(cfg)
+	if err != nil {
+		t.Fatalf("new gateway failed: %v", err)
+	}
+
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"route": map[string]any{"type": "string"},
+		},
+		"required":             []string{"route"},
+		"additionalProperties": false,
+	}
+
+	_, err = gateway.Complete(context.Background(), ModelRequest{
+		Model:        "gpt-test",
+		Prompt:       "Classify input",
+		Step:         1,
+		OutputSchema: schema,
+	})
+	if err != nil {
+		t.Fatalf("complete failed: %v", err)
+	}
+
+	rf, ok := capturedBody["response_format"]
+	if !ok {
+		t.Fatal("expected response_format in request body")
+	}
+	rfMap, ok := rf.(map[string]any)
+	if !ok {
+		t.Fatalf("response_format is not a map: %T", rf)
+	}
+	if rfMap["type"] != "json_schema" {
+		t.Fatalf("expected response_format.type=json_schema, got %v", rfMap["type"])
+	}
+	jsMap, ok := rfMap["json_schema"].(map[string]any)
+	if !ok {
+		t.Fatal("expected response_format.json_schema to be a map")
+	}
+	if jsMap["name"] != "agent_output" {
+		t.Fatalf("expected json_schema.name=agent_output, got %v", jsMap["name"])
+	}
+	if jsMap["strict"] != true {
+		t.Fatalf("expected json_schema.strict=true, got %v", jsMap["strict"])
+	}
+}
+
+func TestOpenAIModelGatewayOmitsResponseFormatWhenNoSchema(t *testing.T) {
+	var capturedBody map[string]any
+
+	client := &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			body, _ := io.ReadAll(req.Body)
+			json.Unmarshal(body, &capturedBody)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(`{"choices":[{"message":{"content":"hello"}}]}`)),
+				Header:     make(http.Header),
+			}, nil
+		}),
+		Timeout: time.Second,
+	}
+
+	cfg := DefaultOpenAIModelGatewayConfig()
+	cfg.APIKey = "test-key"
+	cfg.HTTPClient = client
+
+	gateway, err := NewOpenAIModelGateway(cfg)
+	if err != nil {
+		t.Fatalf("new gateway failed: %v", err)
+	}
+
+	_, err = gateway.Complete(context.Background(), ModelRequest{
+		Model:  "gpt-test",
+		Prompt: "Hello",
+		Step:   1,
+	})
+	if err != nil {
+		t.Fatalf("complete failed: %v", err)
+	}
+
+	if _, ok := capturedBody["response_format"]; ok {
+		t.Fatal("response_format should be omitted when no output schema is set")
+	}
+}

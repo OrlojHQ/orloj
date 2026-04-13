@@ -41,16 +41,17 @@ type ToolSchemaInfo struct {
 
 // ModelRequest defines one model inference request for an agent step.
 type ModelRequest struct {
-	Model       string
-	ModelRef    string
-	Namespace   string
-	Agent       string
-	Prompt      string
-	Step        int
-	Tools       []string
-	ToolSchemas map[string]ToolSchemaInfo
-	Context     map[string]string
-	Messages    []ChatMessage
+	Model        string
+	ModelRef     string
+	Namespace    string
+	Agent        string
+	Prompt       string
+	Step         int
+	Tools        []string
+	ToolSchemas  map[string]ToolSchemaInfo
+	Context      map[string]string
+	Messages     []ChatMessage
+	OutputSchema map[string]any
 }
 
 // ModelResponse captures model output used by the runtime loop.

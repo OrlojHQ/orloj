@@ -5,6 +5,8 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -45,6 +47,11 @@ type GraphEdge struct {
 	Edges []GraphRoute `json:"edges,omitempty"`
 	// Join semantics for this downstream node.
 	Join GraphJoin `json:"join,omitempty"`
+	// Delegates dispatched after the node's first execution. Reports
+	// flow back and trigger a review re-execution before edges fire.
+	Delegates []GraphRoute `json:"delegates,omitempty"`
+	// DelegateJoin controls how delegate returns are collected.
+	DelegateJoin GraphJoin `json:"delegate_join,omitempty"`
 }
 
 type GraphRoute struct {
@@ -53,6 +60,37 @@ type GraphRoute struct {
 	Labels map[string]string `json:"labels,omitempty"`
 	// Optional policy key/value bag for edge-level controls.
 	Policy map[string]string `json:"policy,omitempty"`
+	// Optional condition that must match the completing agent's output for this edge to fire.
+	Condition *EdgeCondition `json:"condition,omitempty"`
+}
+
+// EdgeCondition defines a predicate evaluated against the completing agent's output
+// to determine whether a graph edge should fire. All non-empty fields must match
+// (logical AND). Use Default to mark a fallback edge.
+type EdgeCondition struct {
+	// OutputContains matches if the output contains this string (case-insensitive).
+	OutputContains string `json:"output_contains,omitempty"`
+	// OutputNotContains matches if the output does NOT contain this string (case-insensitive).
+	OutputNotContains string `json:"output_not_contains,omitempty"`
+	// OutputMatches matches if the output matches this regex pattern.
+	OutputMatches string `json:"output_matches,omitempty"`
+	// Default marks this edge as the fallback when no conditional edge matches.
+	Default bool `json:"default,omitempty"`
+
+	// OutputJSONPath extracts a value from JSON output using dot-notation (e.g. "$.route").
+	// When set, one of the comparison operators (Equals, NotEquals, Contains, GreaterThan,
+	// LessThan) must also be set.
+	OutputJSONPath string `json:"output_json_path,omitempty"`
+	// Equals matches when the extracted JSON value equals this string.
+	Equals string `json:"equals,omitempty"`
+	// NotEquals matches when the extracted JSON value does NOT equal this string.
+	NotEquals string `json:"not_equals,omitempty"`
+	// Contains matches when the extracted JSON value (string or array) contains this value.
+	Contains string `json:"contains,omitempty"`
+	// GreaterThan matches when the extracted numeric JSON value is greater than this threshold.
+	GreaterThan string `json:"greater_than,omitempty"`
+	// LessThan matches when the extracted numeric JSON value is less than this threshold.
+	LessThan string `json:"less_than,omitempty"`
 }
 
 type GraphJoin struct {
@@ -77,6 +115,68 @@ type AgentSystemList struct {
 	Items    []AgentSystem `json:"items"`
 }
 
+func normalizeGraphRoutes(routes []GraphRoute, node, field string) ([]GraphRoute, error) {
+	normalized := make([]GraphRoute, 0, len(routes))
+	defaultCount := 0
+	for _, route := range routes {
+		route.To = strings.TrimSpace(route.To)
+		if route.To == "" {
+			continue
+		}
+		if route.Condition != nil {
+			route.Condition.OutputContains = strings.TrimSpace(route.Condition.OutputContains)
+			route.Condition.OutputNotContains = strings.TrimSpace(route.Condition.OutputNotContains)
+			route.Condition.OutputMatches = strings.TrimSpace(route.Condition.OutputMatches)
+			route.Condition.OutputJSONPath = strings.TrimSpace(route.Condition.OutputJSONPath)
+			route.Condition.Equals = strings.TrimSpace(route.Condition.Equals)
+			route.Condition.NotEquals = strings.TrimSpace(route.Condition.NotEquals)
+			route.Condition.Contains = strings.TrimSpace(route.Condition.Contains)
+			route.Condition.GreaterThan = strings.TrimSpace(route.Condition.GreaterThan)
+			route.Condition.LessThan = strings.TrimSpace(route.Condition.LessThan)
+			if route.Condition.OutputMatches != "" {
+				if _, err := regexp.Compile(route.Condition.OutputMatches); err != nil {
+					return nil, fmt.Errorf("spec.graph.%s.%s[%s].condition.output_matches: invalid regex %q: %w", node, field, route.To, route.Condition.OutputMatches, err)
+				}
+			}
+			hasJSONOp := route.Condition.Equals != "" || route.Condition.NotEquals != "" ||
+				route.Condition.Contains != "" || route.Condition.GreaterThan != "" || route.Condition.LessThan != ""
+			if route.Condition.OutputJSONPath != "" {
+				if !hasJSONOp {
+					return nil, fmt.Errorf("spec.graph.%s.%s[%s].condition: output_json_path requires at least one comparison operator (equals, not_equals, contains, greater_than, less_than)", node, field, route.To)
+				}
+				if !strings.HasPrefix(route.Condition.OutputJSONPath, "$.") {
+					return nil, fmt.Errorf("spec.graph.%s.%s[%s].condition: output_json_path must start with \"$.\"", node, field, route.To)
+				}
+			}
+			if hasJSONOp && route.Condition.OutputJSONPath == "" {
+				return nil, fmt.Errorf("spec.graph.%s.%s[%s].condition: comparison operators (equals, not_equals, etc.) require output_json_path", node, field, route.To)
+			}
+			if route.Condition.GreaterThan != "" {
+				if _, err := strconv.ParseFloat(route.Condition.GreaterThan, 64); err != nil {
+					return nil, fmt.Errorf("spec.graph.%s.%s[%s].condition.greater_than: must be a valid number: %w", node, field, route.To, err)
+				}
+			}
+			if route.Condition.LessThan != "" {
+				if _, err := strconv.ParseFloat(route.Condition.LessThan, 64); err != nil {
+					return nil, fmt.Errorf("spec.graph.%s.%s[%s].condition.less_than: must be a valid number: %w", node, field, route.To, err)
+				}
+			}
+			if route.Condition.Default {
+				hasStringCond := route.Condition.OutputContains != "" || route.Condition.OutputNotContains != "" || route.Condition.OutputMatches != ""
+				if hasStringCond || hasJSONOp || route.Condition.OutputJSONPath != "" {
+					return nil, fmt.Errorf("spec.graph.%s.%s[%s].condition: default edge must not have other condition fields", node, field, route.To)
+				}
+				defaultCount++
+			}
+		}
+		normalized = append(normalized, route)
+	}
+	if defaultCount > 1 {
+		return nil, fmt.Errorf("spec.graph.%s.%s: at most one default edge is allowed, found %d", node, field, defaultCount)
+	}
+	return normalized, nil
+}
+
 func (a *AgentSystem) Normalize() error {
 	if a.APIVersion == "" {
 		a.APIVersion = "orloj.dev/v1"
@@ -97,18 +197,30 @@ func (a *AgentSystem) Normalize() error {
 	for name, node := range a.Spec.Graph {
 		node.Next = strings.TrimSpace(node.Next)
 		if len(node.Edges) > 0 {
-			normalized := make([]GraphRoute, 0, len(node.Edges))
-			for _, route := range node.Edges {
-				route.To = strings.TrimSpace(route.To)
-				if route.To == "" {
-					continue
-				}
-				normalized = append(normalized, route)
+			normalized, err := normalizeGraphRoutes(node.Edges, name, "edges")
+			if err != nil {
+				return err
 			}
 			node.Edges = normalized
 		}
+		if len(node.Delegates) > 0 {
+			normalized, err := normalizeGraphRoutes(node.Delegates, name, "delegates")
+			if err != nil {
+				return err
+			}
+			node.Delegates = normalized
+		}
 		a.Spec.Graph[name] = node
 	}
+
+	for name, node := range a.Spec.Graph {
+		for _, route := range node.Delegates {
+			if route.To == name {
+				return fmt.Errorf("spec.graph.%s.delegates[%s]: a node cannot delegate to itself", name, route.To)
+			}
+		}
+	}
+
 	if a.Status.Phase == "" {
 		a.Status.Phase = "Pending"
 	}
@@ -975,6 +1087,7 @@ type TaskMessage struct {
 	Worker         string `json:"worker,omitempty"`
 	ProcessedAt    string `json:"processed_at,omitempty"`
 	NextAttemptAt  string `json:"next_attempt_at,omitempty"`
+	DelegateOf     string `json:"delegate_of,omitempty"`
 }
 
 type TaskMessageIdempotency struct {
@@ -1006,6 +1119,18 @@ type TaskJoinState struct {
 	Sources        []TaskJoinSource `json:"sources,omitempty"`
 }
 
+type TaskDelegationState struct {
+	Attempt        int              `json:"attempt,omitempty"`
+	Node           string           `json:"node,omitempty"`
+	Mode           string           `json:"mode,omitempty"`
+	Expected       int              `json:"expected,omitempty"`
+	QuorumRequired int              `json:"quorum_required,omitempty"`
+	Activated      bool             `json:"activated,omitempty"`
+	ActivatedAt    string           `json:"activated_at,omitempty"`
+	ActivatedBy    string           `json:"activated_by,omitempty"`
+	Sources        []TaskJoinSource `json:"sources,omitempty"`
+}
+
 type TaskStatus struct {
 	Phase              string                   `json:"phase,omitempty"`
 	LastError          string                   `json:"lastError,omitempty"`
@@ -1023,6 +1148,7 @@ type TaskStatus struct {
 	Messages           []TaskMessage            `json:"messages,omitempty"`
 	MessageIdempotency []TaskMessageIdempotency `json:"message_idempotency,omitempty"`
 	JoinStates         []TaskJoinState          `json:"join_states,omitempty"`
+	DelegationStates   []TaskDelegationState    `json:"delegation_states,omitempty"`
 	ObservedGeneration int64                    `json:"observedGeneration,omitempty"`
 }
 
@@ -1121,6 +1247,9 @@ func (t *Task) Normalize() error {
 	}
 	if t.Status.JoinStates == nil {
 		t.Status.JoinStates = make([]TaskJoinState, 0)
+	}
+	if t.Status.DelegationStates == nil {
+		t.Status.DelegationStates = make([]TaskDelegationState, 0)
 	}
 	return nil
 }

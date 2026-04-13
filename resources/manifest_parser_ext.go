@@ -63,6 +63,8 @@ func ParseAgentSystemManifest(data []byte) (AgentSystem, error) {
 	graphNodeSection := ""
 	edgeNestedSection := ""
 	currentGraphEdgeIndex := -1
+	delegateNestedSection := ""
+	currentDelegateIndex := -1
 	out.Spec.Graph = make(map[string]GraphEdge)
 
 	for _, line := range lines {
@@ -78,6 +80,8 @@ func ParseAgentSystemManifest(data []byte) (AgentSystem, error) {
 			graphNodeSection = ""
 			edgeNestedSection = ""
 			currentGraphEdgeIndex = -1
+			delegateNestedSection = ""
+			currentDelegateIndex = -1
 		}
 		if section == "metadata" && indent <= 2 && !strings.HasSuffix(trimmed, ":") && !strings.HasPrefix(trimmed, "- ") {
 			subsection = ""
@@ -86,6 +90,8 @@ func ParseAgentSystemManifest(data []byte) (AgentSystem, error) {
 			graphNodeSection = ""
 			edgeNestedSection = ""
 			currentGraphEdgeIndex = -1
+			delegateNestedSection = ""
+			currentDelegateIndex = -1
 		}
 
 		if strings.HasSuffix(trimmed, ":") {
@@ -98,6 +104,8 @@ func ParseAgentSystemManifest(data []byte) (AgentSystem, error) {
 				graphNodeSection = ""
 				edgeNestedSection = ""
 				currentGraphEdgeIndex = -1
+				delegateNestedSection = ""
+				currentDelegateIndex = -1
 			case key == "spec":
 				section = "spec"
 				subsection = ""
@@ -105,18 +113,24 @@ func ParseAgentSystemManifest(data []byte) (AgentSystem, error) {
 				graphNodeSection = ""
 				edgeNestedSection = ""
 				currentGraphEdgeIndex = -1
+				delegateNestedSection = ""
+				currentDelegateIndex = -1
 			case section == "spec" && key == "agents":
 				subsection = "agents"
 				currentGraphNode = ""
 				graphNodeSection = ""
 				edgeNestedSection = ""
 				currentGraphEdgeIndex = -1
+				delegateNestedSection = ""
+				currentDelegateIndex = -1
 			case section == "spec" && key == "graph":
 				subsection = "graph"
 				currentGraphNode = ""
 				graphNodeSection = ""
 				edgeNestedSection = ""
 				currentGraphEdgeIndex = -1
+				delegateNestedSection = ""
+				currentDelegateIndex = -1
 			case section == "metadata" && key == "labels":
 				subsection = "labels"
 				currentGraphNode = ""
@@ -133,8 +147,24 @@ func ParseAgentSystemManifest(data []byte) (AgentSystem, error) {
 					currentGraphEdgeIndex = -1
 					break
 				}
-				if currentGraphNode != "" && graphNodeSection == "edges" && indent >= 8 && (key == "labels" || key == "policy") {
+				if currentGraphNode != "" && indent >= 6 && key == "delegates" {
+					graphNodeSection = "delegates"
+					delegateNestedSection = ""
+					currentDelegateIndex = -1
+					break
+				}
+				if currentGraphNode != "" && indent >= 6 && (key == "delegate_join" || key == "delegateJoin") {
+					graphNodeSection = "delegate_join"
+					delegateNestedSection = ""
+					currentDelegateIndex = -1
+					break
+				}
+				if currentGraphNode != "" && graphNodeSection == "edges" && indent >= 8 && (key == "labels" || key == "policy" || key == "condition") {
 					edgeNestedSection = key
+					break
+				}
+				if currentGraphNode != "" && graphNodeSection == "delegates" && indent >= 8 && (key == "labels" || key == "policy" || key == "condition") {
+					delegateNestedSection = key
 					break
 				}
 
@@ -142,6 +172,8 @@ func ParseAgentSystemManifest(data []byte) (AgentSystem, error) {
 				graphNodeSection = ""
 				edgeNestedSection = ""
 				currentGraphEdgeIndex = -1
+				delegateNestedSection = ""
+				currentDelegateIndex = -1
 				if _, ok := out.Spec.Graph[currentGraphNode]; !ok {
 					out.Spec.Graph[currentGraphNode] = GraphEdge{}
 				}
@@ -172,6 +204,27 @@ func ParseAgentSystemManifest(data []byte) (AgentSystem, error) {
 			out.Spec.Graph[currentGraphNode] = node
 			currentGraphEdgeIndex = len(node.Edges) - 1
 			edgeNestedSection = ""
+			continue
+		}
+		if section == "spec" && subsection == "graph" && currentGraphNode != "" && graphNodeSection == "delegates" && strings.HasPrefix(trimmed, "- ") {
+			item := strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))
+			route := GraphRoute{}
+			if item != "" {
+				if k, v, ok := parseKeyValue(item); ok {
+					k = strings.TrimSpace(k)
+					v = stripQuotes(v)
+					if k == "to" || k == "next" {
+						route.To = v
+					}
+				} else {
+					route.To = stripQuotes(item)
+				}
+			}
+			node := out.Spec.Graph[currentGraphNode]
+			node.Delegates = append(node.Delegates, route)
+			out.Spec.Graph[currentGraphNode] = node
+			currentDelegateIndex = len(node.Delegates) - 1
+			delegateNestedSection = ""
 			continue
 		}
 
@@ -234,12 +287,106 @@ func ParseAgentSystemManifest(data []byte) (AgentSystem, error) {
 						route.Policy = make(map[string]string)
 					}
 					route.Policy[key] = value
+			case "condition":
+				if route.Condition == nil {
+					route.Condition = &EdgeCondition{}
+				}
+				switch key {
+				case "output_contains", "outputContains":
+					route.Condition.OutputContains = value
+				case "output_not_contains", "outputNotContains":
+					route.Condition.OutputNotContains = value
+				case "output_matches", "outputMatches":
+					route.Condition.OutputMatches = value
+				case "default":
+					route.Condition.Default = strings.EqualFold(value, "true") || value == "1"
+				case "output_json_path", "outputJsonPath":
+					route.Condition.OutputJSONPath = value
+				case "equals":
+					route.Condition.Equals = value
+				case "not_equals", "notEquals":
+					route.Condition.NotEquals = value
+				case "contains":
+					route.Condition.Contains = value
+				case "greater_than", "greaterThan":
+					route.Condition.GreaterThan = value
+				case "less_than", "lessThan":
+					route.Condition.LessThan = value
+				}
 				default:
 					if key == "to" || key == "next" {
 						route.To = value
 					}
 				}
 				node.Edges[currentGraphEdgeIndex] = route
+			case graphNodeSection == "delegates":
+				if currentDelegateIndex < 0 {
+					node.Delegates = append(node.Delegates, GraphRoute{})
+					currentDelegateIndex = len(node.Delegates) - 1
+				}
+				route := node.Delegates[currentDelegateIndex]
+				switch delegateNestedSection {
+				case "labels":
+					if route.Labels == nil {
+						route.Labels = make(map[string]string)
+					}
+					route.Labels[key] = value
+				case "policy":
+					if route.Policy == nil {
+						route.Policy = make(map[string]string)
+					}
+					route.Policy[key] = value
+				case "condition":
+					if route.Condition == nil {
+						route.Condition = &EdgeCondition{}
+					}
+					switch key {
+					case "output_contains", "outputContains":
+						route.Condition.OutputContains = value
+					case "output_not_contains", "outputNotContains":
+						route.Condition.OutputNotContains = value
+					case "output_matches", "outputMatches":
+						route.Condition.OutputMatches = value
+					case "default":
+						route.Condition.Default = strings.EqualFold(value, "true") || value == "1"
+					case "output_json_path", "outputJsonPath":
+						route.Condition.OutputJSONPath = value
+					case "equals":
+						route.Condition.Equals = value
+					case "not_equals", "notEquals":
+						route.Condition.NotEquals = value
+					case "contains":
+						route.Condition.Contains = value
+					case "greater_than", "greaterThan":
+						route.Condition.GreaterThan = value
+					case "less_than", "lessThan":
+						route.Condition.LessThan = value
+					}
+				default:
+					if key == "to" || key == "next" {
+						route.To = value
+					}
+				}
+				node.Delegates[currentDelegateIndex] = route
+			case graphNodeSection == "delegate_join":
+				switch key {
+				case "mode":
+					node.DelegateJoin.Mode = value
+				case "on_failure", "onFailure":
+					node.DelegateJoin.OnFailure = value
+				case "quorum_count", "quorumCount":
+					v, err := strconv.Atoi(value)
+					if err != nil {
+						return AgentSystem{}, fmt.Errorf("invalid spec.graph.%s.delegate_join.quorum_count value %q", currentGraphNode, value)
+					}
+					node.DelegateJoin.QuorumCount = v
+				case "quorum_percent", "quorumPercent":
+					v, err := strconv.Atoi(value)
+					if err != nil {
+						return AgentSystem{}, fmt.Errorf("invalid spec.graph.%s.delegate_join.quorum_percent value %q", currentGraphNode, value)
+					}
+					node.DelegateJoin.QuorumPercent = v
+				}
 			default:
 				if key == "next" {
 					node.Next = value

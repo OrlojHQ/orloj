@@ -110,6 +110,16 @@ func (g *OpenAIModelGateway) Complete(ctx context.Context, req ModelRequest) (Mo
 		body.Tools = buildOpenAIChatTools(req.Tools, req.ToolSchemas)
 		body.ToolChoice = "auto"
 	}
+	if len(req.OutputSchema) > 0 {
+		body.ResponseFormat = &openAIResponseFormat{
+			Type: "json_schema",
+			JSONSchema: &openAIJSONSchema{
+				Name:   "agent_output",
+				Strict: true,
+				Schema: req.OutputSchema,
+			},
+		}
+	}
 
 	payload, err := json.Marshal(body)
 	if err != nil {
@@ -231,10 +241,22 @@ func parseOpenAIMessageContent(raw json.RawMessage) string {
 }
 
 type openAIChatCompletionRequest struct {
-	Model      string                        `json:"model"`
-	Messages   []openAIChatCompletionMessage `json:"messages"`
-	Tools      []openAIChatTool              `json:"tools,omitempty"`
-	ToolChoice string                        `json:"tool_choice,omitempty"`
+	Model          string                        `json:"model"`
+	Messages       []openAIChatCompletionMessage `json:"messages"`
+	Tools          []openAIChatTool              `json:"tools,omitempty"`
+	ToolChoice     string                        `json:"tool_choice,omitempty"`
+	ResponseFormat *openAIResponseFormat          `json:"response_format,omitempty"`
+}
+
+type openAIResponseFormat struct {
+	Type       string              `json:"type"`
+	JSONSchema *openAIJSONSchema   `json:"json_schema,omitempty"`
+}
+
+type openAIJSONSchema struct {
+	Name   string         `json:"name"`
+	Strict bool           `json:"strict"`
+	Schema map[string]any `json:"schema"`
 }
 
 type openAIChatCompletionMessage struct {

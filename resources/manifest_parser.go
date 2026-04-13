@@ -7,6 +7,40 @@ import (
 	"strings"
 )
 
+// yamlScalarToTyped converts a bare YAML scalar string to its natural Go type:
+// "true"/"false" → bool, integer strings → int64, float strings → float64,
+// inline arrays "[a, b, c]" → []any of typed elements,
+// everything else → string. This ensures JSON Schema booleans (e.g.
+// additionalProperties: false) and numbers round-trip correctly.
+func yamlScalarToTyped(s string) any {
+	switch strings.ToLower(s) {
+	case "true":
+		return true
+	case "false":
+		return false
+	}
+	if i, err := strconv.ParseInt(s, 10, 64); err == nil {
+		return i
+	}
+	if f, err := strconv.ParseFloat(s, 64); err == nil {
+		return f
+	}
+	// Inline flow array: [a, b, c]
+	if strings.HasPrefix(s, "[") && strings.HasSuffix(s, "]") {
+		inner := strings.TrimSpace(s[1 : len(s)-1])
+		if inner == "" {
+			return []any{}
+		}
+		parts := strings.Split(inner, ",")
+		arr := make([]any, 0, len(parts))
+		for _, p := range parts {
+			arr = append(arr, yamlScalarToTyped(stripQuotes(strings.TrimSpace(p))))
+		}
+		return arr
+	}
+	return s
+}
+
 // ParseAgentManifest accepts either JSON or a constrained YAML subset for Agent resources.
 func ParseAgentManifest(data []byte) (Agent, error) {
 	var agent Agent
@@ -202,6 +236,50 @@ func ParseAgentManifest(data []byte) (Agent, error) {
 		agent.Spec.Prompt = strings.TrimRight(strings.Join(promptLines, "\n"), "\n")
 	}
 
+	// Post-scan: extract output_schema block under execution (nested map, not a scalar).
+	if len(agent.Spec.Execution.OutputSchema) == 0 {
+		inExecution := false
+		for i, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+				continue
+			}
+			ind := leadingSpaces(line)
+			if trimmed == "execution:" && ind == 2 {
+				inExecution = true
+				continue
+			}
+			if inExecution && ind <= 2 && trimmed != "" {
+				inExecution = false
+			}
+			if inExecution && (trimmed == "output_schema:" || trimmed == "outputSchema:") {
+				blockIndent := -1
+				var blockLines []string
+				for j := i + 1; j < len(lines); j++ {
+					ct := strings.TrimSpace(lines[j])
+					if ct == "" || strings.HasPrefix(ct, "#") {
+						continue
+					}
+					ci := leadingSpaces(lines[j])
+					if ci <= ind {
+						break
+					}
+					if blockIndent < 0 {
+						blockIndent = ci
+					}
+					if ci < blockIndent {
+						break
+					}
+					blockLines = append(blockLines, lines[j])
+				}
+				if blockIndent > 0 && len(blockLines) > 0 {
+					agent.Spec.Execution.OutputSchema = parseSimpleYAMLMap(blockLines, blockIndent)
+				}
+				break
+			}
+		}
+	}
+
 	if err := agent.Normalize(); err != nil {
 		return Agent{}, err
 	}
@@ -298,7 +376,7 @@ func parseSimpleYAMLMap(lines []string, baseIndent int) map[string]any {
 				out[k] = parseSimpleYAMLMap(childLines, childIndent)
 			}
 		} else {
-			out[k] = stripQuotes(v)
+			out[k] = yamlScalarToTyped(stripQuotes(v))
 		}
 		i++
 	}

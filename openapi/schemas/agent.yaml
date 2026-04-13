@@ -27,6 +27,10 @@ components:
         duplicate_tool_call_policy: { type: string }
         on_contract_violation: { type: string }
         tool_use_behavior: { type: string }
+        output_schema:
+          type: object
+          description: JSON Schema constraining the agent's output. Passed to model providers for structured output enforcement.
+          additionalProperties: true
     AgentSpec:
       type: object
       properties:

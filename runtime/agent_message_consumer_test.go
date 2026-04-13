@@ -1369,6 +1369,197 @@ func TestAgentMessageConsumerPassesWithNoPolicies(t *testing.T) {
 	}
 }
 
+func TestConditionalEdgeRoutingSkipsUnmatchedAgents(t *testing.T) {
+	bus := NewMemoryAgentMessageBus("orloj.agentmsg", 256, time.Minute)
+	defer func() { _ = bus.Close() }()
+
+	agentStore := store.NewAgentStore()
+	systemStore := store.NewAgentSystemStore()
+	taskStore := store.NewTaskStore()
+
+	for _, agent := range []resources.Agent{
+		{
+			APIVersion: "orloj.dev/v1",
+			Kind:       "Agent",
+			Metadata:   resources.ObjectMeta{Name: "classifier"},
+			Spec: resources.AgentSpec{
+				ModelRef: "openai-default",
+				Prompt:   "classify",
+				Limits:   resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
+			},
+		},
+		{
+			APIVersion: "orloj.dev/v1",
+			Kind:       "Agent",
+			Metadata:   resources.ObjectMeta{Name: "billing-agent"},
+			Spec: resources.AgentSpec{
+				ModelRef: "openai-default",
+				Prompt:   "handle billing",
+				Limits:   resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
+			},
+		},
+		{
+			APIVersion: "orloj.dev/v1",
+			Kind:       "Agent",
+			Metadata:   resources.ObjectMeta{Name: "tech-agent"},
+			Spec: resources.AgentSpec{
+				ModelRef: "openai-default",
+				Prompt:   "handle tech",
+				Limits:   resources.AgentLimits{MaxSteps: 1, Timeout: "1s"},
+			},
+		},
+	} {
+		if _, err := agentStore.Upsert(context.Background(), agent); err != nil {
+			t.Fatalf("upsert agent failed: %v", err)
+		}
+	}
+
+	if _, err := systemStore.Upsert(context.Background(), resources.AgentSystem{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "AgentSystem",
+		Metadata:   resources.ObjectMeta{Name: "triage-system"},
+		Spec: resources.AgentSystemSpec{
+			Agents: []string{"classifier", "billing-agent", "tech-agent"},
+			Graph: map[string]resources.GraphEdge{
+				"classifier": {Edges: []resources.GraphRoute{
+					{To: "billing-agent", Condition: &resources.EdgeCondition{OutputContains: "BILLING"}},
+					{To: "tech-agent", Condition: &resources.EdgeCondition{OutputContains: "TECH"}},
+				}},
+			},
+		},
+	}); err != nil {
+		t.Fatalf("upsert system failed: %v", err)
+	}
+
+	if _, err := taskStore.Upsert(context.Background(), resources.Task{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Task",
+		Metadata:   resources.ObjectMeta{Name: "triage-task-1"},
+		Spec: resources.TaskSpec{
+			System: "triage-system",
+			Input:  map[string]string{"topic": "my bill is wrong"},
+		},
+		Status: resources.TaskStatus{
+			Phase:     "Running",
+			ClaimedBy: "worker-a",
+			Attempts:  1,
+		},
+	}); err != nil {
+		t.Fatalf("upsert task failed: %v", err)
+	}
+
+	manager := NewAgentMessageConsumerManager(
+		bus,
+		agentStore,
+		systemStore,
+		taskStore,
+		nil,
+		AgentMessageConsumerOptions{
+			ModelEndpoints:      newTestModelEndpointStore(t),
+			WorkerID:            "worker-a",
+			RefreshEvery:        20 * time.Millisecond,
+			DedupeWindow:        time.Minute,
+			LeaseExtendDuration: 30 * time.Second,
+		},
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go manager.Start(ctx)
+	time.Sleep(40 * time.Millisecond)
+
+	if _, err := bus.Publish(context.Background(), AgentMessage{
+		MessageID: "cond-msg-1",
+		TaskID:    "default/triage-task-1",
+		Namespace: "default",
+		FromAgent: "system",
+		ToAgent:   "classifier",
+		Type:      "task_start",
+		Payload:   "my bill is wrong",
+		Attempt:   1,
+		TraceID:   "default/triage-task-1/a001",
+	}); err != nil {
+		t.Fatalf("publish failed: %v", err)
+	}
+
+	waitForConsumer(t, 3*time.Second, func() bool {
+		task, ok, _ := taskStore.Get(context.Background(), "triage-task-1")
+		return ok && strings.EqualFold(task.Status.Phase, "succeeded")
+	})
+
+	task, _, _ := taskStore.Get(context.Background(), "triage-task-1")
+	if task.Status.Phase != "Succeeded" {
+		t.Fatalf("expected Succeeded, got %q (error: %s)", task.Status.Phase, task.Status.LastError)
+	}
+
+	hasBilling := false
+	hasTech := false
+	for _, msg := range task.Status.Messages {
+		if strings.EqualFold(msg.ToAgent, "billing-agent") {
+			hasBilling = true
+		}
+		if strings.EqualFold(msg.ToAgent, "tech-agent") {
+			hasTech = true
+		}
+	}
+
+	// The mock model output won't contain "BILLING" or "TECH", so the
+	// classifier's output should not match either condition. Both agents
+	// should be skipped and the task should complete at the classifier.
+	if hasBilling || hasTech {
+		t.Fatalf("expected conditional routing to skip both agents (mock output has no BILLING/TECH), billing=%v tech=%v", hasBilling, hasTech)
+	}
+}
+
+func TestNextAgentsFromSystemForOutputFiltersEdges(t *testing.T) {
+	system := resources.AgentSystem{
+		Spec: resources.AgentSystemSpec{
+			Agents: []string{"router", "a", "b", "c"},
+			Graph: map[string]resources.GraphEdge{
+				"router": {Edges: []resources.GraphRoute{
+					{To: "a", Condition: &resources.EdgeCondition{OutputContains: "ALPHA"}},
+					{To: "b", Condition: &resources.EdgeCondition{OutputContains: "BETA"}},
+					{To: "c", Condition: &resources.EdgeCondition{Default: true}},
+				}},
+			},
+		},
+	}
+
+	got := nextAgentsFromSystemForOutput(system, "router", "This has ALPHA tag", "")
+	if len(got) != 1 || got[0] != "a" {
+		t.Fatalf("expected [a], got %v", got)
+	}
+
+	got = nextAgentsFromSystemForOutput(system, "router", "Both ALPHA and BETA", "")
+	if len(got) != 2 || got[0] != "a" || got[1] != "b" {
+		t.Fatalf("expected [a, b], got %v", got)
+	}
+
+	got = nextAgentsFromSystemForOutput(system, "router", "nothing matches", "")
+	if len(got) != 1 || got[0] != "c" {
+		t.Fatalf("expected [c] (default), got %v", got)
+	}
+}
+
+func TestNextAgentsFromSystemBackwardCompatNoConditions(t *testing.T) {
+	system := resources.AgentSystem{
+		Spec: resources.AgentSystemSpec{
+			Agents: []string{"a", "b", "c"},
+			Graph: map[string]resources.GraphEdge{
+				"a": {Edges: []resources.GraphRoute{
+					{To: "b"},
+					{To: "c"},
+				}},
+			},
+		},
+	}
+
+	got := nextAgentsFromSystemForOutput(system, "a", "any output", "")
+	if len(got) != 2 || got[0] != "b" || got[1] != "c" {
+		t.Fatalf("expected [b, c] (no conditions = all fire), got %v", got)
+	}
+}
+
 func waitForConsumer(t *testing.T, timeout time.Duration, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -1426,4 +1617,235 @@ func taskMessageByID(messages []resources.TaskMessage, messageID string) (resour
 		}
 	}
 	return resources.TaskMessage{}, false
+}
+
+func TestNextAgentsFromSystemDelegateOfReturn(t *testing.T) {
+	system := resources.AgentSystem{
+		Spec: resources.AgentSystemSpec{
+			Graph: map[string]resources.GraphEdge{
+				"worker": {},
+			},
+		},
+	}
+
+	got := nextAgentsFromSystemForOutput(system, "worker", "some output", "manager")
+	if len(got) != 1 || got[0] != "manager" {
+		t.Fatalf("expected [manager] from delegate_of return, got %v", got)
+	}
+
+	got = nextAgentsFromSystemForOutput(system, "worker", "some output", "")
+	if len(got) != 0 {
+		t.Fatalf("expected empty when no delegate_of, got %v", got)
+	}
+}
+
+func TestNextAgentsFromSystemEdgesTakePriorityOverDelegateOf(t *testing.T) {
+	system := resources.AgentSystem{
+		Spec: resources.AgentSystemSpec{
+			Graph: map[string]resources.GraphEdge{
+				"worker": {
+					Edges: []resources.GraphRoute{
+						{To: "next-agent"},
+					},
+				},
+			},
+		},
+	}
+
+	got := nextAgentsFromSystemForOutput(system, "worker", "output", "manager")
+	if len(got) != 1 || got[0] != "next-agent" {
+		t.Fatalf("edges should take priority over delegate_of, got %v", got)
+	}
+}
+
+func TestBuildDelegateMessages(t *testing.T) {
+	task := resources.Task{
+		Metadata: resources.ObjectMeta{
+			Name:      "test-task",
+			Namespace: "default",
+		},
+		Status: resources.TaskStatus{
+			Attempts: 1,
+		},
+	}
+	current := AgentMessage{
+		MessageID: "default/test-task/a001/h001/init/manager",
+		TaskID:    "default/test-task",
+		Attempt:   1,
+		System:    "my-system",
+		Namespace: "default",
+		FromAgent: "init",
+		ToAgent:   "manager",
+		BranchID:  "b001",
+		TraceID:   "trace-1",
+	}
+	result := AgentExecutionResult{
+		Agent:  "manager",
+		Output: "delegate to workers",
+	}
+
+	msgs := buildDelegateMessages(task, current, result, []string{"worker-a", "worker-b"}, "manager")
+	if len(msgs) != 2 {
+		t.Fatalf("expected 2 delegate messages, got %d", len(msgs))
+	}
+
+	if msgs[0].ToAgent != "worker-a" {
+		t.Fatalf("expected first message to worker-a, got %q", msgs[0].ToAgent)
+	}
+	if msgs[0].DelegateOf != "manager" {
+		t.Fatalf("expected delegate_of=manager, got %q", msgs[0].DelegateOf)
+	}
+	if msgs[0].Type != "delegation" {
+		t.Fatalf("expected type=delegation, got %q", msgs[0].Type)
+	}
+	if !strings.Contains(msgs[0].BranchID, ".d001") {
+		t.Fatalf("expected delegation branch suffix .d001, got %q", msgs[0].BranchID)
+	}
+
+	if msgs[1].ToAgent != "worker-b" {
+		t.Fatalf("expected second message to worker-b, got %q", msgs[1].ToAgent)
+	}
+	if msgs[1].DelegateOf != "manager" {
+		t.Fatalf("expected delegate_of=manager on second message, got %q", msgs[1].DelegateOf)
+	}
+	if !strings.Contains(msgs[1].BranchID, ".d002") {
+		t.Fatalf("expected delegation branch suffix .d002, got %q", msgs[1].BranchID)
+	}
+}
+
+func TestBuildNextAgentMessagesPropagatesDelegateOf(t *testing.T) {
+	task := resources.Task{
+		Metadata: resources.ObjectMeta{
+			Name:      "test-task",
+			Namespace: "default",
+		},
+		Status: resources.TaskStatus{
+			Attempts: 1,
+		},
+	}
+	current := AgentMessage{
+		MessageID:  "default/test-task/a001/h002/manager/worker-a",
+		TaskID:     "default/test-task",
+		Attempt:    1,
+		System:     "my-system",
+		Namespace:  "default",
+		FromAgent:  "manager",
+		ToAgent:    "worker-a",
+		BranchID:   "b001.d001",
+		DelegateOf: "manager",
+		TraceID:    "trace-1",
+	}
+	result := AgentExecutionResult{
+		Agent:  "worker-a",
+		Output: "sub-step output",
+	}
+
+	msgs := buildNextAgentMessages(task, current, result, []string{"sub-worker"})
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(msgs))
+	}
+	if msgs[0].DelegateOf != "manager" {
+		t.Fatalf("expected delegate_of=manager to propagate, got %q", msgs[0].DelegateOf)
+	}
+}
+
+func TestEnsureTaskDelegationState(t *testing.T) {
+	task := resources.Task{}
+	_ = task.Normalize()
+
+	idx := ensureTaskDelegationState(&task, 1, "manager", "wait_for_all", 2, 2)
+	if idx != 0 {
+		t.Fatalf("expected index 0, got %d", idx)
+	}
+	if len(task.Status.DelegationStates) != 1 {
+		t.Fatalf("expected 1 delegation state, got %d", len(task.Status.DelegationStates))
+	}
+	state := task.Status.DelegationStates[0]
+	if state.Node != "manager" || state.Mode != "wait_for_all" || state.Expected != 2 || state.QuorumRequired != 2 {
+		t.Fatalf("unexpected state: %+v", state)
+	}
+
+	idx2 := ensureTaskDelegationState(&task, 1, "manager", "wait_for_all", 2, 2)
+	if idx2 != 0 {
+		t.Fatalf("expected same index 0 for existing state, got %d", idx2)
+	}
+	if len(task.Status.DelegationStates) != 1 {
+		t.Fatalf("expected still 1 delegation state, got %d", len(task.Status.DelegationStates))
+	}
+
+	idx3 := ensureTaskDelegationState(&task, 1, "other-node", "quorum", 3, 2)
+	if idx3 != 1 {
+		t.Fatalf("expected index 1 for different node, got %d", idx3)
+	}
+	if len(task.Status.DelegationStates) != 2 {
+		t.Fatalf("expected 2 delegation states, got %d", len(task.Status.DelegationStates))
+	}
+}
+
+func TestAppendDelegationSource(t *testing.T) {
+	state := resources.TaskDelegationState{
+		Node:     "manager",
+		Expected: 2,
+		Sources:  make([]resources.TaskJoinSource, 0),
+	}
+
+	source1 := resources.TaskJoinSource{MessageID: "msg-1", FromAgent: "worker-a", Payload: "result-a"}
+	state = appendDelegationSource(state, source1)
+	if len(state.Sources) != 1 {
+		t.Fatalf("expected 1 source, got %d", len(state.Sources))
+	}
+
+	source2 := resources.TaskJoinSource{MessageID: "msg-2", FromAgent: "worker-b", Payload: "result-b"}
+	state = appendDelegationSource(state, source2)
+	if len(state.Sources) != 2 {
+		t.Fatalf("expected 2 sources, got %d", len(state.Sources))
+	}
+
+	source1Updated := resources.TaskJoinSource{MessageID: "msg-1", FromAgent: "worker-a", Payload: "updated-result-a"}
+	state = appendDelegationSource(state, source1Updated)
+	if len(state.Sources) != 2 {
+		t.Fatalf("expected still 2 sources after update, got %d", len(state.Sources))
+	}
+	if state.Sources[0].Payload != "updated-result-a" {
+		t.Fatalf("expected updated payload, got %q", state.Sources[0].Payload)
+	}
+}
+
+func TestCountDispatchedDelegates(t *testing.T) {
+	delegates := []resources.GraphRoute{
+		{To: "worker-a"},
+		{To: "worker-b"},
+		{To: "worker-c"},
+	}
+	messages := []resources.TaskMessage{
+		{ToAgent: "worker-a", DelegateOf: "manager"},
+		{ToAgent: "worker-b", DelegateOf: "manager"},
+		{ToAgent: "worker-c", DelegateOf: "other-node"},
+	}
+
+	count := countDispatchedDelegates(messages, delegates, "manager")
+	if count != 2 {
+		t.Fatalf("expected 2 dispatched delegates for manager, got %d", count)
+	}
+}
+
+func TestDelegationGateDecisionHelpers(t *testing.T) {
+	d := delegationGateDecision{
+		DelegationMode: "wait_for_all",
+		Required:       2,
+		Sources: []resources.TaskJoinSource{
+			{FromAgent: "worker-a", Payload: "result-a"},
+			{FromAgent: "worker-b", Payload: "result-b"},
+		},
+	}
+
+	agents := d.SourceAgents()
+	if agents != "worker-a,worker-b" {
+		t.Fatalf("expected 'worker-a,worker-b', got %q", agents)
+	}
+
+	payloads := d.SourcePayloads()
+	if !strings.Contains(payloads, "worker-a:result-a") || !strings.Contains(payloads, "worker-b:result-b") {
+		t.Fatalf("unexpected payloads: %q", payloads)
+	}
 }
