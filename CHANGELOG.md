@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-04-13
+
 ### Added
 
 - **Conditional edge routing for AgentSystem graphs**: graph edges can now carry an optional `condition` that is evaluated against the completing agent's output. Supported operators: `output_contains` (case-insensitive substring), `output_not_contains`, `output_matches` (regex), and `default` (fallback). When conditions are present, only matched edges fire, enabling data-dependent routing patterns like triage, quality gates, and intelligent hierarchical delegation. Join gates (`wait_for_all`, `quorum`) automatically adjust their expected branch count when conditional routing reduces the set of dispatched upstream agents. Requires message-driven execution mode.
@@ -214,7 +216,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Homebrew tap distribution (`OrlojHQ/orloj`)
 - Blueprint scaffolding via `orlojctl init`
 
-[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/OrlojHQ/orloj/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/OrlojHQ/orloj/compare/v0.6.3...v0.7.0
 [0.6.3]: https://github.com/OrlojHQ/orloj/compare/v0.6.2...v0.6.3
 [0.6.2]: https://github.com/OrlojHQ/orloj/compare/v0.6.1...v0.6.2
