@@ -368,6 +368,14 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 		return nil
 	}
 
+	delegationDecision, err := m.applyDelegationGate(ctx, taskKey, msg, system)
+	if err != nil {
+		return err
+	}
+	if delegationDecision.SkipExecution {
+		return nil
+	}
+
 	agentKey := scopedTaskName(ns, msg.ToAgent)
 	agent, ok, agentErr := m.agents.Get(ctx, agentKey)
 	if agentErr != nil {
@@ -430,6 +438,14 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 		input["inbox.join.required"] = strconv.Itoa(joinDecision.Required)
 		input["inbox.join.sources"] = joinDecision.SourceAgents()
 		input["inbox.join.payloads"] = joinDecision.SourcePayloads()
+	}
+	if delegationDecision.DelegationMode != "" {
+		input["inbox.delegation.enabled"] = "true"
+		input["inbox.delegation.mode"] = delegationDecision.DelegationMode
+		input["inbox.delegation.received"] = strconv.Itoa(len(delegationDecision.Sources))
+		input["inbox.delegation.required"] = strconv.Itoa(delegationDecision.Required)
+		input["inbox.delegation.sources"] = delegationDecision.SourceAgents()
+		input["inbox.delegation.payloads"] = delegationDecision.SourcePayloads()
 	}
 
 	var approvalCtx *GovernedToolApprovalContext
@@ -567,7 +583,58 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 		return nil
 	}
 
-	nextAgents := nextAgentsFromSystem(system, strings.TrimSpace(msg.ToAgent))
+	currentNode := strings.TrimSpace(msg.ToAgent)
+	graphNode, hasGraphNode := system.Spec.Graph[currentNode]
+
+	// Only dispatch delegates in the initial execution (dispatch phase).
+	// When delegationDecision.DelegationMode is set, we are already in the
+	// review phase — re-dispatching would create an infinite loop.
+	if hasGraphNode && len(graphNode.Delegates) > 0 && delegationDecision.DelegationMode == "" {
+		delegateRoutes := resources.FilterRoutesForOutput(graphNode.Delegates, strings.TrimSpace(result.Output))
+		if len(delegateRoutes) > 0 {
+			delegateAgents := make([]string, 0, len(delegateRoutes))
+			for _, r := range delegateRoutes {
+				delegateAgents = append(delegateAgents, r.To)
+			}
+			delegateMessages := buildDelegateMessages(task, msg, result, delegateAgents, currentNode)
+			for _, dm := range delegateMessages {
+				if _, err := m.bus.Publish(ctx, dm); err != nil {
+					retryScheduled, delay, markErr := m.recordRetryOrDeadLetter(ctx, taskKey, msg, record, fmt.Errorf("publish delegate message to %s failed: %w", dm.ToAgent, err))
+					if markErr != nil {
+						return markErr
+					}
+					if retryScheduled {
+						return RetryAfter(delay, err)
+					}
+					return nil
+				}
+			}
+			if err := m.recordForward(ctx, taskKey, msg, record, result, delegateMessages); err != nil {
+				return err
+			}
+			if m.logger != nil {
+				targets := make([]string, 0, len(delegateMessages))
+				for _, next := range delegateMessages {
+					targets = append(targets, next.ToAgent)
+				}
+				m.logger.Printf("agent delegation dispatched task=%s from=%s delegates=%s message_id=%s", taskKey, result.Agent, strings.Join(targets, ","), msg.MessageID)
+			}
+			return nil
+		}
+	}
+
+	// In the review phase the incoming message is a returning delegate whose
+	// DelegateOf points back at the current node. Propagating that into
+	// forward-edge messages would cause successors to loop back here when
+	// they terminate. Use the current node's own DelegateOf instead — i.e.
+	// what the current node itself was dispatched as (found from the original
+	// kickoff/handoff message to this node in the task history).
+	forwardDelegateOf := strings.TrimSpace(msg.DelegateOf)
+	if delegationDecision.DelegationMode != "" {
+		forwardDelegateOf = originalDelegateOfForAgent(task, msg.Attempt, currentNode)
+	}
+
+	nextAgents := nextAgentsFromSystemForOutput(system, currentNode, strings.TrimSpace(result.Output), forwardDelegateOf)
 	if len(nextAgents) == 0 {
 		if err := m.completeTaskSuccess(ctx, taskKey, msg, record, result); err != nil {
 			return err
@@ -578,8 +645,8 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 		return nil
 	}
 
-	nextMessages := buildNextAgentMessages(task, msg, result, nextAgents)
-		for _, nextMessage := range nextMessages {
+	nextMessages := buildNextAgentMessages(task, msg, result, nextAgents, forwardDelegateOf)
+	for _, nextMessage := range nextMessages {
 		if _, err := m.bus.Publish(ctx, nextMessage); err != nil {
 			retryScheduled, delay, markErr := m.recordRetryOrDeadLetter(ctx, taskKey, msg, record, fmt.Errorf("publish next message to %s failed: %w", nextMessage.ToAgent, err))
 			if markErr != nil {
@@ -685,6 +752,8 @@ func (m *AgentMessageConsumerManager) applyJoinGate(ctx context.Context, taskKey
 			return joinGateDecision{SkipExecution: true}, nil
 		}
 
+		expected, required = adjustJoinExpectedForConditionalDispatch(system, task, msg, expected, required, joinMode)
+
 		index := ensureTaskMessageRecord(&task, msg)
 		current := task.Status.Messages[index]
 		if isTerminalMessagePhase(current.Phase) {
@@ -775,6 +844,262 @@ func (m *AgentMessageConsumerManager) applyJoinGate(ctx context.Context, taskKey
 		return joinGateDecision{}, lastErr
 	}
 	return joinGateDecision{}, nil
+}
+
+type delegationGateDecision struct {
+	SkipExecution  bool
+	DelegationMode string
+	Required       int
+	Sources        []resources.TaskJoinSource
+}
+
+func (d delegationGateDecision) SourceAgents() string {
+	if len(d.Sources) == 0 {
+		return ""
+	}
+	seen := make(map[string]struct{}, len(d.Sources))
+	out := make([]string, 0, len(d.Sources))
+	for _, source := range d.Sources {
+		agent := strings.TrimSpace(source.FromAgent)
+		if agent == "" {
+			continue
+		}
+		key := strings.ToLower(agent)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, agent)
+	}
+	return strings.Join(out, ",")
+}
+
+func (d delegationGateDecision) SourcePayloads() string {
+	if len(d.Sources) == 0 {
+		return ""
+	}
+	values := make([]string, 0, len(d.Sources))
+	for _, source := range d.Sources {
+		from := strings.TrimSpace(source.FromAgent)
+		payload := strings.TrimSpace(source.Payload)
+		if from == "" && payload == "" {
+			continue
+		}
+		values = append(values, fmt.Sprintf("%s:%s", from, payload))
+	}
+	return strings.Join(values, " | ")
+}
+
+func (m *AgentMessageConsumerManager) applyDelegationGate(ctx context.Context, taskKey string, msg AgentMessage, system resources.AgentSystem) (delegationGateDecision, error) {
+	target := strings.TrimSpace(msg.ToAgent)
+	graphNode, ok := system.Spec.Graph[target]
+	if !ok || len(graphNode.Delegates) == 0 {
+		return delegationGateDecision{}, nil
+	}
+
+	isDelegationReturn := false
+	for _, d := range graphNode.Delegates {
+		if strings.EqualFold(strings.TrimSpace(msg.FromAgent), strings.TrimSpace(d.To)) {
+			isDelegationReturn = true
+			break
+		}
+	}
+	if !isDelegationReturn {
+		return delegationGateDecision{}, nil
+	}
+
+	join := resources.NormalizeGraphJoin(graphNode.DelegateJoin)
+	expected := len(graphNode.Delegates)
+	required := expected
+	if join.Mode == "quorum" {
+		required = quorumRequired(expected, join.QuorumCount, join.QuorumPercent)
+	}
+
+	var lastErr error
+	for attempt := 0; attempt < 5; attempt++ {
+		task, ok, err := m.tasks.Get(ctx, taskKey)
+		if err != nil {
+			lastErr = err
+			if !casRetryDelay(ctx, attempt) {
+				break
+			}
+			continue
+		}
+		if !ok {
+			return delegationGateDecision{SkipExecution: true}, nil
+		}
+		if isTerminalTaskPhase(task.Status.Phase) {
+			return delegationGateDecision{SkipExecution: true}, nil
+		}
+
+		dispatched := countDispatchedDelegates(task.Status.Messages, graphNode.Delegates, target)
+		if dispatched > 0 && dispatched < expected {
+			expected = dispatched
+			if join.Mode == "wait_for_all" {
+				required = expected
+			} else if required > expected {
+				required = expected
+			}
+		}
+
+		index := ensureTaskMessageRecord(&task, msg)
+		current := task.Status.Messages[index]
+		if isTerminalMessagePhase(current.Phase) {
+			return delegationGateDecision{SkipExecution: true}, nil
+		}
+
+		now := time.Now().UTC().Format(time.RFC3339Nano)
+		stateIdx := ensureTaskDelegationState(&task, msg.Attempt, target, join.Mode, expected, required)
+		state := task.Status.DelegationStates[stateIdx]
+		source := resources.TaskJoinSource{
+			MessageID: strings.TrimSpace(msg.MessageID),
+			FromAgent: strings.TrimSpace(msg.FromAgent),
+			BranchID:  strings.TrimSpace(msg.BranchID),
+			Timestamp: normalizeMessageTimestamp(msg.Timestamp),
+			Payload:   strings.TrimSpace(msg.Payload),
+		}
+		state = appendDelegationSource(state, source)
+		state.Expected = expected
+		state.QuorumRequired = required
+		state.Mode = join.Mode
+
+		if state.Activated {
+			current.Phase = "Succeeded"
+			current.Worker = strings.TrimSpace(m.workerID)
+			current.ProcessedAt = now
+			current.NextAttemptAt = ""
+			current.LastError = ""
+			task.Status.Messages[index] = current
+			markMessageIdempotency(&task, msg, "completed", m.workerID)
+			task.Status.DelegationStates[stateIdx] = state
+			appendMessageTrace(&task, msg, "agent_message_processed", fmt.Sprintf("message_id=%s status=delegation_already_activated branch_id=%s", msg.MessageID, msg.BranchID))
+			trimTaskMessages(&task)
+			trimTaskDelegationStates(&task)
+			trimTaskIdempotency(&task)
+			task.Status.ObservedGeneration = task.Metadata.Generation
+			if _, err := m.tasks.Upsert(ctx, task); err != nil {
+				lastErr = err
+				if !casRetryDelay(ctx, attempt) {
+					return delegationGateDecision{}, ctx.Err()
+				}
+				continue
+			}
+			return delegationGateDecision{SkipExecution: true, DelegationMode: state.Mode, Required: state.QuorumRequired, Sources: state.Sources}, nil
+		}
+
+		ready := len(state.Sources) >= state.QuorumRequired
+		if !ready {
+			current.Phase = "Succeeded"
+			current.Worker = strings.TrimSpace(m.workerID)
+			current.ProcessedAt = now
+			current.NextAttemptAt = ""
+			current.LastError = ""
+			task.Status.Messages[index] = current
+			markMessageIdempotency(&task, msg, "completed", m.workerID)
+			task.Status.DelegationStates[stateIdx] = state
+			appendMessageTrace(&task, msg, "agent_delegation_wait", fmt.Sprintf("message_id=%s received=%d required=%d", msg.MessageID, len(state.Sources), state.QuorumRequired))
+			appendMessageTrace(&task, msg, "agent_message_processed", fmt.Sprintf("message_id=%s status=delegation_wait", msg.MessageID))
+			trimTaskMessages(&task)
+			trimTaskDelegationStates(&task)
+			trimTaskIdempotency(&task)
+			task.Status.ObservedGeneration = task.Metadata.Generation
+			if _, err := m.tasks.Upsert(ctx, task); err != nil {
+				lastErr = err
+				if !casRetryDelay(ctx, attempt) {
+					return delegationGateDecision{}, ctx.Err()
+				}
+				continue
+			}
+			return delegationGateDecision{SkipExecution: true, DelegationMode: state.Mode, Required: state.QuorumRequired, Sources: state.Sources}, nil
+		}
+
+		state.Activated = true
+		state.ActivatedAt = now
+		state.ActivatedBy = strings.TrimSpace(msg.MessageID)
+		task.Status.DelegationStates[stateIdx] = state
+		trimTaskDelegationStates(&task)
+		task.Status.ObservedGeneration = task.Metadata.Generation
+		if _, err := m.tasks.Upsert(ctx, task); err != nil {
+			lastErr = err
+			if !casRetryDelay(ctx, attempt) {
+				return delegationGateDecision{}, ctx.Err()
+			}
+			continue
+		}
+		return delegationGateDecision{SkipExecution: false, DelegationMode: state.Mode, Required: state.QuorumRequired, Sources: state.Sources}, nil
+	}
+	if lastErr != nil {
+		return delegationGateDecision{}, lastErr
+	}
+	return delegationGateDecision{}, nil
+}
+
+func countDispatchedDelegates(messages []resources.TaskMessage, delegates []resources.GraphRoute, delegator string) int {
+	count := 0
+	for _, d := range delegates {
+		toLower := strings.ToLower(strings.TrimSpace(d.To))
+		for _, m := range messages {
+			if strings.ToLower(strings.TrimSpace(m.ToAgent)) == toLower &&
+				strings.EqualFold(strings.TrimSpace(m.DelegateOf), strings.TrimSpace(delegator)) {
+				count++
+				break
+			}
+		}
+	}
+	return count
+}
+
+func ensureTaskDelegationState(task *resources.Task, attempt int, node, mode string, expected, required int) int {
+	if task == nil {
+		return -1
+	}
+	if attempt <= 0 {
+		attempt = 1
+	}
+	node = strings.TrimSpace(node)
+	for idx, state := range task.Status.DelegationStates {
+		if state.Attempt != attempt {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(state.Node), node) {
+			continue
+		}
+		state.Mode = strings.TrimSpace(mode)
+		state.Expected = expected
+		state.QuorumRequired = required
+		task.Status.DelegationStates[idx] = state
+		return idx
+	}
+	state := resources.TaskDelegationState{
+		Attempt:        attempt,
+		Node:           node,
+		Mode:           strings.TrimSpace(mode),
+		Expected:       expected,
+		QuorumRequired: required,
+		Sources:        make([]resources.TaskJoinSource, 0, expected),
+	}
+	task.Status.DelegationStates = append(task.Status.DelegationStates, state)
+	return len(task.Status.DelegationStates) - 1
+}
+
+func appendDelegationSource(state resources.TaskDelegationState, source resources.TaskJoinSource) resources.TaskDelegationState {
+	for idx, existing := range state.Sources {
+		if strings.EqualFold(strings.TrimSpace(existing.MessageID), strings.TrimSpace(source.MessageID)) {
+			state.Sources[idx] = source
+			return state
+		}
+	}
+	state.Sources = append(state.Sources, source)
+	return state
+}
+
+func trimTaskDelegationStates(task *resources.Task) {
+	if task == nil {
+		return
+	}
+	if len(task.Status.DelegationStates) > 200 {
+		task.Status.DelegationStates = task.Status.DelegationStates[len(task.Status.DelegationStates)-200:]
+	}
 }
 
 func (m *AgentMessageConsumerManager) completeTaskSuccess(ctx context.Context, taskKey string, msg AgentMessage, record resources.TaskMessage, result AgentExecutionResult) error {
@@ -1376,6 +1701,7 @@ func ensureTaskMessageRecord(task *resources.Task, msg AgentMessage) int {
 		Content:        strings.TrimSpace(msg.Payload),
 		TraceID:        strings.TrimSpace(msg.TraceID),
 		ParentID:       strings.TrimSpace(msg.ParentID),
+		DelegateOf:     strings.TrimSpace(msg.DelegateOf),
 		Phase:          "Queued",
 		MaxAttempts:    defaultMessageMaxAttempts(*task),
 	}
@@ -1943,13 +2269,23 @@ func durableName(workerID, namespace, agent string) string {
 }
 
 func nextAgentsFromSystem(system resources.AgentSystem, current string) []string {
+	return nextAgentsFromSystemForOutput(system, current, "", "")
+}
+
+func nextAgentsFromSystemForOutput(system resources.AgentSystem, current string, output string, delegateOf string) []string {
 	current = strings.TrimSpace(current)
 	if current == "" {
 		return nil
 	}
 	if edge, ok := system.Spec.Graph[current]; ok {
-		if targets := resources.GraphOutgoingAgents(edge); len(targets) > 0 {
-			return targets
+		routes := resources.GraphOutgoingRoutes(edge)
+		if len(routes) > 0 {
+			filtered := resources.FilterRoutesForOutput(routes, output)
+			agents := make([]string, 0, len(filtered))
+			for _, r := range filtered {
+				agents = append(agents, r.To)
+			}
+			return agents
 		}
 	}
 	if len(system.Spec.Graph) == 0 {
@@ -1966,10 +2302,74 @@ func nextAgentsFromSystem(system resources.AgentSystem, current string) []string
 			break
 		}
 	}
+	if delegator := strings.TrimSpace(delegateOf); delegator != "" {
+		return []string{delegator}
+	}
 	return nil
 }
 
-func buildNextAgentMessages(task resources.Task, current AgentMessage, result AgentExecutionResult, nextAgents []string) []AgentMessage {
+func buildDelegateMessages(task resources.Task, current AgentMessage, result AgentExecutionResult, delegateAgents []string, delegator string) []AgentMessage {
+	if len(delegateAgents) == 0 {
+		return nil
+	}
+	ns := resources.NormalizeNamespace(task.Metadata.Namespace)
+	attempt := task.Status.Attempts
+	if attempt <= 0 {
+		attempt = max(1, current.Attempt)
+	}
+	nextHop := hopFromMessageID(current.MessageID) + 1
+	if nextHop <= 1 {
+		nextHop = 2
+	}
+	content := strings.TrimSpace(result.Output)
+	if content == "" {
+		content = strings.TrimSpace(result.LastEvent)
+	}
+	if content == "" {
+		content = fmt.Sprintf("steps=%d tool_calls=%d tokens=%d", result.Steps, result.ToolCalls, result.TokensUsed)
+	}
+	traceID := strings.TrimSpace(current.TraceID)
+	if traceID == "" {
+		traceID = fmt.Sprintf("%s/%s/a%03d", ns, strings.TrimSpace(task.Metadata.Name), attempt)
+	}
+	parentBranch := strings.TrimSpace(current.BranchID)
+	if parentBranch == "" {
+		parentBranch = "b001"
+	}
+	out := make([]AgentMessage, 0, len(delegateAgents))
+	for idx, agent := range delegateAgents {
+		next := strings.TrimSpace(agent)
+		if next == "" {
+			continue
+		}
+		branchID := parentBranch
+		if len(delegateAgents) > 1 {
+			branchID = fmt.Sprintf("%s.d%03d", parentBranch, idx+1)
+		}
+		message := AgentMessage{
+			MessageID:      deterministicMessageID(ns, strings.TrimSpace(task.Metadata.Name), attempt, nextHop, result.Agent, next),
+			IdempotencyKey: deterministicMessageID(ns, strings.TrimSpace(task.Metadata.Name), attempt, nextHop, result.Agent, next),
+			TaskID:         scopedTaskName(ns, task.Metadata.Name),
+			Attempt:        attempt,
+			System:         strings.TrimSpace(task.Spec.System),
+			Namespace:      ns,
+			FromAgent:      strings.TrimSpace(result.Agent),
+			ToAgent:        next,
+			BranchID:       branchID,
+			ParentBranchID: parentBranch,
+			Type:           "delegation",
+			Payload:        content,
+			Timestamp:      time.Now().UTC().Format(time.RFC3339Nano),
+			TraceID:        traceID,
+			ParentID:       strings.TrimSpace(current.MessageID),
+			DelegateOf:     strings.TrimSpace(delegator),
+		}
+		out = append(out, message)
+	}
+	return out
+}
+
+func buildNextAgentMessages(task resources.Task, current AgentMessage, result AgentExecutionResult, nextAgents []string, delegateOf ...string) []AgentMessage {
 	if len(nextAgents) == 0 {
 		return nil
 	}
@@ -2007,6 +2407,10 @@ func buildNextAgentMessages(task resources.Task, current AgentMessage, result Ag
 		if len(nextAgents) > 1 {
 			branchID = fmt.Sprintf("%s.%03d", parentBranch, idx+1)
 		}
+		fwdDelegateOf := strings.TrimSpace(current.DelegateOf)
+		if len(delegateOf) > 0 {
+			fwdDelegateOf = delegateOf[0]
+		}
 		message := AgentMessage{
 			MessageID:      deterministicMessageID(ns, strings.TrimSpace(task.Metadata.Name), attempt, nextHop, result.Agent, next),
 			IdempotencyKey: deterministicMessageID(ns, strings.TrimSpace(task.Metadata.Name), attempt, nextHop, result.Agent, next),
@@ -2023,10 +2427,34 @@ func buildNextAgentMessages(task resources.Task, current AgentMessage, result Ag
 			Timestamp:      time.Now().UTC().Format(time.RFC3339Nano),
 			TraceID:        traceID,
 			ParentID:       strings.TrimSpace(current.MessageID),
+			DelegateOf:     fwdDelegateOf,
 		}
 		out = append(out, message)
 	}
 	return out
+}
+
+// originalDelegateOfForAgent returns the DelegateOf value from the ORIGINAL
+// dispatch/handoff message sent TO agentName in the given attempt. This is
+// needed in the review phase where the incoming trigger message is a returning
+// delegate (whose DelegateOf points at the current node) rather than the
+// original upstream sender.
+func originalDelegateOfForAgent(task resources.Task, attempt int, agentName string) string {
+	agentName = strings.TrimSpace(agentName)
+	for _, m := range task.Status.Messages {
+		if strings.TrimSpace(m.ToAgent) != agentName {
+			continue
+		}
+		if m.Attempt != attempt {
+			continue
+		}
+		// Skip messages where a delegate is returning to its delegator.
+		if strings.TrimSpace(m.DelegateOf) == agentName {
+			continue
+		}
+		return strings.TrimSpace(m.DelegateOf)
+	}
+	return ""
 }
 
 func deterministicMessageID(namespace, taskName string, attempt int, hop int, fromAgent, toAgent string) string {
@@ -2275,6 +2703,59 @@ func quorumRequired(expected, absolute, percent int) int {
 		required = expected
 	}
 	return required
+}
+
+// adjustJoinExpectedForConditionalDispatch reduces the join gate's expected
+// count when conditional edge routing means some upstream agents were never
+// dispatched. It examines task.Status.Messages to see which of the join node's
+// topological upstream agents actually have messages routed to them.
+func adjustJoinExpectedForConditionalDispatch(system resources.AgentSystem, task resources.Task, msg AgentMessage, expected, required int, joinMode string) (int, int) {
+	if !graphHasConditions(system) {
+		return expected, required
+	}
+
+	target := strings.TrimSpace(msg.ToAgent)
+	incoming := incomingAgentsForNode(system, target)
+	if len(incoming) == 0 {
+		return expected, required
+	}
+
+	dispatched := 0
+	for _, upstream := range incoming {
+		upLower := strings.ToLower(strings.TrimSpace(upstream))
+		for _, m := range task.Status.Messages {
+			if strings.ToLower(strings.TrimSpace(m.ToAgent)) == upLower {
+				dispatched++
+				break
+			}
+		}
+	}
+	if dispatched <= 0 || dispatched >= expected {
+		return expected, required
+	}
+
+	adjusted := dispatched
+	adjustedRequired := required
+	if joinMode == "wait_for_all" {
+		adjustedRequired = adjusted
+	} else if adjustedRequired > adjusted {
+		adjustedRequired = adjusted
+	}
+	if adjustedRequired <= 0 {
+		adjustedRequired = 1
+	}
+	return adjusted, adjustedRequired
+}
+
+func graphHasConditions(system resources.AgentSystem) bool {
+	for _, node := range system.Spec.Graph {
+		for _, route := range node.Edges {
+			if route.Condition != nil {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func incomingAgentsForNode(system resources.AgentSystem, target string) []string {

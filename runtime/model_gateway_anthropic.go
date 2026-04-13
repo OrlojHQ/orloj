@@ -136,6 +136,14 @@ func (g *AnthropicModelGateway) Complete(ctx context.Context, req ModelRequest) 
 	if len(req.Tools) > 0 {
 		body.Tools, toolAliases = buildAnthropicTools(req.Tools, req.ToolSchemas)
 	}
+	if len(req.OutputSchema) > 0 {
+		body.OutputConfig = &anthropicOutputConfig{
+			Format: &anthropicOutputFormat{
+				Type:   "json_schema",
+				Schema: req.OutputSchema,
+			},
+		}
+	}
 
 	payload, err := json.Marshal(body)
 	if err != nil {
@@ -231,11 +239,21 @@ func parseAnthropicError(body []byte) string {
 }
 
 type anthropicMessagesRequest struct {
-	Model     string                   `json:"model"`
-	System    string                   `json:"system,omitempty"`
-	Messages  []anthropicMessagesInput `json:"messages"`
-	MaxTokens int                      `json:"max_tokens"`
-	Tools     []anthropicToolSpec      `json:"tools,omitempty"`
+	Model        string                   `json:"model"`
+	System       string                   `json:"system,omitempty"`
+	Messages     []anthropicMessagesInput `json:"messages"`
+	MaxTokens    int                      `json:"max_tokens"`
+	Tools        []anthropicToolSpec      `json:"tools,omitempty"`
+	OutputConfig *anthropicOutputConfig   `json:"output_config,omitempty"`
+}
+
+type anthropicOutputConfig struct {
+	Format *anthropicOutputFormat `json:"format,omitempty"`
+}
+
+type anthropicOutputFormat struct {
+	Type   string         `json:"type"`
+	Schema map[string]any `json:"schema,omitempty"`
 }
 
 type anthropicMessagesInput struct {

@@ -190,16 +190,17 @@ func (w *AgentWorker) Run(ctx context.Context) {
 			})
 			modelStart := time.Now()
 			modelResp, modelErr := w.modelGateway.Complete(ctx, ModelRequest{
-				Model:       w.agent.Spec.Model,
-				ModelRef:    w.agent.Spec.ModelRef,
-				Namespace:   w.agent.Metadata.Namespace,
-				Agent:       w.agent.Metadata.Name,
-				Prompt:      w.agent.Spec.Prompt,
-				Step:        step,
-				Tools:       append([]string(nil), availableTools...),
-				ToolSchemas: w.toolSchemas,
-				Context:     w.modelContext(step),
-				Messages:    append([]ChatMessage(nil), w.history...),
+				Model:        w.agent.Spec.Model,
+				ModelRef:     w.agent.Spec.ModelRef,
+				Namespace:    w.agent.Metadata.Namespace,
+				Agent:        w.agent.Metadata.Name,
+				Prompt:       w.agent.Spec.Prompt,
+				Step:         step,
+				Tools:        append([]string(nil), availableTools...),
+				ToolSchemas:  w.toolSchemas,
+				Context:      w.modelContext(step),
+				Messages:     append([]ChatMessage(nil), w.history...),
+				OutputSchema: w.agent.Spec.Execution.OutputSchema,
 			})
 			modelLatencyMS := time.Since(modelStart).Milliseconds()
 			if modelErr != nil {

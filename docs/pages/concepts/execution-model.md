@@ -9,14 +9,37 @@ This page documents task routing, message lifecycle, and ownership guarantees.
 - `next`: legacy single edge
 - `edges[]`: preferred route list with labels/policy metadata
 
+### Conditional Edge Routing
+
+Edges in the `edges[]` list can carry an optional `condition` that is evaluated against the completing agent's output. When conditions are present, only edges whose condition matches will fire. Edges without conditions are unconditional and always fire. If no conditional edge matches, a `default: true` edge fires as a fallback.
+
+Conditions support both string-based operators (`output_contains`, `output_not_contains`, `output_matches`) and JSON path operators (`output_json_path` with `equals`, `not_equals`, `contains`, `greater_than`, `less_than`). JSON path conditions pair with `output_schema` on the Agent spec for guaranteed structured routing.
+
+See [AgentSystem -- Conditional Routing](./agents/agent-system.md#conditional-routing) for full details and patterns, and [AgentSystem -- Structured Output](./agents/agent-system.md#structured-output) for provider-native schema enforcement.
+
+Conditional routing requires message-driven execution mode.
+
 ## Fan-out and Fan-in
 
-- Fan-out: one node routes to multiple downstream edges.
+- Fan-out: one node routes to multiple downstream edges. When conditional routing is active, only matched edges fan out.
 - Fan-in: downstream join gate with:
   - `wait_for_all`
   - `quorum` (`quorum_count` or `quorum_percent`)
 
-Join state persists in `Task.status.join_states`.
+Join gates automatically adjust their expected branch count when conditional routing reduces the set of dispatched upstream agents. Join state persists in `Task.status.join_states`.
+
+## Delegation
+
+Graph nodes can declare `delegates` alongside `edges`. This gives a node two-phase execution:
+
+1. **Dispatch**: After the node's first execution, the output filters `delegates` (same condition logic as edges). Matched delegates receive messages with `delegate_of` metadata.
+2. **Collect**: A delegation gate tracks returns. Join modes (`wait_for_all`, `quorum`) control when the gate fires.
+3. **Review**: The node re-executes with delegation context (`inbox.delegation.*`).
+4. **Forward**: After review, normal `edges` fire.
+
+Delegates that reach a terminal point (no outgoing edges match) automatically route back to the delegator. The `delegate_of` field propagates through sub-branches, enabling multi-hop delegation trees. Delegation state persists in `Task.status.delegation_states`.
+
+See [AgentSystem -- Delegation](./agents/agent-system.md#delegation) for full details, patterns, and examples.
 
 ## Message Lifecycle
 

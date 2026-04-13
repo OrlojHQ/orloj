@@ -114,6 +114,16 @@ func (g *AzureOpenAIModelGateway) Complete(ctx context.Context, req ModelRequest
 		body.Tools = buildOpenAIChatTools(req.Tools, req.ToolSchemas)
 		body.ToolChoice = "auto"
 	}
+	if len(req.OutputSchema) > 0 {
+		body.ResponseFormat = &openAIResponseFormat{
+			Type: "json_schema",
+			JSONSchema: &openAIJSONSchema{
+				Name:   "agent_output",
+				Strict: true,
+				Schema: req.OutputSchema,
+			},
+		}
+	}
 
 	payload, err := json.Marshal(body)
 	if err != nil {

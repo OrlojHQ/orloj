@@ -187,3 +187,95 @@ func TestOllamaModelGatewayCompleteToolCallResponse(t *testing.T) {
 		t.Fatalf("unexpected tool call input %q", resp.ToolCalls[0].Input)
 	}
 }
+
+func TestOllamaModelGatewaySendsFormatWithSchema(t *testing.T) {
+	var capturedBody map[string]any
+
+	client := &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			body, _ := io.ReadAll(req.Body)
+			json.Unmarshal(body, &capturedBody)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(`{"message":{"role":"assistant","content":"{\"route\":\"research\"}"},"done":true}`)),
+				Header:     make(http.Header),
+			}, nil
+		}),
+		Timeout: time.Second,
+	}
+
+	cfg := DefaultOllamaModelGatewayConfig()
+	cfg.BaseURL = "http://localhost:11434"
+	cfg.DefaultModel = "llama3.2"
+	cfg.HTTPClient = client
+
+	gateway, err := NewOllamaModelGateway(cfg)
+	if err != nil {
+		t.Fatalf("new gateway failed: %v", err)
+	}
+
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"route": map[string]any{"type": "string"},
+		},
+	}
+
+	_, err = gateway.Complete(context.Background(), ModelRequest{
+		Step:         1,
+		OutputSchema: schema,
+	})
+	if err != nil {
+		t.Fatalf("complete failed: %v", err)
+	}
+
+	formatVal, ok := capturedBody["format"]
+	if !ok {
+		t.Fatal("expected format field in request body")
+	}
+	formatMap, ok := formatVal.(map[string]any)
+	if !ok {
+		t.Fatalf("expected format to be an object (schema), got %T", formatVal)
+	}
+	if formatMap["type"] != "object" {
+		t.Fatalf("expected format.type=object, got %v", formatMap["type"])
+	}
+}
+
+func TestOllamaModelGatewayOmitsFormatWhenNoSchema(t *testing.T) {
+	var capturedBody map[string]any
+
+	client := &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			body, _ := io.ReadAll(req.Body)
+			json.Unmarshal(body, &capturedBody)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(`{"message":{"role":"assistant","content":"hello"},"done":true}`)),
+				Header:     make(http.Header),
+			}, nil
+		}),
+		Timeout: time.Second,
+	}
+
+	cfg := DefaultOllamaModelGatewayConfig()
+	cfg.BaseURL = "http://localhost:11434"
+	cfg.DefaultModel = "llama3.2"
+	cfg.HTTPClient = client
+
+	gateway, err := NewOllamaModelGateway(cfg)
+	if err != nil {
+		t.Fatalf("new gateway failed: %v", err)
+	}
+
+	_, err = gateway.Complete(context.Background(), ModelRequest{
+		Step: 1,
+	})
+	if err != nil {
+		t.Fatalf("complete failed: %v", err)
+	}
+
+	if _, ok := capturedBody["format"]; ok {
+		t.Fatal("format should be omitted when no output schema is set")
+	}
+}

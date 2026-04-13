@@ -27,6 +27,7 @@ type AgentMessage struct {
 	Timestamp      string `json:"timestamp,omitempty"`
 	TraceID        string `json:"trace_id,omitempty"`
 	ParentID       string `json:"parent_id,omitempty"`
+	DelegateOf     string `json:"delegate_of,omitempty"`
 }
 
 // AgentMessageDelivery represents one delivery instance with ack semantics.
@@ -116,6 +117,7 @@ func normalizeAgentMessage(message AgentMessage) (AgentMessage, error) {
 	message.BranchID = strings.TrimSpace(message.BranchID)
 	message.ParentBranchID = strings.TrimSpace(message.ParentBranchID)
 	message.IdempotencyKey = strings.TrimSpace(message.IdempotencyKey)
+	message.DelegateOf = strings.TrimSpace(message.DelegateOf)
 
 	if message.ToAgent == "" {
 		return AgentMessage{}, fmt.Errorf("to_agent is required")
