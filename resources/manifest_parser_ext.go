@@ -679,12 +679,72 @@ func parseSecretManifestWithoutNormalize(data []byte) (Secret, error) {
 	lines := strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n")
 	section := ""
 	subsection := ""
+
+	// Literal block scalar state (YAML `key: |` syntax inside stringData/data).
+	lbKey := ""        // key whose value is being accumulated
+	lbSubsection := "" // "stringData" or "data"
+	lbKeyIndent := -1  // indent of the "key: |" line
+	lbContentIndent := -1
+	var lbLines []string
+
+	flushLiteralBlock := func() {
+		if lbKey == "" {
+			return
+		}
+		val := strings.Join(lbLines, "\n")
+		if len(val) > 0 {
+			val += "\n"
+		}
+		if lbSubsection == "data" {
+			if out.Spec.Data == nil {
+				out.Spec.Data = make(map[string]string)
+			}
+			out.Spec.Data[lbKey] = val
+		} else {
+			if out.Spec.StringData == nil {
+				out.Spec.StringData = make(map[string]string)
+			}
+			out.Spec.StringData[lbKey] = val
+		}
+		lbKey = ""
+		lbSubsection = ""
+		lbKeyIndent = -1
+		lbContentIndent = -1
+		lbLines = nil
+	}
+
 	for _, line := range lines {
+		indent := leadingSpaces(line)
 		trimmed := strings.TrimSpace(line)
+
+		// While collecting a literal block, accumulate content lines.
+		if lbKey != "" {
+			if trimmed == "" {
+				lbLines = append(lbLines, "")
+				continue
+			}
+			if indent > lbKeyIndent {
+				if lbContentIndent < 0 {
+					lbContentIndent = indent
+				}
+				stripped := ""
+				if len(line) >= lbContentIndent {
+					stripped = line[lbContentIndent:]
+				} else {
+					stripped = trimmed
+				}
+				lbLines = append(lbLines, stripped)
+				continue
+			}
+			// Indent dropped back to ≤ key indent — end of literal block.
+			flushLiteralBlock()
+			// Fall through to process the current line normally.
+		}
+
 		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 			continue
 		}
-		indent := leadingSpaces(line)
+
 		if section == "spec" && indent <= 2 && !strings.HasSuffix(trimmed, ":") && !strings.HasPrefix(trimmed, "- ") {
 			subsection = ""
 		}
@@ -722,10 +782,23 @@ func parseSecretManifestWithoutNormalize(data []byte) (Secret, error) {
 		}
 		value = stripQuotes(value)
 
+		// Detect literal block scalar (`key: |`) inside stringData or data.
+		if section == "spec" && (subsection == "stringData" || subsection == "data") && value == "|" {
+			lbKey = key
+			lbSubsection = subsection
+			lbKeyIndent = indent
+			lbContentIndent = -1
+			lbLines = nil
+			continue
+		}
+
 		switch {
-		case key == "apiVersion":
+		// Guard apiVersion/kind to document root (indent==0) so embedded YAML in
+		// literal block values (e.g. a kubeconfig with its own kind: Config) cannot
+		// overwrite the Orloj resource kind.
+		case key == "apiVersion" && indent == 0:
 			out.APIVersion = value
-		case key == "kind":
+		case key == "kind" && indent == 0:
 			out.Kind = value
 		case section == "metadata" && subsection == "labels" && indent >= 4:
 			if out.Metadata.Labels == nil {
@@ -748,6 +821,9 @@ func parseSecretManifestWithoutNormalize(data []byte) (Secret, error) {
 			out.Spec.StringData[key] = value
 		}
 	}
+
+	// Flush any literal block that runs to end-of-file.
+	flushLiteralBlock()
 
 	return out, nil
 }
@@ -1902,6 +1978,8 @@ func ParseMcpServerManifest(data []byte) (McpServer, error) {
 					last.Value = value
 				case "secretRef", "secret_ref":
 					last.SecretRef = value
+				case "mountPath", "mount_path":
+					last.MountPath = value
 				}
 			}
 		}
