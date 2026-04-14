@@ -1306,6 +1306,7 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 		if c.mcpSessionMgr != nil && c.mcpServerStore != nil {
 			agentruntime.ConfigureMcpRuntime(toolRuntime, c.mcpSessionMgr, c.mcpServerStore, task.Metadata.Namespace)
 		}
+		agentruntime.ConfigureHttpRuntime(toolRuntime, c.cliSecretResolver, task.Metadata.Namespace)
 		agentruntime.ConfigureCliRuntime(toolRuntime, c.cliSecretResolver, nil, c.cliToolConfig, task.Metadata.Namespace)
 		agentruntime.ConfigureExternalRuntime(toolRuntime, c.cliSecretResolver, task.Metadata.Namespace)
 		agentruntime.ConfigureGRPCRuntime(toolRuntime, c.cliSecretResolver, task.Metadata.Namespace)

@@ -56,10 +56,11 @@ func writeManifest(t *testing.T, path string, raw string) {
 }
 
 type applyRecorder struct {
-	mu          sync.Mutex
-	agentPosts  int
-	taskPosts   int
-	taskPayload []string
+	mu           sync.Mutex
+	agentPosts   int
+	taskPosts    int
+	taskPayload  []string
+	taskRerunSet []bool
 }
 
 type mockApplyTransport struct {
@@ -81,6 +82,7 @@ func (m *mockApplyTransport) RoundTrip(r *http.Request) (*http.Response, error) 
 	case "/v1/tasks":
 		m.rec.taskPosts++
 		m.rec.taskPayload = append(m.rec.taskPayload, string(body))
+		m.rec.taskRerunSet = append(m.rec.taskRerunSet, r.URL.Query().Get("rerun") == "true")
 		statusCode = http.StatusOK
 	}
 
@@ -329,5 +331,50 @@ func TestRunApply_ReapplyDirectoryKeepsSkippingRunnableTasksWithoutRunFlag(t *te
 	}
 	if taskPosts != 0 {
 		t.Fatalf("expected runnable task to remain skipped across re-apply, got %d task applies", taskPosts)
+	}
+}
+
+func TestRunApply_RunFlagSendsRerunQueryParam(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	dir := t.TempDir()
+	writeManifest(t, filepath.Join(dir, "task-run.yaml"), minimalTaskRunYAML)
+
+	rec := &applyRecorder{}
+	withMockTransport(t, rec, func() {
+		_, _ = captureStdout(t, func() error {
+			return Run([]string{"apply", "-f", dir, "--run", "--server", testServerURL()})
+		})
+	})
+
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	if len(rec.taskRerunSet) != 1 {
+		t.Fatalf("expected 1 task POST, got %d", len(rec.taskRerunSet))
+	}
+	if !rec.taskRerunSet[0] {
+		t.Fatal("expected ?rerun=true query parameter when --run is set")
+	}
+}
+
+func TestRunApply_WithoutRunFlagNoRerunQueryParam(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	dir := t.TempDir()
+	taskPath := filepath.Join(dir, "task-run.yaml")
+	writeManifest(t, taskPath, minimalTaskRunYAML)
+
+	rec := &applyRecorder{}
+	withMockTransport(t, rec, func() {
+		_, _ = captureStdout(t, func() error {
+			return Run([]string{"apply", "-f", taskPath, "--server", testServerURL()})
+		})
+	})
+
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	if len(rec.taskRerunSet) != 1 {
+		t.Fatalf("expected 1 task POST, got %d", len(rec.taskRerunSet))
+	}
+	if rec.taskRerunSet[0] {
+		t.Fatal("expected no ?rerun=true when --run is not set")
 	}
 }

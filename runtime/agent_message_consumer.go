@@ -473,6 +473,7 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 	if m.mcpSessionMgr != nil && m.mcpServerStore != nil {
 		ConfigureMcpRuntime(toolRT, m.mcpSessionMgr, m.mcpServerStore, ns)
 	}
+	ConfigureHttpRuntime(toolRT, m.secretResolver, ns)
 	ConfigureCliRuntime(toolRT, m.secretResolver, nil, m.cliConfig, ns)
 	ConfigureExternalRuntime(toolRT, m.secretResolver, ns)
 	ConfigureGRPCRuntime(toolRT, m.secretResolver, ns)

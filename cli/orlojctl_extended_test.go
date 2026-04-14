@@ -2,39 +2,68 @@ package cli
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
-	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/OrlojHQ/orloj/resources"
 )
 
-func TestExtractGlobalNamespace(t *testing.T) {
-	t.Run("prefixed global namespace flag", func(t *testing.T) {
-		args, ns, err := extractGlobalNamespace([]string{"--namespace", "prod", "get", "tasks"})
-		if err != nil {
-			t.Fatalf("extractGlobalNamespace returned error: %v", err)
-		}
-		if ns != "prod" {
-			t.Fatalf("expected namespace prod, got %q", ns)
-		}
-		want := []string{"get", "tasks"}
-		if !reflect.DeepEqual(args, want) {
-			t.Fatalf("unexpected args: got=%v want=%v", args, want)
-		}
+func TestNamespaceFlagOrdering(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	rt := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		return mockResponse(r, http.StatusOK, `{"items":[]}`), nil
 	})
 
-	t.Run("command-local namespace is not treated global", func(t *testing.T) {
-		args, ns, err := extractGlobalNamespace([]string{"get", "tasks", "-n", "prod"})
-		if err != nil {
-			t.Fatalf("extractGlobalNamespace returned error: %v", err)
-		}
-		if ns != "" {
-			t.Fatalf("expected empty global namespace, got %q", ns)
-		}
-		want := []string{"get", "tasks", "-n", "prod"}
-		if !reflect.DeepEqual(args, want) {
-			t.Fatalf("unexpected args: got=%v want=%v", args, want)
-		}
+	t.Run("namespace before subcommand", func(t *testing.T) {
+		withRoundTripper(t, rt, func() {
+			_, err := captureStdout(t, func() error {
+				return Run([]string{"--namespace", "prod", "get", "agents"})
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	})
+
+	t.Run("namespace after positional args with -n", func(t *testing.T) {
+		withRoundTripper(t, rt, func() {
+			_, err := captureStdout(t, func() error {
+				return Run([]string{"get", "agents", "-n", "prod"})
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	})
+
+	t.Run("namespace after positional args with --namespace", func(t *testing.T) {
+		withRoundTripper(t, rt, func() {
+			_, err := captureStdout(t, func() error {
+				return Run([]string{"get", "agents", "--namespace", "staging"})
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
+	})
+
+	t.Run("delete with trailing -n", func(t *testing.T) {
+		rt := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			ns := r.URL.Query().Get("namespace")
+			if ns != "prod" {
+				t.Errorf("expected namespace=prod in URL, got %q (url=%s)", ns, r.URL.String())
+			}
+			return mockResponse(r, http.StatusOK, `{"ok":true}`), nil
+		})
+		withRoundTripper(t, rt, func() {
+			err := Run([]string{"delete", "agent", "my-agent", "-n", "prod"})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+		})
 	})
 }
 
@@ -207,6 +236,61 @@ func TestCanonicalComparableDocument(t *testing.T) {
 	}
 	if !strings.Contains(got, `"name": "demo"`) || !strings.Contains(got, `"namespace": "default"`) {
 		t.Fatalf("expected identity metadata preserved, got:\n%s", got)
+	}
+}
+
+func TestRetryTaskSetsSourceLabels(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	sourceTask := resources.Task{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Task",
+		Metadata: resources.ObjectMeta{
+			Name:            "my-task",
+			Namespace:       "default",
+			ResourceVersion: "1",
+			Labels:          map[string]string{"env": "prod"},
+		},
+		Spec:   resources.TaskSpec{System: "sys"},
+		Status: resources.TaskStatus{Phase: "Failed"},
+	}
+	sourceJSON, _ := json.Marshal(sourceTask)
+
+	var capturedPayload []byte
+	rt := roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if r.Method == http.MethodGet {
+			return mockResponse(r, http.StatusOK, string(sourceJSON)), nil
+		}
+		body, _ := io.ReadAll(r.Body)
+		_ = r.Body.Close()
+		capturedPayload = body
+		return mockResponse(r, http.StatusCreated, "{}"), nil
+	})
+
+	withRoundTripper(t, rt, func() {
+		_, _ = captureStdout(t, func() error {
+			return Run([]string{"retry", "task", "my-task", "--server", "http://test"})
+		})
+	})
+
+	if capturedPayload == nil {
+		t.Fatal("expected retry to POST a new task")
+	}
+	var retried resources.Task
+	if err := json.Unmarshal(capturedPayload, &retried); err != nil {
+		t.Fatalf("decode retry payload: %v", err)
+	}
+	if retried.Metadata.Labels["orloj.dev/source-task"] != "my-task" {
+		t.Fatalf("expected source-task label, got labels=%v", retried.Metadata.Labels)
+	}
+	if retried.Metadata.Labels["orloj.dev/source-task-namespace"] != "default" {
+		t.Fatalf("expected source-task-namespace label, got labels=%v", retried.Metadata.Labels)
+	}
+	if retried.Metadata.Labels["env"] != "prod" {
+		t.Fatalf("expected original labels preserved, got labels=%v", retried.Metadata.Labels)
+	}
+	if !strings.Contains(retried.Metadata.Name, "my-task-retry-") {
+		t.Fatalf("expected retry name pattern, got %q", retried.Metadata.Name)
 	}
 }
 

@@ -2125,7 +2125,22 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 		if writeStoreFetchError(w, err) {
 			return
 		}
-		if ok {
+		rerun := r.URL.Query().Get("rerun") == "true"
+		if ok && rerun {
+			phase := strings.ToLower(strings.TrimSpace(existing.Status.Phase))
+			switch phase {
+			case "deadletter", "failed", "succeeded":
+				obj.Metadata.Name = rerunTaskName(obj.Metadata.Name)
+				if obj.Metadata.Labels == nil {
+					obj.Metadata.Labels = make(map[string]string)
+				}
+				obj.Metadata.Labels["orloj.dev/source-task"] = existing.Metadata.Name
+				obj.Metadata.Labels["orloj.dev/source-task-namespace"] = resources.NormalizeNamespace(existing.Metadata.Namespace)
+			case "pending", "running", "", "waitingapproval":
+				http.Error(w, fmt.Sprintf("task/%s is still active (phase=%s); cannot rerun", existing.Metadata.Name, existing.Status.Phase), http.StatusConflict)
+				return
+			}
+		} else if ok {
 			obj.Status = existing.Status
 		}
 		// Stamp W3C trace context so task execution spans link back to this request.
@@ -2144,6 +2159,14 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
+}
+
+func rerunTaskName(name string) string {
+	base := name
+	if len(base) > 40 {
+		base = strings.TrimRight(base[:40], "-")
+	}
+	return fmt.Sprintf("%s-run-%d", base, time.Now().UnixMilli())
 }
 
 func (s *Server) handleTaskByName(w http.ResponseWriter, r *http.Request) {

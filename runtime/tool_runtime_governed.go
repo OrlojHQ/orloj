@@ -249,6 +249,28 @@ func ConfigureMcpRuntime(rt ToolRuntime, sessionManager *McpSessionManager, mcpS
 	governed.mcpRuntime = mcpRT
 }
 
+// ConfigureHttpRuntime replaces the HTTP base runtime with one that has a secret
+// resolver, enabling HTTP tools with auth.secretRef to resolve their credentials.
+// Must be called after BuildGovernedToolRuntimeForAgent* when the caller has a
+// secret resolver available (e.g. a store-backed resolver in the worker).
+func ConfigureHttpRuntime(rt ToolRuntime, secrets SecretResolver, namespace string) {
+	governed, ok := rt.(*GovernedToolRuntime)
+	if !ok || governed == nil {
+		return
+	}
+	if secrets == nil {
+		secrets = NewEnvSecretResolver("ORLOJ_SECRET_")
+	}
+	var httpRT ToolRuntime = NewHTTPToolClient(governed.registry, secrets, nil)
+	if scoped, ok := httpRT.(namespaceAwareToolRuntime); ok {
+		httpRT = scoped.WithNamespace(namespace)
+	}
+	if aware, ok := httpRT.(registryAwareToolRuntime); ok && governed.registry != nil {
+		httpRT = aware.WithRegistry(governed.registry)
+	}
+	governed.baseRuntime = httpRT
+}
+
 // ConfigureCliRuntime builds and attaches a CLI runtime for direct (non-containerized)
 // CLI tool execution. The runtime is scoped to the governed runtime's registry and
 // the provided namespace.

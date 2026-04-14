@@ -235,7 +235,7 @@ func (r *HTTPToolClient) Call(ctx context.Context, tool string, input string) (s
 	}
 
 	var contractResp ToolExecutionResponse
-	if json.Unmarshal(body, &contractResp) == nil && strings.TrimSpace(contractResp.Status) != "" {
+	if json.Unmarshal(body, &contractResp) == nil && isOrlojToolStatus(contractResp.Status) {
 		if toErr := contractResp.ToError(); toErr != nil {
 			return "", toErr
 		}
@@ -250,6 +250,18 @@ func (r *HTTPToolClient) resolveSpec(tool string) (resources.ToolSpec, bool) {
 		return resources.ToolSpec{}, false
 	}
 	return r.registry.Resolve(tool)
+}
+
+// isOrlojToolStatus reports whether s is one of the Orloj tool contract status
+// values ("ok", "error", "denied"). This prevents accidentally treating third-party
+// API responses that happen to have a "status" field (e.g. Vapi's "queued") as
+// Orloj contract envelopes.
+func isOrlojToolStatus(s string) bool {
+	switch strings.TrimSpace(strings.ToLower(s)) {
+	case ToolExecutionStatusOK, ToolExecutionStatusError, ToolExecutionStatusDenied:
+		return true
+	}
+	return false
 }
 
 func mapHTTPStatusToToolError(tool string, statusCode int, body string) error {

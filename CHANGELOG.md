@@ -7,7 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **CLI migrated from Go `flag` to cobra/pflag**: `orlojctl` now uses [cobra](https://github.com/spf13/cobra) for command and flag parsing, matching the UX conventions of `kubectl`. Flags like `-n`/`--namespace` now work correctly when placed after positional arguments (e.g. `orlojctl delete agent my-agent -n prod`), fixing a long-standing parsing bug where trailing flags were silently ignored. Shell completions (`orlojctl completion bash|zsh|fish|powershell`) now use Cobra's built-in generators.
+
 ### Fixed
+
+- **HTTP tool runtime: third-party `"status"` fields no longer trigger a false "missing error envelope" error**: the HTTP tool client previously treated any 2xx response whose JSON body contained a non-empty `status` field as an Orloj tool-contract envelope. APIs like Vapi that return `"status": "queued"` in their success payloads would therefore fail with `tool response missing error envelope` because no `error` object was present. The check is now restricted to the three Orloj-defined status values (`ok`, `error`, `denied`); any other value causes the raw response body to be returned as the tool output.
+
+- **HTTP tools with `auth.secretRef` no longer fail with "no secret resolver is configured"**: `ConfigureHttpRuntime` is now called in both the message-driven worker (`AgentMessageConsumer`) and the synchronous task controller alongside the existing `ConfigureCliRuntime` / `ConfigureExternalRuntime` / `ConfigureGRPCRuntime` / `ConfigureWebhookCallbackRuntime` calls. Previously, the HTTP base runtime (`GovernedToolRuntime.baseRuntime`) was always constructed with a `nil` secret resolver, causing every HTTP tool that declared `spec.auth.secretRef` to fail at call time with a non-retryable `secret_resolution_failed` error regardless of whether the secret existed in the store.
+
+- **Embedded worker secret resolver missing in `orlojd`**: the `AgentMessageConsumerOptions` struct in `cmd/orlojd/main.go` was missing `SecretResolver`, so the embedded message-driven worker in `orlojd` (started with `--embedded-worker`) always ran with a `nil` secret resolver. Any tool using `spec.auth.secretRef` would fail with `secret_resolution_failed` even when the secret existed in the store. The `cliSecretResolver` (store-backed + env-var chain) is now passed as `SecretResolver` in the embedded consumer options, matching the wiring in `cmd/orlojworker/main.go`.
 
 - **Docker-image MCP servers: three fixes for container initialization failures**: (1) The YAML parser for `McpServer` now parses `mountPath` / `mount_path` on env entries, so file-based secrets (e.g. a kubeconfig) are correctly bind-mounted into the container instead of being silently dropped — fixing `No active cluster!` crashes. (2) Container images are pre-pulled (`docker pull`, 5 min timeout) before `docker run`, so the image-download time no longer eats the 30-second initialize handshake timeout. (3) `--tmpfs /tmp:rw,noexec,nosuid` is added to `docker run` so Node.js-based servers that need a writable temp directory work under `--read-only`. (4) The child process is no longer bound to the init-timeout context via `exec.CommandContext`, which previously killed healthy containers the moment the init handshake completed and the timeout context was cancelled.
 
@@ -19,7 +29,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Task rerun on apply**: `apply --run` now re-executes terminal tasks (DeadLetter, Failed, Succeeded) by creating a new task instance with a unique name (`<name>-run-<timestamp>`); the original task is preserved for history. The `?rerun=true` query parameter is also available on `POST /v1/tasks` for programmatic clients. Returns `409 Conflict` if the task is still active. Both `--run` (apply) and `retry` now set `orloj.dev/source-task` and `orloj.dev/source-task-namespace` labels on new instances for lineage tracking.
+
 - **Real-scenario `18-mcp-k8s-docker`**: new live-validation scenario that registers `ghcr.io/strowk/mcp-k8s-go` as a Docker-image MCP server (`spec.image`), delivers a kubeconfig to the container via file-based secret (`mountPath: /secrets/kubeconfig`), and runs a triage agent that calls `list_namespaces` and `list_pods` against a real cluster. Gate checks tool auto-generation (type=mcp), `tool_filter` enforcement (exactly 2 tools), trace coverage, and required output markers. New `make real-apply-k8s-mcp`, `make real-gate-k8s-mcp`, and `make real-gate-wave6` targets.
+
+- **Real-scenario `19-sales-system`**: new example scenario demonstrating an AI-powered outbound sales pipeline with Vapi voice calling. An AgentSystem handles two phases via conditional `input_type` routing: outreach (lead qualification → Vapi AI call) and follow-up (transcript analysis → CRM update → meeting booking → reporting). The Vapi end-of-call webhook is received by a `TaskWebhook` resource (`shared_token` auth via `x-vapi-secret` header) that creates a fresh task per call, avoiding fixed-name conflicts and providing authenticated delivery. The Vapi payload lands under `vapi_payload` in task input; `input_type: transcript` is injected by the template, so the router routes correctly without a proxy.
 
 ## [0.8.0] - 2026-04-13
 
