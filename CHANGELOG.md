@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-04-14
+
 ### Changed
 
 - **CLI migrated from Go `flag` to cobra/pflag**: `orlojctl` now uses [cobra](https://github.com/spf13/cobra) for command and flag parsing, matching the UX conventions of `kubectl`. Flags like `-n`/`--namespace` now work correctly when placed after positional arguments (e.g. `orlojctl delete agent my-agent -n prod`), fixing a long-standing parsing bug where trailing flags were silently ignored. Shell completions (`orlojctl completion bash|zsh|fish|powershell`) now use Cobra's built-in generators.
@@ -244,7 +246,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Homebrew tap distribution (`OrlojHQ/orloj`)
 - Blueprint scaffolding via `orlojctl init`
 
-[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/OrlojHQ/orloj/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/OrlojHQ/orloj/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/OrlojHQ/orloj/compare/v0.6.3...v0.7.0
 [0.6.3]: https://github.com/OrlojHQ/orloj/compare/v0.6.2...v0.6.3
