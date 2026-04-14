@@ -2,29 +2,33 @@ package cli
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/spf13/cobra"
 )
 
-func runInit(args []string) error {
-	fs := flag.NewFlagSet("init", flag.ContinueOnError)
-	blueprint := fs.String("blueprint", "pipeline", "blueprint to scaffold: pipeline, hierarchical, swarm-loop")
-	if err := fs.Parse(args); err != nil {
-		return err
+func newInitCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "init <name>",
+		Short: "Scaffold a new agent system from a blueprint",
+		Args:  cobra.ExactArgs(1),
+		RunE:  runInit,
 	}
+	cmd.Flags().String("blueprint", "pipeline", "blueprint to scaffold: pipeline, hierarchical, swarm-loop")
+	return cmd
+}
 
-	if fs.NArg() == 0 {
-		return errors.New("usage: orlojctl init <name> [--blueprint pipeline|hierarchical|swarm-loop]")
-	}
-	name := strings.TrimSpace(fs.Arg(0))
+func runInit(cmd *cobra.Command, args []string) error {
+	blueprint, _ := cmd.Flags().GetString("blueprint")
+	name := strings.TrimSpace(args[0])
 	if name == "" {
 		return errors.New("name cannot be empty")
 	}
 
-	bp := strings.ToLower(strings.TrimSpace(*blueprint))
+	bp := strings.ToLower(strings.TrimSpace(blueprint))
 	var files map[string]string
 	switch bp {
 	case "pipeline":

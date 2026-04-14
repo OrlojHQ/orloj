@@ -2,7 +2,6 @@ package cli
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"io/fs"
 	"os"
@@ -10,25 +9,36 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	"github.com/OrlojHQ/orloj/resources"
 )
 
-func runValidate(args []string) error {
-	fsFlags := flag.NewFlagSet("validate", flag.ContinueOnError)
-	manifestPath := fsFlags.String("f", "", "path to manifest file or directory")
-	if err := fsFlags.Parse(args); err != nil {
-		return err
+func newValidateCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "validate",
+		Short: "Validate resource manifests offline",
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			return nil
+		},
+		RunE: runValidate,
 	}
-	if strings.TrimSpace(*manifestPath) == "" {
-		return errors.New("-f is required: path to manifest file or directory")
+	cmd.Flags().StringP("file", "f", "", "path to manifest file or directory")
+	return cmd
+}
+
+func runValidate(cmd *cobra.Command, args []string) error {
+	manifestPath, _ := cmd.Flags().GetString("file")
+	if strings.TrimSpace(manifestPath) == "" {
+		return errors.New("-f is required")
 	}
 
-	files, err := manifestPaths(*manifestPath)
+	files, err := manifestPaths(manifestPath)
 	if err != nil {
 		return err
 	}
 	if len(files) == 0 {
-		return fmt.Errorf("no manifest files found in %s", *manifestPath)
+		return fmt.Errorf("no manifest files found in %s", manifestPath)
 	}
 
 	var errs []string

@@ -3201,6 +3201,23 @@ paths:
     post:
       tags:
       - tasks
+      summary: Create or upsert a Task
+      description: |
+        Creates a new Task or updates an existing one. When `rerun=true` is set
+        and a task with the same name already exists in a terminal phase
+        (DeadLetter, Failed, or Succeeded), a new task instance is created with
+        a unique name (`<name>-run-<timestamp>`) and `orloj.dev/source-task`
+        label linking back to the original. The original task is preserved.
+        Returns 409 if `rerun=true` and the existing task is still active.
+      parameters:
+      - name: rerun
+        in: query
+        description: |
+          When true and the task already exists in a terminal phase, create a
+          new instance instead of upserting. Returns 409 if the task is active.
+        schema:
+          type: boolean
+          default: false
       security:
       - bearerAuth: []
       - sessionCookie: []
@@ -3212,13 +3229,19 @@ paths:
               "$ref": "./schemas/task.yaml#/components/schemas/Task"
       responses:
         '201':
-          description: Created
+          description: Created (or new rerun instance created)
           content:
             application/json:
               schema:
                 "$ref": "./schemas/task.yaml#/components/schemas/Task"
         '400':
           description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Task is still active and cannot be rerun
           content:
             text/plain:
               schema:
