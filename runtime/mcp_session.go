@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -220,6 +221,9 @@ func (m *McpSessionManager) buildStdioTransport(ctx context.Context, server reso
 	}
 
 	if image != "" {
+		if err := m.ensureImagePulled(ctx, m.containerRuntimeBinary(), image); err != nil {
+			return nil, fmt.Errorf("pull image %q: %w", image, err)
+		}
 		return m.buildContainerStdioTransport(server, command, resolved)
 	}
 
@@ -244,6 +248,7 @@ func (m *McpSessionManager) buildContainerStdioTransport(server resources.McpSer
 	dockerArgs := []string{
 		"run", "--rm", "-i",
 		"--read-only",
+		"--tmpfs", "/tmp:rw,noexec,nosuid",
 		"--cap-drop=ALL",
 		"--security-opt", "no-new-privileges",
 	}
@@ -306,6 +311,35 @@ func (m *McpSessionManager) buildContainerStdioTransport(server resources.McpSer
 	}), nil
 }
 
+func (m *McpSessionManager) containerRuntimeBinary() string {
+	m.mu.Lock()
+	cfg := m.containerConfig
+	m.mu.Unlock()
+	if cfg != nil && strings.TrimSpace(cfg.RuntimeBinary) != "" {
+		return strings.TrimSpace(cfg.RuntimeBinary)
+	}
+	return "docker"
+}
+
+// ensureImagePulled runs "<runtime> image inspect" to check if the image
+// exists locally and, if not, pulls it with a generous timeout so that the
+// image-pull cost does not eat into the MCP initialize handshake timeout.
+func (m *McpSessionManager) ensureImagePulled(ctx context.Context, runtimeBinary, image string) error {
+	inspectCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := exec.CommandContext(inspectCtx, runtimeBinary, "image", "inspect", image).Run(); err == nil {
+		return nil // already present
+	}
+
+	pullCtx, pullCancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer pullCancel()
+	pullCmd := exec.CommandContext(pullCtx, runtimeBinary, "pull", "--quiet", image)
+	if out, err := pullCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("%s pull failed: %w\n%s", runtimeBinary, err, out)
+	}
+	return nil
+}
+
 // validateStdioCommand checks the command against the allowed commands list.
 // If no allowlist is configured, all commands are permitted (for backward
 // compatibility). When an allowlist is set, only the first token of the
@@ -336,7 +370,8 @@ func (m *McpSessionManager) validateStdioCommand(command string) error {
 func (m *McpSessionManager) buildHTTPTransport(ctx context.Context, server resources.McpServer) (McpTransport, error) {
 	headers := make(map[string]string)
 	if server.Spec.Auth.SecretRef != "" && m.secretResolver != nil {
-		secret, err := m.secretResolver.Resolve(ctx, server.Spec.Auth.SecretRef)
+		resolver := m.secretScopedToServer(server)
+		secret, err := resolver.Resolve(ctx, server.Spec.Auth.SecretRef)
 		if err != nil {
 			return nil, fmt.Errorf("resolve auth secret %q: %w", server.Spec.Auth.SecretRef, err)
 		}
@@ -371,20 +406,36 @@ type resolvedMcpEnv struct {
 	Mounts  []secretMount
 }
 
+// secretScopedToServer returns a SecretResolver scoped to the server's namespace
+// so that bare secret names (without an explicit namespace prefix) resolve within
+// the same namespace as the McpServer resource.
+func (m *McpSessionManager) secretScopedToServer(server resources.McpServer) SecretResolver {
+	if m.secretResolver == nil {
+		return nil
+	}
+	if aware, ok := m.secretResolver.(interface {
+		WithNamespace(string) SecretResolver
+	}); ok {
+		return aware.WithNamespace(resources.NormalizeNamespace(server.Metadata.Namespace))
+	}
+	return m.secretResolver
+}
+
 func (m *McpSessionManager) resolveEnv(ctx context.Context, server resources.McpServer) (*resolvedMcpEnv, error) {
 	result := &resolvedMcpEnv{}
 	if len(server.Spec.Env) == 0 {
 		return result, nil
 	}
 	result.EnvVars = make([]string, 0, len(server.Spec.Env))
+	resolver := m.secretScopedToServer(server)
 	for _, e := range server.Spec.Env {
 		name := strings.TrimSpace(e.Name)
 		if name == "" {
 			continue
 		}
 		value := e.Value
-		if e.SecretRef != "" && m.secretResolver != nil {
-			resolved, err := m.secretResolver.Resolve(ctx, e.SecretRef)
+		if e.SecretRef != "" && resolver != nil {
+			resolved, err := resolver.Resolve(ctx, e.SecretRef)
 			if err != nil {
 				return nil, fmt.Errorf("resolve env secret %q for %s: %w", e.SecretRef, name, err)
 			}

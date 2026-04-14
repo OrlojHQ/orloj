@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Docker-image MCP servers: three fixes for container initialization failures**: (1) The YAML parser for `McpServer` now parses `mountPath` / `mount_path` on env entries, so file-based secrets (e.g. a kubeconfig) are correctly bind-mounted into the container instead of being silently dropped — fixing `No active cluster!` crashes. (2) Container images are pre-pulled (`docker pull`, 5 min timeout) before `docker run`, so the image-download time no longer eats the 30-second initialize handshake timeout. (3) `--tmpfs /tmp:rw,noexec,nosuid` is added to `docker run` so Node.js-based servers that need a writable temp directory work under `--read-only`. (4) The child process is no longer bound to the init-timeout context via `exec.CommandContext`, which previously killed healthy containers the moment the init handshake completed and the timeout context was cancelled.
+
+- **MCP server secret resolver now scoped to server namespace**: `resolveEnv` and `buildHTTPTransport` in `McpSessionManager` now call `WithNamespace` (when the resolver supports it) to scope secret lookups to the `McpServer` resource's own namespace, matching the behaviour of CLI tool secrets. Previously, bare secret names (e.g. `secretRef: my-secret`) resolved against the default namespace and the format `name/value` was misread as `namespace/name`, causing "not found" errors for any secret referenced by env var on a Docker-image MCP server.
+
+- **Task controller: MCP tool references no longer permanently fail on startup race**: when a task is applied before the MCP server has finished connecting and registering its tools, the task controller now detects the transient condition (MCP server phase is neither `Ready` nor `Error`) and requeues the task instead of marking it permanently `Failed`. Once the server becomes `Ready` and the tools appear, the task proceeds normally. Non-MCP tool references that are genuinely missing still fail immediately.
+
+- **Secret YAML parser: literal block scalars (`key: |`) now parsed correctly**: the line-based `parseSecretManifestWithoutNormalize` parser previously did not understand YAML literal block scalars. A multi-line value such as a kubeconfig under `spec.stringData.value: |` was stored as the bare `|` character, and any embedded YAML keys in the content (e.g. `kind: Config` from a kubeconfig) overwrote the Orloj resource's own `kind` field, causing `unsupported kind "Config" for Secret` at apply time. The parser now accumulates literal block content into the correct key and guards `kind`/`apiVersion` assignment to document-root lines only (`indent == 0`).
+
+### Added
+
+- **Real-scenario `18-mcp-k8s-docker`**: new live-validation scenario that registers `ghcr.io/strowk/mcp-k8s-go` as a Docker-image MCP server (`spec.image`), delivers a kubeconfig to the container via file-based secret (`mountPath: /secrets/kubeconfig`), and runs a triage agent that calls `list_namespaces` and `list_pods` against a real cluster. Gate checks tool auto-generation (type=mcp), `tool_filter` enforcement (exactly 2 tools), trace coverage, and required output markers. New `make real-apply-k8s-mcp`, `make real-gate-k8s-mcp`, and `make real-gate-wave6` targets.
+
 ## [0.8.0] - 2026-04-13
 
 ### Added

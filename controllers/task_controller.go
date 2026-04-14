@@ -297,9 +297,16 @@ func (c *TaskController) reconcileTask(ctx context.Context, task resources.Task)
 }
 
 func (c *TaskController) reconcilePending(ctx context.Context, task resources.Task) error {
-	system, errs := c.validateTask(ctx, task)
+	system, errs, pendingMCP := c.validateTask(ctx, task)
 	if len(errs) > 0 {
 		return c.markFailed(task, strings.Join(errs, "; "))
+	}
+	if len(pendingMCP) > 0 {
+		// MCP server(s) are still starting; keep the task Pending and retry.
+		if c.logger != nil {
+			c.logger.Printf("task=%s mcp tools not yet available, will retry: %s", task.Metadata.Name, strings.Join(pendingMCP, "; "))
+		}
+		return fmt.Errorf("mcp tools not yet available (will retry): %s", strings.Join(pendingMCP, "; "))
 	}
 
 	task.Status.Phase = "Running"
@@ -330,7 +337,10 @@ func (c *TaskController) reconcilePending(ctx context.Context, task resources.Ta
 }
 
 func (c *TaskController) reconcileRunning(ctx context.Context, task resources.Task) error {
-	system, errs := c.validateTask(ctx, task)
+	system, errs, pendingMCP := c.validateTask(ctx, task)
+	if len(pendingMCP) > 0 {
+		errs = append(errs, pendingMCP...)
+	}
 	if len(errs) > 0 {
 		return c.handleExecutionFailure(task, strings.Join(errs, "; "))
 	}
@@ -821,25 +831,31 @@ func (c *TaskController) markDeadLetter(task resources.Task, reason string) erro
 	return nil
 }
 
-func (c *TaskController) validateTask(ctx context.Context, task resources.Task) (resources.AgentSystem, []string) {
+// validateTask checks that all resources referenced by a task exist and are
+// consistent. It returns (system, permanentErrors, pendingMCPHints). When
+// pendingMCPHints is non-empty the caller should requeue rather than fail
+// permanently: the referenced tools are expected to appear once an MCP server
+// finishes connecting.
+func (c *TaskController) validateTask(ctx context.Context, task resources.Task) (resources.AgentSystem, []string, []string) {
 	errs := make([]string, 0)
+	var pendingMCP []string
 	if strings.TrimSpace(task.Spec.System) == "" {
 		errs = append(errs, "spec.system is required")
-		return resources.AgentSystem{}, errs
+		return resources.AgentSystem{}, errs, nil
 	}
 
 	system, ok, err := c.agentSystemStore.Get(ctx, store.ScopedName(task.Metadata.Namespace, task.Spec.System))
 	if err != nil {
-		return resources.AgentSystem{}, append(errs, fmt.Sprintf("agentsystem lookup failed: %v", err))
+		return resources.AgentSystem{}, append(errs, fmt.Sprintf("agentsystem lookup failed: %v", err)), nil
 	}
 	if !ok {
 		errs = append(errs, fmt.Sprintf("agentsystem %q not found", task.Spec.System))
-		return resources.AgentSystem{}, errs
+		return resources.AgentSystem{}, errs, nil
 	}
 
 	if len(system.Spec.Agents) == 0 {
 		errs = append(errs, fmt.Sprintf("agentsystem %q has no spec.agents", system.Metadata.Name))
-		return system, errs
+		return system, errs, nil
 	}
 
 	agentSet := make(map[string]struct{}, len(system.Spec.Agents))
@@ -864,6 +880,20 @@ func (c *TaskController) validateTask(ctx context.Context, task resources.Task) 
 
 		for _, toolName := range agent.Spec.Tools {
 			if _, ok, _ := c.toolStore.Get(ctx, store.ScopedName(task.Metadata.Namespace, toolName)); !ok {
+				// If the tool name looks like an MCP-generated name (contains "--"),
+				// check whether the originating MCP server is still starting up. If
+				// so, treat this as a transient condition and requeue rather than
+				// permanently failing the task.
+				if c.mcpServerStore != nil && strings.Contains(toolName, "--") {
+					serverName := strings.SplitN(toolName, "--", 2)[0]
+					if server, found, _ := c.mcpServerStore.Get(ctx, store.ScopedName(task.Metadata.Namespace, serverName)); found {
+						phase := strings.ToLower(strings.TrimSpace(server.Status.Phase))
+						if phase != "ready" && phase != "error" {
+							pendingMCP = append(pendingMCP, fmt.Sprintf("agent %q references mcp tool %q (server %q not ready: phase=%q)", name, toolName, serverName, server.Status.Phase))
+							continue
+						}
+					}
+				}
 				errs = append(errs, fmt.Sprintf("agent %q references missing tool %q", name, toolName))
 			}
 		}
@@ -907,7 +937,7 @@ func (c *TaskController) validateTask(ctx context.Context, task resources.Task) 
 			errs = append(errs, "agentsystem graph has no entrypoint (no zero-indegree agents)")
 		}
 	}
-	return system, errs
+	return system, errs, pendingMCP
 }
 
 func validateGraph(system resources.AgentSystem, agentSet map[string]struct{}) []string {

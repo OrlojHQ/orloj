@@ -148,7 +148,7 @@ func (t *StdioMcpTransport) startProcess(ctx context.Context) error {
 	cmdArgs := append(parts[1:], t.args...)
 
 	t.ctx = ctx
-	cmd := exec.CommandContext(ctx, cmdName, cmdArgs...)
+	cmd := exec.Command(cmdName, cmdArgs...)
 	if len(t.env) > 0 {
 		cmd.Env = append(cmd.Environ(), t.env...)
 	}
