@@ -48,10 +48,16 @@ type fakeContainerRunner struct {
 	delayOnToken string
 }
 
-func (r *fakeContainerRunner) Run(_ context.Context, _ string, _ []string, stdin string, _ map[string]string) (string, string, error) {
+func (r *fakeContainerRunner) Run(ctx context.Context, _ string, _ []string, stdin string, _ map[string]string) (string, string, error) {
 	if r.delay > 0 {
 		if strings.TrimSpace(r.delayOnToken) == "" || strings.Contains(stdin, r.delayOnToken) {
-			time.Sleep(r.delay)
+			timer := time.NewTimer(r.delay)
+			defer timer.Stop()
+			select {
+			case <-ctx.Done():
+				return "", "", ctx.Err()
+			case <-timer.C:
+			}
 		}
 	}
 	return r.stdout, r.stderr, r.err
@@ -77,7 +83,13 @@ type fakeWASMExecutor struct {
 func (e fakeWASMExecutor) Execute(ctx context.Context, req agentruntime.WASMToolExecuteRequest) (agentruntime.WASMToolExecuteResponse, error) {
 	if e.delay > 0 {
 		if strings.TrimSpace(e.delayOnToken) == "" || strings.Contains(req.Input, e.delayOnToken) {
-			time.Sleep(e.delay)
+			timer := time.NewTimer(e.delay)
+			defer timer.Stop()
+			select {
+			case <-ctx.Done():
+				return agentruntime.WASMToolExecuteResponse{}, ctx.Err()
+			case <-timer.C:
+			}
 		}
 	}
 	return agentruntime.WASMToolExecuteResponse{Output: "ok:" + req.Tool}, nil
@@ -99,8 +111,14 @@ func TestGovernedToolRuntimeConformanceSuite(t *testing.T) {
 				<-ctx.Done()
 				return "", ctx.Err()
 			case "stuck_tool":
-				time.Sleep(250 * time.Millisecond)
-				return "late-result", nil
+				timer := time.NewTimer(250 * time.Millisecond)
+				defer timer.Stop()
+				select {
+				case <-ctx.Done():
+					return "", ctx.Err()
+				case <-timer.C:
+					return "late-result", nil
+				}
 			default:
 				return "ok:" + tool + ":" + input, nil
 			}

@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Rate limiter goroutine leak**: `authRateLimiter` no longer spawns a background goroutine per instance; cleanup runs inline during `allow()`, throttled to every 5 minutes
+- **Watch streams killed by request timeout**: SSE watch endpoints (`/watch` suffix) now bypass the global read timeout middleware
+- **Watch polling with event bus present**: `watchResourceStream` now subscribes to the event bus reactively instead of polling snapshots every 1s when a bus is available
+- **Task controller claim scoping bug**: fixed incorrect indentation/brace alignment in `ReconcileOnce` that caused slot release and early-return paths to execute at the wrong scope
+- **Slice aliasing in worker claim hints**: `workerClaimHints()` now copies `SupportedModels` to prevent mutations from corrupting the worker spec
+- **Work queue blocking on full channel**: replaced fixed-size channel with a growable slice + notify channel so `Enqueue` never blocks
+- **Event bus subscriber double-close panic**: `Subscribe` goroutine now uses a single deferred cleanup, preventing races on concurrent context cancellation
+- **Agent message bus close/send panic**: `Close()` now signals via a broadcast `done` channel instead of closing individual subscriber channels, eliminating send-on-closed-channel races
+- **Bounded tool helpers leaking goroutines**: removed redundant wrapper goroutines in `callToolRuntimeBounded`, `runContainerCommandBounded`, and `executeWASMToolBounded`; the underlying runtimes already honor context cancellation
+- **Embedding provider data race**: `OpenAIEmbeddingProvider.dimensions` is now an `atomic.Int64`
+- **MCP HTTP transport session ID race**: added `RWMutex` for session reads/writes and a serialization mutex for session establishment
+- **MCP image inspect swallowing errors**: `ensureImagePulled` now distinguishes "image not found" from actual Docker daemon errors instead of treating all failures as "not present"
+- **Webhook poll errors silently dropped**: non-context HTTP errors from poll requests now return a proper `ToolError` instead of `nil`
+- **Task store returning shared references**: all `TaskStore` read/write paths now deep-copy tasks to prevent callers from corrupting store state
+- **Worker heartbeat shutdown using cancelled context**: the final "NotReady" write now uses a fresh 5s context instead of the already-cancelled parent
+- **SQL claim missing GPU/model filters**: `claimNextDueTaskSQL` now filters on `RequiresGPU` and `SupportedModels` hints, preventing workers from claiming incompatible tasks
+
 ## [0.9.0] - 2026-04-14
 
 ### Changed

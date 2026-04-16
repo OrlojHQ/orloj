@@ -449,26 +449,7 @@ func runContainerCommandBounded(
 	if runner == nil {
 		return "", "", fmt.Errorf("missing container command runner")
 	}
-	type runResult struct {
-		stdout string
-		stderr string
-		err    error
-	}
-	resultCh := make(chan runResult, 1)
-	go func() {
-		stdout, stderr, err := runner.Run(ctx, binary, args, stdin, env)
-		resultCh <- runResult{
-			stdout: stdout,
-			stderr: stderr,
-			err:    err,
-		}
-	}()
-	select {
-	case <-ctx.Done():
-		return "", "", ctx.Err()
-	case result := <-resultCh:
-		return result.stdout, result.stderr, result.err
-	}
+	return runner.Run(ctx, binary, args, stdin, env)
 }
 
 func mapContainerContextError(tool string, err error) error {

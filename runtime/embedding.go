@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -25,7 +26,7 @@ type OpenAIEmbeddingProvider struct {
 	baseURL    string
 	apiKey     string
 	model      string
-	dimensions int
+	dimensions atomic.Int64
 	client     *http.Client
 }
 
@@ -46,7 +47,10 @@ func NewOpenAIEmbeddingProvider(baseURL, apiKey, model string) *OpenAIEmbeddingP
 }
 
 func (p *OpenAIEmbeddingProvider) Dimensions() int {
-	return p.dimensions
+	if p == nil {
+		return 0
+	}
+	return int(p.dimensions.Load())
 }
 
 type openAIEmbeddingRequest struct {
@@ -125,8 +129,8 @@ func (p *OpenAIEmbeddingProvider) Embed(ctx context.Context, texts []string) ([]
 		result[d.Index] = d.Embedding
 	}
 
-	if p.dimensions == 0 && len(result) > 0 && len(result[0]) > 0 {
-		p.dimensions = len(result[0])
+	if len(result) > 0 && len(result[0]) > 0 {
+		p.dimensions.CompareAndSwap(0, int64(len(result[0])))
 	}
 
 	return result, nil

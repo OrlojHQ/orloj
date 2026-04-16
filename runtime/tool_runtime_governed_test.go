@@ -24,9 +24,15 @@ type blockingToolRuntime struct {
 	delay time.Duration
 }
 
-func (r blockingToolRuntime) Call(_ context.Context, _ string, _ string) (string, error) {
-	time.Sleep(r.delay)
-	return "late", nil
+func (r blockingToolRuntime) Call(ctx context.Context, _ string, _ string) (string, error) {
+	timer := time.NewTimer(r.delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return "", ctx.Err()
+	case <-timer.C:
+		return "late", nil
+	}
 }
 
 func (r *scriptedToolRuntime) Call(_ context.Context, tool string, _ string) (string, error) {
@@ -391,7 +397,7 @@ func TestGovernedToolRuntimeWithGovernanceAppliesToolPermissionRule(t *testing.T
 	}
 }
 
-func TestGovernedToolRuntimeBoundedTimeoutWhenRuntimeIgnoresContext(t *testing.T) {
+func TestGovernedToolRuntimeBoundedTimeoutWhenRuntimeHonorsContext(t *testing.T) {
 	runtime := NewGovernedToolRuntime(
 		blockingToolRuntime{delay: 250 * time.Millisecond},
 		nil,

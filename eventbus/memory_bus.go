@@ -124,18 +124,15 @@ func (b *MemoryBus) Subscribe(ctx context.Context, filter Filter) <-chan Event {
 	b.mu.Unlock()
 
 	go func() {
+		defer b.removeSubscriber(subID)
 		for _, evt := range snapshot {
 			select {
 			case <-ctx.Done():
-				b.removeSubscriber(subID)
-				close(ch)
 				return
 			case ch <- evt:
 			}
 		}
 		<-ctx.Done()
-		b.removeSubscriber(subID)
-		close(ch)
 	}()
 
 	return ch

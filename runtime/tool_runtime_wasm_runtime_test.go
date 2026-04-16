@@ -77,9 +77,15 @@ func TestWASMToolRuntimeBoundsTimeout(t *testing.T) {
 	runtime := NewWASMToolRuntime(NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"slow_tool": {RiskLevel: "high"},
 	}), testWASMExecutor{
-		call: func(_ context.Context, _ WASMToolExecuteRequest) (WASMToolExecuteResponse, error) {
-			time.Sleep(250 * time.Millisecond)
-			return WASMToolExecuteResponse{Output: "late"}, nil
+		call: func(ctx context.Context, _ WASMToolExecuteRequest) (WASMToolExecuteResponse, error) {
+			timer := time.NewTimer(250 * time.Millisecond)
+			defer timer.Stop()
+			select {
+			case <-ctx.Done():
+				return WASMToolExecuteResponse{}, ctx.Err()
+			case <-timer.C:
+				return WASMToolExecuteResponse{Output: "late"}, nil
+			}
 		},
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Millisecond)

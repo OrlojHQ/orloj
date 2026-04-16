@@ -309,21 +309,7 @@ func (r *WASMToolRuntime) resolveExecutor(ctx context.Context) (WASMToolExecutor
 }
 
 func executeWASMToolBounded(ctx context.Context, executor WASMToolExecutor, req WASMToolExecuteRequest) (WASMToolExecuteResponse, error) {
-	type executeResult struct {
-		resp WASMToolExecuteResponse
-		err  error
-	}
-	resultCh := make(chan executeResult, 1)
-	go func() {
-		resp, err := executor.Execute(ctx, req)
-		resultCh <- executeResult{resp: resp, err: err}
-	}()
-	select {
-	case <-ctx.Done():
-		return WASMToolExecuteResponse{}, ctx.Err()
-	case result := <-resultCh:
-		return result.resp, result.err
-	}
+	return executor.Execute(ctx, req)
 }
 
 func mapWASMContextError(tool string, err error) error {

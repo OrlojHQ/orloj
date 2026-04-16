@@ -674,24 +674,7 @@ func callToolRuntimeBounded(ctx context.Context, runtime ToolRuntime, tool strin
 			map[string]string{"tool": strings.TrimSpace(tool)},
 		)
 	}
-	type callResult struct {
-		output string
-		err    error
-	}
-	resultCh := make(chan callResult, 1)
-	go func() {
-		output, err := runtime.Call(ctx, tool, input)
-		resultCh <- callResult{
-			output: output,
-			err:    err,
-		}
-	}()
-	select {
-	case <-ctx.Done():
-		return "", ctx.Err()
-	case result := <-resultCh:
-		return result.output, result.err
-	}
+	return runtime.Call(ctx, tool, input)
 }
 
 func shouldRetryToolError(err error) bool {

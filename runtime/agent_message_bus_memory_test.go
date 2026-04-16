@@ -3,6 +3,7 @@ package agentruntime
 import (
 	"context"
 	"errors"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -273,5 +274,153 @@ func TestMemoryAgentMessageBusRetryAfterDelay(t *testing.T) {
 	elapsed := secondAttemptAt.Sub(firstAttemptAt)
 	if elapsed < 100*time.Millisecond {
 		t.Fatalf("expected delayed retry >=100ms, got %s", elapsed)
+	}
+}
+
+func TestMemoryAgentMessageBusPublishWhileConsumersCancel(t *testing.T) {
+	bus := NewMemoryAgentMessageBus("orloj.agentmsg", 64, time.Minute)
+	defer func() { _ = bus.Close() }()
+
+	panicCh := make(chan any, 1)
+	stop := make(chan struct{})
+
+	var publishers sync.WaitGroup
+	for i := 0; i < 4; i++ {
+		publishers.Add(1)
+		go func(idx int) {
+			defer publishers.Done()
+			defer func() {
+				if recovered := recover(); recovered != nil {
+					select {
+					case panicCh <- recovered:
+					default:
+					}
+				}
+			}()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+					if _, err := bus.Publish(context.Background(), AgentMessage{
+						TaskID:    "default/task-cancel",
+						FromAgent: "planner-agent",
+						ToAgent:   "research-agent",
+						Payload:   "keep publishing",
+					}); err != nil {
+						select {
+						case panicCh <- err:
+						default:
+						}
+						return
+					}
+				}
+			}
+		}(i)
+	}
+
+	errCh := make(chan error, 200)
+	var consumers sync.WaitGroup
+	for i := 0; i < 200; i++ {
+		consumers.Add(1)
+		go func(idx int) {
+			defer consumers.Done()
+			ctx, cancel := context.WithCancel(context.Background())
+			done := make(chan error, 1)
+			go func() {
+				done <- bus.Consume(ctx, AgentMessageSubscription{
+					Namespace: "default",
+					Agent:     "research-agent",
+				}, func(ctx context.Context, delivery AgentMessageDelivery) error {
+					return delivery.Ack(ctx)
+				})
+			}()
+
+			time.Sleep(time.Duration((idx%5)+1) * time.Millisecond)
+			cancel()
+
+			select {
+			case err := <-done:
+				if err != nil {
+					errCh <- err
+				}
+			case <-time.After(2 * time.Second):
+				errCh <- errors.New("timed out waiting for consumer shutdown")
+			}
+		}(i)
+	}
+
+	consumers.Wait()
+	time.Sleep(25 * time.Millisecond)
+	close(stop)
+	publishers.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		if err != nil {
+			t.Fatalf("consumer returned error: %v", err)
+		}
+	}
+	select {
+	case recovered := <-panicCh:
+		t.Fatalf("publish panicked during consumer cancellation: %v", recovered)
+	default:
+	}
+}
+
+func TestMemoryAgentMessageBusCloseStopsDelayedRequeue(t *testing.T) {
+	bus := NewMemoryAgentMessageBus("orloj.agentmsg", 64, time.Minute)
+
+	var attempts atomic.Int32
+	firstAttempt := make(chan struct{}, 1)
+	errCh := make(chan error, 1)
+
+	go func() {
+		errCh <- bus.Consume(context.Background(), AgentMessageSubscription{
+			Namespace: "default",
+			Agent:     "research-agent",
+		}, func(ctx context.Context, delivery AgentMessageDelivery) error {
+			if attempts.Add(1) == 1 {
+				firstAttempt <- struct{}{}
+				return RetryAfter(150*time.Millisecond, errors.New("retry later"))
+			}
+			return delivery.Ack(ctx)
+		})
+	}()
+
+	time.Sleep(20 * time.Millisecond)
+	if _, err := bus.Publish(context.Background(), AgentMessage{
+		MessageID: "msg-close-delay-1",
+		TaskID:    "default/task-close-delay",
+		FromAgent: "planner-agent",
+		ToAgent:   "research-agent",
+		Type:      "task_handoff",
+		Payload:   "delay then close",
+	}); err != nil {
+		t.Fatalf("publish failed: %v", err)
+	}
+
+	select {
+	case <-firstAttempt:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for first delivery attempt")
+	}
+
+	if err := bus.Close(); err != nil {
+		t.Fatalf("close failed: %v", err)
+	}
+
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("consume returned error after close: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for consume shutdown after close")
+	}
+
+	time.Sleep(250 * time.Millisecond)
+	if got := attempts.Load(); got != 1 {
+		t.Fatalf("expected delayed requeue to stop after close, got %d attempts", got)
 	}
 }

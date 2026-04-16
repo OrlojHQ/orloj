@@ -32,12 +32,16 @@ type McpSessionManager struct {
 	secretResolver  SecretResolver
 	allowedCommands []string // if non-empty, only these binaries may be launched for stdio
 	containerConfig *ContainerToolRuntimeConfig
+	imageInspect    func(ctx context.Context, runtimeBinary, image string) (bool, error)
+	imagePull       func(ctx context.Context, runtimeBinary, image string) error
 }
 
 func NewMcpSessionManager(secretResolver SecretResolver) *McpSessionManager {
 	return &McpSessionManager{
 		sessions:       make(map[string]*McpSession),
 		secretResolver: secretResolver,
+		imageInspect:   defaultMcpImageInspect,
+		imagePull:      defaultMcpImagePull,
 	}
 }
 
@@ -327,13 +331,48 @@ func (m *McpSessionManager) containerRuntimeBinary() string {
 func (m *McpSessionManager) ensureImagePulled(ctx context.Context, runtimeBinary, image string) error {
 	inspectCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	if err := exec.CommandContext(inspectCtx, runtimeBinary, "image", "inspect", image).Run(); err == nil {
+	present, err := m.inspectImage(inspectCtx, runtimeBinary, image)
+	if err != nil {
+		return err
+	}
+	if present {
 		return nil // already present
 	}
 
 	pullCtx, pullCancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer pullCancel()
-	pullCmd := exec.CommandContext(pullCtx, runtimeBinary, "pull", "--quiet", image)
+	return m.pullImage(pullCtx, runtimeBinary, image)
+}
+
+func (m *McpSessionManager) inspectImage(ctx context.Context, runtimeBinary, image string) (bool, error) {
+	if m != nil && m.imageInspect != nil {
+		return m.imageInspect(ctx, runtimeBinary, image)
+	}
+	return defaultMcpImageInspect(ctx, runtimeBinary, image)
+}
+
+func (m *McpSessionManager) pullImage(ctx context.Context, runtimeBinary, image string) error {
+	if m != nil && m.imagePull != nil {
+		return m.imagePull(ctx, runtimeBinary, image)
+	}
+	return defaultMcpImagePull(ctx, runtimeBinary, image)
+}
+
+func defaultMcpImageInspect(ctx context.Context, runtimeBinary, image string) (bool, error) {
+	cmd := exec.CommandContext(ctx, runtimeBinary, "image", "inspect", image)
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		return true, nil
+	}
+	lower := strings.ToLower(string(out))
+	if strings.Contains(lower, "no such image") || strings.Contains(lower, "no such object") || strings.Contains(lower, "not found") {
+		return false, nil
+	}
+	return false, fmt.Errorf("%s image inspect failed: %w\n%s", runtimeBinary, err, out)
+}
+
+func defaultMcpImagePull(ctx context.Context, runtimeBinary, image string) error {
+	pullCmd := exec.CommandContext(ctx, runtimeBinary, "pull", "--quiet", image)
 	if out, err := pullCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("%s pull failed: %w\n%s", runtimeBinary, err, out)
 	}

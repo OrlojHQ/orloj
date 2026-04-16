@@ -26,9 +26,15 @@ type sleepingContainerRunner struct {
 	delay time.Duration
 }
 
-func (r sleepingContainerRunner) Run(_ context.Context, _ string, _ []string, _ string, _ map[string]string) (string, string, error) {
-	time.Sleep(r.delay)
-	return "", "", nil
+func (r sleepingContainerRunner) Run(ctx context.Context, _ string, _ []string, _ string, _ map[string]string) (string, string, error) {
+	timer := time.NewTimer(r.delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return "", "", ctx.Err()
+	case <-timer.C:
+		return "", "", nil
+	}
 }
 
 func (r *captureContainerRunner) Run(_ context.Context, binary string, args []string, stdin string, env map[string]string) (string, string, error) {

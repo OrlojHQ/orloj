@@ -995,6 +995,45 @@ func TestBuildContainerStdioTransport(t *testing.T) {
 	})
 }
 
+func TestEnsureImagePulledDoesNotPullOnInspectInfrastructureError(t *testing.T) {
+	mgr := NewMcpSessionManager(nil)
+	mgr.imageInspect = func(context.Context, string, string) (bool, error) {
+		return false, context.DeadlineExceeded
+	}
+	pulled := false
+	mgr.imagePull = func(context.Context, string, string) error {
+		pulled = true
+		return nil
+	}
+
+	err := mgr.ensureImagePulled(context.Background(), "docker", "example:latest")
+	if err == nil {
+		t.Fatal("expected inspect infrastructure error")
+	}
+	if pulled {
+		t.Fatal("expected pull to be skipped when inspect fails for infrastructure reasons")
+	}
+}
+
+func TestEnsureImagePulledPullsOnlyWhenImageIsMissing(t *testing.T) {
+	mgr := NewMcpSessionManager(nil)
+	mgr.imageInspect = func(context.Context, string, string) (bool, error) {
+		return false, nil
+	}
+	pulls := 0
+	mgr.imagePull = func(context.Context, string, string) error {
+		pulls++
+		return nil
+	}
+
+	if err := mgr.ensureImagePulled(context.Background(), "docker", "example:latest"); err != nil {
+		t.Fatalf("ensureImagePulled failed: %v", err)
+	}
+	if pulls != 1 {
+		t.Fatalf("expected one image pull, got %d", pulls)
+	}
+}
+
 // trackingMcpTransport wraps mockMcpTransport and calls onClose when closed.
 type trackingMcpTransport struct {
 	mockMcpTransport

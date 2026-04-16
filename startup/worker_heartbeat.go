@@ -42,18 +42,18 @@ func HeartbeatWorkerRegistration(
 			},
 		}
 		for attempt := 0; attempt < 3; attempt++ {
-		if existing, ok, _ := workerStore.Get(ctx, workerID); ok {
-			worker.Metadata.ResourceVersion = existing.Metadata.ResourceVersion
-			worker.Metadata.Generation = existing.Metadata.Generation
-			worker.Metadata.CreatedAt = existing.Metadata.CreatedAt
-			worker.Status.ObservedGeneration = existing.Metadata.Generation
-			if strings.EqualFold(strings.TrimSpace(existing.Status.Phase), "ready") ||
-				strings.EqualFold(strings.TrimSpace(existing.Status.Phase), "pending") {
-				worker.Status.CurrentTasks = existing.Status.CurrentTasks
-			} else {
-				worker.Status.CurrentTasks = 0
+			if existing, ok, _ := workerStore.Get(ctx, workerID); ok {
+				worker.Metadata.ResourceVersion = existing.Metadata.ResourceVersion
+				worker.Metadata.Generation = existing.Metadata.Generation
+				worker.Metadata.CreatedAt = existing.Metadata.CreatedAt
+				worker.Status.ObservedGeneration = existing.Metadata.Generation
+				if strings.EqualFold(strings.TrimSpace(existing.Status.Phase), "ready") ||
+					strings.EqualFold(strings.TrimSpace(existing.Status.Phase), "pending") {
+					worker.Status.CurrentTasks = existing.Status.CurrentTasks
+				} else {
+					worker.Status.CurrentTasks = 0
+				}
 			}
-		}
 			_, err := workerStore.Upsert(ctx, worker)
 			if err == nil {
 				break
@@ -71,12 +71,14 @@ func HeartbeatWorkerRegistration(
 			final := worker
 			final.Status.Phase = "NotReady"
 			final.Status.LastError = "worker stopped"
-		if existing, ok, _ := workerStore.Get(ctx, workerID); ok {
-			final.Metadata.ResourceVersion = existing.Metadata.ResourceVersion
-			final.Metadata.Generation = existing.Metadata.Generation
-			final.Metadata.CreatedAt = existing.Metadata.CreatedAt
-		}
-			_, _ = workerStore.Upsert(ctx, final)
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			if existing, ok, _ := workerStore.Get(shutdownCtx, workerID); ok {
+				final.Metadata.ResourceVersion = existing.Metadata.ResourceVersion
+				final.Metadata.Generation = existing.Metadata.Generation
+				final.Metadata.CreatedAt = existing.Metadata.CreatedAt
+			}
+			_, _ = workerStore.Upsert(shutdownCtx, final)
+			cancel()
 			return
 		case <-ticker.C:
 		}

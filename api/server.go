@@ -227,7 +227,7 @@ func normalizeUIBasePath(raw string) string {
 	return p
 }
 
-const (
+var (
 	apiReadTimeout  = 30 * time.Second
 	apiWriteTimeout = 60 * time.Second
 )
@@ -236,14 +236,37 @@ const (
 // (GET, HEAD) get a shorter deadline than mutating methods.
 func withRequestTimeout(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		timeout := apiWriteTimeout
-		if r.Method == http.MethodGet || r.Method == http.MethodHead {
-			timeout = apiReadTimeout
+		timeout, ok := requestTimeoutFor(r)
+		if !ok {
+			next.ServeHTTP(w, r)
+			return
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), timeout)
 		defer cancel()
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func requestTimeoutFor(r *http.Request) (time.Duration, bool) {
+	if isStreamingWatchRequest(r) {
+		return 0, false
+	}
+	timeout := apiWriteTimeout
+	if r != nil && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
+		timeout = apiReadTimeout
+	}
+	return timeout, true
+}
+
+func isStreamingWatchRequest(r *http.Request) bool {
+	if r == nil || r.URL == nil {
+		return false
+	}
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		return false
+	}
+	path := strings.TrimSpace(r.URL.Path)
+	return path == "/v1/events/watch" || strings.HasSuffix(path, "/watch")
 }
 
 func (s *Server) routes() {

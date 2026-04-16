@@ -2,6 +2,7 @@ package eventbus
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 )
@@ -46,5 +47,68 @@ func TestMemoryBusSubscribeWithSinceID(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("timed out waiting for replayed event")
+	}
+}
+
+func TestMemoryBusPublishWhileSubscribersCancel(t *testing.T) {
+	bus := NewMemoryBus(64)
+	panicCh := make(chan any, 1)
+	stop := make(chan struct{})
+
+	var publishers sync.WaitGroup
+	for i := 0; i < 4; i++ {
+		publishers.Add(1)
+		go func(idx int) {
+			defer publishers.Done()
+			defer func() {
+				if recovered := recover(); recovered != nil {
+					select {
+					case panicCh <- recovered:
+					default:
+					}
+				}
+			}()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+					bus.Publish(Event{
+						Source: "apiserver",
+						Type:   "resource.updated",
+						Kind:   "Task",
+						Name:   "task-a",
+						Action: "publisher",
+					})
+				}
+			}
+		}(i)
+	}
+
+	var subscribers sync.WaitGroup
+	for i := 0; i < 200; i++ {
+		subscribers.Add(1)
+		go func(idx int) {
+			defer subscribers.Done()
+			ctx, cancel := context.WithCancel(context.Background())
+			ch := bus.Subscribe(ctx, Filter{Kind: "Task"})
+			time.Sleep(time.Duration((idx%5)+1) * time.Millisecond)
+			select {
+			case <-ch:
+			default:
+			}
+			cancel()
+		}(i)
+	}
+
+	subscribers.Wait()
+	time.Sleep(25 * time.Millisecond)
+	close(stop)
+	publishers.Wait()
+
+	select {
+	case recovered := <-panicCh:
+		t.Fatalf("publish panicked during subscriber cancellation: %v", recovered)
+	default:
 	}
 }

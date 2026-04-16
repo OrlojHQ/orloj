@@ -174,6 +174,45 @@ func TestWebhookCallbackToolRuntimeTimesOut(t *testing.T) {
 	}
 }
 
+func TestWebhookCallbackToolRuntimePollTransportFailureReturnsBackendError(t *testing.T) {
+	doer := &sequencedDoer{
+		responses: []fakeHTTPDoer{
+			{statusCode: 202, body: `{"status":"accepted"}`},
+			{err: errors.New("dial tcp 127.0.0.1:443: connection refused")},
+		},
+	}
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
+		"wh_tool": {
+			Type:     "webhook-callback",
+			Endpoint: "https://wh.example.com/execute",
+		},
+	})
+	runtime := NewWebhookCallbackToolRuntime(registry, nil, doer, 10*time.Millisecond)
+
+	start := time.Now()
+	_, err := runtime.Call(context.Background(), "wh_tool", "input")
+	elapsed := time.Since(start)
+	if err == nil {
+		t.Fatal("expected poll transport failure")
+	}
+	if elapsed > 200*time.Millisecond {
+		t.Fatalf("expected poll failure to surface promptly, elapsed=%s", elapsed)
+	}
+	code, reason, retryable, ok := ToolErrorMeta(err)
+	if !ok {
+		t.Fatal("expected tool error metadata")
+	}
+	if code != ToolCodeExecutionFailed {
+		t.Fatalf("expected code %q, got %q", ToolCodeExecutionFailed, code)
+	}
+	if reason != ToolReasonBackendFailure {
+		t.Fatalf("expected reason %q, got %q", ToolReasonBackendFailure, reason)
+	}
+	if !retryable {
+		t.Fatal("expected backend poll failure to be retryable")
+	}
+}
+
 func TestWebhookCallbackToolRuntimeFailsOnMissingEndpoint(t *testing.T) {
 	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"wh_tool": {Type: "webhook-callback"},
