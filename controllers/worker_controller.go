@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/eventbus"
+	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/store"
 )
 
@@ -70,15 +70,14 @@ func (c *WorkerController) ReconcileOnce() error {
 	c.enqueueAll(ctx, queue)
 
 	for {
-		select {
-		case key := <-queue.ch:
-			if err := c.reconcileByName(ctx, key); err != nil {
-				return err
-			}
-			queue.Done(key)
-		default:
+		key, ok := queue.TryPop()
+		if !ok {
 			return nil
 		}
+		if err := c.reconcileByName(ctx, key); err != nil {
+			return err
+		}
+		queue.Done(key)
 	}
 }
 

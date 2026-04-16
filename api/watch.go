@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/eventbus"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 type watchEvent struct {
@@ -26,7 +26,7 @@ type watchRecord struct {
 }
 
 func (s *Server) watchAgents(w http.ResponseWriter, r *http.Request) {
-	s.watchResourceStream(w, r, func() []watchRecord {
+	s.watchResourceStream(w, r, "Agent", func() []watchRecord {
 		items, err := s.stores.Agents.List(r.Context())
 		if err != nil {
 			writeStoreFetchError(w, err)
@@ -47,7 +47,7 @@ func (s *Server) watchAgents(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) watchTasks(w http.ResponseWriter, r *http.Request) {
-	s.watchResourceStream(w, r, func() []watchRecord {
+	s.watchResourceStream(w, r, "Task", func() []watchRecord {
 		items, err := s.stores.Tasks.List(r.Context())
 		if err != nil {
 			writeStoreFetchError(w, err)
@@ -67,7 +67,7 @@ func (s *Server) watchTasks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) watchTaskSchedules(w http.ResponseWriter, r *http.Request) {
-	s.watchResourceStream(w, r, func() []watchRecord {
+	s.watchResourceStream(w, r, "TaskSchedule", func() []watchRecord {
 		items, err := s.stores.TaskSchedules.List(r.Context())
 		if err != nil {
 			writeStoreFetchError(w, err)
@@ -87,7 +87,7 @@ func (s *Server) watchTaskSchedules(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) watchTaskWebhooks(w http.ResponseWriter, r *http.Request) {
-	s.watchResourceStream(w, r, func() []watchRecord {
+	s.watchResourceStream(w, r, "TaskWebhook", func() []watchRecord {
 		items, err := s.stores.TaskWebhooks.List(r.Context())
 		if err != nil {
 			writeStoreFetchError(w, err)
@@ -156,7 +156,7 @@ func (s *Server) watchEvents(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) watchResourceStream(w http.ResponseWriter, r *http.Request, snapshot func() []watchRecord) {
+func (s *Server) watchResourceStream(w http.ResponseWriter, r *http.Request, kind string, snapshot func() []watchRecord) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
@@ -174,81 +174,79 @@ func (s *Server) watchResourceStream(w http.ResponseWriter, r *http.Request, sna
 	seen := make(map[string]int64)
 	heartbeat := time.NewTicker(15 * time.Second)
 	defer heartbeat.Stop()
-	poll := time.NewTicker(1 * time.Second)
-	defer poll.Stop()
-
-	sendSnapshot := func() error {
-		records := snapshot()
-		sort.Slice(records, func(i, j int) bool {
-			left := records[i].Namespace + "/" + records[i].Name
-			right := records[j].Namespace + "/" + records[j].Name
-			return left < right
-		})
-
-		nextSeen := make(map[string]int64, len(records))
-		for _, rec := range records {
-			rec.Namespace = resources.NormalizeNamespace(rec.Namespace)
-			if hasNamespaceFilter && !strings.EqualFold(rec.Namespace, namespaceFilterValue) {
-				continue
-			}
-			if nameFilter != "" && !strings.EqualFold(nameFilter, rec.Name) {
-				continue
-			}
-			recordKey := rec.Namespace + "/" + rec.Name
-			nextSeen[recordKey] = rec.ResourceVersion
-			previousRV, existed := seen[recordKey]
-			if rec.ResourceVersion <= sinceRV {
-				continue
-			}
-			if existed && previousRV == rec.ResourceVersion {
-				continue
-			}
-			eventType := "added"
-			if existed {
-				eventType = "updated"
-			}
-			if err := writeSSE(w, "resource", watchEvent{Type: eventType, Resource: rec.Resource}); err != nil {
-				return err
-			}
-		}
-
-		for key, previousRV := range seen {
-			if _, ok := nextSeen[key]; ok {
-				continue
-			}
-			namespace := ""
-			name := key
-			if parts := strings.SplitN(key, "/", 2); len(parts) == 2 {
-				namespace = parts[0]
-				name = parts[1]
-			}
-			if hasNamespaceFilter && !strings.EqualFold(namespace, namespaceFilterValue) {
-				continue
-			}
-			if nameFilter != "" && !strings.EqualFold(nameFilter, name) {
-				continue
-			}
-			meta := resources.ObjectMeta{Name: name, Namespace: namespace, ResourceVersion: strconv.FormatInt(previousRV, 10)}
-			if err := writeSSE(w, "resource", watchEvent{Type: "deleted", Resource: map[string]any{"metadata": meta}}); err != nil {
-				return err
-			}
-		}
-
-		seen = nextSeen
-		return nil
+	startEventID := uint64(0)
+	if s != nil && s.bus != nil {
+		startEventID = s.bus.LatestID()
 	}
 
-	if err := sendSnapshot(); err != nil {
+	if err := sendWatchSnapshot(w, snapshot(), seen, sinceRV, nameFilter, namespaceFilterValue, hasNamespaceFilter); err != nil {
 		return
 	}
 	flusher.Flush()
+
+	if s == nil || s.bus == nil {
+		s.watchResourceStreamPolling(w, r, snapshot, seen, sinceRV, nameFilter, namespaceFilterValue, hasNamespaceFilter, flusher, heartbeat)
+		return
+	}
+
+	filter := eventbus.Filter{
+		SinceID:   startEventID,
+		Source:    "apiserver",
+		Kind:      strings.TrimSpace(kind),
+		Name:      nameFilter,
+		Namespace: namespaceFilterValue,
+	}
+	if !hasNamespaceFilter {
+		filter.Namespace = ""
+	}
+	stream := s.bus.Subscribe(r.Context(), filter)
 
 	for {
 		select {
 		case <-r.Context().Done():
 			return
-		case <-poll.C:
-			if err := sendSnapshot(); err != nil {
+		case evt := <-stream:
+			record, ok := watchRecordFromResource(evt.Data)
+			if !ok {
+				if strings.EqualFold(strings.TrimSpace(evt.Action), "deleted") {
+					record = watchRecord{
+						Name:      strings.TrimSpace(evt.Name),
+						Namespace: resources.NormalizeNamespace(strings.TrimSpace(evt.Namespace)),
+						Resource: map[string]any{
+							"metadata": resources.ObjectMeta{
+								Name:      strings.TrimSpace(evt.Name),
+								Namespace: resources.NormalizeNamespace(strings.TrimSpace(evt.Namespace)),
+							},
+						},
+					}
+				} else {
+					continue
+				}
+			}
+			if hasNamespaceFilter && !strings.EqualFold(record.Namespace, namespaceFilterValue) {
+				continue
+			}
+			if nameFilter != "" && !strings.EqualFold(record.Name, nameFilter) {
+				continue
+			}
+			eventType := watchEventTypeForAction(evt.Action)
+			if eventType != "deleted" {
+				recordKey := record.Namespace + "/" + record.Name
+				if record.ResourceVersion <= sinceRV {
+					continue
+				}
+				if previousRV, existed := seen[recordKey]; existed && record.ResourceVersion != 0 && previousRV == record.ResourceVersion {
+					continue
+				}
+				seen[recordKey] = record.ResourceVersion
+			} else {
+				recordKey := record.Namespace + "/" + record.Name
+				if _, existed := seen[recordKey]; !existed {
+					continue
+				}
+				delete(seen, recordKey)
+			}
+			if err := writeSSE(w, "resource", watchEvent{Type: eventType, Resource: record.Resource}); err != nil {
 				return
 			}
 			flusher.Flush()
@@ -258,6 +256,196 @@ func (s *Server) watchResourceStream(w http.ResponseWriter, r *http.Request, sna
 			}
 			flusher.Flush()
 		}
+	}
+}
+
+func (s *Server) watchResourceStreamPolling(
+	w http.ResponseWriter,
+	r *http.Request,
+	snapshot func() []watchRecord,
+	seen map[string]int64,
+	sinceRV int64,
+	nameFilter string,
+	namespaceFilterValue string,
+	hasNamespaceFilter bool,
+	flusher http.Flusher,
+	heartbeat *time.Ticker,
+) {
+	poll := time.NewTicker(1 * time.Second)
+	defer poll.Stop()
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-poll.C:
+			if err := sendWatchSnapshot(w, snapshot(), seen, sinceRV, nameFilter, namespaceFilterValue, hasNamespaceFilter); err != nil {
+				return
+			}
+			flusher.Flush()
+		case <-heartbeat.C:
+			if _, err := fmt.Fprint(w, ": keep-alive\n\n"); err != nil {
+				return
+			}
+			flusher.Flush()
+		}
+	}
+}
+
+func sendWatchSnapshot(
+	w http.ResponseWriter,
+	records []watchRecord,
+	seen map[string]int64,
+	sinceRV int64,
+	nameFilter string,
+	namespaceFilterValue string,
+	hasNamespaceFilter bool,
+) error {
+	sort.Slice(records, func(i, j int) bool {
+		left := records[i].Namespace + "/" + records[i].Name
+		right := records[j].Namespace + "/" + records[j].Name
+		return left < right
+	})
+
+	nextSeen := make(map[string]int64, len(records))
+	for _, rec := range records {
+		rec.Namespace = resources.NormalizeNamespace(rec.Namespace)
+		if hasNamespaceFilter && !strings.EqualFold(rec.Namespace, namespaceFilterValue) {
+			continue
+		}
+		if nameFilter != "" && !strings.EqualFold(nameFilter, rec.Name) {
+			continue
+		}
+		recordKey := rec.Namespace + "/" + rec.Name
+		nextSeen[recordKey] = rec.ResourceVersion
+		previousRV, existed := seen[recordKey]
+		if rec.ResourceVersion <= sinceRV {
+			continue
+		}
+		if existed && previousRV == rec.ResourceVersion {
+			continue
+		}
+		eventType := "added"
+		if existed {
+			eventType = "updated"
+		}
+		if err := writeSSE(w, "resource", watchEvent{Type: eventType, Resource: rec.Resource}); err != nil {
+			return err
+		}
+	}
+
+	for key, previousRV := range seen {
+		if _, ok := nextSeen[key]; ok {
+			continue
+		}
+		namespace := ""
+		name := key
+		if parts := strings.SplitN(key, "/", 2); len(parts) == 2 {
+			namespace = parts[0]
+			name = parts[1]
+		}
+		if hasNamespaceFilter && !strings.EqualFold(namespace, namespaceFilterValue) {
+			continue
+		}
+		if nameFilter != "" && !strings.EqualFold(nameFilter, name) {
+			continue
+		}
+		meta := resources.ObjectMeta{Name: name, Namespace: namespace, ResourceVersion: strconv.FormatInt(previousRV, 10)}
+		if err := writeSSE(w, "resource", watchEvent{Type: "deleted", Resource: map[string]any{"metadata": meta}}); err != nil {
+			return err
+		}
+	}
+
+	for key := range seen {
+		delete(seen, key)
+	}
+	for key, value := range nextSeen {
+		seen[key] = value
+	}
+	return nil
+}
+
+func watchRecordFromResource(resource any) (watchRecord, bool) {
+	switch obj := resource.(type) {
+	case resources.Agent:
+		return watchRecord{
+			Name:            strings.TrimSpace(obj.Metadata.Name),
+			Namespace:       resources.NormalizeNamespace(obj.Metadata.Namespace),
+			ResourceVersion: parseResourceVersion(obj.Metadata.ResourceVersion),
+			Resource:        obj,
+		}, true
+	case resources.Task:
+		return watchRecord{
+			Name:            strings.TrimSpace(obj.Metadata.Name),
+			Namespace:       resources.NormalizeNamespace(obj.Metadata.Namespace),
+			ResourceVersion: parseResourceVersion(obj.Metadata.ResourceVersion),
+			Resource:        obj,
+		}, true
+	case resources.TaskSchedule:
+		return watchRecord{
+			Name:            strings.TrimSpace(obj.Metadata.Name),
+			Namespace:       resources.NormalizeNamespace(obj.Metadata.Namespace),
+			ResourceVersion: parseResourceVersion(obj.Metadata.ResourceVersion),
+			Resource:        obj,
+		}, true
+	case resources.TaskWebhook:
+		return watchRecord{
+			Name:            strings.TrimSpace(obj.Metadata.Name),
+			Namespace:       resources.NormalizeNamespace(obj.Metadata.Namespace),
+			ResourceVersion: parseResourceVersion(obj.Metadata.ResourceVersion),
+			Resource:        obj,
+		}, true
+	case map[string]any:
+		meta, ok := watchObjectMetaFromMap(obj["metadata"])
+		if !ok {
+			return watchRecord{}, false
+		}
+		return watchRecord{
+			Name:            strings.TrimSpace(meta.Name),
+			Namespace:       resources.NormalizeNamespace(meta.Namespace),
+			ResourceVersion: parseResourceVersion(meta.ResourceVersion),
+			Resource:        obj,
+		}, true
+	default:
+		return watchRecord{}, false
+	}
+}
+
+func watchObjectMetaFromMap(raw any) (resources.ObjectMeta, bool) {
+	switch meta := raw.(type) {
+	case resources.ObjectMeta:
+		return meta, true
+	case map[string]string:
+		return resources.ObjectMeta{
+			Name:            strings.TrimSpace(meta["name"]),
+			Namespace:       resources.NormalizeNamespace(meta["namespace"]),
+			ResourceVersion: strings.TrimSpace(meta["resourceVersion"]),
+		}, true
+	case map[string]any:
+		out := resources.ObjectMeta{}
+		if name, ok := meta["name"].(string); ok {
+			out.Name = strings.TrimSpace(name)
+		}
+		if namespace, ok := meta["namespace"].(string); ok {
+			out.Namespace = resources.NormalizeNamespace(namespace)
+		}
+		if rv, ok := meta["resourceVersion"].(string); ok {
+			out.ResourceVersion = strings.TrimSpace(rv)
+		}
+		return out, strings.TrimSpace(out.Name) != ""
+	default:
+		return resources.ObjectMeta{}, false
+	}
+}
+
+func watchEventTypeForAction(action string) string {
+	switch strings.ToLower(strings.TrimSpace(action)) {
+	case "created":
+		return "added"
+	case "deleted":
+		return "deleted"
+	default:
+		return "updated"
 	}
 }
 

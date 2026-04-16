@@ -22,6 +22,7 @@ type authRateLimiter struct {
 	trustedProxies []*net.IPNet
 	warnOnce       sync.Once
 	logger         *log.Logger
+	lastCleanup    time.Time
 }
 
 type rateLimiterEntry struct {
@@ -33,11 +34,11 @@ func newAuthRateLimiter(trustedProxies []*net.IPNet, logger *log.Logger) *authRa
 	rl := &authRateLimiter{
 		limiters:       make(map[string]*rateLimiterEntry),
 		rate:           rate.Limit(10.0 / 60.0), // 10 requests per minute sustained
-		burst:          20,                       // allow short bursts for legitimate multi-step flows
+		burst:          20,                      // allow short bursts for legitimate multi-step flows
 		trustedProxies: trustedProxies,
 		logger:         logger,
+		lastCleanup:    time.Now(),
 	}
-	go rl.cleanupLoop()
 	return rl
 }
 
@@ -56,6 +57,7 @@ func (rl *authRateLimiter) allow(r *http.Request) bool {
 	}
 
 	rl.mu.Lock()
+	rl.cleanupLocked(time.Now())
 	entry, ok := rl.limiters[ip]
 	if !ok {
 		entry = &rateLimiterEntry{
@@ -69,19 +71,20 @@ func (rl *authRateLimiter) allow(r *http.Request) bool {
 	return entry.limiter.Allow()
 }
 
-func (rl *authRateLimiter) cleanupLoop() {
-	ticker := time.NewTicker(5 * time.Minute)
-	defer ticker.Stop()
-	for range ticker.C {
-		rl.mu.Lock()
-		cutoff := time.Now().Add(-10 * time.Minute)
-		for ip, entry := range rl.limiters {
-			if entry.lastSeen.Before(cutoff) {
-				delete(rl.limiters, ip)
-			}
-		}
-		rl.mu.Unlock()
+func (rl *authRateLimiter) cleanupLocked(now time.Time) {
+	if rl == nil {
+		return
 	}
+	if !rl.lastCleanup.IsZero() && now.Sub(rl.lastCleanup) < 5*time.Minute {
+		return
+	}
+	cutoff := now.Add(-10 * time.Minute)
+	for ip, entry := range rl.limiters {
+		if entry.lastSeen.Before(cutoff) {
+			delete(rl.limiters, ip)
+		}
+	}
+	rl.lastCleanup = now
 }
 
 // extractClientIP determines the real client IP for rate-limiting purposes.

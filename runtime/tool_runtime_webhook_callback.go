@@ -38,8 +38,8 @@ type WebhookCallbackToolRuntime struct {
 
 // callbackRegistry stores async responses delivered via push callback.
 type callbackRegistry struct {
-	mu       sync.Mutex
-	pending  map[string]chan ToolExecutionResponse
+	mu      sync.Mutex
+	pending map[string]chan ToolExecutionResponse
 }
 
 func newCallbackRegistry() *callbackRegistry {
@@ -363,7 +363,7 @@ func (r *WebhookCallbackToolRuntime) pollOnce(ctx context.Context, tool, pollURL
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 			return "", false, nil
 		}
-		return "", false, nil
+		return "", false, mapWebhookPollError(tool, err)
 	}
 	defer resp.Body.Close()
 
@@ -435,4 +435,16 @@ func mapWebhookHTTPError(tool string, err error) error {
 			map[string]string{"tool": tool, "isolation_mode": "webhook-callback"},
 		)
 	}
+}
+
+func mapWebhookPollError(tool string, err error) error {
+	return NewToolError(
+		ToolStatusError,
+		ToolCodeExecutionFailed,
+		ToolReasonBackendFailure,
+		true,
+		fmt.Sprintf("webhook-callback tool poll failed for tool=%s: %s", tool, RedactSensitive(err.Error())),
+		err,
+		map[string]string{"tool": tool, "isolation_mode": "webhook-callback"},
+	)
 }

@@ -675,9 +675,9 @@ func claimTaskSQL(ctx context.Context, db *sql.DB, name, workerID string, lease 
 // SQL WHERE clause so a worker never fetches tasks it cannot run.
 // Zero-value fields mean "no filter".
 type WorkerClaimHints struct {
-	AssignedWorker  string // match tasks assigned to this worker (or unassigned)
-	Region          string // match tasks with this region requirement (case-insensitive), or no requirement
-	RequiresGPU     bool   // when false, skip GPU filter; when true only tasks with gpu=true
+	AssignedWorker  string   // match tasks assigned to this worker (or unassigned)
+	Region          string   // match tasks with this region requirement (case-insensitive), or no requirement
+	RequiresGPU     bool     // when true, restrict claims to tasks that explicitly require GPU
 	SupportedModels []string // if non-empty, only tasks whose model requirement is in this list (or unset)
 }
 
@@ -711,6 +711,27 @@ func claimNextDueTaskSQL(ctx context.Context, db *sql.DB, workerID string, lease
 			OR LOWER(assigned_worker) = LOWER($%d)
 		)`, len(args)+1)
 		args = append(args, hints.AssignedWorker)
+	}
+	if hints.RequiresGPU {
+		extraWhere += ` AND LOWER(COALESCE(payload->'spec'->'requirements'->>'gpu', 'false')) = 'true'`
+	}
+	if len(hints.SupportedModels) > 0 {
+		placeholders := make([]string, 0, len(hints.SupportedModels))
+		for _, model := range hints.SupportedModels {
+			model = strings.TrimSpace(model)
+			if model == "" {
+				continue
+			}
+			args = append(args, model)
+			placeholders = append(placeholders, fmt.Sprintf("LOWER($%d)", len(args)))
+		}
+		if len(placeholders) > 0 {
+			extraWhere += fmt.Sprintf(` AND (
+				payload->'spec'->'requirements'->>'model' IS NULL
+				OR payload->'spec'->'requirements'->>'model' = ''
+				OR LOWER(payload->'spec'->'requirements'->>'model') IN (%s)
+			)`, strings.Join(placeholders, ", "))
+		}
 	}
 
 	query := fmt.Sprintf(

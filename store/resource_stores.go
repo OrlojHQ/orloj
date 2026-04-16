@@ -2049,9 +2049,10 @@ func (s *TaskStore) Upsert(ctx context.Context, item resources.Task) (resources.
 			return resources.Task{}, err
 		}
 	}
-	s.items[key] = item
+	stored := item.DeepCopy()
+	s.items[key] = stored
 	s.mu.Unlock()
-	return item, nil
+	return stored.DeepCopy(), nil
 }
 
 func (s *TaskStore) Get(ctx context.Context, name string) (resources.Task, bool, error) {
@@ -2063,7 +2064,10 @@ func (s *TaskStore) Get(ctx context.Context, name string) (resources.Task, bool,
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	item, ok := s.items[key]
-	return item, ok, nil
+	if !ok {
+		return resources.Task{}, false, nil
+	}
+	return item.DeepCopy(), true, nil
 }
 
 func (s *TaskStore) List(ctx context.Context) ([]resources.Task, error) {
@@ -2084,7 +2088,7 @@ func (s *TaskStore) ListPaged(ctx context.Context, limit, offset int, namespace 
 		if namespace != "" && !strings.EqualFold(resources.NormalizeNamespace(item.Metadata.Namespace), namespace) {
 			continue
 		}
-		out = append(out, item)
+		out = append(out, item.DeepCopy())
 	}
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].Metadata.Name < out[j].Metadata.Name
@@ -2110,7 +2114,7 @@ func (s *TaskStore) ListCursor(ctx context.Context, limit int, after, namespace 
 	defer s.mu.RUnlock()
 	out := make([]resources.Task, 0, len(s.items))
 	for _, item := range s.items {
-		out = append(out, item)
+		out = append(out, item.DeepCopy())
 	}
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].Metadata.Name < out[j].Metadata.Name
@@ -2200,6 +2204,7 @@ func (s *TaskStore) ClaimIfDue(ctx context.Context, name, workerID string, lease
 	if !ok {
 		return resources.Task{}, false, nil
 	}
+	task = task.DeepCopy()
 	if !isTaskClaimable(task, workerID, now) {
 		return resources.Task{}, false, nil
 	}
@@ -2208,8 +2213,9 @@ func (s *TaskStore) ClaimIfDue(ctx context.Context, name, workerID string, lease
 	if err != nil {
 		return resources.Task{}, false, err
 	}
-	s.items[key] = claimedTask
-	return claimedTask, true, nil
+	stored := claimedTask.DeepCopy()
+	s.items[key] = stored
+	return stored.DeepCopy(), true, nil
 }
 
 func (s *TaskStore) ClaimNextDue(ctx context.Context, workerID string, lease time.Duration, hints WorkerClaimHints, matches func(resources.Task) bool) (resources.Task, bool, error) {
@@ -2230,7 +2236,7 @@ func (s *TaskStore) ClaimNextDue(ctx context.Context, workerID string, lease tim
 	}
 	sort.Strings(names)
 	for _, name := range names {
-		task := s.items[name]
+		task := s.items[name].DeepCopy()
 		if !isTaskClaimable(task, workerID, now) {
 			continue
 		}
@@ -2241,8 +2247,9 @@ func (s *TaskStore) ClaimNextDue(ctx context.Context, workerID string, lease tim
 		if err != nil {
 			return resources.Task{}, false, err
 		}
-		s.items[name] = claimedTask
-		return claimedTask, true, nil
+		stored := claimedTask.DeepCopy()
+		s.items[name] = stored
+		return stored.DeepCopy(), true, nil
 	}
 	return resources.Task{}, false, nil
 }

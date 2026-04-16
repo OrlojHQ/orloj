@@ -195,19 +195,19 @@ func (c *TaskController) ReconcileOnce(ctx context.Context) error {
 		}
 		task, claimed, err := c.taskStore.ClaimNextDue(ctx, c.workerID, c.leaseDuration, c.workerClaimHints(), c.taskMatchesWorker)
 		if err != nil {
-		if slotAcquired {
-			_ = c.workerStore.ReleaseSlot(ctx, c.workerID)
+			if slotAcquired {
+				_ = c.workerStore.ReleaseSlot(ctx, c.workerID)
+			}
+			return err
 		}
-		return err
-	}
-	if !claimed {
-		if slotAcquired {
-			_ = c.workerStore.ReleaseSlot(ctx, c.workerID)
+		if !claimed {
+			if slotAcquired {
+				_ = c.workerStore.ReleaseSlot(ctx, c.workerID)
+			}
+			return nil
 		}
-		return nil
-	}
 
-	taskKey := taskScopedName(task)
+		taskKey := taskScopedName(task)
 		stopHeartbeat := c.startHeartbeat(ctx, taskKey)
 		c.appendTaskLog(taskKey, fmt.Sprintf("task claimed by worker=%s lease=%s", c.workerID, c.leaseDuration))
 		c.appendTaskHistory(&task, "claim", fmt.Sprintf("task claimed by worker=%s lease=%s", c.workerID, c.leaseDuration))
@@ -1673,7 +1673,7 @@ func (c *TaskController) workerClaimHints() store.WorkerClaimHints {
 	return store.WorkerClaimHints{
 		AssignedWorker:  c.workerID,
 		Region:          strings.TrimSpace(worker.Spec.Region),
-		SupportedModels: worker.Spec.Capabilities.SupportedModels,
+		SupportedModels: append([]string(nil), worker.Spec.Capabilities.SupportedModels...),
 	}
 }
 
@@ -2124,4 +2124,3 @@ func dedupeStringsController(values []string) []string {
 	}
 	return out
 }
-

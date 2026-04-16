@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -65,7 +66,25 @@ func TestKeyQueuePopRespectsCancelledContext(t *testing.T) {
 
 func TestKeyQueueNewKeyQueueDefaultSize(t *testing.T) {
 	q := newKeyQueue(0)
-	if q == nil || cap(q.ch) != 1024 {
-		t.Fatalf("expected default buffer 1024, got cap=%d", cap(q.ch))
+	if q == nil || cap(q.items) != 1024 {
+		t.Fatalf("expected default capacity 1024, got cap=%d", cap(q.items))
+	}
+}
+
+func TestKeyQueueEnqueueDoesNotBlockWhenQueueGrowsPastInitialCapacity(t *testing.T) {
+	q := newKeyQueue(1)
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+		for i := 0; i < 2048; i++ {
+			q.Enqueue(fmt.Sprintf("task-%d", i))
+		}
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("expected enqueue loop to remain non-blocking")
 	}
 }

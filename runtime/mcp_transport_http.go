@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -19,6 +20,8 @@ type StreamableHTTPMcpTransport struct {
 	client       HTTPDoer
 	sessionID    string
 	allowPrivate bool
+	sessionMu    sync.RWMutex
+	establishMu  sync.Mutex
 }
 
 // StreamableHTTPMcpTransportConfig configures the HTTP transport.
@@ -133,8 +136,10 @@ func (t *StreamableHTTPMcpTransport) postRequest(ctx context.Context, method str
 	for k, v := range t.headers {
 		httpReq.Header.Set(k, v)
 	}
-	if t.sessionID != "" {
-		httpReq.Header.Set("Mcp-Session-Id", t.sessionID)
+	sessionID, unlock := t.sessionForRequest()
+	defer unlock()
+	if sessionID != "" {
+		httpReq.Header.Set("Mcp-Session-Id", sessionID)
 	}
 
 	httpResp, err := t.client.Do(httpReq)
@@ -144,7 +149,7 @@ func (t *StreamableHTTPMcpTransport) postRequest(ctx context.Context, method str
 	defer httpResp.Body.Close()
 
 	if sid := httpResp.Header.Get("Mcp-Session-Id"); sid != "" {
-		t.sessionID = sid
+		t.setSessionID(sid)
 	}
 
 	respBody, err := io.ReadAll(io.LimitReader(httpResp.Body, 10*1024*1024))
@@ -185,8 +190,10 @@ func (t *StreamableHTTPMcpTransport) postNotification(ctx context.Context, metho
 	for k, v := range t.headers {
 		httpReq.Header.Set(k, v)
 	}
-	if t.sessionID != "" {
-		httpReq.Header.Set("Mcp-Session-Id", t.sessionID)
+	sessionID, unlock := t.sessionForRequest()
+	defer unlock()
+	if sessionID != "" {
+		httpReq.Header.Set("Mcp-Session-Id", sessionID)
 	}
 
 	httpResp, err := t.client.Do(httpReq)
@@ -194,6 +201,38 @@ func (t *StreamableHTTPMcpTransport) postNotification(ctx context.Context, metho
 		return nil, err
 	}
 	defer httpResp.Body.Close()
+	if sid := httpResp.Header.Get("Mcp-Session-Id"); sid != "" {
+		t.setSessionID(sid)
+	}
 	_, _ = io.ReadAll(httpResp.Body)
 	return httpResp, nil
+}
+
+func (t *StreamableHTTPMcpTransport) sessionForRequest() (string, func()) {
+	if t == nil {
+		return "", func() {}
+	}
+	if sessionID := t.currentSessionID(); sessionID != "" {
+		return sessionID, func() {}
+	}
+	t.establishMu.Lock()
+	return t.currentSessionID(), t.establishMu.Unlock
+}
+
+func (t *StreamableHTTPMcpTransport) currentSessionID() string {
+	if t == nil {
+		return ""
+	}
+	t.sessionMu.RLock()
+	defer t.sessionMu.RUnlock()
+	return t.sessionID
+}
+
+func (t *StreamableHTTPMcpTransport) setSessionID(sessionID string) {
+	if t == nil || strings.TrimSpace(sessionID) == "" {
+		return
+	}
+	t.sessionMu.Lock()
+	t.sessionID = strings.TrimSpace(sessionID)
+	t.sessionMu.Unlock()
 }

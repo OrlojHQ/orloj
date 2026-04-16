@@ -57,6 +57,8 @@ type MemoryAgentMessageBus struct {
 	history       []AgentMessage
 	dedupe        map[string]time.Time
 	subs          map[uint64]*memorySubscriber
+	done          chan struct{}
+	closeOnce     sync.Once
 }
 
 func NewMemoryAgentMessageBus(subjectPrefix string, historyMax int, dedupeWindow time.Duration) *MemoryAgentMessageBus {
@@ -73,6 +75,7 @@ func NewMemoryAgentMessageBus(subjectPrefix string, historyMax int, dedupeWindow
 		history:       make([]AgentMessage, 0, historyMax),
 		dedupe:        make(map[string]time.Time),
 		subs:          make(map[uint64]*memorySubscriber),
+		done:          make(chan struct{}),
 	}
 }
 
@@ -81,9 +84,16 @@ func (b *MemoryAgentMessageBus) Publish(_ context.Context, message AgentMessage)
 	if err != nil {
 		return AgentMessage{}, err
 	}
+	if b.isClosed() {
+		return normalized, nil
+	}
 	subject := messageSubject(b.subjectPrefix, normalized.Namespace, normalized.ToAgent)
 
 	b.mu.Lock()
+	if b.isClosed() {
+		b.mu.Unlock()
+		return normalized, nil
+	}
 	b.pruneDedupeLocked()
 	if seenAt, exists := b.dedupe[normalized.MessageID]; exists {
 		if time.Since(seenAt) <= b.dedupeWindow {
@@ -126,6 +136,10 @@ func (b *MemoryAgentMessageBus) Consume(ctx context.Context, sub AgentMessageSub
 	}
 
 	b.mu.Lock()
+	if b.isClosed() {
+		b.mu.Unlock()
+		return nil
+	}
 	b.nextSubID++
 	consumer.id = b.nextSubID
 	b.subs[consumer.id] = consumer
@@ -146,10 +160,9 @@ func (b *MemoryAgentMessageBus) Consume(ctx context.Context, sub AgentMessageSub
 		select {
 		case <-ctx.Done():
 			return nil
-		case message, ok := <-consumer.ch:
-			if !ok {
-				return nil
-			}
+		case <-b.done:
+			return nil
+		case message := <-consumer.ch:
 			msg := message
 			delivery := &memoryDelivery{
 				message: msg,
@@ -175,24 +188,21 @@ func (b *MemoryAgentMessageBus) Consume(ctx context.Context, sub AgentMessageSub
 }
 
 func (b *MemoryAgentMessageBus) Close() error {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	for id, sub := range b.subs {
-		delete(b.subs, id)
-		close(sub.ch)
-	}
+	b.closeOnce.Do(func() {
+		close(b.done)
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		for id := range b.subs {
+			delete(b.subs, id)
+		}
+	})
 	return nil
 }
 
 func (b *MemoryAgentMessageBus) removeSubscriber(id uint64) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	sub, ok := b.subs[id]
-	if !ok {
-		return
-	}
 	delete(b.subs, id)
-	close(sub.ch)
 }
 
 func (b *MemoryAgentMessageBus) pruneDedupeLocked() {
@@ -205,6 +215,9 @@ func (b *MemoryAgentMessageBus) pruneDedupeLocked() {
 }
 
 func (b *MemoryAgentMessageBus) requeueToSubscriber(id uint64, message AgentMessage, delay time.Duration) {
+	if b.isClosed() {
+		return
+	}
 	if delay <= 0 {
 		b.pushToSubscriber(id, message)
 		return
@@ -212,12 +225,19 @@ func (b *MemoryAgentMessageBus) requeueToSubscriber(id uint64, message AgentMess
 	timer := time.NewTimer(delay)
 	go func() {
 		defer timer.Stop()
-		<-timer.C
-		b.pushToSubscriber(id, message)
+		select {
+		case <-b.done:
+			return
+		case <-timer.C:
+			b.pushToSubscriber(id, message)
+		}
 	}()
 }
 
 func (b *MemoryAgentMessageBus) pushToSubscriber(id uint64, message AgentMessage) {
+	if b.isClosed() {
+		return
+	}
 	b.mu.Lock()
 	sub, ok := b.subs[id]
 	b.mu.Unlock()
@@ -225,26 +245,43 @@ func (b *MemoryAgentMessageBus) pushToSubscriber(id uint64, message AgentMessage
 		return
 	}
 	select {
+	case <-b.done:
+		return
 	case sub.ch <- message:
 	default:
 	}
 }
 
 func (b *MemoryAgentMessageBus) enqueueNonBlocking(ch chan AgentMessage, message AgentMessage) {
-	if ch == nil {
+	if ch == nil || b.isClosed() {
 		return
 	}
 	select {
+	case <-b.done:
+		return
 	case ch <- message:
 	default:
 		// Keep publish/replay non-blocking.
 		select {
+		case <-b.done:
+			return
 		case <-ch:
 		default:
 		}
 		select {
+		case <-b.done:
+			return
 		case ch <- message:
 		default:
 		}
+	}
+}
+
+func (b *MemoryAgentMessageBus) isClosed() bool {
+	select {
+	case <-b.done:
+		return true
+	default:
+		return false
 	}
 }
