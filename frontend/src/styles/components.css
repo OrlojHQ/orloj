@@ -82,19 +82,20 @@
 }
 
 .sidebar__group-label {
-  font-size: 0.65rem;
+  font-size: 0.625rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.12em;
   color: var(--text-tertiary);
-  padding: 16px 8px 4px;
+  padding: 20px 10px 6px;
 }
 
 .sidebar__link {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px;
+  padding: 7px 10px;
   border-radius: 6px;
   color: var(--sidebar-text);
   text-decoration: none;
@@ -112,7 +113,22 @@
 
 .sidebar__link--active {
   background: var(--sidebar-active);
-  color: var(--accent-text);
+  color: var(--sidebar-text-active);
+}
+
+.sidebar__link--active::before {
+  content: "";
+  position: absolute;
+  left: -2px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.sidebar__link--active .sidebar__link-icon {
+  color: var(--accent);
 }
 
 .sidebar__link-icon {
@@ -230,12 +246,15 @@
   align-items: center;
   justify-content: space-between;
   padding: 0 24px;
-  height: 48px;
+  height: 52px;
   background: var(--topbar-bg);
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
   border-bottom: 1px solid var(--topbar-border);
   flex-shrink: 0;
-  position: relative;
+  position: sticky;
+  top: 0;
+  z-index: 50;
 }
 
 .topbar__left {
@@ -416,11 +435,68 @@
 }
 
 .topbar__search-btn {
-  display: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 8px 0 10px;
+  margin-right: 6px;
+  min-width: 220px;
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-tertiary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+
+.topbar__search-btn:hover {
+  background: var(--bg-surface);
+  border-color: var(--border);
+  color: var(--text-secondary);
+}
+
+.topbar__search-btn-icon {
+  flex-shrink: 0;
+}
+
+.topbar__search-btn-label {
+  flex: 1;
+  text-align: left;
+}
+
+.topbar__search-btn-kbd {
+  display: inline-flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.topbar__search-btn-kbd kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  font-family: inherit;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
 }
 
 @media (max-width: 768px) {
-  .topbar__search-btn { display: flex; }
+  .topbar__search-btn {
+    min-width: 0;
+    padding: 0 10px;
+  }
+  .topbar__search-btn-label,
+  .topbar__search-btn-kbd {
+    display: none;
+  }
 }
 
 .topbar__settings-panel {
@@ -545,16 +621,17 @@
 }
 
 .page__title {
-  font-size: 1.5rem;
-  font-weight: 700;
+  font-size: 1.75rem;
+  font-weight: 600;
   color: var(--text-primary);
   line-height: 1.2;
+  letter-spacing: -0.01em;
 }
 
 .page__subtitle {
-  font-size: 0.85rem;
+  font-size: 0.875rem;
   color: var(--text-secondary);
-  margin-top: 2px;
+  margin-top: 4px;
 }
 
 /* ============================================
@@ -780,9 +857,14 @@
 
 .card {
   background: var(--card-bg);
-  border: 1px solid var(--card-border);
+  border: 1px solid var(--border-subtle);
   border-radius: 10px;
   padding: 20px;
+  transition: border-color 0.15s;
+}
+
+.card:hover {
+  border-color: var(--border);
 }
 
 .card__title {
@@ -805,11 +887,11 @@
 }
 
 .metric-card {
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
+  background: var(--bg-secondary);
+  border: 1px solid transparent;
   border-radius: 10px;
-  padding: 16px;
-  transition: border-color 0.15s;
+  padding: 18px;
+  transition: border-color 0.15s, background 0.15s;
 }
 
 .metric-card--has-hint {
@@ -817,7 +899,12 @@
 }
 
 .metric-card:hover {
-  border-color: var(--border-strong);
+  background: var(--bg-tertiary);
+  border-color: var(--border);
+}
+
+.metric-card--zero .metric-card__value {
+  opacity: 0.45;
 }
 
 .metric-card__hint-wrap {
@@ -902,10 +989,31 @@
 }
 
 .metric-card__value {
-  font-size: 1.75rem;
-  font-weight: 700;
+  font-size: 2rem;
+  font-weight: 600;
   color: var(--text-primary);
   line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.metric-card__spark {
+  margin-top: 10px;
+  height: 28px;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.metric-card__spark-bar {
+  flex: 1;
+  background: var(--accent-alpha);
+  border-radius: 1px;
+  min-height: 2px;
+  transition: background 0.15s;
+}
+
+.metric-card:hover .metric-card__spark-bar {
+  background: var(--accent);
 }
 
 .metric-card__subtitle {
@@ -931,17 +1039,18 @@
 }
 
 .resource-card {
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
+  background: var(--bg-secondary);
+  border: 1px solid transparent;
   border-radius: 10px;
-  padding: 16px;
+  padding: 18px;
   cursor: pointer;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
 }
 
 .resource-card:hover {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent-alpha);
+  background: var(--bg-tertiary);
+  border-color: var(--border);
+  box-shadow: var(--shadow-sm);
 }
 
 .resource-card__header {
@@ -1016,6 +1125,23 @@
 .badge--gray { color: var(--text-tertiary); background: var(--gray-bg); }
 .badge--gray .badge__dot { background: var(--gray); }
 
+.badge--neutral {
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  text-transform: none;
+  font-weight: 500;
+}
+
+.badge--neutral.badge--dot-green .badge__dot { background: var(--green); }
+.badge--neutral.badge--dot-blue .badge__dot { background: var(--blue); }
+.badge--neutral.badge--dot-yellow .badge__dot { background: var(--yellow); }
+.badge--neutral.badge--dot-red .badge__dot { background: var(--red); }
+.badge--neutral.badge--dot-orange .badge__dot { background: var(--orange); }
+.badge--neutral.badge--dot-purple .badge__dot { background: var(--purple); }
+.badge--neutral.badge--dot-gray .badge__dot { background: var(--gray); }
+.badge--neutral.badge--dot-accent .badge__dot { background: var(--accent); }
+
 .badge--pulse .badge__dot {
   animation: pulse 2s infinite;
 }
@@ -1031,7 +1157,7 @@
 
 .table-wrapper {
   background: var(--card-bg);
-  border: 1px solid var(--card-border);
+  border: 1px solid var(--border-subtle);
   border-radius: 10px;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
@@ -1339,133 +1465,279 @@
    GRAPH VIEW
    ============================================ */
 
+/* --- Graph view container ------------------------------------------------ */
+
 .graph-view {
   position: relative;
   height: 600px;
-  background: var(--bg-primary);
-  border: 1px solid var(--card-border);
-  border-radius: 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
   overflow: hidden;
 }
 
-.graph-view__badge {
+/* --- Top bar: badge + status + legend toggle ----------------------------- */
+
+.graph-view__topbar {
   position: absolute;
   top: 12px;
   left: 12px;
+  right: 12px;
   z-index: 10;
-  font-size: 0.65rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.graph-view__topbar > * { pointer-events: auto; }
+
+.graph-view__badge {
+  font-size: 0.6rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  padding: 4px 10px;
-  border-radius: 6px;
-  backdrop-filter: blur(8px);
+  color: var(--text-secondary);
+  background: var(--topbar-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-subtle);
+  padding: 5px 12px;
+  border-radius: 8px;
+}
+
+.graph-view__status-bar {
+  font-size: 0.6rem;
+  color: var(--text-tertiary);
+  background: var(--topbar-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-subtle);
+  padding: 5px 12px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.graph-view__status-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--text-secondary);
+}
+
+.graph-view__status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.graph-view__status-total {
+  color: var(--text-tertiary);
+  padding-left: 2px;
+  border-left: 1px solid var(--border-subtle);
+  margin-left: 2px;
+}
+
+.graph-view__legend-toggle {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--topbar-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.graph-view__legend-toggle:hover {
+  color: var(--text-primary);
+  border-color: var(--border);
+}
+
+.graph-view__legend-toggle--active {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--topbar-bg));
 }
 
 .graph-view__legend {
   position: absolute;
-  top: 12px;
+  top: 46px;
   right: 12px;
   z-index: 10;
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  padding: 6px 10px;
-  border-radius: 6px;
-  backdrop-filter: blur(8px);
-  max-width: 360px;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--bg-secondary);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--border);
+  padding: 10px 14px;
+  border-radius: 10px;
+  box-shadow: var(--shadow-md);
+  animation: legendFadeIn 0.15s ease;
+}
+
+@keyframes legendFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .graph-view__legend-item {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 6px;
   font-size: 0.6rem;
-  font-weight: 600;
+  font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--text-secondary);
   white-space: nowrap;
 }
 
-/* --- Argo-style graph node ------------------------------------------------ */
+/* --- Modern graph node --------------------------------------------------- */
 
 .gnode {
   display: flex;
   align-items: center;
   gap: 10px;
-  background: var(--node-bg);
-  border: 1.5px solid var(--node-border);
-  border-radius: 10px;
-  padding: 12px 16px;
+  border: 1px solid var(--node-border);
+  border-radius: 12px;
+  padding: 14px 18px;
   min-width: 200px;
   cursor: pointer;
-  transition: border-color 0.15s, box-shadow 0.15s, transform 0.1s;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s, opacity 0.2s;
   box-shadow: var(--shadow-sm);
+  position: relative;
+  overflow: hidden;
 }
 
+.gnode::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--text-tertiary);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.gnode--system::before   { background: var(--accent); }
+.gnode--agent::before    { background: var(--green); }
+.gnode--model::before    { background: var(--blue); }
+.gnode--tool::before     { background: var(--yellow); }
+.gnode--secret::before   { background: var(--orange); }
+.gnode--memory::before   { background: var(--purple); }
+.gnode--role::before     { background: var(--purple); }
+.gnode--task::before     { background: var(--blue); }
+.gnode--schedule::before { background: var(--orange); }
+.gnode--webhook::before  { background: var(--orange); }
+.gnode--worker::before   { background: var(--green); }
+
+/* Type-specific background tints (replaces left border stripe) */
+.gnode--system   { background: color-mix(in srgb, var(--accent) 8%, var(--node-bg)); }
+.gnode--agent    { background: color-mix(in srgb, var(--green) 7%, var(--node-bg)); }
+.gnode--model    { background: color-mix(in srgb, var(--blue) 5%, var(--node-bg)); }
+.gnode--tool     { background: color-mix(in srgb, var(--yellow) 5%, var(--node-bg)); }
+.gnode--secret   { background: color-mix(in srgb, var(--orange) 4%, var(--node-bg)); }
+.gnode--memory   { background: color-mix(in srgb, var(--purple) 5%, var(--node-bg)); }
+.gnode--role     { background: color-mix(in srgb, var(--purple) 5%, var(--node-bg)); }
+.gnode--task     { background: color-mix(in srgb, var(--blue) 7%, var(--node-bg)); }
+.gnode--schedule { background: color-mix(in srgb, var(--orange) 5%, var(--node-bg)); }
+.gnode--webhook  { background: color-mix(in srgb, var(--orange) 5%, var(--node-bg)); }
+.gnode--worker   { background: color-mix(in srgb, var(--green) 5%, var(--node-bg)); }
+
 .gnode:hover {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px var(--accent-alpha), var(--shadow-md);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
   transform: translateY(-1px);
 }
 
-.gnode--system { border-left: 3px solid var(--accent); }
-.gnode--agent  { border-left: 3px solid var(--green); }
-.gnode--model  { border-left: 3px solid var(--blue); }
-.gnode--tool   { border-left: 3px solid var(--yellow); }
-.gnode--secret { border-left: 3px solid var(--orange); }
-.gnode--memory { border-left: 3px solid var(--purple); }
-.gnode--role   { border-left: 3px solid var(--purple); }
-.gnode--task   { border-left: 3px solid var(--blue); }
-.gnode--schedule { border-left: 3px solid var(--orange); }
-.gnode--worker { border-left: 3px solid var(--green); }
-
-.gnode--entry {
-  border-left: 3px solid var(--green);
+/* Secondary (config) nodes — smaller, slightly quieter */
+.gnode--secondary {
+  padding: 10px 14px;
+  min-width: 160px;
+  border-radius: 10px;
+  opacity: 0.75;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
-.gnode--terminal {
-  border-right: 3px solid var(--blue);
+.gnode--secondary:hover {
+  opacity: 1;
 }
 
-.gnode--join {
-  border-left: 3px solid var(--purple);
+/* Running state — soft accent glow */
+.gnode--running {
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  box-shadow: var(--accent-glow);
 }
 
-/* icon ring */
+/* Entry / terminal / join — subtle colored border hint */
+.gnode--entry    { border-color: color-mix(in srgb, var(--green) 25%, transparent); }
+.gnode--terminal { border-color: color-mix(in srgb, var(--blue) 20%, transparent); }
+.gnode--join     { border-color: color-mix(in srgb, var(--purple) 20%, transparent); }
+
+/* --- Icon ring ----------------------------------------------------------- */
+
 .gnode__icon-ring {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
   flex-shrink: 0;
+  transition: background 0.2s;
 }
 
-.gnode--entry .gnode__icon-ring {
-  background: var(--green-bg);
-  color: var(--green);
+/* Per-type icon ring tints */
+.gnode--system .gnode__icon-ring   { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+.gnode--agent .gnode__icon-ring    { background: color-mix(in srgb, var(--green) 18%, transparent); color: var(--green); }
+.gnode--model .gnode__icon-ring    { background: color-mix(in srgb, var(--blue) 15%, transparent); color: var(--blue); }
+.gnode--tool .gnode__icon-ring     { background: color-mix(in srgb, var(--yellow) 15%, transparent); color: var(--yellow); }
+.gnode--secret .gnode__icon-ring   { background: color-mix(in srgb, var(--orange) 15%, transparent); color: var(--orange); }
+.gnode--memory .gnode__icon-ring   { background: color-mix(in srgb, var(--purple) 15%, transparent); color: var(--purple); }
+.gnode--role .gnode__icon-ring     { background: color-mix(in srgb, var(--purple) 15%, transparent); color: var(--purple); }
+.gnode--task .gnode__icon-ring     { background: color-mix(in srgb, var(--blue) 18%, transparent); color: var(--blue); }
+.gnode--schedule .gnode__icon-ring { background: color-mix(in srgb, var(--orange) 15%, transparent); color: var(--orange); }
+.gnode--webhook .gnode__icon-ring  { background: color-mix(in srgb, var(--orange) 15%, transparent); color: var(--orange); }
+.gnode--worker .gnode__icon-ring   { background: color-mix(in srgb, var(--green) 15%, transparent); color: var(--green); }
+
+.gnode--secondary .gnode__icon-ring { width: 26px; height: 26px; }
+
+.gnode--entry .gnode__icon-ring    { background: var(--green-bg); color: var(--green); }
+.gnode--terminal .gnode__icon-ring { background: var(--blue-bg); color: var(--blue); }
+.gnode--join .gnode__icon-ring     { background: var(--purple-bg); color: var(--purple); }
+
+/* Pulse ring for running agents */
+.gnode__pulse {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1.5px solid var(--accent);
+  animation: nodePulse 2s ease-in-out infinite;
+  pointer-events: none;
 }
 
-.gnode--terminal .gnode__icon-ring {
-  background: var(--blue-bg);
-  color: var(--blue);
+@keyframes nodePulse {
+  0%, 100% { opacity: 0; transform: scale(0.85); }
+  50% { opacity: 0.5; transform: scale(1.15); }
 }
 
-.gnode--join .gnode__icon-ring {
-  background: var(--purple-bg);
-  color: var(--purple);
-}
+/* --- Body ---------------------------------------------------------------- */
 
-/* body */
 .gnode__body {
   display: flex;
   flex-direction: column;
@@ -1481,6 +1753,11 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.gnode--secondary .gnode__name {
+  font-size: 0.7rem;
+  font-weight: 500;
 }
 
 .gnode__meta {
@@ -1505,53 +1782,116 @@
   white-space: nowrap;
 }
 
-/* handles */
+/* Dependency count tags on agent nodes */
+.gnode__deps {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.gnode__dep-tag {
+  font-size: 0.55rem;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 1px 6px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+/* --- Hover focus: highlight sub-tree, dim the rest ----------------------- */
+
+.gnode-focus--active {
+  opacity: 1 !important;
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  z-index: 1;
+}
+
+.gnode-focus--active.gnode--secondary {
+  opacity: 1 !important;
+}
+
+.gnode-focus--dimmed {
+  opacity: 0.12 !important;
+  transition: opacity 0.2s ease;
+}
+
+/* --- Handles (hidden until hover) ---------------------------------------- */
+
 .gnode__handle {
-  width: 8px !important;
-  height: 8px !important;
-  border: 2px solid var(--node-bg) !important;
-  transition: background 0.12s;
-}
-
-.gnode__handle--target {
+  width: 6px !important;
+  height: 6px !important;
   background: var(--edge-stroke) !important;
-}
-
-.gnode__handle--source {
-  background: var(--accent) !important;
+  border: none !important;
+  opacity: 0;
+  transition: opacity 0.15s;
 }
 
 .gnode:hover .gnode__handle {
-  background: var(--accent) !important;
+  opacity: 0.5;
 }
 
-/* --- React Flow overrides ------------------------------------------------- */
+/* --- React Flow overrides ------------------------------------------------ */
 
 .react-flow__background { opacity: 0.35; }
 
 .react-flow__edge-path {
-  stroke: var(--edge-stroke) !important;
-  stroke-width: 2px;
+  stroke: var(--edge-stroke);
+  stroke-width: 1.5px;
+  transition: stroke-opacity 0.2s, stroke-width 0.2s, stroke 0.2s;
 }
 
+/* Dependency edges: single-source opacity via stroke-opacity (no inline opacity in JS). */
+.react-flow__edge.edge--dep .react-flow__edge-path {
+  stroke-opacity: 0.6;
+}
+
+.react-flow__edge.edge--dep:hover .react-flow__edge-path {
+  stroke-opacity: 1;
+  stroke-width: 2px !important;
+  stroke: var(--accent);
+}
+
+/* Hover-focus subtree: related edges shift to an accent-tinted stroke so the
+   highlighted sub-graph reads as a cohesive group, not just thicker lines.
+   Routing edges go full accent (they convey the active pipeline path), dep
+   edges go a softer mix. */
+.react-flow__edge.edge--dep.edge-focus--active .react-flow__edge-path {
+  stroke: color-mix(in srgb, var(--accent) 60%, var(--edge-stroke));
+  stroke-opacity: 1;
+}
+
+.react-flow__edge.edge--routing.edge-focus--active .react-flow__edge-path {
+  stroke: var(--accent);
+  stroke-opacity: 1;
+}
+
+/* Routing edge flow animation: slower and eased so it reads as agentic flow,
+   not as a network spinner. Only applied when the call-site opts in to
+   `animated` (i.e., when a task is actually running). */
 .react-flow__edge.animated .react-flow__edge-path {
+  stroke: color-mix(in srgb, var(--accent) 70%, transparent);
   stroke-dasharray: 6 4;
-  animation: edgeDash 0.6s linear infinite;
+  animation: edgeFlow 1.6s ease-in-out infinite;
 }
 
-@keyframes edgeDash {
+@keyframes edgeFlow {
   to { stroke-dashoffset: -10; }
 }
 
 .react-flow__controls {
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: 8px;
+  background: var(--topbar-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
   box-shadow: var(--shadow-md);
+  overflow: hidden;
 }
 
 .react-flow__controls-button {
-  background: var(--card-bg);
+  background: transparent;
   border-bottom: 1px solid var(--border-subtle);
   color: var(--text-primary);
   fill: var(--text-primary);
@@ -1570,8 +1910,8 @@
 
 .react-flow__minimap {
   background: var(--bg-secondary) !important;
-  border: 1px solid var(--card-border);
-  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
   box-shadow: var(--shadow-md);
 }
 
@@ -1729,12 +2069,8 @@
 }
 
 .trace-view__type-badge {
-  display: inline-block;
-  font-size: 0.65rem;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 8px;
-  white-space: nowrap;
+  font-size: 0.7rem;
+  font-family: 'JetBrains Mono', 'SF Mono', monospace;
 }
 
 .trace-view__col-bar {
@@ -1996,7 +2332,7 @@
 }
 
 .dashboard-section__title {
-  font-size: 0.95rem;
+  font-size: 1.0625rem;
   font-weight: 600;
   color: var(--text-primary);
   margin: 0 0 4px;
@@ -2004,10 +2340,10 @@
 }
 
 .dashboard-section__hint {
-  font-size: 0.78rem;
+  font-size: 0.8125rem;
   color: var(--text-tertiary);
-  margin: 0 0 12px;
-  line-height: 1.35;
+  margin: 0 0 14px;
+  line-height: 1.4;
 }
 
 .metrics-grid--dashboard {
@@ -2023,28 +2359,40 @@
 }
 
 .platform-status {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px 24px;
-  padding: 18px 20px;
-  border-radius: 12px;
-  border: 1px solid var(--card-border);
-  background: var(--card-bg);
+  gap: 14px 24px;
+  padding: 14px 18px 14px 22px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
   margin-bottom: 4px;
+  overflow: hidden;
 }
 
-.platform-status--ok {
-  border-left: 4px solid var(--green);
+.platform-status::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--text-tertiary);
 }
 
-.platform-status--warn {
-  border-left: 4px solid var(--orange);
+.platform-status--ok::before {
+  background: var(--green);
 }
 
-.platform-status--bad {
-  border-left: 4px solid var(--red);
+.platform-status--warn::before {
+  background: var(--orange);
+}
+
+.platform-status--bad::before {
+  background: var(--red);
 }
 
 .platform-status__main {
@@ -2495,8 +2843,8 @@
 }
 
 .search-dialog {
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
   border-radius: 12px;
   box-shadow: var(--shadow-lg);
   width: 560px;
@@ -2667,13 +3015,14 @@
   font-weight: 600;
   font-size: 0.85rem;
   padding: 8px 16px;
-  border-radius: 6px;
-  transition: background 0.12s;
+  border-radius: 8px;
+  transition: background 0.12s, box-shadow 0.12s, transform 0.05s;
   white-space: nowrap;
 }
 
-.btn-primary:hover { background: var(--accent-hover); }
-.btn-primary:disabled { opacity: 0.6; cursor: default; }
+.btn-primary:hover { background: var(--accent-hover); box-shadow: var(--shadow-sm); }
+.btn-primary:active { transform: translateY(1px); }
+.btn-primary:disabled { opacity: 0.5; cursor: default; box-shadow: none; }
 
 .btn-secondary {
   background: var(--bg-tertiary);
@@ -2681,11 +3030,16 @@
   font-weight: 500;
   font-size: 0.85rem;
   padding: 8px 16px;
-  border-radius: 6px;
-  transition: background 0.12s;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
 }
 
-.btn-secondary:hover { background: var(--bg-surface); color: var(--text-primary); }
+.btn-secondary:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border-color: var(--border);
+}
 
 /* ============================================
    SKELETON LOADERS
@@ -3249,34 +3603,44 @@ button:focus-visible {
 }
 
 .attention-card {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 14px 16px;
+  padding: 14px 16px 14px 20px;
   border-radius: 10px;
-  border: 1px solid var(--card-border);
-  background: var(--card-bg);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
   cursor: pointer;
-  transition: background 0.12s;
+  transition: background 0.12s, border-color 0.12s;
+  overflow: hidden;
 }
 
 .attention-card:hover {
-  background: var(--bg-hover);
+  background: var(--bg-tertiary);
+  border-color: var(--border);
 }
 
-.attention-card--error {
-  border-color: var(--red);
-  border-left: 3px solid var(--red);
+.attention-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--text-tertiary);
 }
 
-.attention-card--warning {
-  border-color: var(--orange);
-  border-left: 3px solid var(--orange);
+.attention-card--error::before {
+  background: var(--red);
 }
 
-.attention-card--info {
-  border-color: var(--accent);
-  border-left: 3px solid var(--accent);
+.attention-card--warning::before {
+  background: var(--orange);
+}
+
+.attention-card--info::before {
+  background: var(--accent);
 }
 
 .attention-card__icon {

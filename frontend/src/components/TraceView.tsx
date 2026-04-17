@@ -9,24 +9,26 @@ interface TraceViewProps {
   trace: TaskTraceEvent[];
 }
 
-const EVENT_TYPE_COLORS: Record<string, { color: string; bg: string; label: string }> = {
-  task_start:               { color: "var(--blue)",   bg: "var(--blue-bg)",   label: "Task Start" },
-  task_summary:             { color: "var(--blue)",   bg: "var(--blue-bg)",   label: "Task Summary" },
-  agent_start:              { color: "var(--green)",  bg: "var(--green-bg)",  label: "Agent Start" },
-  agent_end:                { color: "var(--green)",  bg: "var(--green-bg)",  label: "Agent End" },
-  agent_event:              { color: "var(--green)",  bg: "var(--green-bg)",  label: "Agent Event" },
-  agent_error:              { color: "var(--red)",    bg: "var(--red-bg)",    label: "Agent Error" },
-  agent_message:            { color: "var(--purple)", bg: "var(--purple-bg)", label: "Message" },
-  agent_message_processed:  { color: "var(--purple)", bg: "var(--purple-bg)", label: "Msg Processed" },
-  agent_message_deadletter: { color: "var(--orange)", bg: "var(--orange-bg)", label: "Dead Letter" },
-  tool_call:                { color: "var(--yellow)", bg: "var(--yellow-bg)", label: "Tool Call" },
-  retry_scheduled:          { color: "var(--orange)", bg: "var(--orange-bg)", label: "Retry" },
-  deadletter:               { color: "var(--orange)", bg: "var(--orange-bg)", label: "Dead Letter" },
+type EventDot = "green" | "blue" | "yellow" | "red" | "orange" | "purple" | "gray" | "accent";
+
+const EVENT_TYPE_COLORS: Record<string, { dot: EventDot; color: string; label: string }> = {
+  task_start:               { dot: "blue",   color: "var(--blue)",   label: "Task Start" },
+  task_summary:             { dot: "blue",   color: "var(--blue)",   label: "Task Summary" },
+  agent_start:              { dot: "green",  color: "var(--green)",  label: "Agent Start" },
+  agent_end:                { dot: "green",  color: "var(--green)",  label: "Agent End" },
+  agent_event:              { dot: "green",  color: "var(--green)",  label: "Agent Event" },
+  agent_error:              { dot: "red",    color: "var(--red)",    label: "Agent Error" },
+  agent_message:            { dot: "purple", color: "var(--purple)", label: "Message" },
+  agent_message_processed:  { dot: "purple", color: "var(--purple)", label: "Msg Processed" },
+  agent_message_deadletter: { dot: "orange", color: "var(--orange)", label: "Dead Letter" },
+  tool_call:                { dot: "yellow", color: "var(--yellow)", label: "Tool Call" },
+  retry_scheduled:          { dot: "orange", color: "var(--orange)", label: "Retry" },
+  deadletter:               { dot: "orange", color: "var(--orange)", label: "Dead Letter" },
 };
 
-function getEventStyle(type?: string) {
-  if (!type) return { color: "var(--text-tertiary)", bg: "var(--gray-bg)", label: type ?? "unknown" };
-  return EVENT_TYPE_COLORS[type] ?? { color: "var(--text-tertiary)", bg: "var(--gray-bg)", label: type };
+function getEventStyle(type?: string): { dot: EventDot; color: string; label: string } {
+  if (!type) return { dot: "gray", color: "var(--text-tertiary)", label: "unknown" };
+  return EVENT_TYPE_COLORS[type] ?? { dot: "gray", color: "var(--text-tertiary)", label: type };
 }
 
 function formatDuration(ms?: number): string {
@@ -237,7 +239,8 @@ export function TraceView({ trace }: TraceViewProps) {
                   {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                 </div>
                 <div className="trace-view__col-type">
-                  <span className="trace-view__type-badge" style={{ color: style.color, background: style.bg }}>
+                  <span className={clsx("badge", "badge--neutral", `badge--dot-${style.dot}`, "trace-view__type-badge")}>
+                    <span className="badge__dot" />
                     {style.label}
                   </span>
                 </div>

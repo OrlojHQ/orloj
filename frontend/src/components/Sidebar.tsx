@@ -31,6 +31,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   CircleUserRound,
+  UserCog,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import orlojMark from "/orloj-mark.png?url";
@@ -56,7 +57,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/memories", icon: <Brain size={18} />, label: "Memories", group: "Infra" },
   { to: "/secrets", icon: <Lock size={18} />, label: "Secrets", group: "Infra" },
   { to: "/policies", icon: <Shield size={18} />, label: "Policies", group: "Governance" },
-  { to: "/roles", icon: <KeyRound size={18} />, label: "Roles", group: "Governance" },
+  { to: "/roles", icon: <UserCog size={18} />, label: "Roles", group: "Governance" },
   { to: "/permissions", icon: <KeyRound size={18} />, label: "Permissions", group: "Governance" },
   { to: "/approvals", icon: <ShieldCheck size={18} />, label: "Approvals", group: "Governance" },
   { to: "/capabilities", icon: <Sparkles size={18} />, label: "Capabilities", group: "System" },

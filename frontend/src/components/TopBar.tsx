@@ -75,11 +75,16 @@ export function TopBar({ onAuthStateChanged, nativeAuthEnabled = false, username
 
         {onSearchOpen && (
           <button
-            className="topbar__icon-btn topbar__search-btn"
+            className="topbar__search-btn"
             onClick={onSearchOpen}
-            aria-label="Search"
+            aria-label="Search resources"
           >
-            <Search size={16} />
+            <Search size={14} className="topbar__search-btn-icon" />
+            <span className="topbar__search-btn-label">Search</span>
+            <span className="topbar__search-btn-kbd" aria-hidden="true">
+              <kbd>⌘</kbd>
+              <kbd>K</kbd>
+            </span>
           </button>
         )}
 

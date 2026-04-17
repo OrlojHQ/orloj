@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, X, Network, Bot, ListTodo, Cpu, Database, Wrench, CalendarClock, Webhook, Lock, Brain, Shield, KeyRound, ShieldCheck, Plug } from "lucide-react";
+import { Search, X, Network, Bot, ListTodo, Cpu, Database, Wrench, CalendarClock, Webhook, Lock, Brain, Shield, KeyRound, ShieldCheck, Plug, UserCog } from "lucide-react";
 import { useAgentSystems, useAgents, useTasks, useTaskSchedules, useTaskWebhooks, useWorkers, useModelEndpoints, useTools, useSecrets, useMemories, useAgentPolicies, useAgentRoles, useToolPermissions, useToolApprovals, useMcpServers } from "../api/hooks";
 
 interface SearchResult {
@@ -74,7 +74,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
       results.push({ kind: "Policy", name: p.metadata.name, path: `/policies/${p.metadata.name}`, icon: <Shield size={14} /> });
     }
     for (const r of roles.data ?? []) {
-      results.push({ kind: "Role", name: r.metadata.name, path: `/roles/${r.metadata.name}`, icon: <KeyRound size={14} /> });
+      results.push({ kind: "Role", name: r.metadata.name, path: `/roles/${r.metadata.name}`, icon: <UserCog size={14} /> });
     }
     for (const p of permissions.data ?? []) {
       results.push({ kind: "Permission", name: p.metadata.name, path: `/permissions/${p.metadata.name}`, icon: <KeyRound size={14} /> });

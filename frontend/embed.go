@@ -59,7 +59,17 @@ func patchedIndex(fsys fs.FS, basePath string) []byte {
 		return nil
 	}
 	tag := []byte(`<script>window.__ORLOJ_UI_BASE="` + basePath + `";</script>`)
-	return bytes.Replace(raw, []byte("</head>"), append(tag, []byte("</head>")...), 1)
+	out := bytes.Replace(raw, []byte("</head>"), append(tag, []byte("</head>")...), 1)
+
+	// Vite builds with base: "/" so asset refs are absolute from root
+	// (e.g. src="/assets/index-abc.js").  When the UI is mounted at a
+	// sub-path like /console/, rewrite them so the browser requests
+	// /console/assets/… which http.StripPrefix will route correctly.
+	if basePath != "/" {
+		out = bytes.ReplaceAll(out, []byte(`src="/assets/`), []byte(`src="`+basePath+`assets/`))
+		out = bytes.ReplaceAll(out, []byte(`href="/assets/`), []byte(`href="`+basePath+`assets/`))
+	}
+	return out
 }
 
 func hasDistIndex() bool {
