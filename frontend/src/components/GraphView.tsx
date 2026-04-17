@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import {
   ReactFlow,
   Background,
@@ -46,12 +46,14 @@ import {
   Wrench,
   Lock,
   Brain,
-  KeyRound,
+  UserCog,
   ListTodo,
   CalendarClock,
   Webhook,
   Cpu,
   CircleDot,
+  Layers,
+  Map as MapIcon,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -165,6 +167,26 @@ function isAutomationSpawnedRunTask(task: Task): boolean {
   return Boolean(labels["orloj.dev/task-schedule"] || labels["orloj.dev/task-webhook"]);
 }
 
+// Task phases treated as "live" (collapse representative prefers these).
+const ACTIVE_TASK_PHASES = new Set(["pending", "running", "waitingapproval"]);
+// Task phases treated as "done" (fallback representative when no active run exists).
+const TERMINAL_TASK_PHASES = new Set(["succeeded", "failed", "deadletter"]);
+
+/** Reruns carry an `orloj.dev/source-task` label pointing at the original task name; treat all instances sharing that source (plus the source itself) as one lineage. */
+function taskLineageKey(task: Task): string {
+  return task.metadata.labels?.["orloj.dev/source-task"] || task.metadata.name;
+}
+
+/** Pick a single node to represent a task lineage: any active instance wins; otherwise the most recent terminal instance by creationTimestamp. Null if neither exists. */
+function pickRepresentativeTask(tasks: Task[]): Task | null {
+  const active = tasks.find((t) => ACTIVE_TASK_PHASES.has((t.status?.phase ?? "").toLowerCase()));
+  if (active) return active;
+  const terminal = tasks
+    .filter((t) => TERMINAL_TASK_PHASES.has((t.status?.phase ?? "").toLowerCase()))
+    .sort((a, b) => (b.metadata.createdAt ?? "").localeCompare(a.metadata.createdAt ?? ""));
+  return terminal[0] ?? null;
+}
+
 // ---------------------------------------------------------------------------
 // Node kind config
 // ---------------------------------------------------------------------------
@@ -178,7 +200,7 @@ const KIND_CONFIG: Record<NodeKind, { icon: React.ReactNode; colorVar: string }>
   tool:    { icon: <Wrench     size={14} />, colorVar: "var(--yellow)" },
   secret:  { icon: <Lock       size={14} />, colorVar: "var(--orange)" },
   memory:  { icon: <Brain      size={14} />, colorVar: "var(--purple)" },
-  role:    { icon: <KeyRound   size={14} />, colorVar: "var(--purple)" },
+  role:    { icon: <UserCog   size={14} />, colorVar: "var(--purple)" },
   task:    { icon: <ListTodo   size={14} />, colorVar: "var(--blue)" },
   schedule:{ icon: <CalendarClock size={14} />, colorVar: "var(--orange)" },
   webhook: { icon: <Webhook    size={14} />, colorVar: "var(--orange)" },
@@ -198,29 +220,52 @@ interface CrdNodeData {
   isTerminal?: boolean;
   hasJoin?: boolean;
   joinMode?: string;
+  depCounts?: { tools: number; models: number; memories: number; roles: number };
   [key: string]: unknown;
 }
 
 function ResourceNode({ data }: { data: CrdNodeData }) {
   const cfg = KIND_CONFIG[data.kind];
   const isAgent = data.kind === "agent";
+  const isRunning = data.phase?.toLowerCase() === "running";
+  const isSecondary = SECONDARY_KINDS.has(data.kind);
+  const iconSize = isSecondary ? 12 : 14;
 
   return (
-    <div className={clsx("gnode", `gnode--${data.kind}`, isAgent && data.isEntry && "gnode--entry", isAgent && data.isTerminal && "gnode--terminal", isAgent && data.hasJoin && "gnode--join")}>
-      <Handle id="left" type="target" position={Position.Left} className="gnode__handle gnode__handle--target" />
-      <Handle id="top" type="target" position={Position.Top} className="gnode__handle gnode__handle--target" />
-      <div className="gnode__icon-ring" style={{ background: `color-mix(in srgb, ${cfg.colorVar} 18%, transparent)`, color: cfg.colorVar }}>
-        {isAgent && data.isEntry ? <Play size={14} /> : isAgent && data.hasJoin ? <GitMerge size={14} /> : cfg.icon}
+    <div
+      className={clsx(
+        "gnode",
+        `gnode--${data.kind}`,
+        isSecondary && "gnode--secondary",
+        isRunning && "gnode--running",
+        isAgent && data.isEntry && "gnode--entry",
+        isAgent && data.isTerminal && "gnode--terminal",
+        isAgent && data.hasJoin && "gnode--join",
+      )}
+    >
+      <Handle id="left" type="target" position={Position.Left} className="gnode__handle" />
+      <Handle id="top" type="target" position={Position.Top} className="gnode__handle" />
+      <div className="gnode__icon-ring">
+        {isAgent && data.isEntry ? <Play size={iconSize} /> : isAgent && data.hasJoin ? <GitMerge size={iconSize} /> : cfg.icon}
+        {isRunning && <span className="gnode__pulse" />}
       </div>
       <div className="gnode__body">
         <div className="gnode__name">{data.label}</div>
         <div className="gnode__meta">
-          {data.phase ? <StatusBadge phase={data.phase} /> : data.subtitle ? <span className="gnode__pos">{data.subtitle}</span> : <span className="gnode__pos">{data.kind}</span>}
+          {data.phase ? <StatusBadge phase={data.phase} pulse={isRunning} /> : data.subtitle ? <span className="gnode__pos">{data.subtitle}</span> : <span className="gnode__pos">{data.kind}</span>}
           {data.hasJoin && <span className="gnode__join-tag">{data.joinMode ?? "wait_for_all"}</span>}
         </div>
+        {isAgent && data.depCounts && (
+          <div className="gnode__deps">
+            {data.depCounts.models > 0 && <span className="gnode__dep-tag">model</span>}
+            {data.depCounts.tools > 0 && <span className="gnode__dep-tag">{data.depCounts.tools} tool{data.depCounts.tools > 1 ? "s" : ""}</span>}
+            {data.depCounts.memories > 0 && <span className="gnode__dep-tag">memory</span>}
+            {data.depCounts.roles > 0 && <span className="gnode__dep-tag">{data.depCounts.roles} role{data.depCounts.roles > 1 ? "s" : ""}</span>}
+          </div>
+        )}
       </div>
-      <Handle id="right" type="source" position={Position.Right} className="gnode__handle gnode__handle--source" />
-      <Handle id="bottom" type="source" position={Position.Bottom} className="gnode__handle gnode__handle--source" />
+      <Handle id="right" type="source" position={Position.Right} className="gnode__handle" />
+      <Handle id="bottom" type="source" position={Position.Bottom} className="gnode__handle" />
     </div>
   );
 }
@@ -241,6 +286,9 @@ const nodeTypes = { resource: ResourceNode };
 
 const NODE_W = 220;
 const NODE_H = 58;
+const NODE_W_SM = 180;
+const NODE_H_SM = 46;
+const SECONDARY_KINDS = new Set<NodeKind>(["model", "tool", "secret", "memory", "role"]);
 
 interface RelatedResources {
   agents?: Agent[];
@@ -304,10 +352,24 @@ function buildTree(
   const edgeList: { src: string; tgt: string; routing: boolean; agentToAgent: boolean }[] = [];
   const registeredNodes = new Set<string>();
 
+  // Symmetric map of semantic neighbours that can bypass the rendered graph edges.
+  // Used for hover highlighting so that a shared model (edged to the system) or a
+  // transitively-used secret (edged to its tool/model) still light up when you hover
+  // the agent that references them.
+  const semanticNeighbours = new Map<string, Set<string>>();
+  function linkSemantic(a: string, b: string) {
+    if (a === b) return;
+    if (!semanticNeighbours.has(a)) semanticNeighbours.set(a, new Set());
+    if (!semanticNeighbours.has(b)) semanticNeighbours.set(b, new Set());
+    semanticNeighbours.get(a)!.add(b);
+    semanticNeighbours.get(b)!.add(a);
+  }
+
   function regNode(id: string, kind: NodeKind, label: string, phase?: string, subtitle?: string, extra?: Partial<CrdNodeData>) {
     if (registeredNodes.has(id)) return;
     registeredNodes.add(id);
-    g.setNode(id, { width: NODE_W, height: NODE_H });
+    const small = SECONDARY_KINDS.has(kind);
+    g.setNode(id, { width: small ? NODE_W_SM : NODE_W, height: small ? NODE_H_SM : NODE_H });
     nodeMeta[id] = { kind, label, phase, subtitle, extra };
   }
 
@@ -389,16 +451,20 @@ function buildTree(
       } else {
         regEdge(aid, mid, false);
       }
+      linkSemantic(aid, mid);
 
       // Secret under model endpoint (via auth.secretRef)
       const secRef = me.spec.auth?.secretRef;
-      if (secRef && secretMap.has(secRef) && !addedSecretForModel.has(mid)) {
-        addedSecretForModel.add(mid);
-        const sec = secretMap.get(secRef)!;
-        const keyCount = Object.keys(sec.spec.data ?? sec.spec.stringData ?? {}).length;
+      if (secRef && secretMap.has(secRef)) {
         const sid = nid("secret", secRef);
-        regNode(sid, "secret", secRef, effectivePhase("secret", sec.status?.phase), `${keyCount} key${keyCount !== 1 ? "s" : ""}`);
-        regEdge(mid, sid, false);
+        if (!addedSecretForModel.has(mid)) {
+          addedSecretForModel.add(mid);
+          const sec = secretMap.get(secRef)!;
+          const keyCount = Object.keys(sec.spec.data ?? sec.spec.stringData ?? {}).length;
+          regNode(sid, "secret", secRef, effectivePhase("secret", sec.status?.phase), `${keyCount} key${keyCount !== 1 ? "s" : ""}`);
+          regEdge(mid, sid, false);
+        }
+        linkSemantic(aid, sid);
       }
     }
 
@@ -413,6 +479,7 @@ function buildTree(
       } else {
         regEdge(aid, tid, false);
       }
+      linkSemantic(aid, tid);
 
       // Secret under tool
       const secRef = tool.spec.auth?.secretRef;
@@ -422,6 +489,7 @@ function buildTree(
         const sid = nid("secret", secRef);
         regNode(sid, "secret", secRef, effectivePhase("secret", sec.status?.phase), `${keyCount} key${keyCount !== 1 ? "s" : ""}`);
         regEdge(tid, sid, false);
+        linkSemantic(aid, sid);
       }
     }
 
@@ -436,6 +504,7 @@ function buildTree(
       } else {
         regEdge(aid, rid, false);
       }
+      linkSemantic(aid, rid);
     }
 
     // Memory
@@ -449,14 +518,50 @@ function buildTree(
       } else {
         regEdge(aid, memId, false);
       }
+      linkSemantic(aid, memId);
     }
+  }
+
+  // -- Compute dependency counts per agent for inline badges -------------------
+
+  const agentDepCounts: Record<string, { tools: number; models: number; memories: number; roles: number }> = {};
+  for (const aName of ordered) {
+    const agent = agentMap.get(aName);
+    if (!agent) continue;
+    const counts = { tools: 0, models: 0, memories: 0, roles: 0 };
+    if (agent.spec.model_ref && modelMap.has(agent.spec.model_ref)) counts.models++;
+    counts.tools = (agent.spec.tools ?? []).filter((t) => toolMap.has(t)).length;
+    counts.roles = (agent.spec.roles ?? []).filter((r) => roleMap.has(r)).length;
+    if (agent.spec.memory?.ref && memMap.has(agent.spec.memory.ref)) counts.memories++;
+    agentDepCounts[aName] = counts;
   }
 
   // -- Tasks and workers connected to system -----------------------------------
 
-  const systemTasks = (related.tasks ?? [])
+  // Tasks for this system, minus high-frequency schedule/webhook spawns.
+  const candidateTasks = (related.tasks ?? [])
     .filter((t) => t.spec.system === system.metadata.name)
     .filter((t) => !isAutomationSpawnedRunTask(t));
+
+  // Templates are definitional and must always render (schedules/webhooks edge into them).
+  const templateTasks = candidateTasks.filter((t) => t.spec.mode === "template");
+
+  // Runnable tasks collapse by lineage to one representative: active run if any, else latest terminal.
+  const tasksByLineage = new Map<string, Task[]>();
+  for (const t of candidateTasks) {
+    if (t.spec.mode === "template") continue;
+    const key = taskLineageKey(t);
+    const list = tasksByLineage.get(key) ?? [];
+    list.push(t);
+    tasksByLineage.set(key, list);
+  }
+  const representativeTasks: Task[] = [];
+  for (const group of tasksByLineage.values()) {
+    const rep = pickRepresentativeTask(group);
+    if (rep) representativeTasks.push(rep);
+  }
+
+  const systemTasks = [...templateTasks, ...representativeTasks];
   for (const task of systemTasks) {
     const tid = nid("task", task.metadata.name);
     regNode(tid, "task", task.metadata.name, task.status?.phase, task.spec.priority ?? "normal");
@@ -530,7 +635,15 @@ function buildTree(
         webhook.status?.phase,
         webhook.status?.endpointID ?? webhook.spec.auth?.profile ?? "generic",
       );
-      regEdge(sysId, webhookId, false);
+
+      // Create a synthetic task node for the inline template so the graph
+      // shows webhook → task (same visual as the task_ref path) rather than
+      // an orphan webhook hanging off the system node.
+      const inlineTaskId = nid("task", `${webhook.metadata.name}-inline`);
+      const tmpl = webhook.spec.task_template;
+      regNode(inlineTaskId, "task", `${webhook.metadata.name} (inline)`, undefined, tmpl.priority ?? "normal");
+      regEdge(webhookId, inlineTaskId, false);
+      regEdge(inlineTaskId, sysId, false);
     }
   }
 
@@ -547,12 +660,19 @@ function buildTree(
   for (const id of registeredNodes) {
     const pos = g.node(id);
     const meta = nodeMeta[id];
+    const small = SECONDARY_KINDS.has(meta.kind);
+    const w = small ? NODE_W_SM : NODE_W;
+    const h = small ? NODE_H_SM : NODE_H;
     nodePos[id] = { x: pos.x, y: pos.y };
+    const data: CrdNodeData = { label: meta.label, kind: meta.kind, phase: meta.phase, subtitle: meta.subtitle, ...meta.extra };
+    if (meta.kind === "agent" && agentDepCounts[meta.label]) {
+      data.depCounts = agentDepCounts[meta.label];
+    }
     nodes.push({
       id,
       type: "resource",
-      position: { x: pos.x - NODE_W / 2, y: pos.y - NODE_H / 2 },
-      data: { label: meta.label, kind: meta.kind, phase: meta.phase, subtitle: meta.subtitle, ...meta.extra },
+      position: { x: pos.x - w / 2, y: pos.y - h / 2 },
+      data,
     });
   }
 
@@ -579,20 +699,45 @@ function buildTree(
       }
     }
 
+    // Per-edge animation: animate only routing edges that land on a currently-
+    // running agent. When the caller doesn't pass `runningAgents` (e.g. task
+    // detail, which only knows the task's phase), fall back to animating every
+    // routing edge so the pipeline still reads as "live".
+    let edgeAnimated = routing && animated;
+    if (edgeAnimated && routing && runningAgents) {
+      const tgtAgent = tgt.startsWith("agent:") ? tgt.slice("agent:".length) : null;
+      edgeAnimated = tgtAgent ? runningAgents.has(tgtAgent) : false;
+    }
+
+    // Routing edges are neutral gray at rest so an idle pipeline with many
+    // agents doesn't read as a wall of green. They only paint accent when
+    // actively animating (handled by the `.animated` CSS rule) or when the
+    // hover-focus subtree highlights them.
+    const strokeColor = "var(--edge-stroke)";
+    const arrowColor = edgeAnimated ? "var(--accent)" : "var(--edge-stroke)";
+
     edges.push({
       id: eid,
       source: src,
       target: tgt,
       sourceHandle,
       targetHandle,
-      animated: routing && animated,
+      animated: edgeAnimated,
+      className: routing ? "edge--routing" : "edge--dep",
       type: agentToAgent ? "default" : "smoothstep",
-      markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14, color: routing ? "var(--accent)" : "var(--edge-stroke)" },
-      style: { stroke: routing ? "var(--accent)" : "var(--edge-stroke)", strokeWidth: routing ? 2 : 1.5, strokeDasharray: routing ? undefined : "4 3" },
+      markerEnd: { type: MarkerType.ArrowClosed, width: routing ? 12 : 10, height: routing ? 12 : 10, color: arrowColor },
+      style: {
+        stroke: strokeColor,
+        strokeWidth: routing ? 1.5 : 1,
+        strokeDasharray: routing ? undefined : "3 4",
+        // Dep edges: single-source opacity via CSS (.edge--dep { stroke-opacity }).
+        // Routing edges keep a slight inline opacity for a softer line at rest.
+        ...(routing ? { opacity: 0.75 } : {}),
+      },
     });
   }
 
-  return { nodes, edges };
+  return { nodes, edges, semanticNeighbours };
 }
 
 // ---------------------------------------------------------------------------
@@ -609,6 +754,9 @@ interface GraphViewProps {
 
 export function GraphView({ system, related, onNodeClick, animated, runningAgents }: GraphViewProps) {
   const isMobile = useIsMobile();
+  const [showLegend, setShowLegend] = useState(false);
+  const [showMinimap, setShowMinimap] = useState(false);
+  const [focusedNode, setFocusedNode] = useState<string | null>(null);
   const agentNames = system.spec.agents ?? [];
   const graph = system.spec.graph ?? {};
   const blueprint = useMemo(() => detectBlueprint(agentNames, graph), [agentNames, graph]);
@@ -617,9 +765,9 @@ export function GraphView({ system, related, onNodeClick, animated, runningAgent
   // Serialize runningAgents to a stable string so useMemo doesn't refire on identical Sets
   const runningKey = useMemo(() => runningAgents ? [...runningAgents].sort().join(",") : "", [runningAgents]);
 
-  const { builtNodes, builtEdges } = useMemo(() => {
+  const { builtNodes, builtEdges, semanticNeighbours } = useMemo(() => {
     const r = buildTree(system, related ?? {}, animated ?? false, runningAgents);
-    return { builtNodes: r.nodes, builtEdges: r.edges };
+    return { builtNodes: r.nodes, builtEdges: r.edges, semanticNeighbours: r.semanticNeighbours };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [system, related, animated, runningKey]);
 
@@ -629,6 +777,57 @@ export function GraphView({ system, related, onNodeClick, animated, runningAgent
   useEffect(() => { setNodes(builtNodes); }, [builtNodes, setNodes]);
   useEffect(() => { setEdges(builtEdges); }, [builtEdges, setEdges]);
 
+  // ---------------------------------------------------------------------------
+  // Hover-based sub-tree highlighting
+  // When hovering a node, light up its direct neighbours + their edges and dim
+  // everything else.  This makes resource ownership (which model / tools /
+  // secrets belong to which agent) immediately obvious.
+  // ---------------------------------------------------------------------------
+
+  // Nodes related to the currently-hovered node: direct graph neighbours plus
+  // semantic neighbours (dependencies that route through the system node or
+  // through intermediate resources like a tool's secret).
+  const focusRelated = useMemo(() => {
+    if (!focusedNode) return null;
+    const relatedIds = new Set<string>([focusedNode]);
+    for (const e of edges) {
+      if (e.source === focusedNode) relatedIds.add(e.target);
+      if (e.target === focusedNode) relatedIds.add(e.source);
+    }
+    const sem = semanticNeighbours?.get(focusedNode);
+    if (sem) for (const id of sem) relatedIds.add(id);
+    return relatedIds;
+  }, [edges, focusedNode, semanticNeighbours]);
+
+  const displayNodes = useMemo(() => {
+    if (!focusRelated) return nodes;
+    return nodes.map((n) => ({
+      ...n,
+      className: focusRelated.has(n.id) ? "gnode-focus--active" : "gnode-focus--dimmed",
+    }));
+  }, [nodes, focusRelated]);
+
+  const displayEdges = useMemo(() => {
+    if (!focusedNode || !focusRelated) return edges;
+    return edges.map((e) => {
+      // Touches the hovered node directly, or connects two nodes in the related
+      // set (so system↔shared-model lights up when hovering an agent that uses it).
+      const isRelated =
+        e.source === focusedNode ||
+        e.target === focusedNode ||
+        (focusRelated.has(e.source) && focusRelated.has(e.target));
+      return {
+        ...e,
+        className: `${e.className ?? ""} ${isRelated ? "edge-focus--active" : "edge-focus--dimmed"}`.trim(),
+        style: {
+          ...e.style,
+          opacity: isRelated ? 1 : 0.06,
+          strokeWidth: isRelated ? 2 : e.style?.strokeWidth,
+        },
+      };
+    });
+  }, [edges, focusedNode, focusRelated]);
+
   const handleNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
       const sep = node.id.indexOf(":");
@@ -637,39 +836,122 @@ export function GraphView({ system, related, onNodeClick, animated, runningAgent
     [onNodeClick],
   );
 
+  const handleNodeMouseEnter = useCallback((_: React.MouseEvent, node: Node) => {
+    setFocusedNode(node.id);
+  }, []);
+
+  const handleNodeMouseLeave = useCallback(() => {
+    setFocusedNode(null);
+  }, []);
+
+  // Status summary counts
+  const statusCounts = useMemo(() => {
+    const counts = { running: 0, ready: 0, failed: 0, total: agentNames.length };
+    const agentList = related?.agents ?? [];
+    for (const aName of agentNames) {
+      const phase = runningAgents?.has(aName) ? "running" : agentList.find((a) => a.metadata.name === aName)?.status?.phase?.toLowerCase();
+      if (phase === "running") counts.running++;
+      else if (phase === "ready" || phase === "healthy") counts.ready++;
+      else if (phase === "failed" || phase === "error") counts.failed++;
+    }
+    return counts;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentNames, related?.agents, runningKey]);
+
+  // Minimap node color by status
+  const minimapNodeColor = useCallback(
+    (node: Node) => {
+      const d = node.data as CrdNodeData | undefined;
+      if (!d?.phase) return "var(--edge-stroke)";
+      const p = d.phase.toLowerCase();
+      if (p === "running") return "var(--accent)";
+      if (p === "failed" || p === "error") return "var(--red)";
+      if (p === "ready" || p === "healthy" || p === "succeeded") return "var(--green)";
+      return "var(--edge-stroke)";
+    },
+    [],
+  );
+
   const legendKinds: NodeKind[] = ["system", "agent", "model", "tool", "secret", "memory", "role", "task", "schedule", "webhook", "worker"];
 
   return (
     <div className="graph-view">
-      <div className="graph-view__badge" style={{ color: bpInfo.color }}>{bpInfo.label}</div>
-      <div className="graph-view__legend">
-        {legendKinds.map((k) => (
-          <span key={k} className="graph-view__legend-item">
-            <CircleDot size={10} style={{ color: KIND_CONFIG[k].colorVar }} />
-            <span>{k}</span>
-          </span>
-        ))}
+      <div className="graph-view__topbar">
+        <div className="graph-view__badge" style={{ color: bpInfo.color }}>{bpInfo.label}</div>
+        <div className="graph-view__status-bar">
+          {statusCounts.ready > 0 && (
+            <span className="graph-view__status-item">
+              <span className="graph-view__status-dot" style={{ background: "var(--green)" }} />
+              {statusCounts.ready} ready
+            </span>
+          )}
+          {statusCounts.running > 0 && (
+            <span className="graph-view__status-item">
+              <span className="graph-view__status-dot" style={{ background: "var(--blue)" }} />
+              {statusCounts.running} running
+            </span>
+          )}
+          {statusCounts.failed > 0 && (
+            <span className="graph-view__status-item">
+              <span className="graph-view__status-dot" style={{ background: "var(--red)" }} />
+              {statusCounts.failed} failed
+            </span>
+          )}
+          <span className="graph-view__status-total">{statusCounts.total} agents</span>
+        </div>
+        {!isMobile && (
+          <button
+            className={clsx("graph-view__legend-toggle", showMinimap && "graph-view__legend-toggle--active")}
+            onClick={() => setShowMinimap(!showMinimap)}
+            title="Toggle minimap"
+            aria-pressed={showMinimap}
+          >
+            <MapIcon size={14} />
+          </button>
+        )}
+        <button
+          className={clsx("graph-view__legend-toggle", showLegend && "graph-view__legend-toggle--active")}
+          onClick={() => setShowLegend(!showLegend)}
+          title="Toggle legend"
+          aria-pressed={showLegend}
+        >
+          <Layers size={14} />
+        </button>
       </div>
+      {showLegend && (
+        <div className="graph-view__legend">
+          {legendKinds.map((k) => (
+            <span key={k} className="graph-view__legend-item">
+              <CircleDot size={8} style={{ color: KIND_CONFIG[k].colorVar }} />
+              <span>{k}</span>
+            </span>
+          ))}
+        </div>
+      )}
       <ReactFlow
-        nodes={nodes}
-        edges={edges}
+        nodes={displayNodes}
+        edges={displayEdges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeClick={handleNodeClick}
+        onNodeMouseEnter={handleNodeMouseEnter}
+        onNodeMouseLeave={handleNodeMouseLeave}
         nodeTypes={nodeTypes}
         fitView
-        fitViewOptions={{ padding: 0.2 }}
+        fitViewOptions={{ padding: 0.25 }}
         minZoom={0.15}
         maxZoom={2}
         proOptions={{ hideAttribution: true }}
       >
-        <Background gap={24} size={1} color="var(--graph-grid)" />
+        <Background gap={28} size={1} color="var(--graph-grid)" />
         <Controls position="bottom-right" showInteractive={false} />
-        {!isMobile && (
+        {!isMobile && showMinimap && (
           <MiniMap
-            nodeColor="var(--accent)"
+            nodeColor={minimapNodeColor}
             maskColor="var(--bg-overlay)"
-            style={{ background: "var(--bg-secondary)", borderRadius: 8, border: "1px solid var(--card-border)" }}
+            pannable
+            zoomable
+            style={{ background: "var(--bg-secondary)", borderRadius: 10, border: "1px solid var(--border-subtle)" }}
           />
         )}
       </ReactFlow>

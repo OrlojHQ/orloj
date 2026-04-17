@@ -307,7 +307,7 @@ export function TaskDetail() {
         {tab === "logs" && <LogViewer logs={logs.data ?? ""} loading={logs.isLoading} />}
 
         {tab === "graph" && system.data && (
-          <GraphView system={system.data} animated />
+          <GraphView system={system.data} animated={task.status?.phase === "Running"} />
         )}
         {tab === "graph" && !system.data && <p className="text-muted">System not found</p>}
 

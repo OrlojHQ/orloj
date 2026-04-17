@@ -20,8 +20,17 @@ export function MetricCard({ label, value, icon, variant = "default", subtitle, 
     setHintVisible((v) => !v);
   }, []);
 
+  const isZero = value === 0 || value === "0";
+
   return (
-    <div className={clsx("metric-card", `metric-card--${variant}`, hint && "metric-card--has-hint")}>
+    <div
+      className={clsx(
+        "metric-card",
+        `metric-card--${variant}`,
+        hint && "metric-card--has-hint",
+        isZero && "metric-card--zero",
+      )}
+    >
       {hint && (
         <div className="metric-card__hint-wrap">
           <button
