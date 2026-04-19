@@ -15,7 +15,7 @@ components:
         review_cycle: { type: integer, minimum: 1, default: 1 }
         supersedes: { type: string }
         output:
-          nullable: true
+          type: ["string", "null"]
         output_format: { type: string, enum: [text, json] }
         resume_context:
           type: object
