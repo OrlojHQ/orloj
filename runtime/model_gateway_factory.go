@@ -1,6 +1,7 @@
 package agentruntime
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -231,6 +232,57 @@ func (p *ollamaModelProviderPlugin) BuildGateway(cfg ModelGatewayConfig) (ModelG
 		ollamaCfg.DefaultModel = strings.TrimSpace(value)
 	}
 	return NewOllamaModelGateway(ollamaCfg)
+}
+
+type bedrockModelProviderPlugin struct{}
+
+func (p *bedrockModelProviderPlugin) Name() string { return "bedrock" }
+
+func (p *bedrockModelProviderPlugin) Aliases() []string { return []string{"aws-bedrock", "aws_bedrock"} }
+
+func (p *bedrockModelProviderPlugin) RequiresAPIKey() bool { return false }
+
+func (p *bedrockModelProviderPlugin) BuildGateway(cfg ModelGatewayConfig) (ModelGateway, error) {
+	bedrockCfg := DefaultBedrockModelGatewayConfig()
+	if strings.TrimSpace(cfg.DefaultModel) != "" {
+		bedrockCfg.DefaultModel = strings.TrimSpace(cfg.DefaultModel)
+	}
+	if strings.TrimSpace(cfg.BaseURL) != "" {
+		bedrockCfg.BaseURL = strings.TrimSpace(cfg.BaseURL)
+	}
+	if cfg.Timeout > 0 {
+		bedrockCfg.Timeout = cfg.Timeout
+	}
+
+	options := normalizeModelProviderOptions(cfg.Options)
+	if value, ok := options["region"]; ok && strings.TrimSpace(value) != "" {
+		bedrockCfg.Region = strings.TrimSpace(value)
+	}
+	if value, ok := options["max_tokens"]; ok {
+		parsed, err := strconv.Atoi(strings.TrimSpace(value))
+		if err != nil {
+			return nil, fmt.Errorf("invalid bedrock max_tokens %q", value)
+		}
+		bedrockCfg.MaxTokens = parsed
+	}
+	if value, ok := options["profile"]; ok && strings.TrimSpace(value) != "" {
+		bedrockCfg.Profile = strings.TrimSpace(value)
+	}
+
+	if strings.TrimSpace(cfg.APIKey) != "" {
+		var creds struct {
+			AccessKeyID     string `json:"access_key_id"`
+			SecretAccessKey string `json:"secret_access_key"`
+			SessionToken    string `json:"session_token"`
+		}
+		if err := json.Unmarshal([]byte(cfg.APIKey), &creds); err == nil && creds.AccessKeyID != "" {
+			bedrockCfg.AccessKeyID = creds.AccessKeyID
+			bedrockCfg.SecretAccessKey = creds.SecretAccessKey
+			bedrockCfg.SessionToken = creds.SessionToken
+		}
+	}
+
+	return NewBedrockModelGateway(bedrockCfg)
 }
 
 // resolveGatewayHTTPClient returns cfg.HTTPClient if non-nil, otherwise a

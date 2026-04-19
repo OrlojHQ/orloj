@@ -23,6 +23,7 @@ spec:
 |---|---|---|
 | OpenAI | `openai` | `https://api.openai.com/v1` |
 | Anthropic | `anthropic` | `https://api.anthropic.com/v1` |
+| AWS Bedrock | `bedrock` | (SDK-managed) |
 | Azure OpenAI | `azure-openai` | (must be set explicitly) |
 | Ollama (native) | `ollama` | `http://127.0.0.1:11434` |
 | OpenAI-compatible | `openai-compatible` | (must be set explicitly) |
@@ -57,6 +58,28 @@ spec:
     secretRef: azure-openai-api-key
 ```
 
+**AWS Bedrock** (uses the Converse API via the AWS SDK):
+```yaml
+spec:
+  provider: bedrock
+  default_model: anthropic.claude-sonnet-4-20250514-v1:0
+  options:
+    region: us-east-1
+    max_tokens: "4096"
+  auth:
+    secretRef: aws-credentials
+```
+
+Bedrock uses AWS IAM credentials instead of a simple API key. If `auth.secretRef` is set, the secret must contain a JSON blob with `access_key_id`, `secret_access_key`, and optionally `session_token`. If `auth.secretRef` is omitted, the AWS SDK resolves credentials from the environment (env vars, `~/.aws/credentials`, EC2/ECS IAM roles, etc.).
+
+| Option | Description | Default |
+|---|---|---|
+| `region` | AWS region (required) | -- |
+| `max_tokens` | Default max output tokens | `1024` |
+| `profile` | AWS named profile from `~/.aws/config` | (default) |
+
+Cross-region inference profiles (e.g. `us.anthropic.claude-sonnet-4-20250514-v1:0`) work transparently -- use the profile ID as `default_model`.
+
 **Ollama** (native `/api/chat` endpoint, no auth required):
 ```yaml
 spec:
@@ -69,29 +92,50 @@ spec:
 
 ### OpenAI-Compatible Providers
 
-The `openai-compatible` provider uses the OpenAI Chat Completions protocol (`/chat/completions`) with a custom `base_url`. This lets you connect to any service that exposes an OpenAI-compatible API, including Groq, Together AI, Fireworks AI, local vLLM/TGI servers, and Ollama's OpenAI-compatible endpoint. `auth.secretRef` is optional for this provider.
+The `openai-compatible` provider uses the OpenAI Chat Completions protocol (`/chat/completions`) with a custom `base_url`. This lets you connect to any service that exposes an OpenAI-compatible API. `auth.secretRef` is optional for this provider.
 
-**Groq:**
+The following table lists tested providers and their configuration. Any service that implements the `/chat/completions` endpoint should work -- this list is not exhaustive.
+
+| Provider | `base_url` | Example `default_model` | Auth required |
+|---|---|---|---|
+| Groq | `https://api.groq.com/openai/v1` | `llama-3.3-70b-versatile` | Yes |
+| Together AI | `https://api.together.xyz/v1` | `meta-llama/Llama-3.3-70B-Instruct-Turbo` | Yes |
+| Fireworks AI | `https://api.fireworks.ai/inference/v1` | `accounts/fireworks/models/llama-v3p3-70b-instruct` | Yes |
+| Mistral AI | `https://api.mistral.ai/v1` | `mistral-large-latest` | Yes |
+| DeepSeek | `https://api.deepseek.com/v1` | `deepseek-chat` | Yes |
+| xAI (Grok) | `https://api.x.ai/v1` | `grok-3` | Yes |
+| Google Gemini | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-2.5-pro` | Yes |
+| Perplexity | `https://api.perplexity.ai` | `sonar-pro` | Yes |
+| OpenRouter | `https://openrouter.ai/api/v1` | `anthropic/claude-sonnet-4` | Yes |
+| Cerebras | `https://api.cerebras.ai/v1` | `llama-4-scout-17b-16e-instruct` | Yes |
+| SambaNova | `https://api.sambanova.ai/v1` | `Meta-Llama-3.3-70B-Instruct` | Yes |
+| vLLM | `http://localhost:8000/v1` | (your deployed model) | No |
+| text-generation-inference | `http://localhost:8080/v1` | (your deployed model) | No |
+| LM Studio | `http://localhost:1234/v1` | (your loaded model) | No |
+| LiteLLM proxy | `http://localhost:4000/v1` | (your configured model) | No |
+| Ollama (OpenAI mode) | `http://127.0.0.1:11434/v1` | `llama3.1` | No |
+
+**Example -- Groq:**
 ```yaml
 spec:
   provider: openai-compatible
   base_url: https://api.groq.com/openai/v1
-  default_model: llama-3.1-70b-versatile
+  default_model: llama-3.3-70b-versatile
   auth:
     secretRef: groq-api-key
 ```
 
-**Together AI:**
+**Example -- Google Gemini (via OpenAI-compatible endpoint):**
 ```yaml
 spec:
   provider: openai-compatible
-  base_url: https://api.together.xyz/v1
-  default_model: meta-llama/Llama-3.1-70B-Instruct-Turbo
+  base_url: https://generativelanguage.googleapis.com/v1beta/openai
+  default_model: gemini-2.5-pro
   auth:
-    secretRef: together-api-key
+    secretRef: gemini-api-key
 ```
 
-**Local vLLM server:**
+**Example -- local vLLM server:**
 ```yaml
 spec:
   provider: openai-compatible
@@ -99,15 +143,9 @@ spec:
   default_model: meta-llama/Llama-3.1-8B-Instruct
 ```
 
-**Ollama via OpenAI-compatible endpoint:**
-```yaml
-spec:
-  provider: openai-compatible
-  base_url: http://127.0.0.1:11434/v1
-  default_model: llama3.1
-```
-
-> **Ollama note:** Ollama exposes both a native API (`/api/chat`, used by the `ollama` provider) and an OpenAI-compatible API (`/v1/chat/completions`). Use whichever suits your setup — the `openai-compatible` provider works with Ollama's `/v1` endpoint.
+> **Ollama note:** Ollama exposes both a native API (`/api/chat`, used by the `ollama` provider) and an OpenAI-compatible API (`/v1/chat/completions`). Use whichever suits your setup -- the `openai-compatible` provider works with Ollama's `/v1` endpoint.
+>
+> **Not listed here?** Any service that implements OpenAI's `/chat/completions` endpoint should work. Set `provider: openai-compatible`, point `base_url` at the service's API root, and add `auth.secretRef` if the service requires an API key.
 
 ## Binding Agents to Models
 
@@ -139,6 +177,7 @@ ModelEndpoint references are resolved by name within the same namespace, or by `
 Model authentication is managed through [Secret](./secret.md) resources referenced by `auth.secretRef`.
 
 - `openai`, `anthropic`, and `azure-openai` require `auth.secretRef`.
+- `bedrock` accepts either with or without `auth.secretRef`. When set, the secret must be a JSON blob containing `access_key_id` and `secret_access_key`. When omitted, the AWS SDK default credential chain is used (env vars, instance profiles, SSO, etc.).
 - `openai-compatible` accepts either with or without `auth.secretRef`.
 - `ollama` usually runs without `auth.secretRef`.
 

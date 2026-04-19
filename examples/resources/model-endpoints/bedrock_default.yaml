@@ -1,0 +1,25 @@
+# AWS Bedrock via the Converse API.
+#
+# Authentication options:
+#   1. Explicit credentials: set auth.secretRef to a Secret containing a JSON
+#      blob with access_key_id, secret_access_key, and optionally session_token:
+#        orlojctl create secret aws-credentials \
+#          --from-literal value='{"access_key_id":"AKIA...","secret_access_key":"..."}'
+#   2. IAM role / default credential chain: omit auth entirely and let the AWS
+#      SDK resolve credentials from the environment (env vars, ~/.aws/credentials,
+#      EC2/ECS instance profiles, etc.).
+#
+# Cross-region inference profiles (e.g. "us.anthropic.claude-...") work
+# transparently -- just use the profile ID as default_model.
+apiVersion: orloj.dev/v1
+kind: ModelEndpoint
+metadata:
+  name: bedrock-claude
+spec:
+  provider: bedrock
+  default_model: anthropic.claude-sonnet-4-20250514-v1:0
+  options:
+    region: us-east-1
+    max_tokens: "4096"
+  auth:
+    secretRef: aws-credentials

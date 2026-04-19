@@ -101,6 +101,7 @@ func mustRegisterBuiltinModelProviders(registry *ModelProviderRegistry) {
 		&anthropicModelProviderPlugin{},
 		&azureOpenAIModelProviderPlugin{},
 		&ollamaModelProviderPlugin{},
+		&bedrockModelProviderPlugin{},
 	}
 	for _, plugin := range builtins {
 		if err := registry.Register(plugin); err != nil {
