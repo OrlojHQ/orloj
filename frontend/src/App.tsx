@@ -43,6 +43,7 @@ import { Permissions } from "./pages/Permissions";
 import { ToolPermissionDetail } from "./pages/ToolPermissionDetail";
 import { ToolApprovals } from "./pages/ToolApprovals";
 import { ToolApprovalDetail } from "./pages/ToolApprovalDetail";
+import { TaskApprovalDetail } from "./pages/TaskApprovalDetail";
 import { McpServers } from "./pages/McpServers";
 import { McpServerDetail } from "./pages/McpServerDetail";
 import { Capabilities } from "./pages/Capabilities";
@@ -175,6 +176,7 @@ function AppLayout({
               <Route path="/permissions/:name" element={<ToolPermissionDetail />} />
               <Route path="/approvals" element={<ToolApprovals />} />
               <Route path="/approvals/:name" element={<ToolApprovalDetail />} />
+              <Route path="/approvals/task/:name" element={<TaskApprovalDetail />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </ErrorBoundary>

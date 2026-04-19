@@ -19,6 +19,7 @@ import type {
   AgentRole,
   ToolPermission,
   ToolApproval,
+  TaskApproval,
   Task,
   TaskSchedule,
   TaskWebhook,
@@ -184,12 +185,19 @@ export function useToolApprovals() {
 export function useToolApproval(name: string) {
   return useResourceGet<ToolApproval>("ToolApproval", RESOURCE_ENDPOINTS.ToolApproval, name);
 }
+export function useTaskApprovals() {
+  return useResourceList<TaskApproval>("TaskApproval", RESOURCE_ENDPOINTS.TaskApproval);
+}
+export function useTaskApproval(name: string) {
+  return useResourceGet<TaskApproval>("TaskApproval", RESOURCE_ENDPOINTS.TaskApproval, name);
+}
 
 export function useApproveToolApproval() {
   const qc = useQueryClient();
   const ns = useNamespace();
   return useMutation({
-    mutationFn: (name: string) => client.postAction("tool-approvals", name, "approve"),
+    mutationFn: ({ name, body }: { name: string; body?: Record<string, string> }) =>
+      client.postAction("tool-approvals", name, "approve", body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["ToolApproval", ns] }),
   });
 }
@@ -198,8 +206,39 @@ export function useDenyToolApproval() {
   const qc = useQueryClient();
   const ns = useNamespace();
   return useMutation({
-    mutationFn: (name: string) => client.postAction("tool-approvals", name, "deny"),
+    mutationFn: ({ name, body }: { name: string; body?: Record<string, string> }) =>
+      client.postAction("tool-approvals", name, "deny", body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["ToolApproval", ns] }),
+  });
+}
+
+export function useApproveTaskApproval() {
+  const qc = useQueryClient();
+  const ns = useNamespace();
+  return useMutation({
+    mutationFn: ({ name, body }: { name: string; body?: Record<string, string> }) =>
+      client.postAction("task-approvals", name, "approve", body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["TaskApproval", ns] }),
+  });
+}
+
+export function useDenyTaskApproval() {
+  const qc = useQueryClient();
+  const ns = useNamespace();
+  return useMutation({
+    mutationFn: ({ name, body }: { name: string; body?: Record<string, string> }) =>
+      client.postAction("task-approvals", name, "deny", body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["TaskApproval", ns] }),
+  });
+}
+
+export function useRequestChangesTaskApproval() {
+  const qc = useQueryClient();
+  const ns = useNamespace();
+  return useMutation({
+    mutationFn: ({ name, body }: { name: string; body?: Record<string, string> }) =>
+      client.postAction("task-approvals", name, "request-changes", body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["TaskApproval", ns] }),
   });
 }
 

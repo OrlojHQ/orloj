@@ -1,0 +1,29 @@
+apiVersion: orloj.dev/v1
+kind: AgentSystem
+metadata:
+  name: review-sequential-system
+  labels:
+    orloj.dev/domain: governed-workflows
+    orloj.dev/example: human-review-sequential
+spec:
+  agents:
+    - planner-agent
+    - research-agent
+    - writer-agent
+  graph:
+    planner-agent:
+      next: research-agent
+    research-agent:
+      next: writer-agent
+    writer-agent:
+      review:
+        checkpoint_id: writer-review
+        display_name: Writer Review
+        reason: Editor must approve the draft before the workflow can finish.
+        ttl: 30m
+        max_review_cycles: 3
+  completion_review:
+    checkpoint_id: final-publish-review
+    display_name: Final Publish Review
+    reason: Final human signoff is required before the task is marked succeeded.
+    ttl: 30m

@@ -6,9 +6,12 @@ This page describes current runtime security controls and expected operator prac
 
 - `AgentPolicy` gates model/tool/token usage.
 - `AgentRole` and `ToolPermission` enforce per-tool authorization.
+- `ToolApproval` and `TaskApproval` pause risky actions or sensitive outputs for explicit human review.
 - Tool runtime enforces timeout/retry/isolation policy from `Tool.spec.runtime`.
 - Unsupported tools and disallowed runtime requests fail closed.
 - Permission denials are terminal for the current execution path.
+
+For regulated environments, `TaskApproval` checkpoints add a second control plane beyond tool authorization: a human can review and approve, deny, or request changes on sensitive agent output before the workflow continues.
 
 ## Namespace Isolation
 

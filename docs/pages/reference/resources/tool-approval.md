@@ -4,6 +4,8 @@
 
 Captures a pending human/system approval request for a tool invocation that was flagged by a `ToolPermission` `operation_rules` verdict of `approval_required`.
 
+Use `ToolApproval` for "may this tool call happen?" and [TaskApproval](./task-approval.md) for "is this output acceptable to continue?"
+
 ## spec
 
 - `task_ref` (string, required): name of the Task resource waiting for approval.
@@ -22,6 +24,7 @@ Captures a pending human/system approval request for a tool invocation that was 
 - `decision` (string): `approved` or `denied`.
 - `decided_by` (string): identity of the approver/denier.
 - `decided_at` (string): RFC3339 timestamp of the decision.
+- `comment` (string): optional reviewer comment.
 - `expires_at` (string): RFC3339 timestamp when the approval expires.
 
 ## API Endpoints
@@ -30,7 +33,7 @@ Captures a pending human/system approval request for a tool invocation that was 
 - `GET /v1/tool-approvals` -- list approval requests (supports namespace and label filters).
 - `GET /v1/tool-approvals/{name}` -- get a specific approval.
 - `DELETE /v1/tool-approvals/{name}` -- delete an approval.
-- `POST /v1/tool-approvals/{name}/approve` -- approve a pending request. Body: `{"decided_by": "...", "reason": "..."}` (`reason` optional).
-- `POST /v1/tool-approvals/{name}/deny` -- deny a pending request. Body: `{"decided_by": "...", "reason": "..."}` (`reason` optional).
+- `POST /v1/tool-approvals/{name}/approve` -- approve a pending request. Body: `{"decided_by": "...", "comment": "..."}` (`comment` optional; `reason` is still accepted as a compatibility alias).
+- `POST /v1/tool-approvals/{name}/deny` -- deny a pending request. Body: `{"decided_by": "...", "comment": "..."}` (`comment` optional; `reason` is still accepted as a compatibility alias).
 
 See also: [Tool approval concepts](../../concepts/governance/tool-approval.md).

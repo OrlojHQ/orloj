@@ -135,6 +135,7 @@ func main() {
 	taskController.SetExecutionMode(*taskExecutionMode)
 	taskController.SetGovernanceStores(stores.Roles, stores.ToolPerms)
 	taskController.SetToolApprovalStore(stores.ToolApprovals)
+	taskController.SetTaskApprovalStore(stores.TaskApprovals)
 	taskController.SetModelEndpointStore(stores.ModelEPs)
 	taskController.SetExecutor(taskExecutor)
 	taskController.SetExtensions(extensions)
@@ -223,6 +224,7 @@ func main() {
 					MemoryBackends:      memoryBackendRegistry,
 					ModelEndpoints:      stores.ModelEPs,
 					ToolApprovals:       stores.ToolApprovals,
+					TaskApprovals:       stores.TaskApprovals,
 					Policies:            stores.Policies,
 				},
 			)
@@ -260,4 +262,3 @@ func main() {
 	logger.Printf("task worker starting id=%s lease=%s heartbeat=%s", *workerID, leaseDuration.String(), heartbeatInterval.String())
 	taskController.Start(ctx)
 }
-

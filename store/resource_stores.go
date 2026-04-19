@@ -1358,12 +1358,26 @@ type ToolApprovalStore struct {
 	db    *sql.DB
 }
 
+type TaskApprovalStore struct {
+	mu    sync.RWMutex
+	items map[string]resources.TaskApproval
+	db    *sql.DB
+}
+
 func NewToolApprovalStore() *ToolApprovalStore {
 	return &ToolApprovalStore{items: make(map[string]resources.ToolApproval)}
 }
 
 func NewToolApprovalStoreWithDB(db *sql.DB) *ToolApprovalStore {
 	return &ToolApprovalStore{items: make(map[string]resources.ToolApproval), db: db}
+}
+
+func NewTaskApprovalStore() *TaskApprovalStore {
+	return &TaskApprovalStore{items: make(map[string]resources.TaskApproval)}
+}
+
+func NewTaskApprovalStoreWithDB(db *sql.DB) *TaskApprovalStore {
+	return &TaskApprovalStore{items: make(map[string]resources.TaskApproval), db: db}
 }
 
 func (s *ToolApprovalStore) Upsert(ctx context.Context, item resources.ToolApproval) (resources.ToolApproval, error) {
@@ -1485,6 +1499,131 @@ func (s *ToolApprovalStore) Delete(ctx context.Context, name string) error {
 	defer s.mu.Unlock()
 	if _, ok := s.items[key]; !ok {
 		return fmt.Errorf("toolapproval %q not found", name)
+	}
+	delete(s.items, key)
+	return nil
+}
+
+func (s *TaskApprovalStore) Upsert(ctx context.Context, item resources.TaskApproval) (resources.TaskApproval, error) {
+	if err := item.Normalize(); err != nil {
+		return resources.TaskApproval{}, err
+	}
+	key := scopedNameFromMeta(item.Metadata)
+	if s.db != nil {
+		tx, err := s.db.Begin()
+		if err != nil {
+			return resources.TaskApproval{}, err
+		}
+		defer tx.Rollback()
+
+		existing, found, err := getFromTableForUpdate[resources.TaskApproval](ctx, tx, tableTaskApprovals, key)
+		if err != nil {
+			return resources.TaskApproval{}, err
+		}
+		if !found {
+			if err := initializeCreateMetadata("TaskApproval", &item.Metadata); err != nil {
+				return resources.TaskApproval{}, err
+			}
+		} else {
+			specChanged := !reflect.DeepEqual(existing.Spec, item.Spec)
+			if err := initializeUpdateMetadata("TaskApproval", &item.Metadata, existing.Metadata, specChanged); err != nil {
+				return resources.TaskApproval{}, err
+			}
+		}
+		if err := upsertTaskApprovalSQL(ctx, tx, key, item); err != nil {
+			return resources.TaskApproval{}, err
+		}
+		if err := tx.Commit(); err != nil {
+			return resources.TaskApproval{}, err
+		}
+		return item, nil
+	}
+
+	s.mu.Lock()
+	existing, found := s.items[key]
+	if !found {
+		if err := initializeCreateMetadata("TaskApproval", &item.Metadata); err != nil {
+			s.mu.Unlock()
+			return resources.TaskApproval{}, err
+		}
+	} else {
+		specChanged := !reflect.DeepEqual(existing.Spec, item.Spec)
+		if err := initializeUpdateMetadata("TaskApproval", &item.Metadata, existing.Metadata, specChanged); err != nil {
+			s.mu.Unlock()
+			return resources.TaskApproval{}, err
+		}
+	}
+	s.items[key] = item
+	s.mu.Unlock()
+	return item, nil
+}
+
+func (s *TaskApprovalStore) Get(ctx context.Context, name string) (resources.TaskApproval, bool, error) {
+	key := normalizeLookupName(name)
+	if s.db != nil {
+		return getFromTable[resources.TaskApproval](ctx, s.db, tableTaskApprovals, key)
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	item, ok := s.items[key]
+	return item, ok, nil
+}
+
+func (s *TaskApprovalStore) List(ctx context.Context) ([]resources.TaskApproval, error) {
+	if s.db != nil {
+		return listFromTable[resources.TaskApproval](ctx, s.db, tableTaskApprovals)
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]resources.TaskApproval, 0, len(s.items))
+	for _, item := range s.items {
+		out = append(out, item)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Metadata.Name < out[j].Metadata.Name
+	})
+	return out, nil
+}
+
+func (s *TaskApprovalStore) ListCursor(ctx context.Context, limit int, after, namespace string) ([]resources.TaskApproval, error) {
+	if s.db != nil {
+		return listFromTableCursor[resources.TaskApproval](ctx, s.db, tableTaskApprovals, limit, after, namespace)
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]resources.TaskApproval, 0, len(s.items))
+	for _, item := range s.items {
+		out = append(out, item)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Metadata.Name < out[j].Metadata.Name
+	})
+	return cursorFilter(out,
+		func(a resources.TaskApproval) string { return a.Metadata.Name },
+		func(a resources.TaskApproval) string { return resources.NormalizeNamespace(a.Metadata.Namespace) },
+		limit, after, namespace,
+	), nil
+}
+
+func (s *TaskApprovalStore) Delete(ctx context.Context, name string) error {
+	key := normalizeLookupName(name)
+	if s.db != nil {
+		deleted, err := deleteFromTable(ctx, s.db, tableTaskApprovals, key)
+		if err != nil {
+			return err
+		}
+		if !deleted {
+			return fmt.Errorf("taskapproval %q not found", name)
+		}
+		return nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.items[key]; !ok {
+		return fmt.Errorf("taskapproval %q not found", name)
 	}
 	delete(s.items, key)
 	return nil

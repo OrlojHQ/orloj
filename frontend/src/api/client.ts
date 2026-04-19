@@ -194,13 +194,18 @@ export async function del(resourcePath: string, name: string, opts?: ScopedReque
   }
 }
 
-export async function postAction<T>(resourcePath: string, name: string, action: string): Promise<T> {
+export async function postAction<T>(
+  resourcePath: string,
+  name: string,
+  action: string,
+  body: unknown = {},
+): Promise<T> {
   const { namespace } = getConnection();
   const url = buildUrl(`${resourcePath}/${name}/${action}`, namespace);
   return request<T>(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({}),
+    body: JSON.stringify(body ?? {}),
   });
 }
 

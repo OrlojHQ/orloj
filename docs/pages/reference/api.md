@@ -18,6 +18,8 @@ This page summarizes key HTTP endpoints and behavior contracts.
 - agent-policies
 - agent-roles
 - tool-permissions
+- tool-approvals
+- task-approvals
 - tasks
 - task-schedules
 - task-webhooks
@@ -63,6 +65,22 @@ Namespace defaults to `default` and can be overridden with `?namespace=<ns>`.
 - `GET|PUT /v1/<resource>/{name}/status`
 - `GET /v1/agents/{name}/logs`
 - `GET /v1/tasks/{name}/logs`
+
+## Approval Decision Endpoints
+
+- `POST /v1/tool-approvals/{name}/approve`
+- `POST /v1/tool-approvals/{name}/deny`
+- `POST /v1/task-approvals/{name}/approve`
+- `POST /v1/task-approvals/{name}/deny`
+- `POST /v1/task-approvals/{name}/request-changes`
+
+Decision request bodies may include:
+
+- `decided_by`: reviewer identity
+- `comment`: reviewer note
+- `reason`: legacy alias for `comment`
+
+`TaskApproval request-changes` requires reviewer feedback via `comment` or the legacy `reason` field. It returns `409 Conflict` when the checkpoint has `allow_request_changes: false` or the approval has already reached `max_review_cycles`. `comment` is also supported on tool approval decisions for consistent reviewer audit trails.
 
 ## Watches and Events
 

@@ -2,6 +2,8 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -33,6 +35,7 @@ type TaskController struct {
 	roleStore         *store.AgentRoleStore
 	toolPermStore     *store.ToolPermissionStore
 	toolApprovalStore *store.ToolApprovalStore
+	taskApprovalStore *store.TaskApprovalStore
 	workerStore       *store.WorkerStore
 	executor          *agentruntime.TaskExecutor
 	reconcileEvery    time.Duration
@@ -123,6 +126,10 @@ func (c *TaskController) SetGovernanceStores(roleStore *store.AgentRoleStore, to
 
 func (c *TaskController) SetToolApprovalStore(s *store.ToolApprovalStore) {
 	c.toolApprovalStore = s
+}
+
+func (c *TaskController) SetTaskApprovalStore(s *store.TaskApprovalStore) {
+	c.taskApprovalStore = s
 }
 
 func (c *TaskController) SetModelEndpointStore(modelEPStore *store.ModelEndpointStore) {
@@ -351,9 +358,21 @@ func (c *TaskController) reconcileRunning(ctx context.Context, task resources.Ta
 
 	output, err := c.executeTask(ctx, &task, system)
 	if err != nil {
+		var reviewPauseErr *taskApprovalPauseError
+		if errors.As(err, &reviewPauseErr) {
+			return c.transitionToWaitingApproval(task, reviewPauseErr.reason, &resources.TaskBlockedOn{
+				Kind:   "TaskApproval",
+				Name:   reviewPauseErr.approvalName,
+				Reason: "output_review",
+			})
+		}
 		if agentruntime.IsApprovalRequiredError(err) {
-			c.createSyncToolApproval(ctx, task, err)
-			return c.transitionToWaitingApproval(task, err.Error())
+			approvalName := c.createSyncToolApproval(ctx, task, err)
+			return c.transitionToWaitingApproval(task, err.Error(), &resources.TaskBlockedOn{
+				Kind:   "ToolApproval",
+				Name:   approvalName,
+				Reason: "tool_approval",
+			})
 		}
 		return c.handleExecutionFailure(task, err.Error())
 	}
@@ -426,7 +445,7 @@ func (c *TaskController) reconcileRunning(ctx context.Context, task resources.Ta
 // the ToolApproval in the store. ClaimNextDue never selects WaitingApproval (isTaskClaimable is false),
 // so reconcileWaitingApproval would otherwise never run.
 func (c *TaskController) reconcileWaitingApprovalSweep(ctx context.Context) error {
-	if c == nil || c.taskStore == nil || c.toolApprovalStore == nil {
+	if c == nil || c.taskStore == nil || (c.toolApprovalStore == nil && c.taskApprovalStore == nil) {
 		return nil
 	}
 	_taskList, err := c.taskStore.List(ctx)
@@ -461,13 +480,13 @@ func (c *TaskController) reconcileWaitingApprovalSweep(ctx context.Context) erro
 	return nil
 }
 
-func (c *TaskController) createSyncToolApproval(ctx context.Context, task resources.Task, execErr error) {
+func (c *TaskController) createSyncToolApproval(ctx context.Context, task resources.Task, execErr error) string {
 	if c.toolApprovalStore == nil {
-		return
+		return ""
 	}
 	toolName := agentruntime.ParseToolFromApprovalError(execErr)
 	if toolName == "" {
-		return
+		return ""
 	}
 	taskKey := taskScopedName(task)
 	syncMsgID := fmt.Sprintf("sync/a%d", task.Status.Attempts)
@@ -502,11 +521,13 @@ func (c *TaskController) createSyncToolApproval(ctx context.Context, task resour
 			c.logger.Printf("task=%s failed to create tool approval: %v", task.Metadata.Name, err)
 		}
 	}
+	return approvalName
 }
 
-func (c *TaskController) transitionToWaitingApproval(task resources.Task, reason string) error {
+func (c *TaskController) transitionToWaitingApproval(task resources.Task, reason string, blockedOn *resources.TaskBlockedOn) error {
 	task.Status.Phase = "WaitingApproval"
 	task.Status.LastError = agentruntime.RedactSensitive(reason)
+	task.Status.BlockedOn = blockedOn
 	task.Status.ObservedGeneration = task.Metadata.Generation
 	c.appendTaskHistory(&task, "waiting_approval", fmt.Sprintf("task paused pending approval: %s", reason))
 	if _, err := c.upsertTask(task); err != nil {
@@ -521,28 +542,50 @@ func (c *TaskController) transitionToWaitingApproval(task resources.Task, reason
 }
 
 func (c *TaskController) reconcileWaitingApproval(ctx context.Context, task resources.Task) error {
+	if task.Status.BlockedOn != nil {
+		switch strings.ToLower(strings.TrimSpace(task.Status.BlockedOn.Kind)) {
+		case "toolapproval":
+			return c.reconcileWaitingToolApproval(ctx, task, strings.TrimSpace(task.Status.BlockedOn.Name))
+		case "taskapproval":
+			return c.reconcileWaitingTaskApproval(ctx, task, strings.TrimSpace(task.Status.BlockedOn.Name))
+		}
+	}
+	return c.reconcileWaitingToolApprovalLegacy(ctx, task)
+}
+
+func (c *TaskController) reconcileWaitingToolApprovalLegacy(ctx context.Context, task resources.Task) error {
 	if c.toolApprovalStore == nil {
 		return nil
 	}
-
 	taskKey := taskScopedName(task)
-	var approval resources.ToolApproval
-	found := false
 	_aList, err := c.toolApprovalStore.List(ctx)
 	if err != nil {
 		return err
 	}
 	for _, a := range _aList {
 		if strings.TrimSpace(a.Spec.TaskRef) == taskKey || strings.TrimSpace(a.Spec.TaskRef) == task.Metadata.Name {
-			approval = a
-			found = true
-			break
+			return c.applyWaitingToolApproval(ctx, task, a)
 		}
 	}
-	if !found {
+	return nil
+}
+
+func (c *TaskController) reconcileWaitingToolApproval(ctx context.Context, task resources.Task, approvalName string) error {
+	if c.toolApprovalStore == nil || strings.TrimSpace(approvalName) == "" {
 		return nil
 	}
+	approval, ok, err := c.toolApprovalStore.Get(ctx, store.ScopedName(task.Metadata.Namespace, approvalName))
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil
+	}
+	return c.applyWaitingToolApproval(ctx, task, approval)
+}
 
+func (c *TaskController) applyWaitingToolApproval(ctx context.Context, task resources.Task, approval resources.ToolApproval) error {
+	taskKey := taskScopedName(task)
 	if approval.Status.ExpiresAt != "" {
 		if expiresAt, err := time.Parse(time.RFC3339, approval.Status.ExpiresAt); err == nil {
 			if time.Now().UTC().After(expiresAt) && approval.Status.Phase == "Pending" {
@@ -556,6 +599,7 @@ func (c *TaskController) reconcileWaitingApproval(ctx context.Context, task reso
 	case "Approved":
 		task.Status.Phase = "Running"
 		task.Status.LastError = ""
+		task.Status.BlockedOn = nil
 		task.Status.AssignedWorker = c.workerID
 		task.Status.ClaimedBy = c.workerID
 		task.Status.LeaseUntil = time.Now().UTC().Add(c.leaseDuration).Format(time.RFC3339Nano)
@@ -574,6 +618,434 @@ func (c *TaskController) reconcileWaitingApproval(ctx context.Context, task reso
 	case "Expired":
 		return c.markFailed(task, "tool approval expired")
 	}
+	return nil
+}
+
+func (c *TaskController) reconcileWaitingTaskApproval(ctx context.Context, task resources.Task, approvalName string) error {
+	if c.taskApprovalStore == nil || strings.TrimSpace(approvalName) == "" {
+		return nil
+	}
+	approval, ok, err := c.taskApprovalStore.Get(ctx, store.ScopedName(task.Metadata.Namespace, approvalName))
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil
+	}
+	if approval.Status.ExpiresAt != "" {
+		if expiresAt, err := time.Parse(time.RFC3339, approval.Status.ExpiresAt); err == nil {
+			if time.Now().UTC().After(expiresAt) && approval.Status.Phase == "Pending" {
+				approval.Status.Phase = "Expired"
+				_, _ = c.taskApprovalStore.Upsert(ctx, approval)
+			}
+		}
+	}
+	switch approval.Status.Phase {
+	case "Approved":
+		return c.resumeApprovedTaskApproval(ctx, task, approval)
+	case "Denied":
+		return c.markFailed(task, "task approval denied")
+	case "Expired":
+		return c.markFailed(task, "task approval expired")
+	case "ChangesRequested":
+		return c.resumeRequestedChangesTaskApproval(ctx, task, approval)
+	default:
+		return nil
+	}
+}
+
+type taskApprovalPauseError struct {
+	approvalName string
+	reason       string
+}
+
+func (e *taskApprovalPauseError) Error() string {
+	if e == nil {
+		return "task approval pending"
+	}
+	return e.reason
+}
+
+func (c *TaskController) resumeApprovedTaskApproval(ctx context.Context, task resources.Task, approval resources.TaskApproval) error {
+	resume, err := resources.DecodeTaskApprovalResumeContext(approval.Spec.ResumeContext)
+	if err != nil {
+		return err
+	}
+	switch strings.ToLower(strings.TrimSpace(resume.Mode)) {
+	case "message-driven":
+		return c.resumeMessageDrivenTaskApproval(ctx, task, approval, resume, false)
+	case "sequential":
+		return c.resumeSequentialTaskApproval(ctx, task, approval, resume, false)
+	default:
+		return fmt.Errorf("unsupported task approval resume mode %q", resume.Mode)
+	}
+}
+
+func (c *TaskController) resumeRequestedChangesTaskApproval(ctx context.Context, task resources.Task, approval resources.TaskApproval) error {
+	if !resources.TaskApprovalAllowsRequestChanges(approval) {
+		return c.markFailed(task, "task approval request_changes is disabled for this checkpoint")
+	}
+	if approval.Spec.ReviewCycle >= resources.TaskApprovalMaxReviewCycles(approval) {
+		return c.markFailed(task, "task approval max review cycles reached")
+	}
+	resume, err := resources.DecodeTaskApprovalResumeContext(approval.Spec.ResumeContext)
+	if err != nil {
+		return err
+	}
+	switch strings.ToLower(strings.TrimSpace(resume.Mode)) {
+	case "message-driven":
+		return c.resumeMessageDrivenTaskApproval(ctx, task, approval, resume, true)
+	case "sequential":
+		return c.resumeSequentialTaskApproval(ctx, task, approval, resume, true)
+	default:
+		return fmt.Errorf("unsupported task approval resume mode %q", resume.Mode)
+	}
+}
+
+func resumeMessageToTaskMessage(msg resources.TaskApprovalResumeMessage) resources.TaskMessage {
+	return resources.TaskMessage{
+		Timestamp:      strings.TrimSpace(msg.Timestamp),
+		MessageID:      strings.TrimSpace(msg.MessageID),
+		IdempotencyKey: strings.TrimSpace(msg.IdempotencyKey),
+		TaskID:         strings.TrimSpace(msg.TaskID),
+		Attempt:        msg.Attempt,
+		System:         strings.TrimSpace(msg.System),
+		FromAgent:      strings.TrimSpace(msg.FromAgent),
+		ToAgent:        strings.TrimSpace(msg.ToAgent),
+		BranchID:       strings.TrimSpace(msg.BranchID),
+		ParentBranchID: strings.TrimSpace(msg.ParentBranchID),
+		Type:           strings.TrimSpace(msg.Type),
+		Content:        strings.TrimSpace(msg.Payload),
+		TraceID:        strings.TrimSpace(msg.TraceID),
+		ParentID:       strings.TrimSpace(msg.ParentID),
+		DelegateOf:     strings.TrimSpace(msg.DelegateOf),
+	}
+}
+
+func ensureTaskMessageRecordController(task *resources.Task, message resources.TaskMessage) int {
+	if task == nil {
+		return -1
+	}
+	for idx, existing := range task.Status.Messages {
+		if strings.EqualFold(strings.TrimSpace(existing.MessageID), strings.TrimSpace(message.MessageID)) {
+			if strings.TrimSpace(message.IdempotencyKey) == "" {
+				message.IdempotencyKey = strings.TrimSpace(existing.IdempotencyKey)
+			}
+			task.Status.Messages[idx] = message
+			return idx
+		}
+	}
+	task.Status.Messages = append(task.Status.Messages, message)
+	return len(task.Status.Messages) - 1
+}
+
+func allTaskMessagesTerminalController(messages []resources.TaskMessage) bool {
+	if len(messages) == 0 {
+		return true
+	}
+	for _, message := range messages {
+		switch strings.ToLower(strings.TrimSpace(message.Phase)) {
+		case "succeeded", "deadletter":
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func stringifyTaskApprovalOutput(output any) string {
+	switch value := output.(type) {
+	case string:
+		return strings.TrimSpace(value)
+	case map[string]string:
+		raw, _ := json.Marshal(value)
+		return string(raw)
+	default:
+		raw, _ := json.Marshal(output)
+		return string(raw)
+	}
+}
+
+func (c *TaskController) maybeCreateCompletionReviewFromTaskApproval(ctx context.Context, task resources.Task, approval resources.TaskApproval, resume resources.TaskApprovalResumeContext) (bool, error) {
+	if c.taskApprovalStore == nil || c.agentSystemStore == nil || strings.EqualFold(strings.TrimSpace(approval.Spec.CheckpointType), "task_output") {
+		return false, nil
+	}
+	system, ok, err := c.agentSystemStore.Get(ctx, store.ScopedName(task.Metadata.Namespace, task.Spec.System))
+	if err != nil {
+		return false, err
+	}
+	if !ok || system.Spec.CompletionReview == nil {
+		return false, nil
+	}
+	if strings.EqualFold(strings.TrimSpace(approval.Spec.CheckpointID), strings.TrimSpace(system.Spec.CompletionReview.CheckpointID)) {
+		return false, nil
+	}
+	taskKey := taskScopedName(task)
+	approvalName := agentruntime.TaskApprovalResourceName(taskKey, system.Spec.CompletionReview.CheckpointID, 1)
+	nextResume := resources.TaskApprovalResumeContext{
+		Mode:           strings.TrimSpace(resume.Mode),
+		Action:         "message_complete",
+		System:         strings.TrimSpace(task.Spec.System),
+		ProducingAgent: strings.TrimSpace(resume.ProducingAgent),
+		CurrentMessage: resume.CurrentMessage,
+		Output:         copyStringMap(task.Status.Output),
+	}
+	created := resources.TaskApproval{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "TaskApproval",
+		Metadata: resources.ObjectMeta{
+			Namespace: task.Metadata.Namespace,
+			Name:      approvalName,
+		},
+		Spec: resources.TaskApprovalSpec{
+			TaskRef:             taskKey,
+			CheckpointID:        system.Spec.CompletionReview.CheckpointID,
+			CheckpointType:      "task_output",
+			Agent:               strings.TrimSpace(resume.ProducingAgent),
+			Reason:              strings.TrimSpace(system.Spec.CompletionReview.Reason),
+			TTL:                 strings.TrimSpace(system.Spec.CompletionReview.TTL),
+			AllowRequestChanges: system.Spec.CompletionReview.AllowRequestChanges,
+			MaxReviewCycles:     system.Spec.CompletionReview.MaxReviewCycles,
+			ReviewCycle:         1,
+			Output:              copyStringMap(task.Status.Output),
+			OutputFormat:        "json",
+			ResumeContext:       resources.EncodeTaskApprovalResumeContext(nextResume),
+		},
+		Status: resources.TaskApprovalStatus{Phase: "Pending"},
+	}
+	if _, err := c.taskApprovalStore.Upsert(ctx, created); err != nil {
+		return false, err
+	}
+	task.Status.Phase = "WaitingApproval"
+	task.Status.BlockedOn = &resources.TaskBlockedOn{
+		Kind:   "TaskApproval",
+		Name:   approvalName,
+		Reason: "output_review",
+	}
+	task.Status.LastError = ""
+	task.Status.ObservedGeneration = task.Metadata.Generation
+	if _, err := c.upsertTask(task); err != nil {
+		return false, err
+	}
+	c.appendTaskLog(taskKey, fmt.Sprintf("task paused for completion review: approval=%s", approvalName))
+	return true, nil
+}
+
+func (c *TaskController) resumeMessageDrivenTaskApproval(ctx context.Context, task resources.Task, approval resources.TaskApproval, resume resources.TaskApprovalResumeContext, requestChanges bool) error {
+	if resume.CurrentMessage == nil {
+		return fmt.Errorf("task approval %q is missing resume current_message", approval.Metadata.Name)
+	}
+	currentMessage := resumeMessageToTaskMessage(*resume.CurrentMessage)
+	currentIndex := ensureTaskMessageRecordController(&task, currentMessage)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	current := task.Status.Messages[currentIndex]
+	current.Phase = "Succeeded"
+	current.Worker = c.workerID
+	current.ProcessedAt = now
+	current.NextAttemptAt = ""
+	current.LastError = ""
+	task.Status.Messages[currentIndex] = current
+
+	if requestChanges {
+		if c.agentMessageBus == nil {
+			return fmt.Errorf("agent message bus is required to resume task approval request_changes")
+		}
+		rerun := agentruntime.AgentMessageFromResumeMessage(*resume.CurrentMessage)
+		rerun.MessageID = fmt.Sprintf("%s/review-%d", strings.TrimSpace(resume.CurrentMessage.MessageID), approval.Spec.ReviewCycle+1)
+		rerun.IdempotencyKey = rerun.MessageID
+		rerun.Type = "review_request_changes"
+		rerun.ParentID = strings.TrimSpace(resume.CurrentMessage.MessageID)
+		rerun.Timestamp = now
+		rerun.Payload = agentruntime.EncodeReviewRequestPayload(agentruntime.ReviewRequestPayload{
+			Content:        strings.TrimSpace(resume.CurrentMessage.Payload),
+			Feedback:       strings.TrimSpace(approval.Status.Comment),
+			PreviousOutput: stringifyTaskApprovalOutput(approval.Spec.Output),
+			CheckpointID:   strings.TrimSpace(approval.Spec.CheckpointID),
+			Cycle:          approval.Spec.ReviewCycle + 1,
+			RequestedBy:    strings.TrimSpace(approval.Status.DecidedBy),
+			Supersedes:     strings.TrimSpace(approval.Metadata.Name),
+		})
+		if _, err := c.agentMessageBus.Publish(ctx, rerun); err != nil {
+			return err
+		}
+		rerunRecord := resumeMessageToTaskMessage(agentruntime.ResumeMessageFromAgentMessage(rerun))
+		rerunRecord.Phase = "Queued"
+		rerunRecord.Worker = ""
+		rerunRecord.ProcessedAt = ""
+		rerunRecord.NextAttemptAt = ""
+		rerunRecord.LastError = ""
+		ensureTaskMessageRecordController(&task, rerunRecord)
+		task.Status.Phase = "Running"
+		task.Status.BlockedOn = nil
+		task.Status.LastError = ""
+		task.Status.AssignedWorker = c.workerID
+		task.Status.ClaimedBy = c.workerID
+		task.Status.LeaseUntil = time.Now().UTC().Add(c.leaseDuration).Format(time.RFC3339Nano)
+		task.Status.LastHeartbeat = now
+		task.Status.ObservedGeneration = task.Metadata.Generation
+		if _, err := c.upsertTask(task); err != nil {
+			return err
+		}
+		c.appendTaskLog(taskScopedName(task), fmt.Sprintf("task approval requested changes: rerun_message=%s", rerun.MessageID))
+		return nil
+	}
+
+	switch strings.ToLower(strings.TrimSpace(resume.Action)) {
+	case "message_forward":
+		if c.agentMessageBus == nil {
+			return fmt.Errorf("agent message bus is required to resume task approval")
+		}
+		for _, stored := range resume.NextMessages {
+			envelope := agentruntime.AgentMessageFromResumeMessage(stored)
+			if _, err := c.agentMessageBus.Publish(ctx, envelope); err != nil {
+				return err
+			}
+			record := resumeMessageToTaskMessage(stored)
+			record.Phase = "Queued"
+			record.Worker = ""
+			record.ProcessedAt = ""
+			record.NextAttemptAt = ""
+			record.LastError = ""
+			ensureTaskMessageRecordController(&task, record)
+		}
+		task.Status.Phase = "Running"
+		task.Status.BlockedOn = nil
+		task.Status.LastError = ""
+		task.Status.AssignedWorker = c.workerID
+		task.Status.ClaimedBy = c.workerID
+		task.Status.LeaseUntil = time.Now().UTC().Add(c.leaseDuration).Format(time.RFC3339Nano)
+		task.Status.LastHeartbeat = now
+		task.Status.ObservedGeneration = task.Metadata.Generation
+		if _, err := c.upsertTask(task); err != nil {
+			return err
+		}
+		c.appendTaskLog(taskScopedName(task), fmt.Sprintf("task approval granted: forwarded %d downstream message(s)", len(resume.NextMessages)))
+		return nil
+	default:
+		if len(resume.Output) > 0 {
+			task.Status.Output = copyStringMap(resume.Output)
+		}
+		if created, err := c.maybeCreateCompletionReviewFromTaskApproval(ctx, task, approval, resume); err != nil {
+			return err
+		} else if created {
+			return nil
+		}
+		if allTaskMessagesTerminalController(task.Status.Messages) {
+			task.Status.Phase = "Succeeded"
+			task.Status.CompletedAt = now
+			task.Status.AssignedWorker = ""
+			task.Status.ClaimedBy = ""
+			task.Status.LeaseUntil = ""
+			task.Status.LastHeartbeat = ""
+		} else {
+			task.Status.Phase = "Running"
+			task.Status.AssignedWorker = c.workerID
+			task.Status.ClaimedBy = c.workerID
+			task.Status.LeaseUntil = time.Now().UTC().Add(c.leaseDuration).Format(time.RFC3339Nano)
+			task.Status.LastHeartbeat = now
+		}
+		task.Status.BlockedOn = nil
+		task.Status.LastError = ""
+		task.Status.ObservedGeneration = task.Metadata.Generation
+		if _, err := c.upsertTask(task); err != nil {
+			return err
+		}
+		c.appendTaskLog(taskScopedName(task), "task approval granted: task resumed/completed")
+		return nil
+	}
+}
+
+func (c *TaskController) resumeSequentialTaskApproval(ctx context.Context, task resources.Task, approval resources.TaskApproval, resume resources.TaskApprovalResumeContext, requestChanges bool) error {
+	system, ok, err := c.agentSystemStore.Get(ctx, store.ScopedName(task.Metadata.Namespace, task.Spec.System))
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("agentsystem %q not found", task.Spec.System)
+	}
+	order := executionOrder(system)
+	if len(order) == 0 {
+		return fmt.Errorf("cannot derive execution order from agentsystem %q", system.Metadata.Name)
+	}
+
+	startIndex := resume.NextAgentIndex
+	runtimeInput := copyStringMap(resume.NextRuntimeInput)
+	if requestChanges {
+		startIndex = resume.CurrentAgentIndex
+		runtimeInput = copyStringMap(resume.RuntimeInput)
+		runtimeInput["review.feedback"] = strings.TrimSpace(approval.Status.Comment)
+		runtimeInput["review.previous_output"] = stringifyTaskApprovalOutput(approval.Spec.Output)
+		runtimeInput["review.checkpoint_id"] = strings.TrimSpace(approval.Spec.CheckpointID)
+		runtimeInput["review.cycle"] = strconv.Itoa(approval.Spec.ReviewCycle + 1)
+		runtimeInput["review.requested_by"] = strings.TrimSpace(approval.Status.DecidedBy)
+		runtimeInput["review.supersedes"] = strings.TrimSpace(approval.Metadata.Name)
+	}
+	if !requestChanges && startIndex >= len(order) {
+		if created, err := c.maybeCreateCompletionReviewFromTaskApproval(ctx, task, approval, resume); err != nil {
+			return err
+		} else if created {
+			return nil
+		}
+		task.Status.Phase = "Succeeded"
+		task.Status.LastError = ""
+		task.Status.CompletedAt = time.Now().UTC().Format(time.RFC3339Nano)
+		task.Status.Output = copyStringMap(resume.Output)
+		task.Status.AssignedWorker = ""
+		task.Status.ClaimedBy = ""
+		task.Status.LeaseUntil = ""
+		task.Status.LastHeartbeat = ""
+		task.Status.BlockedOn = nil
+		task.Status.ObservedGeneration = task.Metadata.Generation
+		if _, err := c.upsertTask(task); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	task.Status.Phase = "Running"
+	task.Status.BlockedOn = nil
+	task.Status.LastError = ""
+	task.Status.AssignedWorker = c.workerID
+	task.Status.ClaimedBy = c.workerID
+	task.Status.LeaseUntil = time.Now().UTC().Add(c.leaseDuration).Format(time.RFC3339Nano)
+	task.Status.LastHeartbeat = time.Now().UTC().Format(time.RFC3339Nano)
+	task.Status.ObservedGeneration = task.Metadata.Generation
+	if _, err := c.upsertTask(task); err != nil {
+		return err
+	}
+
+	output, err := c.executeTaskFromResume(ctx, &task, system, order, startIndex, runtimeInput, copyStringMap(resume.Output))
+	if err != nil {
+		var pauseErr *taskApprovalPauseError
+		if errors.As(err, &pauseErr) {
+			return c.transitionToWaitingApproval(task, pauseErr.reason, &resources.TaskBlockedOn{
+				Kind:   "TaskApproval",
+				Name:   pauseErr.approvalName,
+				Reason: "output_review",
+			})
+		}
+		return c.handleExecutionFailure(task, err.Error())
+	}
+
+	task.Status.Phase = "Succeeded"
+	task.Status.LastError = ""
+	if task.Status.StartedAt == "" {
+		task.Status.StartedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	}
+	task.Status.CompletedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	task.Status.Output = output
+	task.Status.ObservedGeneration = task.Metadata.Generation
+	task.Status.AssignedWorker = ""
+	task.Status.ClaimedBy = ""
+	task.Status.LeaseUntil = ""
+	task.Status.LastHeartbeat = ""
+	task.Status.BlockedOn = nil
+	c.appendTaskHistory(&task, "succeeded", "task execution completed successfully")
+	_, err = c.upsertTask(task)
+	if err != nil {
+		return err
+	}
+	c.appendTaskLog(taskScopedName(task), "task approval resume completed successfully")
 	return nil
 }
 
@@ -1164,6 +1636,81 @@ func entryAgentsFromSystem(system resources.AgentSystem) []string {
 	return out
 }
 
+func reviewCheckpointForNode(system resources.AgentSystem, agentName string) *resources.ReviewCheckpointSpec {
+	node, ok := system.Spec.Graph[strings.TrimSpace(agentName)]
+	if !ok {
+		return nil
+	}
+	return node.Review
+}
+
+func reviewCycleFromInput(input map[string]string) (int, string) {
+	cycle := 1
+	if input != nil {
+		if raw := strings.TrimSpace(input["review.cycle"]); raw != "" {
+			if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
+				cycle = parsed
+			}
+		}
+	}
+	supersedes := ""
+	if input != nil {
+		supersedes = strings.TrimSpace(input["review.supersedes"])
+	}
+	return cycle, supersedes
+}
+
+func (c *TaskController) createTaskApprovalForCheckpoint(
+	ctx context.Context,
+	task *resources.Task,
+	checkpoint resources.ReviewCheckpointSpec,
+	checkpointType string,
+	agentName string,
+	outputSnapshot any,
+	outputFormat string,
+	resume resources.TaskApprovalResumeContext,
+	reviewCycle int,
+	supersedes string,
+) (resources.TaskApproval, error) {
+	if c.taskApprovalStore == nil || task == nil {
+		return resources.TaskApproval{}, fmt.Errorf("task approval store not configured")
+	}
+	taskKey := taskScopedName(*task)
+	if reviewCycle <= 0 {
+		reviewCycle = 1
+	}
+	approvalName := agentruntime.TaskApprovalResourceName(taskKey, checkpoint.CheckpointID, reviewCycle)
+	reason := strings.TrimSpace(checkpoint.Reason)
+	if reason == "" {
+		reason = fmt.Sprintf("checkpoint %s requires review", checkpoint.CheckpointID)
+	}
+	approval := resources.TaskApproval{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "TaskApproval",
+		Metadata: resources.ObjectMeta{
+			Namespace: task.Metadata.Namespace,
+			Name:      approvalName,
+		},
+		Spec: resources.TaskApprovalSpec{
+			TaskRef:             taskKey,
+			CheckpointID:        strings.TrimSpace(checkpoint.CheckpointID),
+			CheckpointType:      strings.TrimSpace(checkpointType),
+			Agent:               strings.TrimSpace(agentName),
+			Reason:              reason,
+			TTL:                 strings.TrimSpace(checkpoint.TTL),
+			AllowRequestChanges: checkpoint.AllowRequestChanges,
+			MaxReviewCycles:     checkpoint.MaxReviewCycles,
+			ReviewCycle:         reviewCycle,
+			Supersedes:          strings.TrimSpace(supersedes),
+			Output:              outputSnapshot,
+			OutputFormat:        strings.TrimSpace(outputFormat),
+			ResumeContext:       resources.EncodeTaskApprovalResumeContext(resume),
+		},
+		Status: resources.TaskApprovalStatus{Phase: "Pending"},
+	}
+	return c.taskApprovalStore.Upsert(ctx, approval)
+}
+
 func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, system resources.AgentSystem) (map[string]string, error) {
 	if task == nil {
 		return nil, fmt.Errorf("task is required")
@@ -1199,6 +1746,7 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 	orlojCurrentDepth := parseOrlojDepthLabel(task.Metadata.Labels)
 	totalEstimatedTokens := 0
 	totalUsedTokens := 0
+	var lastAgentInputBefore map[string]string
 
 	output := map[string]string{
 		"system":            system.Metadata.Name,
@@ -1230,6 +1778,8 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 
 	runtimeInput := copyStringMap(task.Spec.Input)
 	for idx, agentName := range order {
+		agentInputBefore := copyStringMap(runtimeInput)
+		lastAgentInputBefore = copyStringMap(agentInputBefore)
 		agent, ok, err := c.agentStore.Get(ctx, store.ScopedName(task.Metadata.Namespace, agentName))
 		if err != nil {
 			return nil, err
@@ -1427,6 +1977,18 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 		output[prefix+".tokens_used"] = strconv.Itoa(result.TokensUsed)
 		output[prefix+".token_usage_source"] = strings.TrimSpace(result.TokenSource)
 		output[prefix+".last_event"] = result.LastEvent
+		task.Status.Output = copyStringMap(output)
+
+		nextRuntimeInput := copyStringMap(runtimeInput)
+		delete(nextRuntimeInput, "review.feedback")
+		delete(nextRuntimeInput, "review.previous_output")
+		delete(nextRuntimeInput, "review.checkpoint_id")
+		delete(nextRuntimeInput, "review.cycle")
+		delete(nextRuntimeInput, "review.requested_by")
+		delete(nextRuntimeInput, "review.supersedes")
+		nextRuntimeInput["previous_agent"] = result.Agent
+		nextRuntimeInput["previous_agent_last_event"] = result.LastEvent
+		var plannedMessage *resources.TaskMessage
 
 		if idx+1 < len(order) {
 			nextAgent := order[idx+1]
@@ -1445,8 +2007,59 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 				Content:   content,
 			}
 			c.populateTaskMessageMetadata(task, &message, idx)
-			c.appendTaskMessage(task, message)
-			if err := c.publishAgentMessage(ctx, task, message); err != nil {
+			output[prefix+".message_to"] = nextAgent
+			output[prefix+".message_content"] = content
+			nextRuntimeInput["inbox.from"] = result.Agent
+			nextRuntimeInput["inbox.to"] = nextAgent
+			nextRuntimeInput["inbox.content"] = content
+			nextRuntimeInput["inbox.message_id"] = message.MessageID
+			nextRuntimeInput["inbox.trace_id"] = message.TraceID
+			nextRuntimeInput["inbox.branch_id"] = message.BranchID
+			nextRuntimeInput["inbox.parent_branch_id"] = message.ParentBranchID
+			plannedMessage = &message
+		}
+
+		if checkpoint := reviewCheckpointForNode(system, agentName); checkpoint != nil && c.taskApprovalStore != nil {
+			reviewCycle, supersedes := reviewCycleFromInput(runtimeInput)
+			approvalOutput := strings.TrimSpace(result.Output)
+			if approvalOutput == "" {
+				approvalOutput = strings.TrimSpace(result.LastEvent)
+			}
+			approval, err := c.createTaskApprovalForCheckpoint(
+				ctx,
+				task,
+				*checkpoint,
+				"agent_output",
+				result.Agent,
+				approvalOutput,
+				"text",
+				resources.TaskApprovalResumeContext{
+					Mode:              "sequential",
+					Action:            "sequential_continue",
+					System:            strings.TrimSpace(task.Spec.System),
+					ProducingAgent:    result.Agent,
+					RuntimeInput:      agentInputBefore,
+					NextRuntimeInput:  nextRuntimeInput,
+					Output:            copyStringMap(output),
+					CurrentAgentIndex: idx,
+					NextAgentIndex:    idx + 1,
+				},
+				reviewCycle,
+				supersedes,
+			)
+			if err != nil {
+				return nil, err
+			}
+			task.Status.Output = copyStringMap(output)
+			return nil, &taskApprovalPauseError{
+				approvalName: approval.Metadata.Name,
+				reason:       fmt.Sprintf("task output review pending: %s", checkpoint.CheckpointID),
+			}
+		}
+
+		if plannedMessage != nil {
+			c.appendTaskMessage(task, *plannedMessage)
+			if err := c.publishAgentMessage(ctx, task, *plannedMessage); err != nil {
 				c.appendTaskTrace(task, resources.TaskTraceEvent{
 					Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 					Type:      "agent_message_error",
@@ -1459,24 +2072,13 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 				Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 				Type:      "agent_message",
 				Agent:     result.Agent,
-				BranchID:  message.BranchID,
-				Message:   fmt.Sprintf("to=%s content=%s branch_id=%s", nextAgent, content, message.BranchID),
+				BranchID:  plannedMessage.BranchID,
+				Message:   fmt.Sprintf("to=%s content=%s branch_id=%s", plannedMessage.ToAgent, plannedMessage.Content, plannedMessage.BranchID),
 			})
-			c.appendTaskLog(taskScopedName(*task), fmt.Sprintf("agent message: %s -> %s content=%s", result.Agent, nextAgent, content))
-
-			output[prefix+".message_to"] = nextAgent
-			output[prefix+".message_content"] = content
-			runtimeInput["inbox.from"] = result.Agent
-			runtimeInput["inbox.to"] = nextAgent
-			runtimeInput["inbox.content"] = content
-			runtimeInput["inbox.message_id"] = message.MessageID
-			runtimeInput["inbox.trace_id"] = message.TraceID
-			runtimeInput["inbox.branch_id"] = message.BranchID
-			runtimeInput["inbox.parent_branch_id"] = message.ParentBranchID
+			c.appendTaskLog(taskScopedName(*task), fmt.Sprintf("agent message: %s -> %s content=%s", result.Agent, plannedMessage.ToAgent, plannedMessage.Content))
 		}
 
-		runtimeInput["previous_agent"] = result.Agent
-		runtimeInput["previous_agent_last_event"] = result.LastEvent
+		runtimeInput = nextRuntimeInput
 	}
 
 	output["agents_executed"] = strconv.Itoa(len(order))
@@ -1500,6 +2102,373 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 		Message:   fmt.Sprintf("agents=%s tokens_used_total=%d tokens_estimated_total=%d", output["agents_executed"], totalUsedTokens, totalEstimatedTokens),
 		Tokens:    totalUsedTokens,
 	})
+	task.Status.Output = copyStringMap(output)
+	if system.Spec.CompletionReview != nil && c.taskApprovalStore != nil {
+		lastAgent := ""
+		if len(order) > 0 {
+			lastAgent = order[len(order)-1]
+		}
+		completionInput := copyStringMap(runtimeInput)
+		if len(lastAgentInputBefore) > 0 {
+			completionInput = copyStringMap(lastAgentInputBefore)
+		}
+		reviewCycle, supersedes := reviewCycleFromInput(completionInput)
+		approval, err := c.createTaskApprovalForCheckpoint(
+			ctx,
+			task,
+			*system.Spec.CompletionReview,
+			"task_output",
+			lastAgent,
+			copyStringMap(output),
+			"json",
+			resources.TaskApprovalResumeContext{
+				Mode:              "sequential",
+				Action:            "sequential_finalize",
+				System:            strings.TrimSpace(task.Spec.System),
+				ProducingAgent:    lastAgent,
+				RuntimeInput:      copyStringMap(completionInput),
+				NextRuntimeInput:  copyStringMap(completionInput),
+				Output:            copyStringMap(output),
+				CurrentAgentIndex: len(order) - 1,
+				NextAgentIndex:    len(order),
+			},
+			reviewCycle,
+			supersedes,
+		)
+		if err != nil {
+			return nil, err
+		}
+		return nil, &taskApprovalPauseError{
+			approvalName: approval.Metadata.Name,
+			reason:       fmt.Sprintf("task output review pending: %s", system.Spec.CompletionReview.CheckpointID),
+		}
+	}
+	return output, nil
+}
+
+func (c *TaskController) executeTaskFromResume(
+	ctx context.Context,
+	task *resources.Task,
+	system resources.AgentSystem,
+	order []string,
+	startIndex int,
+	runtimeInput map[string]string,
+	output map[string]string,
+) (map[string]string, error) {
+	if task == nil {
+		return nil, fmt.Errorf("task is required")
+	}
+	if len(order) == 0 {
+		order = executionOrder(system)
+	}
+	if len(order) == 0 {
+		return nil, fmt.Errorf("cannot derive execution order from agentsystem %q", system.Metadata.Name)
+	}
+	if startIndex < 0 {
+		startIndex = 0
+	}
+	if startIndex >= len(order) {
+		return copyStringMap(output), nil
+	}
+	if runtimeInput == nil {
+		runtimeInput = copyStringMap(task.Spec.Input)
+	}
+	if output == nil {
+		output = map[string]string{}
+	}
+	if output["system"] == "" {
+		output["system"] = system.Metadata.Name
+	}
+	if output["priority"] == "" {
+		output["priority"] = task.Spec.Priority
+	}
+	if output["execution_order"] == "" {
+		output["execution_order"] = strings.Join(order, " -> ")
+	}
+	if output["result"] == "" {
+		output["result"] = "executed"
+	}
+	if output["topic"] == "" {
+		if topic, ok := task.Spec.Input["topic"]; ok {
+			output["topic"] = topic
+		}
+	}
+
+	var allPolicies []resources.AgentPolicy
+	if c.policyStore != nil {
+		if listed, err := c.policyStore.List(ctx); err == nil {
+			allPolicies = listed
+		}
+	}
+	policies := agentruntime.MatchedPolicies(*task, system, allPolicies)
+	tokenBudget := agentruntime.MinimumTokenBudget(policies)
+	orlojMaxDepth := agentruntime.MinimumChildDepth(policies)
+	orlojMaxChildren := agentruntime.MinimumChildTasks(policies)
+	orlojCurrentDepth := parseOrlojDepthLabel(task.Metadata.Labels)
+	totalEstimatedTokens, _ := strconv.Atoi(strings.TrimSpace(output["tokens_estimated_total"]))
+	totalUsedTokens, _ := strconv.Atoi(strings.TrimSpace(output["tokens_used_total"]))
+	var lastAgentInputBefore map[string]string
+
+	c.appendTaskTrace(task, resources.TaskTraceEvent{
+		Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+		Type:      "task_resume",
+		Message:   fmt.Sprintf("system=%s start_index=%d", system.Metadata.Name, startIndex),
+	})
+
+	for idx := startIndex; idx < len(order); idx++ {
+		agentName := order[idx]
+		agentInputBefore := copyStringMap(runtimeInput)
+		lastAgentInputBefore = copyStringMap(agentInputBefore)
+		agent, ok, err := c.agentStore.Get(ctx, store.ScopedName(task.Metadata.Namespace, agentName))
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return nil, fmt.Errorf("agent %q not found", agentName)
+		}
+		_, effectiveModel, err := resolveAgentEffectiveModel(ctx, task.Metadata.Namespace, agent, c.modelEPStore)
+		if err != nil {
+			return nil, fmt.Errorf("agent %q model resolution failed: %w", agentName, err)
+		}
+		agent.Spec.Model = effectiveModel
+		if err := agentruntime.EnforcePoliciesForAgent(agent, effectiveModel, policies); err != nil {
+			return nil, err
+		}
+
+		var approvalCtx *agentruntime.GovernedToolApprovalContext
+		if c.toolApprovalStore != nil {
+			taskKey := taskScopedName(*task)
+			syncMsgID := fmt.Sprintf("sync/a%d/%s", task.Status.Attempts, agentName)
+			store := c.toolApprovalStore
+			approvalCtx = &agentruntime.GovernedToolApprovalContext{
+				Getter: func(key string) (resources.ToolApproval, bool, error) {
+					return store.Get(ctx, key)
+				},
+				TaskKey:   taskKey,
+				MessageID: syncMsgID,
+			}
+		}
+		toolRuntime := agentruntime.BuildGovernedToolRuntimeForAgentWithGovernance(
+			ctx,
+			nil,
+			c.isolatedTools,
+			c.toolStore,
+			c.roleStore,
+			c.toolPermStore,
+			task.Metadata.Namespace,
+			agent,
+			approvalCtx,
+		)
+		if c.mcpSessionMgr != nil && c.mcpServerStore != nil {
+			agentruntime.ConfigureMcpRuntime(toolRuntime, c.mcpSessionMgr, c.mcpServerStore, task.Metadata.Namespace)
+		}
+		agentruntime.ConfigureHttpRuntime(toolRuntime, c.cliSecretResolver, task.Metadata.Namespace)
+		agentruntime.ConfigureCliRuntime(toolRuntime, c.cliSecretResolver, nil, c.cliToolConfig, task.Metadata.Namespace)
+		agentruntime.ConfigureExternalRuntime(toolRuntime, c.cliSecretResolver, task.Metadata.Namespace)
+		agentruntime.ConfigureGRPCRuntime(toolRuntime, c.cliSecretResolver, task.Metadata.Namespace)
+		agentruntime.ConfigureWebhookCallbackRuntime(toolRuntime, c.cliSecretResolver, task.Metadata.Namespace)
+		var finalRT agentruntime.ToolRuntime = toolRuntime
+		if agentruntime.AgentHasOrlojTools(agent) {
+			finalRT = agentruntime.NewOrlojToolRuntime(toolRuntime, c.taskStore, agentruntime.OrlojToolConfig{
+				ParentNamespace: task.Metadata.Namespace,
+				ParentTaskName:  task.Metadata.Name,
+				CurrentDepth:    orlojCurrentDepth,
+				MaxDepth:        orlojMaxDepth,
+				MaxChildren:     orlojMaxChildren,
+			})
+			for _, name := range agentruntime.BuiltinOrlojToolNames() {
+				agent.Spec.Tools = append(agent.Spec.Tools, name)
+			}
+			agent.Spec.Tools = dedupeStringsController(agent.Spec.Tools)
+		}
+
+		result, err := c.executor.ExecuteAgentWithRuntime(ctx, agent, runtimeInput, finalRT)
+		if err != nil {
+			return nil, fmt.Errorf("agent %q execution failed: %w", agentName, err)
+		}
+
+		totalEstimatedTokens += result.EstimatedTokens
+		totalUsedTokens += result.TokensUsed
+		if tokenBudget > 0 && totalUsedTokens > tokenBudget {
+			return nil, fmt.Errorf("token budget exceeded after agent %q: used=%d budget=%d", agentName, totalUsedTokens, tokenBudget)
+		}
+
+		prefix := fmt.Sprintf("agent.%d", idx+1)
+		output[prefix+".name"] = result.Agent
+		output[prefix+".model"] = result.Model
+		output[prefix+".steps"] = strconv.Itoa(result.Steps)
+		output[prefix+".tool_calls"] = strconv.Itoa(result.ToolCalls)
+		output[prefix+".memory_writes"] = strconv.Itoa(result.MemoryWrites)
+		output[prefix+".duration_ms"] = strconv.FormatInt(result.Duration.Milliseconds(), 10)
+		output[prefix+".estimated_tokens"] = strconv.Itoa(result.EstimatedTokens)
+		output[prefix+".tokens_used"] = strconv.Itoa(result.TokensUsed)
+		output[prefix+".token_usage_source"] = strings.TrimSpace(result.TokenSource)
+		output[prefix+".last_event"] = result.LastEvent
+		output["tokens_used_total"] = strconv.Itoa(totalUsedTokens)
+		output["tokens_estimated_total"] = strconv.Itoa(totalEstimatedTokens)
+		task.Status.Output = copyStringMap(output)
+
+		nextRuntimeInput := copyStringMap(runtimeInput)
+		delete(nextRuntimeInput, "review.feedback")
+		delete(nextRuntimeInput, "review.previous_output")
+		delete(nextRuntimeInput, "review.checkpoint_id")
+		delete(nextRuntimeInput, "review.cycle")
+		delete(nextRuntimeInput, "review.requested_by")
+		delete(nextRuntimeInput, "review.supersedes")
+		nextRuntimeInput["previous_agent"] = result.Agent
+		nextRuntimeInput["previous_agent_last_event"] = result.LastEvent
+
+		if idx+1 < len(order) {
+			nextAgent := order[idx+1]
+			content := strings.TrimSpace(result.Output)
+			if content == "" {
+				content = strings.TrimSpace(result.LastEvent)
+			}
+			if content == "" {
+				content = fmt.Sprintf("steps=%d tool_calls=%d tokens=%d usage_source=%s", result.Steps, result.ToolCalls, result.TokensUsed, strings.TrimSpace(result.TokenSource))
+			}
+			message := resources.TaskMessage{
+				Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+				FromAgent: result.Agent,
+				ToAgent:   nextAgent,
+				Type:      "task_handoff",
+				Content:   content,
+			}
+			c.populateTaskMessageMetadata(task, &message, idx)
+			output[prefix+".message_to"] = nextAgent
+			output[prefix+".message_content"] = content
+			nextRuntimeInput["inbox.from"] = result.Agent
+			nextRuntimeInput["inbox.to"] = nextAgent
+			nextRuntimeInput["inbox.content"] = content
+			nextRuntimeInput["inbox.message_id"] = message.MessageID
+			nextRuntimeInput["inbox.trace_id"] = message.TraceID
+			nextRuntimeInput["inbox.branch_id"] = message.BranchID
+			nextRuntimeInput["inbox.parent_branch_id"] = message.ParentBranchID
+			if checkpoint := reviewCheckpointForNode(system, agentName); checkpoint != nil && c.taskApprovalStore != nil {
+				reviewCycle, supersedes := reviewCycleFromInput(runtimeInput)
+				approvalOutput := strings.TrimSpace(result.Output)
+				if approvalOutput == "" {
+					approvalOutput = strings.TrimSpace(result.LastEvent)
+				}
+				approval, err := c.createTaskApprovalForCheckpoint(
+					ctx,
+					task,
+					*checkpoint,
+					"agent_output",
+					result.Agent,
+					approvalOutput,
+					"text",
+					resources.TaskApprovalResumeContext{
+						Mode:              "sequential",
+						Action:            "sequential_continue",
+						System:            strings.TrimSpace(task.Spec.System),
+						ProducingAgent:    result.Agent,
+						RuntimeInput:      agentInputBefore,
+						NextRuntimeInput:  nextRuntimeInput,
+						Output:            copyStringMap(output),
+						CurrentAgentIndex: idx,
+						NextAgentIndex:    idx + 1,
+					},
+					reviewCycle,
+					supersedes,
+				)
+				if err != nil {
+					return nil, err
+				}
+				return nil, &taskApprovalPauseError{
+					approvalName: approval.Metadata.Name,
+					reason:       fmt.Sprintf("task output review pending: %s", checkpoint.CheckpointID),
+				}
+			}
+			c.appendTaskMessage(task, message)
+			if err := c.publishAgentMessage(ctx, task, message); err != nil {
+				return nil, err
+			}
+		} else if checkpoint := reviewCheckpointForNode(system, agentName); checkpoint != nil && c.taskApprovalStore != nil {
+			reviewCycle, supersedes := reviewCycleFromInput(runtimeInput)
+			approvalOutput := strings.TrimSpace(result.Output)
+			if approvalOutput == "" {
+				approvalOutput = strings.TrimSpace(result.LastEvent)
+			}
+			approval, err := c.createTaskApprovalForCheckpoint(
+				ctx,
+				task,
+				*checkpoint,
+				"agent_output",
+				result.Agent,
+				approvalOutput,
+				"text",
+				resources.TaskApprovalResumeContext{
+					Mode:              "sequential",
+					Action:            "sequential_continue",
+					System:            strings.TrimSpace(task.Spec.System),
+					ProducingAgent:    result.Agent,
+					RuntimeInput:      agentInputBefore,
+					NextRuntimeInput:  nextRuntimeInput,
+					Output:            copyStringMap(output),
+					CurrentAgentIndex: idx,
+					NextAgentIndex:    idx + 1,
+				},
+				reviewCycle,
+				supersedes,
+			)
+			if err != nil {
+				return nil, err
+			}
+			return nil, &taskApprovalPauseError{
+				approvalName: approval.Metadata.Name,
+				reason:       fmt.Sprintf("task output review pending: %s", checkpoint.CheckpointID),
+			}
+		}
+
+		runtimeInput = nextRuntimeInput
+	}
+
+	output["agents_executed"] = strconv.Itoa(len(order))
+	if tokenBudget > 0 {
+		remainingUsed := max(0, tokenBudget-totalUsedTokens)
+		remainingEstimated := max(0, tokenBudget-totalEstimatedTokens)
+		output["tokens_used_remaining"] = strconv.Itoa(remainingUsed)
+		output["tokens_estimated_remaining"] = strconv.Itoa(remainingEstimated)
+	}
+	task.Status.Output = copyStringMap(output)
+	if system.Spec.CompletionReview != nil && c.taskApprovalStore != nil {
+		lastAgent := order[len(order)-1]
+		completionInput := copyStringMap(runtimeInput)
+		if len(lastAgentInputBefore) > 0 {
+			completionInput = copyStringMap(lastAgentInputBefore)
+		}
+		reviewCycle, supersedes := reviewCycleFromInput(completionInput)
+		approval, err := c.createTaskApprovalForCheckpoint(
+			ctx,
+			task,
+			*system.Spec.CompletionReview,
+			"task_output",
+			lastAgent,
+			copyStringMap(output),
+			"json",
+			resources.TaskApprovalResumeContext{
+				Mode:              "sequential",
+				Action:            "sequential_finalize",
+				System:            strings.TrimSpace(task.Spec.System),
+				ProducingAgent:    lastAgent,
+				RuntimeInput:      copyStringMap(completionInput),
+				NextRuntimeInput:  copyStringMap(completionInput),
+				Output:            copyStringMap(output),
+				CurrentAgentIndex: len(order) - 1,
+				NextAgentIndex:    len(order),
+			},
+			reviewCycle,
+			supersedes,
+		)
+		if err != nil {
+			return nil, err
+		}
+		return nil, &taskApprovalPauseError{
+			approvalName: approval.Metadata.Name,
+			reason:       fmt.Sprintf("task output review pending: %s", system.Spec.CompletionReview.CheckpointID),
+		}
+	}
 	return output, nil
 }
 

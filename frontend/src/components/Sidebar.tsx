@@ -1,7 +1,7 @@
 import { useMemo, useEffect, useSyncExternalStore } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useAppStore } from "../store";
-import { useToolApprovals } from "../api/hooks";
+import { useToolApprovals, useTaskApprovals } from "../api/hooks";
 import clsx from "clsx";
 
 const mqMobile = typeof window !== "undefined" ? window.matchMedia("(max-width: 768px)") : null;
@@ -74,6 +74,7 @@ export function Sidebar({ nativeAuthEnabled = false, username }: SidebarProps) {
   const sidebarOpen = useAppStore((s) => s.sidebarOpen);
   const setSidebarOpen = useAppStore((s) => s.setSidebarOpen);
   const approvals = useToolApprovals();
+  const taskApprovals = useTaskApprovals();
   const location = useLocation();
   const isMobile = useIsMobile();
   const collapsed = isMobile ? false : storeCollapsed;
@@ -90,8 +91,10 @@ export function Sidebar({ nativeAuthEnabled = false, username }: SidebarProps) {
   }, [setSidebarOpen]);
 
   const pendingCount = useMemo(() => {
-    return (approvals.data ?? []).filter((a) => (a.status?.phase ?? "Pending").toLowerCase() === "pending").length;
-  }, [approvals.data]);
+    const toolPending = (approvals.data ?? []).filter((a) => (a.status?.phase ?? "Pending").toLowerCase() === "pending").length;
+    const taskPending = (taskApprovals.data ?? []).filter((a) => (a.status?.phase ?? "Pending").toLowerCase() === "pending").length;
+    return toolPending + taskPending;
+  }, [approvals.data, taskApprovals.data]);
 
   let lastGroup: string | undefined;
 

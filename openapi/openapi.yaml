@@ -35,6 +35,7 @@ tags:
 - name: agent-roles
 - name: tool-permissions
 - name: tool-approvals
+- name: task-approvals
 - name: tasks
 - name: task-schedules
 - name: task-webhooks
@@ -3148,6 +3149,367 @@ paths:
             text/plain:
               schema:
                 "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/task-approvals":
+    get:
+      tags:
+      - task-approvals
+      parameters:
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+      - name: after
+        in: query
+        schema:
+          type: string
+      - name: labelSelector
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/task-approval.yaml#/components/schemas/TaskApprovalList"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    post:
+      tags:
+      - task-approvals
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/task-approval.yaml#/components/schemas/TaskApproval"
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/task-approval.yaml#/components/schemas/TaskApproval"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/task-approvals/{name}":
+    get:
+      tags:
+      - task-approvals
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/task-approval.yaml#/components/schemas/TaskApproval"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    delete:
+      tags:
+      - task-approvals
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    put:
+      tags:
+      - task-approvals
+      summary: Not supported
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '405':
+          description: Method not allowed
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/task-approvals/{name}/approve":
+    post:
+      tags:
+      - task-approvals
+      summary: Approve pending task review
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/common.yaml#/components/schemas/TaskApprovalDecisionRequest"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/task-approval.yaml#/components/schemas/TaskApproval"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/task-approvals/{name}/deny":
+    post:
+      tags:
+      - task-approvals
+      summary: Deny pending task review
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/common.yaml#/components/schemas/TaskApprovalDecisionRequest"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/task-approval.yaml#/components/schemas/TaskApproval"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/task-approvals/{name}/request-changes":
+    post:
+      tags:
+      - task-approvals
+      summary: Request changes on pending task review
+      description: Reruns the producing agent with reviewer feedback. Requires `comment`
+        or the legacy `reason` field and returns `409 Conflict` when the checkpoint
+        disables request_changes or has reached max_review_cycles.
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/common.yaml#/components/schemas/TaskApprovalRequestChangesRequest"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/task-approval.yaml#/components/schemas/TaskApproval"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
   "/v1/tasks":
     get:
       tags:
@@ -3201,23 +3563,6 @@ paths:
     post:
       tags:
       - tasks
-      summary: Create or upsert a Task
-      description: |
-        Creates a new Task or updates an existing one. When `rerun=true` is set
-        and a task with the same name already exists in a terminal phase
-        (DeadLetter, Failed, or Succeeded), a new task instance is created with
-        a unique name (`<name>-run-<timestamp>`) and `orloj.dev/source-task`
-        label linking back to the original. The original task is preserved.
-        Returns 409 if `rerun=true` and the existing task is still active.
-      parameters:
-      - name: rerun
-        in: query
-        description: |
-          When true and the task already exists in a terminal phase, create a
-          new instance instead of upserting. Returns 409 if the task is active.
-        schema:
-          type: boolean
-          default: false
       security:
       - bearerAuth: []
       - sessionCookie: []
@@ -3229,19 +3574,13 @@ paths:
               "$ref": "./schemas/task.yaml#/components/schemas/Task"
       responses:
         '201':
-          description: Created (or new rerun instance created)
+          description: Created
           content:
             application/json:
               schema:
                 "$ref": "./schemas/task.yaml#/components/schemas/Task"
         '400':
           description: Bad request
-          content:
-            text/plain:
-              schema:
-                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
-        '409':
-          description: Task is still active and cannot be rerun
           content:
             text/plain:
               schema:

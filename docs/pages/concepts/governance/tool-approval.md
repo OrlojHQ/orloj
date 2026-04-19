@@ -2,6 +2,8 @@
 
 A **ToolApproval** captures a pending human/system approval request for a tool invocation that was flagged by a [ToolPermission](./tool-permission.md) `operation_rules` verdict of `approval_required`.
 
+`ToolApproval` is about authorizing a tool action. If you need human review of agent output or final task output, use [TaskApproval](./task-approval.md).
+
 ## How the Approval Workflow Works
 
 When a tool call is flagged as `approval_required`:
@@ -52,6 +54,7 @@ spec:
 | `decision` | `approved` or `denied`. |
 | `decided_by` | Identity of the approver/denier. |
 | `decided_at` | Timestamp of the decision. |
+| `comment` | Optional reviewer comment. |
 | `expires_at` | Timestamp when the approval expires. |
 
 ## API Endpoints
@@ -60,11 +63,12 @@ spec:
 - `GET /v1/tool-approvals` -- list approval requests.
 - `GET /v1/tool-approvals/{name}` -- get a specific approval.
 - `DELETE /v1/tool-approvals/{name}` -- delete an approval.
-- `POST /v1/tool-approvals/{name}/approve` -- approve a pending request. Body: `{"decided_by": "...", "reason": "..."}` (`reason` optional).
-- `POST /v1/tool-approvals/{name}/deny` -- deny a pending request. Body: `{"decided_by": "...", "reason": "..."}` (`reason` optional).
+- `POST /v1/tool-approvals/{name}/approve` -- approve a pending request. Body: `{"decided_by": "...", "comment": "..."}` (`comment` optional; `reason` remains a compatibility alias).
+- `POST /v1/tool-approvals/{name}/deny` -- deny a pending request. Body: `{"decided_by": "...", "comment": "..."}` (`comment` optional; `reason` remains a compatibility alias).
 
 ## Related
 
 - [ToolPermission](./tool-permission.md) -- defines which operations require approval
+- [TaskApproval](./task-approval.md) -- review task or agent output instead of tool execution
 - [Governance Overview](./) -- how the governance resources work together
 - [Resource Reference: ToolApproval](../../reference/resources/tool-approval.md)

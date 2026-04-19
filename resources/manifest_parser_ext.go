@@ -131,6 +131,14 @@ func ParseAgentSystemManifest(data []byte) (AgentSystem, error) {
 				currentGraphEdgeIndex = -1
 				delegateNestedSection = ""
 				currentDelegateIndex = -1
+			case section == "spec" && key == "completion_review":
+				subsection = "completion_review"
+				currentGraphNode = ""
+				graphNodeSection = ""
+				edgeNestedSection = ""
+				currentGraphEdgeIndex = -1
+				delegateNestedSection = ""
+				currentDelegateIndex = -1
 			case section == "metadata" && key == "labels":
 				subsection = "labels"
 				currentGraphNode = ""
@@ -155,6 +163,14 @@ func ParseAgentSystemManifest(data []byte) (AgentSystem, error) {
 				}
 				if currentGraphNode != "" && indent >= 6 && (key == "delegate_join" || key == "delegateJoin") {
 					graphNodeSection = "delegate_join"
+					delegateNestedSection = ""
+					currentDelegateIndex = -1
+					break
+				}
+				if currentGraphNode != "" && indent >= 6 && key == "review" {
+					graphNodeSection = "review"
+					edgeNestedSection = ""
+					currentGraphEdgeIndex = -1
 					delegateNestedSection = ""
 					currentDelegateIndex = -1
 					break
@@ -287,32 +303,32 @@ func ParseAgentSystemManifest(data []byte) (AgentSystem, error) {
 						route.Policy = make(map[string]string)
 					}
 					route.Policy[key] = value
-			case "condition":
-				if route.Condition == nil {
-					route.Condition = &EdgeCondition{}
-				}
-				switch key {
-				case "output_contains", "outputContains":
-					route.Condition.OutputContains = value
-				case "output_not_contains", "outputNotContains":
-					route.Condition.OutputNotContains = value
-				case "output_matches", "outputMatches":
-					route.Condition.OutputMatches = value
-				case "default":
-					route.Condition.Default = strings.EqualFold(value, "true") || value == "1"
-				case "output_json_path", "outputJsonPath":
-					route.Condition.OutputJSONPath = value
-				case "equals":
-					route.Condition.Equals = value
-				case "not_equals", "notEquals":
-					route.Condition.NotEquals = value
-				case "contains":
-					route.Condition.Contains = value
-				case "greater_than", "greaterThan":
-					route.Condition.GreaterThan = value
-				case "less_than", "lessThan":
-					route.Condition.LessThan = value
-				}
+				case "condition":
+					if route.Condition == nil {
+						route.Condition = &EdgeCondition{}
+					}
+					switch key {
+					case "output_contains", "outputContains":
+						route.Condition.OutputContains = value
+					case "output_not_contains", "outputNotContains":
+						route.Condition.OutputNotContains = value
+					case "output_matches", "outputMatches":
+						route.Condition.OutputMatches = value
+					case "default":
+						route.Condition.Default = strings.EqualFold(value, "true") || value == "1"
+					case "output_json_path", "outputJsonPath":
+						route.Condition.OutputJSONPath = value
+					case "equals":
+						route.Condition.Equals = value
+					case "not_equals", "notEquals":
+						route.Condition.NotEquals = value
+					case "contains":
+						route.Condition.Contains = value
+					case "greater_than", "greaterThan":
+						route.Condition.GreaterThan = value
+					case "less_than", "lessThan":
+						route.Condition.LessThan = value
+					}
 				default:
 					if key == "to" || key == "next" {
 						route.To = value
@@ -387,12 +403,26 @@ func ParseAgentSystemManifest(data []byte) (AgentSystem, error) {
 					}
 					node.DelegateJoin.QuorumPercent = v
 				}
+			case graphNodeSection == "review":
+				if node.Review == nil {
+					node.Review = &ReviewCheckpointSpec{}
+				}
+				if err := applyReviewCheckpointField(node.Review, key, value); err != nil {
+					return AgentSystem{}, fmt.Errorf("spec.graph.%s.review: %w", currentGraphNode, err)
+				}
 			default:
 				if key == "next" {
 					node.Next = value
 				}
 			}
 			out.Spec.Graph[currentGraphNode] = node
+		case section == "spec" && subsection == "completion_review":
+			if out.Spec.CompletionReview == nil {
+				out.Spec.CompletionReview = &ReviewCheckpointSpec{}
+			}
+			if err := applyReviewCheckpointField(out.Spec.CompletionReview, key, value); err != nil {
+				return AgentSystem{}, fmt.Errorf("spec.completion_review: %w", err)
+			}
 		}
 	}
 
@@ -400,6 +430,32 @@ func ParseAgentSystemManifest(data []byte) (AgentSystem, error) {
 		return AgentSystem{}, err
 	}
 	return out, nil
+}
+
+func applyReviewCheckpointField(spec *ReviewCheckpointSpec, key, value string) error {
+	if spec == nil {
+		return nil
+	}
+	switch key {
+	case "checkpoint_id", "checkpointId":
+		spec.CheckpointID = value
+	case "display_name", "displayName":
+		spec.DisplayName = value
+	case "reason":
+		spec.Reason = value
+	case "ttl":
+		spec.TTL = value
+	case "allow_request_changes", "allowRequestChanges":
+		parsed := strings.EqualFold(value, "true") || value == "1"
+		spec.AllowRequestChanges = &parsed
+	case "max_review_cycles", "maxReviewCycles":
+		v, err := strconv.Atoi(value)
+		if err != nil {
+			return fmt.Errorf("invalid %s value %q", key, value)
+		}
+		spec.MaxReviewCycles = v
+	}
+	return nil
 }
 
 // ParseToolManifest parses Tool resources from JSON or constrained YAML.
@@ -460,101 +516,101 @@ func ParseToolManifest(data []byte) (Tool, error) {
 					subsection = "auth"
 					runtimeSubsection = ""
 				}
-		case "capabilities":
-			if section == "spec" {
-				subsection = "capabilities"
-				runtimeSubsection = ""
-			}
-		case "operation_classes", "operationClasses":
-			if section == "spec" {
-				subsection = "operation_classes"
-				runtimeSubsection = ""
-			}
-		case "scopes":
-			if section == "spec" && subsection == "auth" {
-				runtimeSubsection = "scopes"
-			}
-		case "runtime":
-			if section == "spec" {
-				subsection = "runtime"
-				runtimeSubsection = ""
-			}
-		case "retry":
-			if section == "spec" && subsection == "runtime" {
-				runtimeSubsection = "retry"
-			}
-		case "input_schema", "inputSchema":
-			if section == "spec" {
-				subsection = "input_schema"
-				runtimeSubsection = ""
-			}
-		case "cli":
-			if section == "spec" {
-				subsection = "cli"
-				runtimeSubsection = ""
-			}
-		case "args":
-			if section == "spec" && subsection == "cli" {
-				runtimeSubsection = "args"
-			}
-		case "env":
-			if section == "spec" && subsection == "cli" {
-				runtimeSubsection = "env"
-			}
-		case "env_from", "envFrom":
-			if section == "spec" && subsection == "cli" {
-				runtimeSubsection = "env_from"
-			}
-		}
-		continue
-	}
-
-	if section == "spec" && subsection == "capabilities" && strings.HasPrefix(trimmed, "- ") {
-		out.Spec.Capabilities = append(out.Spec.Capabilities, stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))))
-		continue
-	}
-
-	if section == "spec" && subsection == "operation_classes" && strings.HasPrefix(trimmed, "- ") {
-		out.Spec.OperationClasses = append(out.Spec.OperationClasses, stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))))
-		continue
-	}
-
-	if section == "spec" && subsection == "auth" && runtimeSubsection == "scopes" && strings.HasPrefix(trimmed, "- ") {
-		out.Spec.Auth.Scopes = append(out.Spec.Auth.Scopes, stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))))
-		continue
-	}
-
-	if section == "spec" && subsection == "cli" && runtimeSubsection == "args" && strings.HasPrefix(trimmed, "- ") {
-		out.Spec.Cli.Args = append(out.Spec.Cli.Args, stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))))
-		continue
-	}
-
-	if section == "spec" && subsection == "cli" && runtimeSubsection == "env_from" && strings.HasPrefix(trimmed, "- ") {
-		item := strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))
-		k, v, ok := parseKeyValue(item)
-		if ok && (k == "name") {
-			out.Spec.Cli.EnvFrom = append(out.Spec.Cli.EnvFrom, ToolCliEnvRef{Name: stripQuotes(v)})
-		}
-		continue
-	}
-
-	if section == "spec" && subsection == "cli" && runtimeSubsection == "env_from" && !strings.HasPrefix(trimmed, "- ") {
-		if len(out.Spec.Cli.EnvFrom) > 0 {
-			k, v, ok := parseKeyValue(trimmed)
-			if ok {
-				last := &out.Spec.Cli.EnvFrom[len(out.Spec.Cli.EnvFrom)-1]
-				switch k {
-				case "name":
-					last.Name = stripQuotes(v)
-				case "secretRef", "secret_ref":
-					last.SecretRef = stripQuotes(v)
-				case "key":
-					last.Key = stripQuotes(v)
+			case "capabilities":
+				if section == "spec" {
+					subsection = "capabilities"
+					runtimeSubsection = ""
+				}
+			case "operation_classes", "operationClasses":
+				if section == "spec" {
+					subsection = "operation_classes"
+					runtimeSubsection = ""
+				}
+			case "scopes":
+				if section == "spec" && subsection == "auth" {
+					runtimeSubsection = "scopes"
+				}
+			case "runtime":
+				if section == "spec" {
+					subsection = "runtime"
+					runtimeSubsection = ""
+				}
+			case "retry":
+				if section == "spec" && subsection == "runtime" {
+					runtimeSubsection = "retry"
+				}
+			case "input_schema", "inputSchema":
+				if section == "spec" {
+					subsection = "input_schema"
+					runtimeSubsection = ""
+				}
+			case "cli":
+				if section == "spec" {
+					subsection = "cli"
+					runtimeSubsection = ""
+				}
+			case "args":
+				if section == "spec" && subsection == "cli" {
+					runtimeSubsection = "args"
+				}
+			case "env":
+				if section == "spec" && subsection == "cli" {
+					runtimeSubsection = "env"
+				}
+			case "env_from", "envFrom":
+				if section == "spec" && subsection == "cli" {
+					runtimeSubsection = "env_from"
 				}
 			}
+			continue
 		}
-		continue
-	}
+
+		if section == "spec" && subsection == "capabilities" && strings.HasPrefix(trimmed, "- ") {
+			out.Spec.Capabilities = append(out.Spec.Capabilities, stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))))
+			continue
+		}
+
+		if section == "spec" && subsection == "operation_classes" && strings.HasPrefix(trimmed, "- ") {
+			out.Spec.OperationClasses = append(out.Spec.OperationClasses, stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))))
+			continue
+		}
+
+		if section == "spec" && subsection == "auth" && runtimeSubsection == "scopes" && strings.HasPrefix(trimmed, "- ") {
+			out.Spec.Auth.Scopes = append(out.Spec.Auth.Scopes, stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))))
+			continue
+		}
+
+		if section == "spec" && subsection == "cli" && runtimeSubsection == "args" && strings.HasPrefix(trimmed, "- ") {
+			out.Spec.Cli.Args = append(out.Spec.Cli.Args, stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))))
+			continue
+		}
+
+		if section == "spec" && subsection == "cli" && runtimeSubsection == "env_from" && strings.HasPrefix(trimmed, "- ") {
+			item := strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))
+			k, v, ok := parseKeyValue(item)
+			if ok && (k == "name") {
+				out.Spec.Cli.EnvFrom = append(out.Spec.Cli.EnvFrom, ToolCliEnvRef{Name: stripQuotes(v)})
+			}
+			continue
+		}
+
+		if section == "spec" && subsection == "cli" && runtimeSubsection == "env_from" && !strings.HasPrefix(trimmed, "- ") {
+			if len(out.Spec.Cli.EnvFrom) > 0 {
+				k, v, ok := parseKeyValue(trimmed)
+				if ok {
+					last := &out.Spec.Cli.EnvFrom[len(out.Spec.Cli.EnvFrom)-1]
+					switch k {
+					case "name":
+						last.Name = stripQuotes(v)
+					case "secretRef", "secret_ref":
+						last.SecretRef = stripQuotes(v)
+					case "key":
+						last.Key = stripQuotes(v)
+					}
+				}
+			}
+			continue
+		}
 
 		key, value, ok := parseKeyValue(trimmed)
 		if !ok {
@@ -1322,6 +1378,179 @@ func ParseToolApprovalManifest(data []byte) (ToolApproval, error) {
 
 	if err := out.Normalize(); err != nil {
 		return ToolApproval{}, err
+	}
+	return out, nil
+}
+
+// ParseTaskApprovalManifest parses TaskApproval resources from JSON or constrained YAML.
+func ParseTaskApprovalManifest(data []byte) (TaskApproval, error) {
+	var out TaskApproval
+	if json.Valid(data) {
+		if err := json.Unmarshal(data, &out); err != nil {
+			return TaskApproval{}, fmt.Errorf("failed to decode JSON manifest: %w", err)
+		}
+		if err := out.Normalize(); err != nil {
+			return TaskApproval{}, err
+		}
+		return out, nil
+	}
+
+	lines := strings.Split(strings.ReplaceAll(string(data), "\r\n", "\n"), "\n")
+	section := ""
+	subsection := ""
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		indent := leadingSpaces(line)
+		if section == "metadata" && indent <= 2 && !strings.HasSuffix(trimmed, ":") && !strings.HasPrefix(trimmed, "- ") {
+			subsection = ""
+		}
+		if (section == "spec" || section == "status") && indent <= 2 && !strings.HasSuffix(trimmed, ":") && !strings.HasPrefix(trimmed, "- ") {
+			subsection = ""
+		}
+
+		if strings.HasSuffix(trimmed, ":") {
+			switch strings.TrimSuffix(trimmed, ":") {
+			case "metadata":
+				section = "metadata"
+				subsection = ""
+			case "spec":
+				section = "spec"
+				subsection = ""
+			case "status":
+				section = "status"
+				subsection = ""
+			case "labels":
+				if section == "metadata" {
+					subsection = "labels"
+				}
+			}
+			continue
+		}
+
+		key, value, ok := parseKeyValue(trimmed)
+		if !ok {
+			continue
+		}
+		value = stripQuotes(value)
+
+		switch {
+		case key == "apiVersion":
+			out.APIVersion = value
+		case key == "kind":
+			out.Kind = value
+		case section == "metadata" && subsection == "labels" && indent >= 4:
+			if out.Metadata.Labels == nil {
+				out.Metadata.Labels = make(map[string]string)
+			}
+			out.Metadata.Labels[key] = value
+		case section == "metadata":
+			if err := applyObjectMetaField(&out.Metadata, key, value); err != nil {
+				return TaskApproval{}, err
+			}
+		case section == "spec":
+			switch key {
+			case "task_ref", "taskRef":
+				out.Spec.TaskRef = value
+			case "checkpoint_id", "checkpointId":
+				out.Spec.CheckpointID = value
+			case "checkpoint_type", "checkpointType":
+				out.Spec.CheckpointType = value
+			case "agent":
+				out.Spec.Agent = value
+			case "reason":
+				out.Spec.Reason = value
+			case "ttl":
+				out.Spec.TTL = value
+			case "allow_request_changes", "allowRequestChanges":
+				parsed := strings.EqualFold(value, "true")
+				out.Spec.AllowRequestChanges = &parsed
+			case "max_review_cycles", "maxReviewCycles":
+				v, err := strconv.Atoi(value)
+				if err != nil {
+					return TaskApproval{}, fmt.Errorf("invalid spec.max_review_cycles value %q", value)
+				}
+				out.Spec.MaxReviewCycles = v
+			case "review_cycle", "reviewCycle":
+				v, err := strconv.Atoi(value)
+				if err != nil {
+					return TaskApproval{}, fmt.Errorf("invalid spec.review_cycle value %q", value)
+				}
+				out.Spec.ReviewCycle = v
+			case "supersedes":
+				out.Spec.Supersedes = value
+			case "output":
+				out.Spec.Output = value
+			case "output_format", "outputFormat":
+				out.Spec.OutputFormat = value
+			}
+		case section == "status":
+			switch key {
+			case "phase":
+				out.Status.Phase = value
+			case "decision":
+				out.Status.Decision = value
+			case "decided_by", "decidedBy":
+				out.Status.DecidedBy = value
+			case "decided_at", "decidedAt":
+				out.Status.DecidedAt = value
+			case "comment":
+				out.Status.Comment = value
+			case "expires_at", "expiresAt":
+				out.Status.ExpiresAt = value
+			}
+		}
+	}
+
+	if len(out.Spec.ResumeContext) == 0 || out.Spec.Output == nil {
+		for i, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			ind := leadingSpaces(line)
+			var target *map[string]any
+			switch {
+			case trimmed == "resume_context:" || trimmed == "resumeContext:":
+				target = &out.Spec.ResumeContext
+			case trimmed == "output:" && out.Spec.Output == nil:
+				target = nil
+			default:
+				continue
+			}
+
+			blockIndent := -1
+			var blockLines []string
+			for j := i + 1; j < len(lines); j++ {
+				ct := strings.TrimSpace(lines[j])
+				if ct == "" || strings.HasPrefix(ct, "#") {
+					continue
+				}
+				ci := leadingSpaces(lines[j])
+				if ci <= ind {
+					break
+				}
+				if blockIndent < 0 {
+					blockIndent = ci
+				}
+				if ci < blockIndent {
+					break
+				}
+				blockLines = append(blockLines, lines[j])
+			}
+			if blockIndent <= 0 || len(blockLines) == 0 {
+				continue
+			}
+			parsed := parseSimpleYAMLMap(blockLines, blockIndent)
+			if target != nil && len(*target) == 0 {
+				*target = parsed
+			} else if trimmed == "output:" && out.Spec.Output == nil {
+				out.Spec.Output = parsed
+			}
+		}
+	}
+
+	if err := out.Normalize(); err != nil {
+		return TaskApproval{}, err
 	}
 	return out, nil
 }

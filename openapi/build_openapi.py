@@ -474,6 +474,126 @@ def build() -> dict:
             }
         }
 
+    paths["/v1/task-approvals"] = {
+        "get": list_op(
+            "task-approvals",
+            "./schemas/task-approval.yaml#/components/schemas/TaskApprovalList",
+        ),
+        "post": post_create(
+            "task-approvals",
+            "./schemas/task-approval.yaml#/components/schemas/TaskApproval",
+        ),
+    }
+    paths["/v1/task-approvals/{name}"] = {
+        "get": get_one(
+            "task-approvals",
+            "./schemas/task-approval.yaml#/components/schemas/TaskApproval",
+        ),
+        "delete": delete_one("task-approvals"),
+        "put": {
+            "tags": ["task-approvals"],
+            "summary": "Not supported",
+            "parameters": [
+                {"name": "name", "in": "path", "required": True,
+                    "schema": {"type": "string"}}
+            ],
+            "security": SEC_WRITER,
+            "responses": {
+                "405": {
+                    "description": "Method not allowed",
+                    "content": text_plain_error(),
+                },
+                "default": {"description": "Error", "content": text_plain_error()},
+            },
+        },
+    }
+    for suf, title in [
+        ("approve", "Approve pending task review"),
+        ("deny", "Deny pending task review"),
+    ]:
+        paths[f"/v1/task-approvals/{{name}}/{suf}"] = {
+            "post": {
+                "tags": ["task-approvals"],
+                "summary": title,
+                "parameters": [
+                    {
+                        "name": "name",
+                        "in": "path",
+                        "required": True,
+                        "schema": {"type": "string"},
+                    },
+                    {"name": "namespace", "in": "query",
+                        "schema": {"type": "string"}},
+                ],
+                    "security": SEC_WRITER,
+                    "requestBody": {
+                        "required": False,
+                        "content": json_body(
+                            "./schemas/common.yaml#/components/schemas/TaskApprovalDecisionRequest"
+                    ),
+                },
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": json_body(
+                            "./schemas/task-approval.yaml#/components/schemas/TaskApproval"
+                        ),
+                    },
+                    "404": {"description": "Not found", "content": text_plain_error()},
+                    "409": {"description": "Conflict", "content": text_plain_error()},
+                    "503": {
+                        "description": "Store unavailable",
+                        "content": text_plain_error(),
+                    },
+                    "default": {"description": "Error", "content": text_plain_error()},
+                },
+            }
+        }
+
+    paths["/v1/task-approvals/{name}/request-changes"] = {
+        "post": {
+            "tags": ["task-approvals"],
+            "summary": "Request changes on pending task review",
+            "description": (
+                "Reruns the producing agent with reviewer feedback. "
+                "Requires `comment` or the legacy `reason` field and returns `409 Conflict` "
+                "when the checkpoint disables request_changes or has reached max_review_cycles."
+            ),
+            "parameters": [
+                {
+                    "name": "name",
+                    "in": "path",
+                    "required": True,
+                    "schema": {"type": "string"},
+                },
+                {"name": "namespace", "in": "query", "schema": {"type": "string"}},
+            ],
+            "security": SEC_WRITER,
+            "requestBody": {
+                "required": True,
+                "content": json_body(
+                    "./schemas/common.yaml#/components/schemas/TaskApprovalRequestChangesRequest"
+                ),
+            },
+            "responses": {
+                "200": {
+                    "description": "OK",
+                    "content": json_body(
+                        "./schemas/task-approval.yaml#/components/schemas/TaskApproval"
+                    ),
+                },
+                "400": {"description": "Bad request", "content": text_plain_error()},
+                "404": {"description": "Not found", "content": text_plain_error()},
+                "409": {"description": "Conflict", "content": text_plain_error()},
+                "503": {
+                    "description": "Store unavailable",
+                    "content": text_plain_error(),
+                },
+                "default": {"description": "Error", "content": text_plain_error()},
+            },
+        }
+    }
+
     paths["/v1/tasks"] = {
         "get": list_tasks("tasks", "./schemas/task.yaml#/components/schemas/TaskList"),
         "post": post_create("tasks", "./schemas/task.yaml#/components/schemas/Task"),
@@ -1152,6 +1272,7 @@ def build() -> dict:
             {"name": "agent-roles"},
             {"name": "tool-permissions"},
             {"name": "tool-approvals"},
+            {"name": "task-approvals"},
             {"name": "tasks"},
             {"name": "task-schedules"},
             {"name": "task-webhooks"},

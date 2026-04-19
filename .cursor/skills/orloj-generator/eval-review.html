@@ -1,0 +1,1325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Eval Review</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600&family=Lora:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js" integrity="sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT" crossorigin="anonymous"></script>
+  <style>
+    :root {
+      --bg: #faf9f5;
+      --surface: #ffffff;
+      --border: #e8e6dc;
+      --text: #141413;
+      --text-muted: #b0aea5;
+      --accent: #d97757;
+      --accent-hover: #c4613f;
+      --green: #788c5d;
+      --green-bg: #eef2e8;
+      --red: #c44;
+      --red-bg: #fceaea;
+      --header-bg: #141413;
+      --header-text: #faf9f5;
+      --radius: 6px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Lora', Georgia, serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ---- Header ---- */
+    .header {
+      background: var(--header-bg);
+      color: var(--header-text);
+      padding: 1rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .header h1 {
+      font-family: 'Poppins', sans-serif;
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+    .header .instructions {
+      font-size: 0.8rem;
+      opacity: 0.7;
+      margin-top: 0.25rem;
+    }
+    .header .progress {
+      font-size: 0.875rem;
+      opacity: 0.8;
+      text-align: right;
+    }
+
+    /* ---- Main content ---- */
+    .main {
+      flex: 1;
+      overflow-y: auto;
+      padding: 1.5rem 2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    /* ---- Sections ---- */
+    .section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      flex-shrink: 0;
+    }
+    .section-header {
+      font-family: 'Poppins', sans-serif;
+      padding: 0.75rem 1rem;
+      font-size: 0.75rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      background: var(--bg);
+    }
+    .section-body {
+      padding: 1rem;
+    }
+
+    /* ---- Config badge ---- */
+    .config-badge {
+      display: inline-block;
+      padding: 0.2rem 0.625rem;
+      border-radius: 9999px;
+      font-family: 'Poppins', sans-serif;
+      font-size: 0.6875rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      margin-left: 0.75rem;
+      vertical-align: middle;
+    }
+    .config-badge.config-primary {
+      background: rgba(33, 150, 243, 0.12);
+      color: #1976d2;
+    }
+    .config-badge.config-baseline {
+      background: rgba(255, 193, 7, 0.15);
+      color: #f57f17;
+    }
+
+    /* ---- Prompt ---- */
+    .prompt-text {
+      white-space: pre-wrap;
+      font-size: 0.9375rem;
+      line-height: 1.6;
+    }
+
+    /* ---- Outputs ---- */
+    .output-file {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .output-file + .output-file {
+      margin-top: 1rem;
+    }
+    .output-file-header {
+      padding: 0.5rem 0.75rem;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      font-family: 'SF Mono', SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .output-file-header .dl-btn {
+      font-size: 0.7rem;
+      color: var(--accent);
+      text-decoration: none;
+      cursor: pointer;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-weight: 500;
+      opacity: 0.8;
+    }
+    .output-file-header .dl-btn:hover {
+      opacity: 1;
+      text-decoration: underline;
+    }
+    .output-file-content {
+      padding: 0.75rem;
+      overflow-x: auto;
+    }
+    .output-file-content pre {
+      font-size: 0.8125rem;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: 'SF Mono', SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+    }
+    .output-file-content img {
+      max-width: 100%;
+      height: auto;
+      border-radius: 4px;
+    }
+    .output-file-content iframe {
+      width: 100%;
+      height: 600px;
+      border: none;
+    }
+    .output-file-content table {
+      border-collapse: collapse;
+      font-size: 0.8125rem;
+      width: 100%;
+    }
+    .output-file-content table td,
+    .output-file-content table th {
+      border: 1px solid var(--border);
+      padding: 0.375rem 0.5rem;
+      text-align: left;
+    }
+    .output-file-content table th {
+      background: var(--bg);
+      font-weight: 600;
+    }
+    .output-file-content .download-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 1rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 0.875rem;
+      cursor: pointer;
+    }
+    .output-file-content .download-link:hover {
+      background: var(--border);
+    }
+    .empty-state {
+      color: var(--text-muted);
+      font-style: italic;
+      padding: 2rem;
+      text-align: center;
+    }
+
+    /* ---- Feedback ---- */
+    .prev-feedback {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.625rem 0.75rem;
+      margin-top: 0.75rem;
+      font-size: 0.8125rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .prev-feedback-label {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 0.25rem;
+      color: var(--text-muted);
+    }
+    .feedback-textarea {
+      width: 100%;
+      min-height: 100px;
+      padding: 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-family: inherit;
+      font-size: 0.9375rem;
+      line-height: 1.5;
+      resize: vertical;
+      color: var(--text);
+    }
+    .feedback-textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    }
+    .feedback-status {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      margin-top: 0.5rem;
+      min-height: 1.1em;
+    }
+
+    /* ---- Grades (collapsible) ---- */
+    .grades-toggle {
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+    }
+    .grades-toggle:hover {
+      color: var(--accent);
+    }
+    .grades-toggle .arrow {
+      margin-right: 0.5rem;
+      transition: transform 0.15s;
+      font-size: 0.75rem;
+    }
+    .grades-toggle .arrow.open {
+      transform: rotate(90deg);
+    }
+    .grades-content {
+      display: none;
+      margin-top: 0.75rem;
+    }
+    .grades-content.open {
+      display: block;
+    }
+    .grades-summary {
+      font-size: 0.875rem;
+      margin-bottom: 0.75rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .grade-badge {
+      display: inline-block;
+      padding: 0.125rem 0.5rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .grade-pass { background: var(--green-bg); color: var(--green); }
+    .grade-fail { background: var(--red-bg); color: var(--red); }
+    .assertion-list {
+      list-style: none;
+    }
+    .assertion-item {
+      padding: 0.625rem 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 0.8125rem;
+    }
+    .assertion-item:last-child { border-bottom: none; }
+    .assertion-status {
+      font-weight: 600;
+      margin-right: 0.5rem;
+    }
+    .assertion-status.pass { color: var(--green); }
+    .assertion-status.fail { color: var(--red); }
+    .assertion-evidence {
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      margin-top: 0.25rem;
+      padding-left: 1.5rem;
+    }
+
+    /* ---- View tabs ---- */
+    .view-tabs {
+      display: flex;
+      gap: 0;
+      padding: 0 2rem;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .view-tab {
+      font-family: 'Poppins', sans-serif;
+      padding: 0.625rem 1.25rem;
+      font-size: 0.8125rem;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      background: none;
+      color: var(--text-muted);
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s;
+    }
+    .view-tab:hover { color: var(--text); }
+    .view-tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+    .view-panel { display: none; }
+    .view-panel.active { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+
+    /* ---- Benchmark view ---- */
+    .benchmark-view {
+      padding: 1.5rem 2rem;
+      overflow-y: auto;
+      flex: 1;
+    }
+    .benchmark-table {
+      border-collapse: collapse;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 0.8125rem;
+      width: 100%;
+      margin-bottom: 1.5rem;
+    }
+    .benchmark-table th, .benchmark-table td {
+      padding: 0.625rem 0.75rem;
+      text-align: left;
+      border: 1px solid var(--border);
+    }
+    .benchmark-table th {
+      font-family: 'Poppins', sans-serif;
+      background: var(--header-bg);
+      color: var(--header-text);
+      font-weight: 500;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .benchmark-table tr:hover { background: var(--bg); }
+    .benchmark-table tr.benchmark-row-with { background: rgba(33, 150, 243, 0.06); }
+    .benchmark-table tr.benchmark-row-without { background: rgba(255, 193, 7, 0.06); }
+    .benchmark-table tr.benchmark-row-with:hover { background: rgba(33, 150, 243, 0.12); }
+    .benchmark-table tr.benchmark-row-without:hover { background: rgba(255, 193, 7, 0.12); }
+    .benchmark-table tr.benchmark-row-avg { font-weight: 600; border-top: 2px solid var(--border); }
+    .benchmark-table tr.benchmark-row-avg.benchmark-row-with { background: rgba(33, 150, 243, 0.12); }
+    .benchmark-table tr.benchmark-row-avg.benchmark-row-without { background: rgba(255, 193, 7, 0.12); }
+    .benchmark-delta-positive { color: var(--green); font-weight: 600; }
+    .benchmark-delta-negative { color: var(--red); font-weight: 600; }
+    .benchmark-notes {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1rem;
+    }
+    .benchmark-notes h3 {
+      font-family: 'Poppins', sans-serif;
+      font-size: 0.875rem;
+      margin-bottom: 0.75rem;
+    }
+    .benchmark-notes ul {
+      list-style: disc;
+      padding-left: 1.25rem;
+    }
+    .benchmark-notes li {
+      font-size: 0.8125rem;
+      line-height: 1.6;
+      margin-bottom: 0.375rem;
+    }
+    .benchmark-empty {
+      color: var(--text-muted);
+      font-style: italic;
+      text-align: center;
+      padding: 3rem;
+    }
+
+    /* ---- Navigation ---- */
+    .nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 2rem;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      flex-shrink: 0;
+    }
+    .nav-btn {
+      font-family: 'Poppins', sans-serif;
+      padding: 0.5rem 1.25rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--text);
+      transition: all 0.15s;
+    }
+    .nav-btn:hover:not(:disabled) {
+      background: var(--bg);
+      border-color: var(--text-muted);
+    }
+    .nav-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .done-btn {
+      font-family: 'Poppins', sans-serif;
+      padding: 0.5rem 1.5rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: all 0.15s;
+    }
+    .done-btn:hover {
+      background: var(--bg);
+      border-color: var(--text-muted);
+    }
+    .done-btn.ready {
+      border: none;
+      background: var(--accent);
+      color: white;
+      font-weight: 600;
+    }
+    .done-btn.ready:hover {
+      background: var(--accent-hover);
+    }
+    /* ---- Done overlay ---- */
+    .done-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 100;
+      justify-content: center;
+      align-items: center;
+    }
+    .done-overlay.visible {
+      display: flex;
+    }
+    .done-card {
+      background: var(--surface);
+      border-radius: 12px;
+      padding: 2rem 3rem;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      max-width: 500px;
+    }
+    .done-card h2 {
+      font-size: 1.5rem;
+      margin-bottom: 0.5rem;
+    }
+    .done-card p {
+      color: var(--text-muted);
+      margin-bottom: 1.5rem;
+      line-height: 1.5;
+    }
+    .done-card .btn-row {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: center;
+    }
+    .done-card button {
+      padding: 0.5rem 1.25rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      cursor: pointer;
+      font-size: 0.875rem;
+    }
+    .done-card button:hover {
+      background: var(--bg);
+    }
+    /* ---- Toast ---- */
+    .toast {
+      position: fixed;
+      bottom: 5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--header-bg);
+      color: var(--header-text);
+      padding: 0.625rem 1.25rem;
+      border-radius: var(--radius);
+      font-size: 0.875rem;
+      opacity: 0;
+      transition: opacity 0.3s;
+      pointer-events: none;
+      z-index: 200;
+    }
+    .toast.visible {
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+  <div id="app" style="height:100vh; display:flex; flex-direction:column;">
+    <div class="header">
+      <div>
+        <h1>Eval Review: <span id="skill-name"></span></h1>
+        <div class="instructions">Review each output and leave feedback below. Navigate with arrow keys or buttons. When done, copy feedback and paste into Claude Code.</div>
+      </div>
+      <div class="progress" id="progress"></div>
+    </div>
+
+    <!-- View tabs (only shown when benchmark data exists) -->
+    <div class="view-tabs" id="view-tabs" style="display:none;">
+      <button class="view-tab active" onclick="switchView('outputs')">Outputs</button>
+      <button class="view-tab" onclick="switchView('benchmark')">Benchmark</button>
+    </div>
+
+    <!-- Outputs panel (qualitative review) -->
+    <div class="view-panel active" id="panel-outputs">
+    <div class="main">
+      <!-- Prompt -->
+      <div class="section">
+        <div class="section-header">Prompt <span class="config-badge" id="config-badge" style="display:none;"></span></div>
+        <div class="section-body">
+          <div class="prompt-text" id="prompt-text"></div>
+        </div>
+      </div>
+
+      <!-- Outputs -->
+      <div class="section">
+        <div class="section-header">Output</div>
+        <div class="section-body" id="outputs-body">
+          <div class="empty-state">No output files found</div>
+        </div>
+      </div>
+
+      <!-- Previous Output (collapsible) -->
+      <div class="section" id="prev-outputs-section" style="display:none;">
+        <div class="section-header">
+          <div class="grades-toggle" onclick="togglePrevOutputs()">
+            <span class="arrow" id="prev-outputs-arrow">&#9654;</span>
+            Previous Output
+          </div>
+        </div>
+        <div class="grades-content" id="prev-outputs-content"></div>
+      </div>
+
+      <!-- Grades (collapsible) -->
+      <div class="section" id="grades-section" style="display:none;">
+        <div class="section-header">
+          <div class="grades-toggle" onclick="toggleGrades()">
+            <span class="arrow" id="grades-arrow">&#9654;</span>
+            Formal Grades
+          </div>
+        </div>
+        <div class="grades-content" id="grades-content"></div>
+      </div>
+
+      <!-- Feedback -->
+      <div class="section">
+        <div class="section-header">Your Feedback</div>
+        <div class="section-body">
+          <textarea
+            class="feedback-textarea"
+            id="feedback"
+            placeholder="What do you think of this output? Any issues, suggestions, or things that look great?"
+          ></textarea>
+          <div class="feedback-status" id="feedback-status"></div>
+          <div class="prev-feedback" id="prev-feedback" style="display:none;">
+            <div class="prev-feedback-label">Previous feedback</div>
+            <div id="prev-feedback-text"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="nav" id="outputs-nav">
+      <button class="nav-btn" id="prev-btn" onclick="navigate(-1)">&#8592; Previous</button>
+      <button class="done-btn" id="done-btn" onclick="showDoneDialog()">Submit All Reviews</button>
+      <button class="nav-btn" id="next-btn" onclick="navigate(1)">Next &#8594;</button>
+    </div>
+    </div><!-- end panel-outputs -->
+
+    <!-- Benchmark panel (quantitative stats) -->
+    <div class="view-panel" id="panel-benchmark">
+      <div class="benchmark-view" id="benchmark-content">
+        <div class="benchmark-empty">No benchmark data available. Run a benchmark to see quantitative results here.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Done overlay -->
+  <div class="done-overlay" id="done-overlay">
+    <div class="done-card">
+      <h2>Review Complete</h2>
+      <p>Your feedback has been saved. Go back to your Claude Code session and tell Claude you're done reviewing.</p>
+      <div class="btn-row">
+        <button onclick="closeDoneDialog()">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ---- Embedded data (injected by generate_review.py) ----
+    const EMBEDDED_DATA = {"skill_name": "orloj-generator", "runs": [{"id": "eval-1-pipeline-with_skill", "prompt": "I want to build a content pipeline that takes a topic, does research, and writes a blog post. Using Anthropic Claude.", "eval_id": 1, "outputs": [{"name": "agent-system.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: AgentSystem\nmetadata:\n  name: blog-pipeline-system\n  labels:\n    orloj.dev/pattern: pipeline\n    orloj.dev/use-case: blog-pipeline\nspec:\n  agents:\n    - blog-pipeline-planner-agent\n    - blog-pipeline-researcher-agent\n    - blog-pipeline-writer-agent\n  graph:\n    blog-pipeline-planner-agent:\n      edges:\n        - to: blog-pipeline-researcher-agent\n    blog-pipeline-researcher-agent:\n      edges:\n        - to: blog-pipeline-writer-agent\n"}, {"name": "model-endpoint.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: ModelEndpoint\nmetadata:\n  name: anthropic-default\n  labels:\n    orloj.dev/pattern: pipeline\n    orloj.dev/use-case: blog-pipeline\nspec:\n  provider: anthropic\n  base_url: https://api.anthropic.com/v1\n  default_model: claude-sonnet-4-20250514\n  auth:\n    secretRef: anthropic-api-key\n"}, {"name": "secret-anthropic.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: Secret\nmetadata:\n  name: anthropic-api-key\n  labels:\n    orloj.dev/pattern: pipeline\n    orloj.dev/use-case: blog-pipeline\nspec:\n  stringData:\n    value: sk-ant-PLACEHOLDER  # replace-with-your-actual-key\n"}, {"name": "task.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: Task\nmetadata:\n  name: blog-pipeline-task\n  labels:\n    orloj.dev/pattern: pipeline\n    orloj.dev/use-case: blog-pipeline\nspec:\n  system: blog-pipeline-system\n  mode: run\n  input:\n    topic: \"Your blog topic here\"\n  priority: normal\n  retry:\n    max_attempts: 2\n    backoff: 2s\n  message_retry:\n    max_attempts: 2\n    backoff: 250ms\n    max_backoff: 2s\n    jitter: full\n"}], "grading": {"expectations": [{"text": "valid_api_version", "passed": true, "evidence": "All 7 YAML files (agent-system, model-endpoint, secret-anthropic, task, planner, researcher, writer) have apiVersion: orloj.dev/v1"}, {"text": "correct_kinds", "passed": true, "evidence": "AgentSystem, ModelEndpoint, Secret, Task, and Agent kinds are all used correctly for their respective resources"}, {"text": "agents_have_model_ref", "passed": true, "evidence": "All 3 agents (planner, researcher, writer) have spec.model_ref: anthropic-default"}, {"text": "agents_have_prompts", "passed": true, "evidence": "All 3 agents have multi-line prompts using | block scalar syntax, each with detailed multi-step instructions (6+ lines each)"}, {"text": "system_has_graph", "passed": true, "evidence": "AgentSystem has spec.graph with edges: planner -> researcher -> writer, forming a correct pipeline"}, {"text": "task_has_retry", "passed": true, "evidence": "Task has spec.retry with max_attempts: 2, backoff: 2s, plus message_retry configuration"}, {"text": "task_references_system", "passed": true, "evidence": "Task spec.system: blog-pipeline-system matches AgentSystem metadata.name: blog-pipeline-system"}, {"text": "secret_has_placeholder", "passed": true, "evidence": "Secret has value: sk-ant-PLACEHOLDER with comment # replace-with-your-actual-key"}, {"text": "consistent_naming", "passed": true, "evidence": "All resources follow blog-pipeline-* slug pattern consistently (blog-pipeline-system, blog-pipeline-planner-agent, blog-pipeline-researcher-agent, blog-pipeline-writer-agent, blog-pipeline-task)"}, {"text": "no_deprecated_fields", "passed": true, "evidence": "Graph uses edges array format (edges: - to: ...) and does not use deprecated graph.*.next field"}]}}, {"id": "eval-1-pipeline-without_skill", "prompt": "I want to build a content pipeline that takes a topic, does research, and writes a blog post. Using Anthropic Claude.", "eval_id": 1, "outputs": [{"name": "agent-editor.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: Agent\nmetadata:\n  name: editor\n  labels:\n    app: content-pipeline\n    role: editing\nspec:\n  modelEndpointRef:\n    name: claude-sonnet\n  systemPrompt: |\n    You are a meticulous blog post editor. Given a draft blog post and the\n    original research brief, you review and refine the content to ensure\n    it meets high editorial standards.\n\n    Your editing process should:\n    - Check factual accuracy against the research brief\n    - Improve clarity, flow, and readability\n    - Fix any grammatical or spelling errors\n    - Strengthen the headline and introduction if needed\n    - Ensure logical structure and smooth transitions between sections\n    - Verify that key points from the research are adequately covered\n    - Add or improve the meta description for SEO\n    - Ensure the tone is consistent throughout\n\n    Output the final polished blog post in markdown format, preceded by a\n    short editorial note summarizing the changes you made.\n  parameters:\n    max_tokens: 4096\n    temperature: 0.3\n"}, {"name": "agent-researcher.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: Agent\nmetadata:\n  name: researcher\n  labels:\n    app: content-pipeline\n    role: research\nspec:\n  modelEndpointRef:\n    name: claude-sonnet\n  systemPrompt: |\n    You are an expert research analyst. Given a topic, you conduct thorough\n    research by identifying key facts, statistics, trends, expert opinions,\n    and relevant context. You organize your findings into a structured\n    research brief that can be used by a writer to produce a high-quality\n    blog post.\n\n    Your research output should include:\n    - A concise summary of the topic\n    - Key facts and data points\n    - Different perspectives or angles on the topic\n    - Notable quotes or references from domain experts\n    - Suggested subtopics or sections for a blog post\n    - Any caveats, controversies, or nuances worth noting\n\n    Be factual, balanced, and thorough. Cite sources where possible.\n  parameters:\n    max_tokens: 4096\n    temperature: 0.5\n"}, {"name": "agent-system-content-pipeline.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: AgentSystem\nmetadata:\n  name: content-pipeline\n  labels:\n    app: content-pipeline\nspec:\n  description: |\n    A content pipeline that takes a topic, conducts research, writes a\n    blog post draft, and then edits it into a polished final article.\n    The pipeline consists of three stages: research, writing, and editing.\n  agents:\n    - agentRef:\n        name: researcher\n    - agentRef:\n        name: writer\n    - agentRef:\n        name: editor\n  tasks:\n    - taskRef:\n        name: research-topic\n    - taskRef:\n        name: write-blog-post\n    - taskRef:\n        name: edit-blog-post\n  entrypoint:\n    taskRef:\n      name: research-topic\n  input:\n    schema:\n      type: object\n      properties:\n        topic:\n          type: string\n          description: The topic to research and write a blog post about.\n      required:\n        - topic\n  output:\n    taskRef:\n      name: edit-blog-post\n    schema:\n      type: object\n      properties:\n        editorial_notes:\n          type: string\n        final_post:\n          type: string\n"}, {"name": "agent-writer.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: Agent\nmetadata:\n  name: writer\n  labels:\n    app: content-pipeline\n    role: writing\nspec:\n  modelEndpointRef:\n    name: claude-sonnet\n  systemPrompt: |\n    You are a skilled blog post writer. Given a research brief and a topic,\n    you craft engaging, well-structured blog posts that are informative and\n    enjoyable to read.\n\n    Your writing should:\n    - Start with a compelling headline and introduction that hooks the reader\n    - Use clear, conversational language appropriate for a general audience\n    - Organize content with logical headings and subheadings\n    - Integrate facts and data from the research naturally into the narrative\n    - Include practical takeaways or actionable insights where appropriate\n    - End with a strong conclusion that summarizes key points\n    - Be between 800 and 1500 words in length\n    - Use markdown formatting for structure\n\n    Write in a professional yet approachable tone. Avoid jargon unless it\n    is explained. Make the content scannable with short paragraphs and\n    clear section breaks.\n  parameters:\n    max_tokens: 4096\n    temperature: 0.7\n"}, {"name": "model-endpoint-claude.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: ModelEndpoint\nmetadata:\n  name: claude-sonnet\n  labels:\n    app: content-pipeline\nspec:\n  provider: anthropic\n  model: claude-sonnet-4-20250514\n  apiKeyFrom:\n    secretRef:\n      name: anthropic-api-key\n      key: ANTHROPIC_API_KEY\n  parameters:\n    max_tokens: 4096\n    temperature: 0.7\n"}, {"name": "secret-anthropic-api-key.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: Secret\nmetadata:\n  name: anthropic-api-key\n  labels:\n    app: content-pipeline\nspec:\n  type: Opaque\n  data:\n    ANTHROPIC_API_KEY: \"${ANTHROPIC_API_KEY}\"\n"}, {"name": "task-edit.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: Task\nmetadata:\n  name: edit-blog-post\n  labels:\n    app: content-pipeline\n    stage: \"3\"\nspec:\n  agentRef:\n    name: editor\n  dependsOn:\n    - taskRef:\n        name: research-topic\n    - taskRef:\n        name: write-blog-post\n  input:\n    schema:\n      type: object\n      properties:\n        research_brief:\n          type: string\n          description: The original research brief for fact-checking.\n        draft_post:\n          type: string\n          description: The draft blog post to edit.\n      required:\n        - research_brief\n        - draft_post\n    prompt: |\n      Review and polish the following draft blog post. Cross-reference it\n      against the research brief for accuracy and completeness.\n\n      Research Brief:\n      {{ .tasks.research-topic.output.research_brief }}\n\n      Draft Blog Post:\n      {{ .tasks.write-blog-post.output.draft_post }}\n  output:\n    schema:\n      type: object\n      properties:\n        editorial_notes:\n          type: string\n          description: Summary of edits and improvements made.\n        final_post:\n          type: string\n          description: The final polished blog post in markdown format.\n"}, {"name": "task-research.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: Task\nmetadata:\n  name: research-topic\n  labels:\n    app: content-pipeline\n    stage: \"1\"\nspec:\n  agentRef:\n    name: researcher\n  input:\n    schema:\n      type: object\n      properties:\n        topic:\n          type: string\n          description: The topic to research for the blog post.\n      required:\n        - topic\n    prompt: |\n      Research the following topic thoroughly and produce a structured\n      research brief that a blog writer can use.\n\n      Topic: {{ .input.topic }}\n  output:\n    schema:\n      type: object\n      properties:\n        research_brief:\n          type: string\n          description: The structured research brief with key findings.\n"}, {"name": "task-write.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: Task\nmetadata:\n  name: write-blog-post\n  labels:\n    app: content-pipeline\n    stage: \"2\"\nspec:\n  agentRef:\n    name: writer\n  dependsOn:\n    - taskRef:\n        name: research-topic\n  input:\n    schema:\n      type: object\n      properties:\n        topic:\n          type: string\n          description: The original topic for the blog post.\n        research_brief:\n          type: string\n          description: The research brief from the researcher agent.\n      required:\n        - topic\n        - research_brief\n    prompt: |\n      Using the research brief below, write an engaging blog post on the\n      given topic.\n\n      Topic: {{ .input.topic }}\n\n      Research Brief:\n      {{ .tasks.research-topic.output.research_brief }}\n  output:\n    schema:\n      type: object\n      properties:\n        draft_post:\n          type: string\n          description: The draft blog post in markdown format.\n"}], "grading": {"expectations": [{"text": "valid_api_version", "passed": true, "evidence": "All 9 YAML files have apiVersion: orloj.dev/v1"}, {"text": "correct_kinds", "passed": true, "evidence": "Agent (x3), AgentSystem, ModelEndpoint, Secret, and Task (x3) kinds are all used correctly"}, {"text": "agents_have_model_ref", "passed": false, "evidence": "Agents use spec.modelEndpointRef.name instead of spec.model_ref. The field name is non-standard (modelEndpointRef vs model_ref)"}, {"text": "agents_have_prompts", "passed": true, "evidence": "All 3 agents (researcher, writer, editor) have multi-line systemPrompt fields with detailed instructions (8+ lines each). Note: field is named systemPrompt instead of prompt"}, {"text": "system_has_graph", "passed": false, "evidence": "AgentSystem does not have spec.graph. It uses spec.entrypoint and spec.tasks with dependsOn relationships instead of an explicit graph with edges"}, {"text": "task_has_retry", "passed": false, "evidence": "None of the 3 Task resources (research-topic, write-blog-post, edit-blog-post) have spec.retry configured"}, {"text": "task_references_system", "passed": false, "evidence": "Tasks use spec.agentRef (referencing individual agents) not spec.system. No task references the AgentSystem name 'content-pipeline'"}, {"text": "secret_has_placeholder", "passed": true, "evidence": "Secret has ANTHROPIC_API_KEY: '${ANTHROPIC_API_KEY}' which is a placeholder environment variable reference"}, {"text": "consistent_naming", "passed": true, "evidence": "Resources use consistent lowercase slug naming: researcher, writer, editor, content-pipeline, claude-sonnet, anthropic-api-key"}, {"text": "no_deprecated_fields", "passed": true, "evidence": "No graph.*.next fields used. The system uses dependsOn task references rather than graph edges at all"}]}}, {"id": "eval-2-swarm-with_skill", "prompt": "I need a competitive analysis system. A coordinator sends out 3 scouts to explore different angles (tech, market, customer), they iterate a couple rounds, then a synthesizer writes the report. The scouts should have web search tools. Use OpenAI.", "eval_id": 2, "outputs": [{"name": "agent-system.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: AgentSystem\nmetadata:\n  name: companalysis-system\n  labels:\n    orloj.dev/pattern: swarm-loop\n    orloj.dev/use-case: competitive-analysis\nspec:\n  agents:\n    - companalysis-coordinator-agent\n    - companalysis-scout-tech-agent\n    - companalysis-scout-market-agent\n    - companalysis-scout-customer-agent\n    - companalysis-synthesizer-agent\n  graph:\n    companalysis-coordinator-agent:\n      edges:\n        - to: companalysis-scout-tech-agent\n        - to: companalysis-scout-market-agent\n        - to: companalysis-scout-customer-agent\n        - to: companalysis-synthesizer-agent\n    companalysis-scout-tech-agent:\n      edges:\n        - to: companalysis-coordinator-agent\n    companalysis-scout-market-agent:\n      edges:\n        - to: companalysis-coordinator-agent\n    companalysis-scout-customer-agent:\n      edges:\n        - to: companalysis-coordinator-agent\n"}, {"name": "model-endpoint.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: ModelEndpoint\nmetadata:\n  name: openai-default\n  labels:\n    orloj.dev/pattern: swarm-loop\n    orloj.dev/use-case: competitive-analysis\nspec:\n  provider: openai\n  base_url: https://api.openai.com/v1\n  default_model: gpt-4o-mini\n  auth:\n    secretRef: openai-api-key\n"}, {"name": "secret-openai.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: Secret\nmetadata:\n  name: openai-api-key\n  labels:\n    orloj.dev/pattern: swarm-loop\n    orloj.dev/use-case: competitive-analysis\nspec:\n  stringData:\n    value: sk-your-openai-api-key  # replace-with-your-actual-key\n"}, {"name": "task.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: Task\nmetadata:\n  name: companalysis-task\n  labels:\n    orloj.dev/pattern: swarm-loop\n    orloj.dev/use-case: competitive-analysis\nspec:\n  system: companalysis-system\n  mode: run\n  input:\n    topic: \"Competitive analysis target -- replace with your company or market segment\"\n  priority: normal\n  max_turns: 10\n  retry:\n    max_attempts: 2\n    backoff: 2s\n  message_retry:\n    max_attempts: 2\n    backoff: 250ms\n    max_backoff: 2s\n    jitter: full\n"}, {"name": "tool-web-search.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: Tool\nmetadata:\n  name: companalysis-web-search\n  labels:\n    orloj.dev/pattern: swarm-loop\n    orloj.dev/use-case: competitive-analysis\nspec:\n  type: http\n  endpoint: https://api.search.example.com/v1/search\n  description: Search the web for competitive intelligence, market data, and technology trends\n  input_schema:\n    type: object\n    properties:\n      query:\n        type: string\n  capabilities: [web-search]\n  operation_classes: [read]\n  risk_level: low\n  runtime:\n    timeout: 30s\n    isolation_mode: none\n    retry:\n      max_attempts: 2\n      backoff: 1s\n      max_backoff: 10s\n      jitter: full\n  auth:\n    profile: bearer\n    secretRef: openai-api-key\n"}], "grading": {"expectations": [{"text": "valid_api_version", "passed": true, "evidence": "All 10 YAML files have apiVersion: orloj.dev/v1"}, {"text": "correct_kinds", "passed": true, "evidence": "AgentSystem, ModelEndpoint, Secret, Task, Tool, and Agent (x5) kinds are all used correctly"}, {"text": "agents_have_model_ref", "passed": true, "evidence": "All 5 agents (coordinator, scout-tech, scout-market, scout-customer, synthesizer) have spec.model_ref: openai-default"}, {"text": "agents_have_prompts", "passed": true, "evidence": "All 5 agents have detailed multi-line prompts with 6+ lines each covering specific responsibilities and output formats"}, {"text": "system_has_graph", "passed": true, "evidence": "AgentSystem has spec.graph with edges from coordinator to all scouts and synthesizer, and scouts back to coordinator"}, {"text": "task_has_retry", "passed": true, "evidence": "Task has spec.retry with max_attempts: 2, backoff: 2s, plus message_retry configuration"}, {"text": "task_references_system", "passed": true, "evidence": "Task spec.system: companalysis-system matches AgentSystem metadata.name: companalysis-system"}, {"text": "secret_has_placeholder", "passed": true, "evidence": "Secret has value: sk-your-openai-api-key with comment # replace-with-your-actual-key"}, {"text": "consistent_naming", "passed": true, "evidence": "All resources follow companalysis-* slug pattern (companalysis-system, companalysis-coordinator-agent, companalysis-scout-tech-agent, etc.)"}, {"text": "no_deprecated_fields", "passed": true, "evidence": "Graph uses edges array format (edges: - to: ...) and does not use deprecated graph.*.next field"}, {"text": "bidirectional_edges", "passed": true, "evidence": "All 3 scouts (tech, market, customer) have edges back to companalysis-coordinator-agent"}, {"text": "task_has_max_turns", "passed": true, "evidence": "Task has spec.max_turns: 10 to prevent infinite loops in the swarm"}, {"text": "tool_resources_present", "passed": true, "evidence": "tool-web-search.yaml defines a Tool resource (kind: Tool) with web search capability, referenced by scout agents via tools: [companalysis-web-search]"}]}}, {"id": "eval-2-swarm-without_skill", "prompt": "I need a competitive analysis system. A coordinator sends out 3 scouts to explore different angles (tech, market, customer), they iterate a couple rounds, then a synthesizer writes the report. The scouts should have web search tools. Use OpenAI.", "eval_id": 2, "outputs": [{"name": "agent-coordinator.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: Agent\nmetadata:\n  name: coordinator\n  labels:\n    app: competitive-analysis\n    role: coordinator\nspec:\n  modelEndpointRef:\n    name: openai-gpt4o\n  systemPrompt: |\n    You are the Coordinator of a competitive analysis team. Your job is to:\n\n    1. Receive a competitive analysis request (company or product to analyze).\n    2. Break the request into three research angles and assign them to your scouts:\n       - Tech Scout: technology stack, patents, engineering talent, R&D focus\n       - Market Scout: market share, pricing, go-to-market strategy, partnerships\n       - Customer Scout: customer reviews, sentiment, NPS, churn signals, use cases\n    3. After each round of scout research, review their findings and provide\n       focused follow-up questions or areas to dig deeper.\n    4. After the final round, compile a brief summary of key themes and hand off\n       all findings to the Synthesizer for the final report.\n\n    Be specific in your assignments. Reference actual data points the scouts should look for.\n    Keep track of what has already been covered to avoid duplication across rounds.\n  parameters:\n    temperature: 0.5\n"}, {"name": "agent-customer-scout.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: Agent\nmetadata:\n  name: customer-scout\n  labels:\n    app: competitive-analysis\n    role: scout\n    angle: customer\nspec:\n  modelEndpointRef:\n    name: openai-gpt4o\n  systemPrompt: |\n    You are the Customer Scout on a competitive analysis team. Your focus areas include:\n\n    - Customer reviews and ratings across platforms (G2, Capterra, Trustpilot, etc.)\n    - Customer sentiment analysis and common praise/complaint themes\n    - Net Promoter Score (NPS) and satisfaction metrics if available\n    - Churn signals, switching patterns, and competitor migration trends\n    - Key use cases, customer segments, and ideal customer profiles\n    - Case studies, testimonials, and notable customer logos\n\n    When you receive an assignment from the Coordinator, use your web search tool\n    to find concrete data points, sources, and evidence. Always cite your sources.\n    Present findings in a structured format with confidence levels (high/medium/low)\n    for each claim.\n  tools:\n    - name: web_search\n      type: web_search\n      description: Search the web for customer reviews, sentiment, and user experience data\n  parameters:\n    temperature: 0.4\n"}, {"name": "agent-market-scout.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: Agent\nmetadata:\n  name: market-scout\n  labels:\n    app: competitive-analysis\n    role: scout\n    angle: market\nspec:\n  modelEndpointRef:\n    name: openai-gpt4o\n  systemPrompt: |\n    You are the Market Scout on a competitive analysis team. Your focus areas include:\n\n    - Market share, revenue estimates, and growth trajectory\n    - Pricing models, tiers, and competitive positioning\n    - Go-to-market strategy, sales channels, and distribution\n    - Strategic partnerships, acquisitions, and investments\n    - Competitive landscape and positioning relative to alternatives\n    - Regulatory and geographic market considerations\n\n    When you receive an assignment from the Coordinator, use your web search tool\n    to find concrete data points, sources, and evidence. Always cite your sources.\n    Present findings in a structured format with confidence levels (high/medium/low)\n    for each claim.\n  tools:\n    - name: web_search\n      type: web_search\n      description: Search the web for market data, pricing, and business strategy information\n  parameters:\n    temperature: 0.4\n"}, {"name": "agent-synthesizer.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: Agent\nmetadata:\n  name: synthesizer\n  labels:\n    app: competitive-analysis\n    role: synthesizer\nspec:\n  modelEndpointRef:\n    name: openai-gpt4o\n  systemPrompt: |\n    You are the Synthesizer on a competitive analysis team. You receive research\n    findings from three scouts (Technology, Market, Customer) after multiple rounds\n    of investigation, along with a summary from the Coordinator.\n\n    Your job is to produce a polished, executive-ready competitive analysis report with:\n\n    1. Executive Summary - Key takeaways in 3-5 bullet points\n    2. Company/Product Overview - What the competitor does and their value proposition\n    3. Technology Analysis - Technical strengths, weaknesses, and trajectory\n    4. Market Position - Market share, pricing, go-to-market, and partnerships\n    5. Customer Perspective - Sentiment, satisfaction, key use cases, and pain points\n    6. SWOT Analysis - Strengths, Weaknesses, Opportunities, Threats\n    7. Strategic Recommendations - Actionable insights for our team\n    8. Sources and Confidence Assessment - Bibliography with confidence ratings\n\n    Write clearly and concisely. Use data points and citations from the scouts.\n    Flag any conflicting information and note confidence levels throughout.\n  parameters:\n    temperature: 0.3\n"}, {"name": "agent-system.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: AgentSystem\nmetadata:\n  name: competitive-analysis-system\n  labels:\n    app: competitive-analysis\nspec:\n  description: >\n    A multi-agent competitive analysis system. A Coordinator dispatches research\n    tasks to three specialized scouts (Tech, Market, Customer) who use web search\n    to gather intelligence. After two iterative rounds of research and refinement,\n    a Synthesizer compiles the findings into an executive-ready report.\n  agents:\n    - name: coordinator\n      agentRef:\n        name: coordinator\n    - name: tech-scout\n      agentRef:\n        name: tech-scout\n    - name: market-scout\n      agentRef:\n        name: market-scout\n    - name: customer-scout\n      agentRef:\n        name: customer-scout\n    - name: synthesizer\n      agentRef:\n        name: synthesizer\n  graph:\n    entrypoint: coordinator\n    edges:\n      # Round 1: Coordinator fans out to all three scouts\n      - from: coordinator\n        to: tech-scout\n        condition: round == 1\n      - from: coordinator\n        to: market-scout\n        condition: round == 1\n      - from: coordinator\n        to: customer-scout\n        condition: round == 1\n\n      # Round 1: Scouts report back to Coordinator\n      - from: tech-scout\n        to: coordinator\n        condition: round == 1\n      - from: market-scout\n        to: coordinator\n        condition: round == 1\n      - from: customer-scout\n        to: coordinator\n        condition: round == 1\n\n      # Round 2: Coordinator sends follow-up tasks to scouts\n      - from: coordinator\n        to: tech-scout\n        condition: round == 2\n      - from: coordinator\n        to: market-scout\n        condition: round == 2\n      - from: coordinator\n        to: customer-scout\n        condition: round == 2\n\n      # Round 2: Scouts report back to Coordinator\n      - from: tech-scout\n        to: coordinator\n        condition: round == 2\n      - from: market-scout\n        to: coordinator\n        condition: round == 2\n      - from: customer-scout\n        to: coordinator\n        condition: round == 2\n\n      # Final: Coordinator hands off to Synthesizer for report\n      - from: coordinator\n        to: synthesizer\n        condition: round == 3\n  maxRounds: 3\n"}, {"name": "agent-tech-scout.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: Agent\nmetadata:\n  name: tech-scout\n  labels:\n    app: competitive-analysis\n    role: scout\n    angle: technology\nspec:\n  modelEndpointRef:\n    name: openai-gpt4o\n  systemPrompt: |\n    You are the Technology Scout on a competitive analysis team. Your focus areas include:\n\n    - Technology stack and architecture choices\n    - Patents, intellectual property, and R&D investments\n    - Engineering team size, hiring trends, and key hires\n    - Product features, technical differentiators, and roadmap signals\n    - Developer ecosystem, APIs, integrations, and open-source contributions\n    - Infrastructure and scalability indicators\n\n    When you receive an assignment from the Coordinator, use your web search tool\n    to find concrete data points, sources, and evidence. Always cite your sources.\n    Present findings in a structured format with confidence levels (high/medium/low)\n    for each claim.\n  tools:\n    - name: web_search\n      type: web_search\n      description: Search the web for technology and engineering information about competitors\n  parameters:\n    temperature: 0.4\n"}, {"name": "model-endpoint.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: ModelEndpoint\nmetadata:\n  name: openai-gpt4o\n  labels:\n    app: competitive-analysis\nspec:\n  provider: openai\n  model: gpt-4o\n  secretRef:\n    name: openai-api-key\n  parameters:\n    temperature: 0.7\n    max_tokens: 4096\n"}, {"name": "secret-openai.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: Secret\nmetadata:\n  name: openai-api-key\n  labels:\n    app: competitive-analysis\nspec:\n  type: opaque\n  key: OPENAI_API_KEY\n  description: API key for OpenAI model access\n"}, {"name": "task.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: Task\nmetadata:\n  name: competitive-analysis-task\n  labels:\n    app: competitive-analysis\nspec:\n  description: >\n    Run a competitive analysis using the multi-agent system. Provide a company\n    or product name as input and receive a comprehensive competitive analysis report.\n  agentSystemRef:\n    name: competitive-analysis-system\n  input:\n    schema:\n      type: object\n      properties:\n        target:\n          type: string\n          description: The company or product to analyze competitively\n        context:\n          type: string\n          description: Optional additional context such as your own company, industry, or specific concerns\n      required:\n        - target\n  output:\n    schema:\n      type: object\n      properties:\n        report:\n          type: string\n          description: The full competitive analysis report produced by the Synthesizer\n        sources:\n          type: array\n          items:\n            type: string\n          description: List of sources cited in the analysis\n"}], "grading": {"expectations": [{"text": "valid_api_version", "passed": true, "evidence": "All 9 YAML files have apiVersion: orloj.dev/v1"}, {"text": "correct_kinds", "passed": true, "evidence": "Agent (x5), AgentSystem, ModelEndpoint, Secret, and Task kinds are all used correctly"}, {"text": "agents_have_model_ref", "passed": false, "evidence": "Agents use spec.modelEndpointRef.name instead of spec.model_ref. The field name is non-standard"}, {"text": "agents_have_prompts", "passed": true, "evidence": "All 5 agents have multi-line systemPrompt fields with detailed instructions (8+ lines each). Note: field is named systemPrompt instead of prompt"}, {"text": "system_has_graph", "passed": true, "evidence": "AgentSystem has spec.graph with entrypoint: coordinator and edges array defining from/to relationships with conditions"}, {"text": "task_has_retry", "passed": false, "evidence": "Task (competitive-analysis-task) has no spec.retry field at all"}, {"text": "task_references_system", "passed": false, "evidence": "Task uses spec.agentSystemRef.name: competitive-analysis-system instead of spec.system. Field name differs from expected"}, {"text": "secret_has_placeholder", "passed": false, "evidence": "Secret has spec.key: OPENAI_API_KEY and spec.description but no actual placeholder value with replacement indication. It's a schema-like definition, not a placeholder secret value"}, {"text": "consistent_naming", "passed": true, "evidence": "Resources use consistent lowercase slug naming with competitive-analysis app label: coordinator, tech-scout, market-scout, customer-scout, synthesizer"}, {"text": "no_deprecated_fields", "passed": true, "evidence": "Graph uses edges array with from/to format and does not use deprecated graph.*.next field"}, {"text": "bidirectional_edges", "passed": true, "evidence": "All 3 scouts have edges back to coordinator (from: tech-scout to: coordinator, etc.) for both round 1 and round 2"}, {"text": "task_has_max_turns", "passed": false, "evidence": "Task does not have max_turns field. The AgentSystem has maxRounds: 3 but the Task itself does not specify max_turns"}, {"text": "tool_resources_present", "passed": false, "evidence": "No separate Tool resource YAML file exists. Agents define tools inline (tools: - name: web_search, type: web_search) but no standalone Tool kind resource was generated"}]}}, {"id": "eval-3-vague-with_skill", "prompt": "I want to set up some agents in Orloj to help with customer support ticket routing. Not sure exactly how to structure it.", "eval_id": 3, "outputs": [{"name": "NOTES.md", "type": "text", "content": "# Questions I Would Have Asked the User\n\nBefore generating this system, I would have asked the following clarifying questions:\n\n1. **What ticket categories do you need?** I assumed three common categories: billing/account issues, technical/product issues, and general inquiries. Your real categories may differ.\n\n2. **What should the system produce?** I assumed the goal is a drafted response for the support agent to review, plus a priority/severity assessment. You might instead want just routing metadata, or a fully autonomous reply.\n\n3. **Do you have an existing ticketing system to integrate with?** If so, we could add a webhook trigger (e.g., from Zendesk, Freshdesk, Intercom) and a tool for updating ticket status. I left these out for simplicity.\n\n4. **Which LLM provider do you prefer?** I defaulted to OpenAI with gpt-4o-mini since it is fast and cost-effective for support workflows. You may prefer Anthropic or a local model.\n\n5. **Do you need memory/context across tickets?** For example, remembering a customer's prior issues. I left memory out for the initial version but it could be added.\n\n6. **Do you need governance/policies?** For example, preventing the agents from making promises about refunds. I left policies out but flagged where they could be added.\n\n## What I Generated\n\nA hierarchical agent system with conditional routing:\n\n```\ntriage-agent \u2500\u2500(billing)\u2500\u2500> billing-agent \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n             \u2500\u2500(technical)\u2500> technical-agent \u2500\u2500\u2500\u2500\u2500\u2500\u2524\u2500\u2500> response-drafter (wait_for_all)\n             \u2500\u2500(general)\u2500\u2500\u2500> general-agent \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518\n```\n\n- **Triage Agent**: Classifies the ticket by category and priority\n- **Billing Agent**: Handles billing/account questions with relevant context\n- **Technical Agent**: Handles product/technical issues with diagnostic steps\n- **General Agent**: Handles everything else\n- **Response Drafter**: Takes the specialist's analysis and drafts a customer-facing reply\n\nOnly one specialist branch fires per ticket (conditional routing), and the response drafter waits for whichever branch was activated.\n"}, {"name": "agent-system.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: AgentSystem\nmetadata:\n  name: support-routing-system\n  labels:\n    orloj.dev/pattern: hierarchical\n    orloj.dev/use-case: support-routing\nspec:\n  agents:\n    - support-triage-agent\n    - support-billing-agent\n    - support-technical-agent\n    - support-general-agent\n    - support-response-drafter-agent\n  graph:\n    support-triage-agent:\n      edges:\n        - to: support-billing-agent\n          condition:\n            output_contains: \"CATEGORY: BILLING\"\n        - to: support-technical-agent\n          condition:\n            output_contains: \"CATEGORY: TECHNICAL\"\n        - to: support-general-agent\n          condition:\n            default: true\n    support-billing-agent:\n      edges:\n        - to: support-response-drafter-agent\n    support-technical-agent:\n      edges:\n        - to: support-response-drafter-agent\n    support-general-agent:\n      edges:\n        - to: support-response-drafter-agent\n    support-response-drafter-agent:\n      join:\n        mode: wait_for_all\n"}, {"name": "model-endpoint.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: ModelEndpoint\nmetadata:\n  name: openai-default\n  labels:\n    orloj.dev/pattern: hierarchical\n    orloj.dev/use-case: support-routing\nspec:\n  provider: openai\n  base_url: https://api.openai.com/v1\n  default_model: gpt-4o-mini\n  auth:\n    secretRef: openai-api-key\n"}, {"name": "secret-openai.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: Secret\nmetadata:\n  name: openai-api-key\n  labels:\n    orloj.dev/pattern: hierarchical\n    orloj.dev/use-case: support-routing\nspec:\n  stringData:\n    value: sk-replace-with-your-actual-key  # replace-with-your-actual-key\n"}, {"name": "task.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: Task\nmetadata:\n  name: support-routing-task\n  labels:\n    orloj.dev/pattern: hierarchical\n    orloj.dev/use-case: support-routing\nspec:\n  system: support-routing-system\n  mode: run\n  input:\n    ticket: |\n      Customer: Jane Doe (account #12345)\n      Product: Pro Plan\n      Channel: Email\n      Message: I was charged twice for my subscription this month. I see two charges of $49.99 on my credit card statement dated April 10 and April 12. Please help me get a refund for the duplicate charge.\n  priority: normal\n  retry:\n    max_attempts: 2\n    backoff: 2s\n  message_retry:\n    max_attempts: 2\n    backoff: 250ms\n    max_backoff: 2s\n    jitter: full\n"}], "grading": {"expectations": [{"text": "valid_api_version", "passed": true, "evidence": "All YAML files (agent-system, model-endpoint, secret-openai, task, and 5 agent files) have apiVersion: orloj.dev/v1"}, {"text": "correct_kinds", "passed": true, "evidence": "AgentSystem, ModelEndpoint, Secret, Task, and Agent (x5) kinds are all used correctly"}, {"text": "agents_have_model_ref", "passed": true, "evidence": "All 5 agents (triage, billing, technical, general, response-drafter) have spec.model_ref: openai-default"}, {"text": "agents_have_prompts", "passed": true, "evidence": "All 5 agents have detailed multi-line prompts (8+ lines each) with structured output formats and clear responsibilities"}, {"text": "system_has_graph", "passed": true, "evidence": "AgentSystem has spec.graph with edges from triage to specialists (with conditions) and from specialists to response-drafter"}, {"text": "task_has_retry", "passed": true, "evidence": "Task has spec.retry with max_attempts: 2, backoff: 2s, plus message_retry configuration"}, {"text": "task_references_system", "passed": true, "evidence": "Task spec.system: support-routing-system matches AgentSystem metadata.name: support-routing-system"}, {"text": "secret_has_placeholder", "passed": true, "evidence": "Secret has value: sk-replace-with-your-actual-key with comment # replace-with-your-actual-key"}, {"text": "consistent_naming", "passed": true, "evidence": "All resources follow support-* slug pattern (support-routing-system, support-triage-agent, support-billing-agent, etc.)"}, {"text": "no_deprecated_fields", "passed": true, "evidence": "Graph uses edges array format (edges: - to: ...) and does not use deprecated graph.*.next field"}, {"text": "conditional_routing", "passed": true, "evidence": "Edges from triage agent use condition: output_contains for BILLING and TECHNICAL categories, and default: true for general fallback"}, {"text": "clarifying_approach", "passed": true, "evidence": "NOTES.md file documents 6 clarifying questions that would have been asked (ticket categories, system output, ticketing integration, LLM provider, memory needs, governance) and documents assumptions made"}]}}, {"id": "eval-3-vague-without_skill", "prompt": "I want to set up some agents in Orloj to help with customer support ticket routing. Not sure exactly how to structure it.", "eval_id": 3, "outputs": [{"name": "agent-account-specialist.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: Agent\nmetadata:\n  name: account-specialist\n  labels:\n    app: customer-support-routing\n    role: specialist\n    category: account\nspec:\n  description: >\n    Handles account-related support tickets including login issues, password\n    resets, permissions, and profile management.\n  modelEndpointRef:\n    name: gpt-4o\n  systemPrompt: |\n    You are an account support specialist. You handle customer issues related to\n    login problems, password resets, account settings, permissions, and profile\n    management.\n\n    When responding to a ticket:\n    1. Identify the specific account issue\n    2. Verify the request is legitimate (flag suspicious activity)\n    3. Provide clear instructions for self-service resolution where possible\n    4. Flag any security-sensitive operations for human verification\n\n    Response format:\n    {\n      \"response_draft\": \"<draft reply to the customer>\",\n      \"internal_notes\": \"<notes for the support team>\",\n      \"actions_required\": [\"<list of actions to take>\"],\n      \"security_flag\": <true|false>,\n      \"security_concern\": \"<description if flagged>\",\n      \"needs_human_escalation\": <true|false>,\n      \"escalation_reason\": \"<reason if escalation needed>\"\n    }\n  inputs:\n    - name: ticket_content\n      type: string\n      description: The raw content of the support ticket\n    - name: classification\n      type: object\n      description: The triage classification from the router agent\n    - name: customer_metadata\n      type: object\n      description: Customer account information\n      required: false\n  outputs:\n    - name: resolution\n      type: object\n      description: The proposed resolution including draft response and required actions\n"}, {"name": "agent-billing-specialist.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: Agent\nmetadata:\n  name: billing-specialist\n  labels:\n    app: customer-support-routing\n    role: specialist\n    category: billing\nspec:\n  description: >\n    Handles billing-related support tickets including payment issues, refunds,\n    subscription changes, and pricing inquiries.\n  modelEndpointRef:\n    name: gpt-4o\n  systemPrompt: |\n    You are a billing support specialist. You handle customer issues related to\n    payments, invoices, refunds, subscriptions, and pricing.\n\n    When responding to a ticket:\n    1. Acknowledge the customer's concern\n    2. Identify the specific billing issue\n    3. Provide a recommended resolution or next steps\n    4. If the issue requires manual intervention (e.g., processing a refund),\n       flag it for human escalation\n\n    Response format:\n    {\n      \"response_draft\": \"<draft reply to the customer>\",\n      \"internal_notes\": \"<notes for the support team>\",\n      \"actions_required\": [\"<list of actions to take>\"],\n      \"needs_human_escalation\": <true|false>,\n      \"escalation_reason\": \"<reason if escalation needed>\"\n    }\n  inputs:\n    - name: ticket_content\n      type: string\n      description: The raw content of the support ticket\n    - name: classification\n      type: object\n      description: The triage classification from the router agent\n    - name: customer_metadata\n      type: object\n      description: Customer account and billing information\n      required: false\n  outputs:\n    - name: resolution\n      type: object\n      description: The proposed resolution including draft response and required actions\n"}, {"name": "agent-escalation.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: Agent\nmetadata:\n  name: escalation-handler\n  labels:\n    app: customer-support-routing\n    role: escalation\nspec:\n  description: >\n    Handles tickets that require escalation. Reviews specialist recommendations,\n    compiles context for human agents, and prioritizes the escalation queue.\n  modelEndpointRef:\n    name: gpt-4o\n  systemPrompt: |\n    You are an escalation handler for customer support. When a specialist agent\n    determines that a ticket needs human intervention, you prepare a comprehensive\n    escalation package.\n\n    Your responsibilities:\n    1. Compile all relevant context from the ticket and specialist analysis\n    2. Assign an escalation priority\n    3. Recommend the appropriate human team to handle the case\n    4. Provide a brief executive summary for the human agent\n\n    Response format:\n    {\n      \"escalation_priority\": \"<p1|p2|p3>\",\n      \"assigned_team\": \"<billing_ops|engineering|security|account_management|leadership>\",\n      \"executive_summary\": \"<2-3 sentence summary for the human agent>\",\n      \"full_context\": {\n        \"original_ticket\": \"<ticket content>\",\n        \"specialist_analysis\": \"<what the specialist found>\",\n        \"recommended_actions\": [\"<actions the specialist recommended>\"],\n        \"escalation_reason\": \"<why this needs a human>\"\n      },\n      \"suggested_sla_hours\": <number>\n    }\n  inputs:\n    - name: ticket_content\n      type: string\n      description: The raw content of the support ticket\n    - name: classification\n      type: object\n      description: The triage classification from the router agent\n    - name: specialist_resolution\n      type: object\n      description: The resolution output from the specialist agent\n  outputs:\n    - name: escalation_package\n      type: object\n      description: Complete escalation package for human agent handoff\n"}, {"name": "agent-general-specialist.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: Agent\nmetadata:\n  name: general-specialist\n  labels:\n    app: customer-support-routing\n    role: specialist\n    category: general\nspec:\n  description: >\n    Handles general support tickets including feature requests, onboarding\n    questions, feedback, and inquiries that do not fit other categories.\n  modelEndpointRef:\n    name: gpt-4o\n  systemPrompt: |\n    You are a general customer support specialist. You handle inquiries that\n    include feature requests, general product questions, onboarding assistance,\n    and customer feedback.\n\n    When responding to a ticket:\n    1. Understand the customer's question or request\n    2. Provide a helpful and friendly response\n    3. For feature requests, log them with relevant details\n    4. For onboarding questions, provide clear guidance and link to resources\n\n    Response format:\n    {\n      \"response_draft\": \"<draft reply to the customer>\",\n      \"internal_notes\": \"<notes for the support team>\",\n      \"ticket_type\": \"<question|feature_request|feedback|onboarding>\",\n      \"feature_request_details\": \"<details if applicable>\",\n      \"needs_human_escalation\": <true|false>,\n      \"escalation_reason\": \"<reason if escalation needed>\"\n    }\n  inputs:\n    - name: ticket_content\n      type: string\n      description: The raw content of the support ticket\n    - name: classification\n      type: object\n      description: The triage classification from the router agent\n    - name: customer_metadata\n      type: object\n      description: Customer information\n      required: false\n  outputs:\n    - name: resolution\n      type: object\n      description: The proposed resolution including draft response\n"}, {"name": "agent-system.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: AgentSystem\nmetadata:\n  name: customer-support-routing\n  labels:\n    app: customer-support-routing\nspec:\n  description: >\n    A multi-agent system for automated customer support ticket routing and\n    resolution. Incoming tickets are triaged by a router agent, dispatched to\n    the appropriate specialist, and escalated to human agents when necessary.\n  agents:\n    - name: triage-router\n      ref:\n        name: triage-router\n      role: entrypoint\n    - name: billing-specialist\n      ref:\n        name: billing-specialist\n      role: worker\n    - name: technical-specialist\n      ref:\n        name: technical-specialist\n      role: worker\n    - name: account-specialist\n      ref:\n        name: account-specialist\n      role: worker\n    - name: general-specialist\n      ref:\n        name: general-specialist\n      role: worker\n    - name: escalation-handler\n      ref:\n        name: escalation-handler\n      role: worker\n  routing:\n    entrypoint: triage-router\n    rules:\n      - from: triage-router\n        to: billing-specialist\n        condition: \"classification.category == 'billing'\"\n      - from: triage-router\n        to: technical-specialist\n        condition: \"classification.category == 'technical'\"\n      - from: triage-router\n        to: account-specialist\n        condition: \"classification.category == 'account'\"\n      - from: triage-router\n        to: general-specialist\n        condition: \"classification.category == 'general'\"\n      - from: billing-specialist\n        to: escalation-handler\n        condition: \"resolution.needs_human_escalation == true\"\n      - from: technical-specialist\n        to: escalation-handler\n        condition: \"resolution.needs_human_escalation == true\"\n      - from: account-specialist\n        to: escalation-handler\n        condition: \"resolution.needs_human_escalation == true\"\n      - from: general-specialist\n        to: escalation-handler\n        condition: \"resolution.needs_human_escalation == true\"\n"}, {"name": "agent-technical-specialist.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: Agent\nmetadata:\n  name: technical-specialist\n  labels:\n    app: customer-support-routing\n    role: specialist\n    category: technical\nspec:\n  description: >\n    Handles technical support tickets including bug reports, integration issues,\n    API problems, and performance complaints.\n  modelEndpointRef:\n    name: gpt-4o\n  systemPrompt: |\n    You are a technical support specialist. You handle customer issues related to\n    bugs, errors, integrations, API usage, and system performance.\n\n    When responding to a ticket:\n    1. Identify the technical issue described\n    2. Check if it matches any known issues or common troubleshooting patterns\n    3. Provide step-by-step troubleshooting guidance or a fix\n    4. If the issue appears to be a genuine bug, flag it for engineering escalation\n\n    Response format:\n    {\n      \"response_draft\": \"<draft reply to the customer>\",\n      \"internal_notes\": \"<technical analysis notes>\",\n      \"troubleshooting_steps\": [\"<ordered list of steps>\"],\n      \"likely_root_cause\": \"<suspected cause>\",\n      \"needs_human_escalation\": <true|false>,\n      \"escalation_reason\": \"<reason if escalation needed>\",\n      \"escalation_team\": \"<engineering|devops|security>\"\n    }\n  inputs:\n    - name: ticket_content\n      type: string\n      description: The raw content of the support ticket\n    - name: classification\n      type: object\n      description: The triage classification from the router agent\n    - name: customer_metadata\n      type: object\n      description: Customer technical environment details\n      required: false\n  outputs:\n    - name: resolution\n      type: object\n      description: The proposed resolution including draft response and troubleshooting steps\n"}, {"name": "agent-triage-router.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: Agent\nmetadata:\n  name: triage-router\n  labels:\n    app: customer-support-routing\n    role: router\nspec:\n  description: >\n    Classifies incoming customer support tickets and routes them to the\n    appropriate specialist agent based on ticket content, urgency, and category.\n  modelEndpointRef:\n    name: gpt-4o\n  systemPrompt: |\n    You are a customer support ticket triage specialist. Your job is to analyze\n    incoming support tickets and classify them into the correct category.\n\n    Categories:\n    - billing: Payment issues, invoices, refunds, subscription changes, pricing questions\n    - technical: Bugs, errors, outages, integration problems, API issues, performance\n    - account: Login issues, password resets, account settings, profile changes, permissions\n    - general: Feature requests, general questions, feedback, onboarding help\n\n    For each ticket, respond with a JSON object:\n    {\n      \"category\": \"<billing|technical|account|general>\",\n      \"priority\": \"<low|medium|high|critical>\",\n      \"summary\": \"<brief one-line summary>\",\n      \"reasoning\": \"<why you chose this category and priority>\"\n    }\n\n    Priority guidelines:\n    - critical: Service completely down, data loss, security breach\n    - high: Major feature broken, billing overcharge, account locked out\n    - medium: Non-blocking issue, moderate inconvenience\n    - low: General questions, minor UI issues, feature requests\n  inputs:\n    - name: ticket_content\n      type: string\n      description: The raw content of the support ticket\n    - name: customer_metadata\n      type: object\n      description: Optional metadata about the customer (plan tier, account age, etc.)\n      required: false\n  outputs:\n    - name: classification\n      type: object\n      description: The ticket classification with category, priority, summary, and reasoning\n"}, {"name": "model-endpoint.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: ModelEndpoint\nmetadata:\n  name: gpt-4o\n  labels:\n    app: customer-support-routing\nspec:\n  provider: openai\n  model: gpt-4o\n  parameters:\n    temperature: 0.3\n    max_tokens: 4096\n  authSecretRef:\n    name: openai-api-key\n"}, {"name": "secret.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: Secret\nmetadata:\n  name: openai-api-key\n  labels:\n    app: customer-support-routing\nspec:\n  type: opaque\n  data:\n    apiKey: \"${OPENAI_API_KEY}\"\n"}, {"name": "task-process-ticket.yaml", "type": "text", "content": "apiVersion: orloj.dev/v1\nkind: Task\nmetadata:\n  name: process-support-ticket\n  labels:\n    app: customer-support-routing\nspec:\n  description: >\n    Processes a single incoming customer support ticket through the routing\n    system. The ticket is classified, routed to a specialist, and either\n    resolved automatically or escalated to a human agent.\n  agentSystemRef:\n    name: customer-support-routing\n  inputs:\n    - name: ticket_content\n      type: string\n      description: The raw content of the customer support ticket\n      required: true\n    - name: customer_metadata\n      type: object\n      description: >\n        Optional metadata about the customer, such as plan tier, account age,\n        and previous ticket history\n      required: false\n  outputs:\n    - name: classification\n      type: object\n      description: Ticket category, priority, and summary from triage\n    - name: resolution\n      type: object\n      description: Proposed resolution from the specialist agent\n    - name: escalation_package\n      type: object\n      description: Escalation details if human intervention is needed (null if resolved)\n  timeout: 120s\n  retryPolicy:\n    maxRetries: 2\n    backoffMultiplier: 2\n"}], "grading": {"expectations": [{"text": "valid_api_version", "passed": true, "evidence": "All 10 YAML files have apiVersion: orloj.dev/v1"}, {"text": "correct_kinds", "passed": true, "evidence": "Agent (x6), AgentSystem, ModelEndpoint, Secret, and Task kinds are all used correctly"}, {"text": "agents_have_model_ref", "passed": false, "evidence": "Agents use spec.modelEndpointRef.name instead of spec.model_ref. The field name is non-standard"}, {"text": "agents_have_prompts", "passed": true, "evidence": "All 6 agents have multi-line systemPrompt fields with detailed instructions (8+ lines each). Note: field is named systemPrompt instead of prompt"}, {"text": "system_has_graph", "passed": false, "evidence": "AgentSystem does not have spec.graph. It uses spec.routing with entrypoint and rules instead of a graph with edges"}, {"text": "task_has_retry", "passed": true, "evidence": "Task has spec.retryPolicy with maxRetries: 2 and backoffMultiplier: 2. Field naming differs (retryPolicy vs retry) but retry is configured"}, {"text": "task_references_system", "passed": false, "evidence": "Task uses spec.agentSystemRef.name: customer-support-routing instead of spec.system. Field name differs from expected"}, {"text": "secret_has_placeholder", "passed": true, "evidence": "Secret has apiKey: '${OPENAI_API_KEY}' which is a placeholder environment variable reference indicating replacement"}, {"text": "consistent_naming", "passed": true, "evidence": "Resources use consistent lowercase slug naming with customer-support-routing app label: triage-router, billing-specialist, technical-specialist, account-specialist, general-specialist, escalation-handler"}, {"text": "no_deprecated_fields", "passed": true, "evidence": "No graph.*.next fields used. The system uses routing.rules with from/to/condition format"}, {"text": "conditional_routing", "passed": true, "evidence": "spec.routing.rules has conditions like classification.category == 'billing', 'technical', 'account', 'general' for routing from triage-router, plus escalation conditions on resolution.needs_human_escalation == true"}, {"text": "clarifying_approach", "passed": false, "evidence": "No NOTES.md, README, or any documentation file acknowledging ambiguity or documenting assumptions. The output was generated without addressing the vagueness of the input"}]}}], "previous_feedback": {}, "previous_outputs": {}, "benchmark": {"metadata": {"skill_name": "orloj-generator", "skill_path": "/sessions/determined-elegant-albattani/mnt/orloj/skills/orloj-generator", "executor_model": "claude-opus-4-6", "analyzer_model": "claude-opus-4-6", "timestamp": "2026-04-18T00:18:00Z", "evals_run": [1, 2, 3], "runs_per_configuration": 3}, "runs": [{"eval_id": 1, "eval_name": "pipeline-anthropic", "config": "with_skill", "pass_rate": 1.0, "passed": 10, "total": 10, "time_seconds": 61.0, "total_tokens": 21194}, {"eval_id": 1, "eval_name": "pipeline-anthropic", "config": "without_skill", "pass_rate": 0.6, "passed": 6, "total": 10, "time_seconds": 51.7, "total_tokens": 14344}, {"eval_id": 2, "eval_name": "swarm-with-tools", "config": "with_skill", "pass_rate": 1.0, "passed": 13, "total": 13, "time_seconds": 63.1, "total_tokens": 22692}, {"eval_id": 2, "eval_name": "swarm-with-tools", "config": "without_skill", "pass_rate": 0.54, "passed": 7, "total": 13, "time_seconds": 56.1, "total_tokens": 14238}, {"eval_id": 3, "eval_name": "vague-support-routing", "config": "with_skill", "pass_rate": 1.0, "passed": 12, "total": 12, "time_seconds": 93.3, "total_tokens": 23769}, {"eval_id": 3, "eval_name": "vague-support-routing", "config": "without_skill", "pass_rate": 0.67, "passed": 8, "total": 12, "time_seconds": 75.5, "total_tokens": 15768}], "run_summary": {"with_skill": {"pass_rate": {"mean": 1.0, "stddev": 0.0, "min": 1.0, "max": 1.0}, "time_seconds": {"mean": 72.5, "stddev": 18.2, "min": 61.0, "max": 93.3}, "total_tokens": {"mean": 22552, "stddev": 1303, "min": 21194, "max": 23769}}, "without_skill": {"pass_rate": {"mean": 0.6, "stddev": 0.06, "min": 0.54, "max": 0.67}, "time_seconds": {"mean": 61.1, "stddev": 12.6, "min": 51.7, "max": 75.5}, "total_tokens": {"mean": 14783, "stddev": 799, "min": 14238, "max": 15768}}, "delta": {"pass_rate": "+0.40", "time_seconds": "+11.4", "tokens": "+7769"}}, "notes": ["The with_skill configuration achieved 100% pass rate across all 3 evals (35/35 assertions), while without_skill averaged 60% (21/35).", "The most consistent failure pattern without the skill was incorrect field names: model_ref vs modelEndpointRef, spec.system vs agentSystemRef, spec.graph with edges vs custom routing structures.", "The skill adds ~50% more tokens and ~18% more time, but this overhead buys schema correctness that would otherwise require manual YAML debugging.", "Without the skill, no run included spec.retry on Tasks \u2014 a production-critical field that the skill consistently includes."]}};
+
+    // ---- State ----
+    let feedbackMap = {};  // run_id -> feedback text
+    let currentIndex = 0;
+    let visitedRuns = new Set();
+
+    // ---- Init ----
+    async function init() {
+      // Load saved feedback from server — but only if this isn't a fresh
+      // iteration (indicated by previous_feedback being present). When
+      // previous feedback exists, the feedback.json on disk is stale from
+      // the prior iteration and should not pre-fill the textareas.
+      const hasPrevious = Object.keys(EMBEDDED_DATA.previous_feedback || {}).length > 0
+        || Object.keys(EMBEDDED_DATA.previous_outputs || {}).length > 0;
+      if (!hasPrevious) {
+        try {
+          const resp = await fetch("/api/feedback");
+          const data = await resp.json();
+          if (data.reviews) {
+            for (const r of data.reviews) feedbackMap[r.run_id] = r.feedback;
+          }
+        } catch { /* first run, no feedback yet */ }
+      }
+
+      document.getElementById("skill-name").textContent = EMBEDDED_DATA.skill_name;
+      showRun(0);
+
+      // Wire up feedback auto-save
+      const textarea = document.getElementById("feedback");
+      let saveTimeout = null;
+      textarea.addEventListener("input", () => {
+        clearTimeout(saveTimeout);
+        document.getElementById("feedback-status").textContent = "";
+        saveTimeout = setTimeout(() => saveCurrentFeedback(), 800);
+      });
+    }
+
+    // ---- Navigation ----
+    function navigate(delta) {
+      const newIndex = currentIndex + delta;
+      if (newIndex >= 0 && newIndex < EMBEDDED_DATA.runs.length) {
+        saveCurrentFeedback();
+        showRun(newIndex);
+      }
+    }
+
+    function updateNavButtons() {
+      document.getElementById("prev-btn").disabled = currentIndex === 0;
+      document.getElementById("next-btn").disabled =
+        currentIndex === EMBEDDED_DATA.runs.length - 1;
+    }
+
+    // ---- Show a run ----
+    function showRun(index) {
+      currentIndex = index;
+      const run = EMBEDDED_DATA.runs[index];
+
+      // Progress
+      document.getElementById("progress").textContent =
+        `${index + 1} of ${EMBEDDED_DATA.runs.length}`;
+
+      // Prompt
+      document.getElementById("prompt-text").textContent = run.prompt;
+
+      // Config badge
+      const badge = document.getElementById("config-badge");
+      const configMatch = run.id.match(/(with_skill|without_skill|new_skill|old_skill)/);
+      if (configMatch) {
+        const config = configMatch[1];
+        const isBaseline = config === "without_skill" || config === "old_skill";
+        badge.textContent = config.replace(/_/g, " ");
+        badge.className = "config-badge " + (isBaseline ? "config-baseline" : "config-primary");
+        badge.style.display = "inline-block";
+      } else {
+        badge.style.display = "none";
+      }
+
+      // Outputs
+      renderOutputs(run);
+
+      // Previous outputs
+      renderPrevOutputs(run);
+
+      // Grades
+      renderGrades(run);
+
+      // Previous feedback
+      const prevFb = (EMBEDDED_DATA.previous_feedback || {})[run.id];
+      const prevEl = document.getElementById("prev-feedback");
+      if (prevFb) {
+        document.getElementById("prev-feedback-text").textContent = prevFb;
+        prevEl.style.display = "block";
+      } else {
+        prevEl.style.display = "none";
+      }
+
+      // Feedback
+      document.getElementById("feedback").value = feedbackMap[run.id] || "";
+      document.getElementById("feedback-status").textContent = "";
+
+      updateNavButtons();
+
+      // Track visited runs and promote done button when all visited
+      visitedRuns.add(index);
+      const doneBtn = document.getElementById("done-btn");
+      if (visitedRuns.size >= EMBEDDED_DATA.runs.length) {
+        doneBtn.classList.add("ready");
+      }
+
+      // Scroll main content to top
+      document.querySelector(".main").scrollTop = 0;
+    }
+
+    // ---- Render outputs ----
+    function renderOutputs(run) {
+      const container = document.getElementById("outputs-body");
+      container.innerHTML = "";
+
+      const outputs = run.outputs || [];
+      if (outputs.length === 0) {
+        container.innerHTML = '<div class="empty-state">No output files</div>';
+        return;
+      }
+
+      for (const file of outputs) {
+        const fileDiv = document.createElement("div");
+        fileDiv.className = "output-file";
+
+        // Always show file header with download link
+        const header = document.createElement("div");
+        header.className = "output-file-header";
+        const nameSpan = document.createElement("span");
+        nameSpan.textContent = file.name;
+        header.appendChild(nameSpan);
+        const dlBtn = document.createElement("a");
+        dlBtn.className = "dl-btn";
+        dlBtn.textContent = "Download";
+        dlBtn.download = file.name;
+        dlBtn.href = getDownloadUri(file);
+        header.appendChild(dlBtn);
+        fileDiv.appendChild(header);
+
+        const content = document.createElement("div");
+        content.className = "output-file-content";
+
+        if (file.type === "text") {
+          const pre = document.createElement("pre");
+          pre.textContent = file.content;
+          content.appendChild(pre);
+        } else if (file.type === "image") {
+          const img = document.createElement("img");
+          img.src = file.data_uri;
+          img.alt = file.name;
+          content.appendChild(img);
+        } else if (file.type === "pdf") {
+          const iframe = document.createElement("iframe");
+          iframe.src = file.data_uri;
+          content.appendChild(iframe);
+        } else if (file.type === "xlsx") {
+          renderXlsx(content, file.data_b64);
+        } else if (file.type === "binary") {
+          const a = document.createElement("a");
+          a.className = "download-link";
+          a.href = file.data_uri;
+          a.download = file.name;
+          a.textContent = "Download " + file.name;
+          content.appendChild(a);
+        } else if (file.type === "error") {
+          const pre = document.createElement("pre");
+          pre.textContent = file.content;
+          pre.style.color = "var(--red)";
+          content.appendChild(pre);
+        }
+
+        fileDiv.appendChild(content);
+        container.appendChild(fileDiv);
+      }
+    }
+
+    // ---- XLSX rendering via SheetJS ----
+    function renderXlsx(container, b64Data) {
+      try {
+        const raw = Uint8Array.from(atob(b64Data), c => c.charCodeAt(0));
+        const wb = XLSX.read(raw, { type: "array" });
+
+        for (let i = 0; i < wb.SheetNames.length; i++) {
+          const sheetName = wb.SheetNames[i];
+          const ws = wb.Sheets[sheetName];
+
+          if (wb.SheetNames.length > 1) {
+            const sheetLabel = document.createElement("div");
+            sheetLabel.style.cssText =
+              "font-weight:600; font-size:0.8rem; color:#b0aea5; margin-top:0.5rem; margin-bottom:0.25rem;";
+            sheetLabel.textContent = "Sheet: " + sheetName;
+            container.appendChild(sheetLabel);
+          }
+
+          const htmlStr = XLSX.utils.sheet_to_html(ws, { editable: false });
+          const wrapper = document.createElement("div");
+          wrapper.innerHTML = htmlStr;
+          container.appendChild(wrapper);
+        }
+      } catch (err) {
+        container.textContent = "Error rendering spreadsheet: " + err.message;
+      }
+    }
+
+    // ---- Grades ----
+    function renderGrades(run) {
+      const section = document.getElementById("grades-section");
+      const content = document.getElementById("grades-content");
+
+      if (!run.grading) {
+        section.style.display = "none";
+        return;
+      }
+
+      const grading = run.grading;
+      section.style.display = "block";
+      // Reset to collapsed
+      content.classList.remove("open");
+      document.getElementById("grades-arrow").classList.remove("open");
+
+      const summary = grading.summary || {};
+      const expectations = grading.expectations || [];
+
+      let html = '<div style="padding: 1rem;">';
+
+      // Summary line
+      const passRate = summary.pass_rate != null
+        ? Math.round(summary.pass_rate * 100) + "%"
+        : "?";
+      const badgeClass = summary.pass_rate >= 0.8 ? "grade-pass" : summary.pass_rate >= 0.5 ? "" : "grade-fail";
+      html += '<div class="grades-summary">';
+      html += '<span class="grade-badge ' + badgeClass + '">' + passRate + '</span>';
+      html += '<span>' + (summary.passed || 0) + ' passed, ' + (summary.failed || 0) + ' failed of ' + (summary.total || 0) + '</span>';
+      html += '</div>';
+
+      // Assertions list
+      html += '<ul class="assertion-list">';
+      for (const exp of expectations) {
+        const statusClass = exp.passed ? "pass" : "fail";
+        const statusIcon = exp.passed ? "\u2713" : "\u2717";
+        html += '<li class="assertion-item">';
+        html += '<span class="assertion-status ' + statusClass + '">' + statusIcon + '</span>';
+        html += '<span>' + escapeHtml(exp.text) + '</span>';
+        if (exp.evidence) {
+          html += '<div class="assertion-evidence">' + escapeHtml(exp.evidence) + '</div>';
+        }
+        html += '</li>';
+      }
+      html += '</ul>';
+
+      html += '</div>';
+      content.innerHTML = html;
+    }
+
+    function toggleGrades() {
+      const content = document.getElementById("grades-content");
+      const arrow = document.getElementById("grades-arrow");
+      content.classList.toggle("open");
+      arrow.classList.toggle("open");
+    }
+
+    // ---- Previous outputs (collapsible) ----
+    function renderPrevOutputs(run) {
+      const section = document.getElementById("prev-outputs-section");
+      const content = document.getElementById("prev-outputs-content");
+      const prevOutputs = (EMBEDDED_DATA.previous_outputs || {})[run.id];
+
+      if (!prevOutputs || prevOutputs.length === 0) {
+        section.style.display = "none";
+        return;
+      }
+
+      section.style.display = "block";
+      // Reset to collapsed
+      content.classList.remove("open");
+      document.getElementById("prev-outputs-arrow").classList.remove("open");
+
+      // Render the files into the content area
+      content.innerHTML = "";
+      const wrapper = document.createElement("div");
+      wrapper.style.padding = "1rem";
+
+      for (const file of prevOutputs) {
+        const fileDiv = document.createElement("div");
+        fileDiv.className = "output-file";
+
+        const header = document.createElement("div");
+        header.className = "output-file-header";
+        const nameSpan = document.createElement("span");
+        nameSpan.textContent = file.name;
+        header.appendChild(nameSpan);
+        const dlBtn = document.createElement("a");
+        dlBtn.className = "dl-btn";
+        dlBtn.textContent = "Download";
+        dlBtn.download = file.name;
+        dlBtn.href = getDownloadUri(file);
+        header.appendChild(dlBtn);
+        fileDiv.appendChild(header);
+
+        const fc = document.createElement("div");
+        fc.className = "output-file-content";
+
+        if (file.type === "text") {
+          const pre = document.createElement("pre");
+          pre.textContent = file.content;
+          fc.appendChild(pre);
+        } else if (file.type === "image") {
+          const img = document.createElement("img");
+          img.src = file.data_uri;
+          img.alt = file.name;
+          fc.appendChild(img);
+        } else if (file.type === "pdf") {
+          const iframe = document.createElement("iframe");
+          iframe.src = file.data_uri;
+          fc.appendChild(iframe);
+        } else if (file.type === "xlsx") {
+          renderXlsx(fc, file.data_b64);
+        } else if (file.type === "binary") {
+          const a = document.createElement("a");
+          a.className = "download-link";
+          a.href = file.data_uri;
+          a.download = file.name;
+          a.textContent = "Download " + file.name;
+          fc.appendChild(a);
+        }
+
+        fileDiv.appendChild(fc);
+        wrapper.appendChild(fileDiv);
+      }
+
+      content.appendChild(wrapper);
+    }
+
+    function togglePrevOutputs() {
+      const content = document.getElementById("prev-outputs-content");
+      const arrow = document.getElementById("prev-outputs-arrow");
+      content.classList.toggle("open");
+      arrow.classList.toggle("open");
+    }
+
+    // ---- Feedback (saved to server -> feedback.json) ----
+    function saveCurrentFeedback() {
+      const run = EMBEDDED_DATA.runs[currentIndex];
+      const text = document.getElementById("feedback").value;
+
+      if (text.trim() === "") {
+        delete feedbackMap[run.id];
+      } else {
+        feedbackMap[run.id] = text;
+      }
+
+      // Build reviews array from map
+      const reviews = [];
+      for (const [run_id, feedback] of Object.entries(feedbackMap)) {
+        if (feedback.trim()) {
+          reviews.push({ run_id, feedback, timestamp: new Date().toISOString() });
+        }
+      }
+
+      fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reviews, status: "in_progress" }),
+      }).then(() => {
+        document.getElementById("feedback-status").textContent = "Saved";
+      }).catch(() => {
+        // Static mode or server unavailable — no-op on auto-save,
+        // feedback will be downloaded on final submit
+        document.getElementById("feedback-status").textContent = "Will download on submit";
+      });
+    }
+
+    // ---- Done ----
+    function showDoneDialog() {
+      // Save current textarea to feedbackMap (but don't POST yet)
+      const run = EMBEDDED_DATA.runs[currentIndex];
+      const text = document.getElementById("feedback").value;
+      if (text.trim() === "") {
+        delete feedbackMap[run.id];
+      } else {
+        feedbackMap[run.id] = text;
+      }
+
+      // POST once with status: complete — include ALL runs so the model
+      // can distinguish "no feedback" (looks good) from "not reviewed"
+      const reviews = [];
+      const ts = new Date().toISOString();
+      for (const r of EMBEDDED_DATA.runs) {
+        reviews.push({ run_id: r.id, feedback: feedbackMap[r.id] || "", timestamp: ts });
+      }
+      const payload = JSON.stringify({ reviews, status: "complete" }, null, 2);
+      fetch("/api/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: payload,
+      }).then(() => {
+        document.getElementById("done-overlay").classList.add("visible");
+      }).catch(() => {
+        // Server not available (static mode) — download as file
+        const blob = new Blob([payload], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "feedback.json";
+        a.click();
+        URL.revokeObjectURL(url);
+        document.getElementById("done-overlay").classList.add("visible");
+      });
+    }
+
+    function closeDoneDialog() {
+      // Reset status back to in_progress
+      saveCurrentFeedback();
+      document.getElementById("done-overlay").classList.remove("visible");
+    }
+
+    // ---- Toast ----
+    function showToast(message) {
+      const toast = document.getElementById("toast");
+      toast.textContent = message;
+      toast.classList.add("visible");
+      setTimeout(() => toast.classList.remove("visible"), 2000);
+    }
+
+    // ---- Keyboard nav ----
+    document.addEventListener("keydown", (e) => {
+      // Don't capture when typing in textarea
+      if (e.target.tagName === "TEXTAREA") return;
+
+      if (e.key === "ArrowLeft" || e.key === "ArrowUp") {
+        e.preventDefault();
+        navigate(-1);
+      } else if (e.key === "ArrowRight" || e.key === "ArrowDown") {
+        e.preventDefault();
+        navigate(1);
+      }
+    });
+
+    // ---- Util ----
+    function getDownloadUri(file) {
+      if (file.data_uri) return file.data_uri;
+      if (file.data_b64) return "data:application/octet-stream;base64," + file.data_b64;
+      if (file.type === "text") return "data:text/plain;charset=utf-8," + encodeURIComponent(file.content);
+      return "#";
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement("div");
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // ---- View switching ----
+    function switchView(view) {
+      document.querySelectorAll(".view-tab").forEach(t => t.classList.remove("active"));
+      document.querySelectorAll(".view-panel").forEach(p => p.classList.remove("active"));
+      document.querySelector(`[onclick="switchView('${view}')"]`).classList.add("active");
+      document.getElementById("panel-" + view).classList.add("active");
+    }
+
+    // ---- Benchmark rendering ----
+    function renderBenchmark() {
+      const data = EMBEDDED_DATA.benchmark;
+      if (!data) return;
+
+      // Show the tabs
+      document.getElementById("view-tabs").style.display = "flex";
+
+      const container = document.getElementById("benchmark-content");
+      const summary = data.run_summary || {};
+      const metadata = data.metadata || {};
+      const notes = data.notes || [];
+
+      let html = "";
+
+      // Header
+      html += "<h2 style='font-family: Poppins, sans-serif; margin-bottom: 0.5rem;'>Benchmark Results</h2>";
+      html += "<p style='color: var(--text-muted); font-size: 0.875rem; margin-bottom: 1.25rem;'>";
+      if (metadata.skill_name) html += "<strong>" + escapeHtml(metadata.skill_name) + "</strong> &mdash; ";
+      if (metadata.timestamp) html += metadata.timestamp + " &mdash; ";
+      if (metadata.evals_run) html += "Evals: " + metadata.evals_run.join(", ") + " &mdash; ";
+      html += (metadata.runs_per_configuration || "?") + " runs per configuration";
+      html += "</p>";
+
+      // Summary table
+      html += '<table class="benchmark-table">';
+
+      function fmtStat(stat, pct) {
+        if (!stat) return "—";
+        const suffix = pct ? "%" : "";
+        const m = pct ? (stat.mean * 100).toFixed(0) : stat.mean.toFixed(1);
+        const s = pct ? (stat.stddev * 100).toFixed(0) : stat.stddev.toFixed(1);
+        return m + suffix + " ± " + s + suffix;
+      }
+
+      function deltaClass(val) {
+        if (!val) return "";
+        const n = parseFloat(val);
+        if (n > 0) return "benchmark-delta-positive";
+        if (n < 0) return "benchmark-delta-negative";
+        return "";
+      }
+
+      // Discover config names dynamically (everything except "delta")
+      const configs = Object.keys(summary).filter(k => k !== "delta");
+      const configA = configs[0] || "config_a";
+      const configB = configs[1] || "config_b";
+      const labelA = configA.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+      const labelB = configB.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+      const a = summary[configA] || {};
+      const b = summary[configB] || {};
+      const delta = summary.delta || {};
+
+      html += "<thead><tr><th>Metric</th><th>" + escapeHtml(labelA) + "</th><th>" + escapeHtml(labelB) + "</th><th>Delta</th></tr></thead>";
+      html += "<tbody>";
+
+      html += "<tr><td><strong>Pass Rate</strong></td>";
+      html += "<td>" + fmtStat(a.pass_rate, true) + "</td>";
+      html += "<td>" + fmtStat(b.pass_rate, true) + "</td>";
+      html += '<td class="' + deltaClass(delta.pass_rate) + '">' + (delta.pass_rate || "—") + "</td></tr>";
+
+      // Time (only show row if data exists)
+      if (a.time_seconds || b.time_seconds) {
+        html += "<tr><td><strong>Time (s)</strong></td>";
+        html += "<td>" + fmtStat(a.time_seconds, false) + "</td>";
+        html += "<td>" + fmtStat(b.time_seconds, false) + "</td>";
+        html += '<td class="' + deltaClass(delta.time_seconds) + '">' + (delta.time_seconds ? delta.time_seconds + "s" : "—") + "</td></tr>";
+      }
+
+      // Tokens (only show row if data exists)
+      if (a.tokens || b.tokens) {
+        html += "<tr><td><strong>Tokens</strong></td>";
+        html += "<td>" + fmtStat(a.tokens, false) + "</td>";
+        html += "<td>" + fmtStat(b.tokens, false) + "</td>";
+        html += '<td class="' + deltaClass(delta.tokens) + '">' + (delta.tokens || "—") + "</td></tr>";
+      }
+
+      html += "</tbody></table>";
+
+      // Per-eval breakdown (if runs data available)
+      const runs = data.runs || [];
+      if (runs.length > 0) {
+        const evalIds = [...new Set(runs.map(r => r.eval_id))].sort((a, b) => a - b);
+
+        html += "<h3 style='font-family: Poppins, sans-serif; margin-bottom: 0.75rem;'>Per-Eval Breakdown</h3>";
+
+        const hasTime = runs.some(r => r.result && r.result.time_seconds != null);
+        const hasErrors = runs.some(r => r.result && r.result.errors > 0);
+
+        for (const evalId of evalIds) {
+          const evalRuns = runs.filter(r => r.eval_id === evalId);
+          const evalName = evalRuns[0] && evalRuns[0].eval_name ? evalRuns[0].eval_name : "Eval " + evalId;
+
+          html += "<h4 style='font-family: Poppins, sans-serif; margin: 1rem 0 0.5rem; color: var(--text);'>" + escapeHtml(evalName) + "</h4>";
+          html += '<table class="benchmark-table">';
+          html += "<thead><tr><th>Config</th><th>Run</th><th>Pass Rate</th>";
+          if (hasTime) html += "<th>Time (s)</th>";
+          if (hasErrors) html += "<th>Crashes During Execution</th>";
+          html += "</tr></thead>";
+          html += "<tbody>";
+
+          // Group by config and render with average rows
+          const configGroups = [...new Set(evalRuns.map(r => r.configuration))];
+          for (let ci = 0; ci < configGroups.length; ci++) {
+            const config = configGroups[ci];
+            const configRuns = evalRuns.filter(r => r.configuration === config);
+            if (configRuns.length === 0) continue;
+
+            const rowClass = ci === 0 ? "benchmark-row-with" : "benchmark-row-without";
+            const configLabel = config.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+
+            for (const run of configRuns) {
+              const r = run.result || {};
+              const prClass = r.pass_rate >= 0.8 ? "benchmark-delta-positive" : r.pass_rate < 0.5 ? "benchmark-delta-negative" : "";
+              html += '<tr class="' + rowClass + '">';
+              html += "<td>" + configLabel + "</td>";
+              html += "<td>" + run.run_number + "</td>";
+              html += '<td class="' + prClass + '">' + ((r.pass_rate || 0) * 100).toFixed(0) + "% (" + (r.passed || 0) + "/" + (r.total || 0) + ")</td>";
+              if (hasTime) html += "<td>" + (r.time_seconds != null ? r.time_seconds.toFixed(1) : "—") + "</td>";
+              if (hasErrors) html += "<td>" + (r.errors || 0) + "</td>";
+              html += "</tr>";
+            }
+
+            // Average row
+            const rates = configRuns.map(r => (r.result || {}).pass_rate || 0);
+            const avgRate = rates.reduce((a, b) => a + b, 0) / rates.length;
+            const avgPrClass = avgRate >= 0.8 ? "benchmark-delta-positive" : avgRate < 0.5 ? "benchmark-delta-negative" : "";
+            html += '<tr class="benchmark-row-avg ' + rowClass + '">';
+            html += "<td>" + configLabel + "</td>";
+            html += "<td>Avg</td>";
+            html += '<td class="' + avgPrClass + '">' + (avgRate * 100).toFixed(0) + "%</td>";
+            if (hasTime) {
+              const times = configRuns.map(r => (r.result || {}).time_seconds).filter(t => t != null);
+              html += "<td>" + (times.length ? (times.reduce((a, b) => a + b, 0) / times.length).toFixed(1) : "—") + "</td>";
+            }
+            if (hasErrors) html += "<td></td>";
+            html += "</tr>";
+          }
+          html += "</tbody></table>";
+
+          // Per-assertion detail for this eval
+          const runsWithExpectations = {};
+          for (const config of configGroups) {
+            runsWithExpectations[config] = evalRuns.filter(r => r.configuration === config && r.expectations && r.expectations.length > 0);
+          }
+          const hasAnyExpectations = Object.values(runsWithExpectations).some(runs => runs.length > 0);
+          if (hasAnyExpectations) {
+            // Collect all unique assertion texts across all configs
+            const allAssertions = [];
+            const seen = new Set();
+            for (const config of configGroups) {
+              for (const run of runsWithExpectations[config]) {
+                for (const exp of (run.expectations || [])) {
+                  if (!seen.has(exp.text)) {
+                    seen.add(exp.text);
+                    allAssertions.push(exp.text);
+                  }
+                }
+              }
+            }
+
+            html += '<table class="benchmark-table" style="margin-top: 0.5rem;">';
+            html += "<thead><tr><th>Assertion</th>";
+            for (const config of configGroups) {
+              const label = config.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+              html += "<th>" + escapeHtml(label) + "</th>";
+            }
+            html += "</tr></thead><tbody>";
+
+            for (const assertionText of allAssertions) {
+              html += "<tr><td>" + escapeHtml(assertionText) + "</td>";
+
+              for (const config of configGroups) {
+                html += "<td>";
+                for (const run of runsWithExpectations[config]) {
+                  const exp = (run.expectations || []).find(e => e.text === assertionText);
+                  if (exp) {
+                    const cls = exp.passed ? "benchmark-delta-positive" : "benchmark-delta-negative";
+                    const icon = exp.passed ? "\u2713" : "\u2717";
+                    html += '<span class="' + cls + '" title="Run ' + run.run_number + ': ' + escapeHtml(exp.evidence || "") + '">' + icon + "</span> ";
+                  } else {
+                    html += "— ";
+                  }
+                }
+                html += "</td>";
+              }
+              html += "</tr>";
+            }
+            html += "</tbody></table>";
+          }
+        }
+      }
+
+      // Notes
+      if (notes.length > 0) {
+        html += '<div class="benchmark-notes">';
+        html += "<h3>Analysis Notes</h3>";
+        html += "<ul>";
+        for (const note of notes) {
+          html += "<li>" + escapeHtml(note) + "</li>";
+        }
+        html += "</ul></div>";
+      }
+
+      container.innerHTML = html;
+    }
+
+    // ---- Start ----
+    init();
+    renderBenchmark();
+  </script>
+</body>
+</html>

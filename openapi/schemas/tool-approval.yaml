@@ -18,6 +18,7 @@ components:
         decision: { type: string }
         decided_by: { type: string }
         decided_at: { type: string }
+        comment: { type: string }
         expires_at: { type: string }
     ToolApproval:
       type: object

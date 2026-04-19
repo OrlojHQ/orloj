@@ -32,4 +32,5 @@ Each kind has a dedicated page; see [Resource reference pages](#resource-referen
 - [AgentRole](./agent-role.md)
 - [ToolPermission](./tool-permission.md)
 - [ToolApproval](./tool-approval.md)
+- [TaskApproval](./task-approval.md)
 - [Worker](./worker.md)

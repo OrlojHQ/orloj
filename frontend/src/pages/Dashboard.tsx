@@ -10,6 +10,7 @@ import {
   useModelEndpoints,
   useTools,
   useToolApprovals,
+  useTaskApprovals,
   useHealthCheck,
 } from "../api/hooks";
 import {
@@ -84,6 +85,7 @@ export function Dashboard() {
   const models = useModelEndpoints();
   const tools = useTools();
   const approvals = useToolApprovals();
+  const taskApprovals = useTaskApprovals();
   const health = useHealthCheck();
   const navigate = useNavigate();
 
@@ -108,9 +110,12 @@ export function Dashboard() {
   const modelsReady = modelList.filter((m) => (m.status?.phase ?? "").toLowerCase() === "ready").length;
 
   const pendingApprovals = useMemo(
-    () =>
-      (approvals.data ?? []).filter((a) => (a.status?.phase ?? "Pending").toLowerCase() === "pending").length,
-    [approvals.data],
+    () => {
+      const toolPending = (approvals.data ?? []).filter((a) => (a.status?.phase ?? "Pending").toLowerCase() === "pending").length;
+      const taskPending = (taskApprovals.data ?? []).filter((a) => (a.status?.phase ?? "Pending").toLowerCase() === "pending").length;
+      return toolPending + taskPending;
+    },
+    [approvals.data, taskApprovals.data],
   );
 
   const taskIssues = failed + deadletter;

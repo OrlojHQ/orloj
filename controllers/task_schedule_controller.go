@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/cronexpr"
 	"github.com/OrlojHQ/orloj/eventbus"
+	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/store"
 )
 
@@ -27,6 +27,7 @@ type TaskScheduleController struct {
 	reconcileEvery    time.Duration
 	logger            *log.Logger
 	eventBus          eventbus.Bus
+	now               func() time.Time
 }
 
 func NewTaskScheduleController(
@@ -43,6 +44,9 @@ func NewTaskScheduleController(
 		taskStore:         taskStore,
 		reconcileEvery:    reconcileEvery,
 		logger:            logger,
+		now: func() time.Time {
+			return time.Now().UTC()
+		},
 	}
 }
 
@@ -99,7 +103,7 @@ func (c *TaskScheduleController) ReconcileOnce(ctx context.Context) error {
 }
 
 func (c *TaskScheduleController) reconcileSchedule(ctx context.Context, item resources.TaskSchedule) error {
-	now := time.Now().UTC()
+	now := c.currentTime()
 	expr, loc, err := parseScheduleSpec(item)
 	if err != nil {
 		item.Status.LastError = err.Error()
@@ -179,6 +183,13 @@ func (c *TaskScheduleController) reconcileSchedule(ctx context.Context, item res
 	}
 
 	return c.refreshScheduleStatus(ctx, item)
+}
+
+func (c *TaskScheduleController) currentTime() time.Time {
+	if c != nil && c.now != nil {
+		return c.now().UTC()
+	}
+	return time.Now().UTC()
 }
 
 func parseScheduleSpec(item resources.TaskSchedule) (cronexpr.Expression, *time.Location, error) {

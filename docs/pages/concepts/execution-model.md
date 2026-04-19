@@ -45,10 +45,12 @@ See [AgentSystem -- Delegation](./agents/agent-system.md#delegation) for full de
 
 `Task.status.messages` includes:
 
-- lifecycle phase: `queued|running|retrypending|succeeded|deadletter`
+- lifecycle phase: `queued|running|retrypending|waitingapproval|succeeded|deadletter`
 - retry fields: `attempts`, `max_attempts`, `next_attempt_at`
 - worker ownership fields: `worker`, `processed_at`, `last_error`
 - routing/tracing fields: `branch_id`, `parent_branch_id`, `trace_id`, `parent_id`
+
+When a workflow hits a review checkpoint, the current message moves to `waitingapproval` until the linked `TaskApproval` is approved, denied, expired, or rerouted through `request_changes`.
 
 ## Tool Selection Model
 

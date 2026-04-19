@@ -23,6 +23,7 @@ type StoreSet struct {
 	Roles         *store.AgentRoleStore
 	ToolPerms     *store.ToolPermissionStore
 	ToolApprovals *store.ToolApprovalStore
+	TaskApprovals *store.TaskApprovalStore
 	Tasks         *store.TaskStore
 	TaskSchedules *store.TaskScheduleStore
 	TaskWebhooks  *store.TaskWebhookStore
@@ -71,6 +72,7 @@ func OpenStores(cfg StoreConfig, logger *log.Logger) (*StoreSet, error) {
 		s.Roles = store.NewAgentRoleStore()
 		s.ToolPerms = store.NewToolPermissionStore()
 		s.ToolApprovals = store.NewToolApprovalStore()
+		s.TaskApprovals = store.NewTaskApprovalStore()
 		s.Tasks = store.NewTaskStore()
 		s.Workers = store.NewWorkerStore()
 		s.McpServers = store.NewMcpServerStore()
@@ -138,6 +140,7 @@ func OpenStores(cfg StoreConfig, logger *log.Logger) (*StoreSet, error) {
 		s.Roles = store.NewAgentRoleStoreWithDB(db)
 		s.ToolPerms = store.NewToolPermissionStoreWithDB(db)
 		s.ToolApprovals = store.NewToolApprovalStoreWithDB(db)
+		s.TaskApprovals = store.NewTaskApprovalStoreWithDB(db)
 		s.Tasks = store.NewTaskStoreWithDB(db)
 		s.Workers = store.NewWorkerStoreWithDB(db)
 		s.McpServers = store.NewMcpServerStoreWithDB(db)

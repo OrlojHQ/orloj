@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -36,8 +37,9 @@ type AgentSystem struct {
 }
 
 type AgentSystemSpec struct {
-	Agents []string             `json:"agents,omitempty"`
-	Graph  map[string]GraphEdge `json:"graph,omitempty"`
+	Agents           []string              `json:"agents,omitempty"`
+	Graph            map[string]GraphEdge  `json:"graph,omitempty"`
+	CompletionReview *ReviewCheckpointSpec `json:"completion_review,omitempty"`
 }
 
 type GraphEdge struct {
@@ -52,6 +54,8 @@ type GraphEdge struct {
 	Delegates []GraphRoute `json:"delegates,omitempty"`
 	// DelegateJoin controls how delegate returns are collected.
 	DelegateJoin GraphJoin `json:"delegate_join,omitempty"`
+	// Review gates this node's output behind a human approval checkpoint.
+	Review *ReviewCheckpointSpec `json:"review,omitempty"`
 }
 
 type GraphRoute struct {
@@ -102,6 +106,15 @@ type GraphJoin struct {
 	QuorumPercent int `json:"quorum_percent,omitempty"`
 	// OnFailure: deadletter | skip | continue_partial.
 	OnFailure string `json:"on_failure,omitempty"`
+}
+
+type ReviewCheckpointSpec struct {
+	CheckpointID        string `json:"checkpoint_id,omitempty"`
+	DisplayName         string `json:"display_name,omitempty"`
+	Reason              string `json:"reason,omitempty"`
+	TTL                 string `json:"ttl,omitempty"`
+	AllowRequestChanges *bool  `json:"allow_request_changes,omitempty"`
+	MaxReviewCycles     int    `json:"max_review_cycles,omitempty"`
 }
 
 type AgentSystemStatus struct {
@@ -194,6 +207,7 @@ func (a *AgentSystem) Normalize() error {
 	if a.Spec.Graph == nil {
 		a.Spec.Graph = make(map[string]GraphEdge)
 	}
+	seenCheckpoints := map[string]string{}
 	for name, node := range a.Spec.Graph {
 		node.Next = strings.TrimSpace(node.Next)
 		if len(node.Edges) > 0 {
@@ -210,7 +224,26 @@ func (a *AgentSystem) Normalize() error {
 			}
 			node.Delegates = normalized
 		}
+		if node.Review != nil {
+			if err := normalizeReviewCheckpoint(node.Review, fmt.Sprintf("spec.graph.%s.review", name)); err != nil {
+				return err
+			}
+			checkpointKey := strings.ToLower(strings.TrimSpace(node.Review.CheckpointID))
+			if previous, exists := seenCheckpoints[checkpointKey]; exists {
+				return fmt.Errorf("checkpoint_id %q must be unique within the system (already used by %s)", node.Review.CheckpointID, previous)
+			}
+			seenCheckpoints[checkpointKey] = fmt.Sprintf("spec.graph.%s.review", name)
+		}
 		a.Spec.Graph[name] = node
+	}
+	if a.Spec.CompletionReview != nil {
+		if err := normalizeReviewCheckpoint(a.Spec.CompletionReview, "spec.completion_review"); err != nil {
+			return err
+		}
+		checkpointKey := strings.ToLower(strings.TrimSpace(a.Spec.CompletionReview.CheckpointID))
+		if previous, exists := seenCheckpoints[checkpointKey]; exists {
+			return fmt.Errorf("checkpoint_id %q must be unique within the system (already used by %s)", a.Spec.CompletionReview.CheckpointID, previous)
+		}
 	}
 
 	for name, node := range a.Spec.Graph {
@@ -223,6 +256,34 @@ func (a *AgentSystem) Normalize() error {
 
 	if a.Status.Phase == "" {
 		a.Status.Phase = "Pending"
+	}
+	return nil
+}
+
+func normalizeReviewCheckpoint(spec *ReviewCheckpointSpec, path string) error {
+	if spec == nil {
+		return nil
+	}
+	spec.CheckpointID = strings.TrimSpace(spec.CheckpointID)
+	if spec.CheckpointID == "" {
+		return fmt.Errorf("%s.checkpoint_id is required", path)
+	}
+	spec.DisplayName = strings.TrimSpace(spec.DisplayName)
+	spec.Reason = strings.TrimSpace(spec.Reason)
+	ttl := strings.TrimSpace(spec.TTL)
+	if ttl == "" {
+		ttl = "10m"
+	}
+	if _, err := time.ParseDuration(ttl); err != nil {
+		return fmt.Errorf("invalid %s.ttl %q: %w", path, spec.TTL, err)
+	}
+	spec.TTL = ttl
+	if spec.AllowRequestChanges == nil {
+		allowed := true
+		spec.AllowRequestChanges = &allowed
+	}
+	if spec.MaxReviewCycles <= 0 {
+		spec.MaxReviewCycles = 3
 	}
 	return nil
 }
@@ -931,6 +992,7 @@ type ToolApprovalStatus struct {
 	Decision  string `json:"decision,omitempty"`
 	DecidedBy string `json:"decided_by,omitempty"`
 	DecidedAt string `json:"decided_at,omitempty"`
+	Comment   string `json:"comment,omitempty"`
 	ExpiresAt string `json:"expires_at,omitempty"`
 }
 
@@ -964,6 +1026,11 @@ func (a *ToolApproval) Normalize() error {
 	a.Spec.OperationClass = strings.ToLower(strings.TrimSpace(a.Spec.OperationClass))
 	a.Spec.Agent = strings.TrimSpace(a.Spec.Agent)
 	a.Spec.Reason = strings.TrimSpace(a.Spec.Reason)
+	a.Status.Decision = strings.TrimSpace(a.Status.Decision)
+	a.Status.DecidedBy = strings.TrimSpace(a.Status.DecidedBy)
+	a.Status.DecidedAt = strings.TrimSpace(a.Status.DecidedAt)
+	a.Status.Comment = strings.TrimSpace(a.Status.Comment)
+	a.Status.ExpiresAt = strings.TrimSpace(a.Status.ExpiresAt)
 
 	ttl := strings.TrimSpace(a.Spec.TTL)
 	if ttl == "" {
@@ -990,6 +1057,219 @@ func (a *ToolApproval) Normalize() error {
 		a.Status.ExpiresAt = time.Now().UTC().Add(dur).Format(time.RFC3339)
 	}
 	return nil
+}
+
+// TaskApproval captures a pending human review checkpoint for agent or task output.
+type TaskApproval struct {
+	APIVersion string             `json:"apiVersion"`
+	Kind       string             `json:"kind"`
+	Metadata   ObjectMeta         `json:"metadata"`
+	Spec       TaskApprovalSpec   `json:"spec"`
+	Status     TaskApprovalStatus `json:"status,omitempty"`
+}
+
+type TaskApprovalSpec struct {
+	TaskRef             string         `json:"task_ref"`
+	CheckpointID        string         `json:"checkpoint_id"`
+	CheckpointType      string         `json:"checkpoint_type,omitempty"`
+	Agent               string         `json:"agent,omitempty"`
+	Reason              string         `json:"reason,omitempty"`
+	TTL                 string         `json:"ttl,omitempty"`
+	AllowRequestChanges *bool          `json:"allow_request_changes,omitempty"`
+	MaxReviewCycles     int            `json:"max_review_cycles,omitempty"`
+	ReviewCycle         int            `json:"review_cycle,omitempty"`
+	Supersedes          string         `json:"supersedes,omitempty"`
+	Output              any            `json:"output,omitempty"`
+	OutputFormat        string         `json:"output_format,omitempty"`
+	ResumeContext       map[string]any `json:"resume_context,omitempty"`
+}
+
+type TaskApprovalResumeMessage struct {
+	MessageID      string `json:"message_id,omitempty"`
+	IdempotencyKey string `json:"idempotency_key,omitempty"`
+	TaskID         string `json:"task_id,omitempty"`
+	Attempt        int    `json:"attempt,omitempty"`
+	System         string `json:"system,omitempty"`
+	Namespace      string `json:"namespace,omitempty"`
+	FromAgent      string `json:"from_agent,omitempty"`
+	ToAgent        string `json:"to_agent,omitempty"`
+	BranchID       string `json:"branch_id,omitempty"`
+	ParentBranchID string `json:"parent_branch_id,omitempty"`
+	Type           string `json:"type,omitempty"`
+	Payload        string `json:"payload,omitempty"`
+	Timestamp      string `json:"timestamp,omitempty"`
+	TraceID        string `json:"trace_id,omitempty"`
+	ParentID       string `json:"parent_id,omitempty"`
+	DelegateOf     string `json:"delegate_of,omitempty"`
+}
+
+type TaskApprovalResumeContext struct {
+	Mode              string                      `json:"mode,omitempty"`
+	Action            string                      `json:"action,omitempty"`
+	System            string                      `json:"system,omitempty"`
+	ProducingAgent    string                      `json:"producing_agent,omitempty"`
+	CurrentMessage    *TaskApprovalResumeMessage  `json:"current_message,omitempty"`
+	NextMessages      []TaskApprovalResumeMessage `json:"next_messages,omitempty"`
+	RerunMessage      *TaskApprovalResumeMessage  `json:"rerun_message,omitempty"`
+	RuntimeInput      map[string]string           `json:"runtime_input,omitempty"`
+	NextRuntimeInput  map[string]string           `json:"next_runtime_input,omitempty"`
+	Output            map[string]string           `json:"output,omitempty"`
+	CurrentAgentIndex int                         `json:"current_agent_index,omitempty"`
+	NextAgentIndex    int                         `json:"next_agent_index,omitempty"`
+}
+
+type TaskApprovalStatus struct {
+	Phase     string `json:"phase,omitempty"`
+	Decision  string `json:"decision,omitempty"`
+	DecidedBy string `json:"decided_by,omitempty"`
+	DecidedAt string `json:"decided_at,omitempty"`
+	Comment   string `json:"comment,omitempty"`
+	ExpiresAt string `json:"expires_at,omitempty"`
+}
+
+func EncodeTaskApprovalResumeContext(ctx TaskApprovalResumeContext) map[string]any {
+	raw, err := json.Marshal(ctx)
+	if err != nil {
+		return map[string]any{}
+	}
+	var out map[string]any
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return map[string]any{}
+	}
+	return out
+}
+
+func DecodeTaskApprovalResumeContext(data map[string]any) (TaskApprovalResumeContext, error) {
+	if len(data) == 0 {
+		return TaskApprovalResumeContext{}, nil
+	}
+	raw, err := json.Marshal(data)
+	if err != nil {
+		return TaskApprovalResumeContext{}, err
+	}
+	var out TaskApprovalResumeContext
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return TaskApprovalResumeContext{}, err
+	}
+	return out, nil
+}
+
+type TaskApprovalList struct {
+	ListMeta `json:",inline"`
+	Items    []TaskApproval `json:"items"`
+}
+
+func (a *TaskApproval) Normalize() error {
+	if a.APIVersion == "" {
+		a.APIVersion = "orloj.dev/v1"
+	}
+	if a.Kind == "" {
+		a.Kind = "TaskApproval"
+	}
+	if !strings.EqualFold(a.Kind, "TaskApproval") {
+		return fmt.Errorf("unsupported kind %q for TaskApproval", a.Kind)
+	}
+	NormalizeObjectMetaNamespace(&a.Metadata)
+	if a.Metadata.Name == "" {
+		return fmt.Errorf("metadata.name is required")
+	}
+	a.Spec.TaskRef = strings.TrimSpace(a.Spec.TaskRef)
+	if a.Spec.TaskRef == "" {
+		return fmt.Errorf("spec.task_ref is required")
+	}
+	a.Spec.CheckpointID = strings.TrimSpace(a.Spec.CheckpointID)
+	if a.Spec.CheckpointID == "" {
+		return fmt.Errorf("spec.checkpoint_id is required")
+	}
+	checkpointType := strings.ToLower(strings.TrimSpace(a.Spec.CheckpointType))
+	if checkpointType == "" {
+		checkpointType = "agent_output"
+	}
+	switch checkpointType {
+	case "agent_output", "task_output":
+		a.Spec.CheckpointType = checkpointType
+	default:
+		return fmt.Errorf("invalid spec.checkpoint_type %q: expected agent_output or task_output", a.Spec.CheckpointType)
+	}
+	a.Spec.Agent = strings.TrimSpace(a.Spec.Agent)
+	a.Spec.Reason = strings.TrimSpace(a.Spec.Reason)
+	a.Spec.Supersedes = strings.TrimSpace(a.Spec.Supersedes)
+	ttl := strings.TrimSpace(a.Spec.TTL)
+	if ttl == "" {
+		ttl = "10m"
+	}
+	if _, err := time.ParseDuration(ttl); err != nil {
+		return fmt.Errorf("invalid spec.ttl %q: %w", a.Spec.TTL, err)
+	}
+	a.Spec.TTL = ttl
+	if a.Spec.AllowRequestChanges == nil {
+		allowed := true
+		a.Spec.AllowRequestChanges = &allowed
+	}
+	if a.Spec.MaxReviewCycles <= 0 {
+		a.Spec.MaxReviewCycles = 3
+	}
+	if a.Spec.ReviewCycle <= 0 {
+		a.Spec.ReviewCycle = 1
+	}
+	if a.Spec.ResumeContext == nil {
+		a.Spec.ResumeContext = map[string]any{}
+	}
+	outputFormat := strings.ToLower(strings.TrimSpace(a.Spec.OutputFormat))
+	if outputFormat == "" {
+		if _, ok := a.Spec.Output.(string); ok || a.Spec.Output == nil {
+			outputFormat = "text"
+		} else {
+			outputFormat = "json"
+		}
+	}
+	switch outputFormat {
+	case "text", "json":
+		a.Spec.OutputFormat = outputFormat
+	default:
+		return fmt.Errorf("invalid spec.output_format %q: expected text or json", a.Spec.OutputFormat)
+	}
+
+	phase := strings.TrimSpace(a.Status.Phase)
+	if phase == "" {
+		phase = "Pending"
+	}
+	switch phase {
+	case "Pending", "Approved", "Denied", "ChangesRequested", "Expired":
+		a.Status.Phase = phase
+	default:
+		return fmt.Errorf("invalid status.phase %q for TaskApproval: expected Pending, Approved, Denied, ChangesRequested, or Expired", a.Status.Phase)
+	}
+	decision := strings.ToLower(strings.TrimSpace(a.Status.Decision))
+	switch decision {
+	case "", "approved", "denied", "request_changes":
+		a.Status.Decision = decision
+	default:
+		return fmt.Errorf("invalid status.decision %q for TaskApproval: expected approved, denied, or request_changes", a.Status.Decision)
+	}
+	a.Status.DecidedBy = strings.TrimSpace(a.Status.DecidedBy)
+	a.Status.DecidedAt = strings.TrimSpace(a.Status.DecidedAt)
+	a.Status.Comment = strings.TrimSpace(a.Status.Comment)
+	a.Status.ExpiresAt = strings.TrimSpace(a.Status.ExpiresAt)
+	if a.Status.Phase == "Pending" && a.Status.ExpiresAt == "" {
+		dur, _ := time.ParseDuration(a.Spec.TTL)
+		a.Status.ExpiresAt = time.Now().UTC().Add(dur).Format(time.RFC3339)
+	}
+	return nil
+}
+
+func TaskApprovalAllowsRequestChanges(a TaskApproval) bool {
+	if a.Spec.AllowRequestChanges == nil {
+		return true
+	}
+	return *a.Spec.AllowRequestChanges
+}
+
+func TaskApprovalMaxReviewCycles(a TaskApproval) int {
+	if a.Spec.MaxReviewCycles <= 0 {
+		return 3
+	}
+	return a.Spec.MaxReviewCycles
 }
 
 // Task defines one execution request routed to an AgentSystem.
@@ -1131,6 +1411,12 @@ type TaskDelegationState struct {
 	Sources        []TaskJoinSource `json:"sources,omitempty"`
 }
 
+type TaskBlockedOn struct {
+	Kind   string `json:"kind,omitempty"`
+	Name   string `json:"name,omitempty"`
+	Reason string `json:"reason,omitempty"`
+}
+
 type TaskStatus struct {
 	Phase              string                   `json:"phase,omitempty"`
 	LastError          string                   `json:"lastError,omitempty"`
@@ -1149,6 +1435,7 @@ type TaskStatus struct {
 	MessageIdempotency []TaskMessageIdempotency `json:"message_idempotency,omitempty"`
 	JoinStates         []TaskJoinState          `json:"join_states,omitempty"`
 	DelegationStates   []TaskDelegationState    `json:"delegation_states,omitempty"`
+	BlockedOn          *TaskBlockedOn           `json:"blocked_on,omitempty"`
 	ObservedGeneration int64                    `json:"observedGeneration,omitempty"`
 }
 
@@ -1250,6 +1537,14 @@ func (t *Task) Normalize() error {
 	}
 	if t.Status.DelegationStates == nil {
 		t.Status.DelegationStates = make([]TaskDelegationState, 0)
+	}
+	if t.Status.BlockedOn != nil {
+		t.Status.BlockedOn.Kind = strings.TrimSpace(t.Status.BlockedOn.Kind)
+		t.Status.BlockedOn.Name = strings.TrimSpace(t.Status.BlockedOn.Name)
+		t.Status.BlockedOn.Reason = strings.TrimSpace(t.Status.BlockedOn.Reason)
+		if t.Status.BlockedOn.Kind == "" && t.Status.BlockedOn.Name == "" && t.Status.BlockedOn.Reason == "" {
+			t.Status.BlockedOn = nil
+		}
 	}
 	return nil
 }
