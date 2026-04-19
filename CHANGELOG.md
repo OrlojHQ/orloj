@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-04-18
+
 ### Added
 
 - **AWS Bedrock model provider**: added `bedrock` (aliases `aws-bedrock`, `aws_bedrock`) as a first-class model provider using the Converse API via `aws-sdk-go-v2`. Supports all Bedrock-hosted models (Claude, Llama, Titan, Mistral, Nova, etc.) through a single code path, with tool use, structured output, and full IAM credential chain support (explicit keys via `secretRef` or automatic resolution from env vars, `~/.aws/credentials`, EC2/ECS IAM roles, SSO).
@@ -282,7 +284,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Homebrew tap distribution (`OrlojHQ/orloj`)
 - Blueprint scaffolding via `orlojctl init`
 
-[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/OrlojHQ/orloj/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/OrlojHQ/orloj/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/OrlojHQ/orloj/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/OrlojHQ/orloj/compare/v0.6.3...v0.7.0
