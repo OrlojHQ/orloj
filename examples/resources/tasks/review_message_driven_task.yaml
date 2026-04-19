@@ -1,0 +1,18 @@
+apiVersion: orloj.dev/v1
+kind: Task
+metadata:
+  name: review-message-driven-task
+  labels:
+    orloj.dev/example: human-review-message-driven
+spec:
+  system: review-message-driven-system
+  input:
+    topic: financial risk memo
+    audience: compliance reviewer
+  priority: high
+  retry:
+    max_attempts: 3
+    backoff: 5s
+  requirements:
+    region: default
+    model: gpt-4o

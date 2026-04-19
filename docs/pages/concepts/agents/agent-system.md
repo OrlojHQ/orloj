@@ -2,6 +2,11 @@
 
 An **AgentSystem** composes multiple [Agents](./agent.md) into a directed graph that Orloj executes as a coordinated workflow. The graph defines how messages flow between agents during task execution.
 
+Agent systems can also declare human review checkpoints:
+
+- `spec.graph.<node>.review`: review a node's output before downstream routing continues
+- `spec.completion_review`: review the final task output before the task is marked `Succeeded`
+
 ## Defining an AgentSystem
 
 ```yaml
@@ -92,6 +97,29 @@ When a graph node has multiple outbound edges, messages fan out to all targets i
 | `quorum` | Activates after `quorum_count` or `quorum_percent` of upstream branches complete. |
 
 If an upstream branch fails, the `on_failure` policy determines behavior: `deadletter` (default), `skip`, or `continue_partial`.
+
+## Human Review Checkpoints
+
+Attach a review checkpoint to a graph node when a human must inspect that output before the workflow continues.
+
+```yaml
+graph:
+  writer-agent:
+    review:
+      checkpoint_id: writer-review
+      reason: Editor must approve the draft before compliance runs.
+      ttl: 30m
+      allow_request_changes: true
+      max_review_cycles: 3
+    next: compliance-agent
+completion_review:
+  checkpoint_id: final-review
+  reason: Final human signoff before success.
+```
+
+When a checkpoint is reached, Orloj creates a `TaskApproval`, pauses the task in `WaitingApproval`, and records the exact blocker in `Task.status.blocked_on`.
+
+If `allow_request_changes` is `false`, reviewers can only approve or deny that checkpoint. If a reviewer keeps sending work back, `max_review_cycles` caps the number of rerun loops before Orloj rejects additional `request_changes` decisions.
 
 ## Conditional Routing
 

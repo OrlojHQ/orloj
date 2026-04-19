@@ -121,6 +121,26 @@ components:
         sources:
           type: array
           items: { $ref: "#/components/schemas/TaskJoinSource" }
+    TaskDelegationState:
+      type: object
+      properties:
+        attempt: { type: integer }
+        node: { type: string }
+        mode: { type: string }
+        expected: { type: integer }
+        quorum_required: { type: integer }
+        activated: { type: boolean }
+        activated_at: { type: string }
+        activated_by: { type: string }
+        sources:
+          type: array
+          items: { $ref: "#/components/schemas/TaskJoinSource" }
+    TaskBlockedOn:
+      type: object
+      properties:
+        kind: { type: string }
+        name: { type: string }
+        reason: { type: string }
     TaskStatus:
       type: object
       properties:
@@ -150,6 +170,11 @@ components:
         join_states:
           type: array
           items: { $ref: "#/components/schemas/TaskJoinState" }
+        delegation_states:
+          type: array
+          items: { $ref: "#/components/schemas/TaskDelegationState" }
+        blocked_on:
+          $ref: "#/components/schemas/TaskBlockedOn"
         observedGeneration: { type: integer, format: int64 }
     Task:
       type: object

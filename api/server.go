@@ -36,6 +36,7 @@ type Stores struct {
 	AgentRoles    *store.AgentRoleStore
 	ToolPerms     *store.ToolPermissionStore
 	ToolApprovals *store.ToolApprovalStore
+	TaskApprovals *store.TaskApprovalStore
 	Tasks         *store.TaskStore
 	TaskSchedules *store.TaskScheduleStore
 	TaskWebhooks  *store.TaskWebhookStore
@@ -91,11 +92,17 @@ func NewServerWithOptions(stores Stores, runtime *agentruntime.Manager, logger *
 	if stores.ToolPerms == nil {
 		stores.ToolPerms = store.NewToolPermissionStore()
 	}
+	if stores.ToolApprovals == nil {
+		stores.ToolApprovals = store.NewToolApprovalStore()
+	}
 	if stores.Secrets == nil {
 		stores.Secrets = store.NewSecretStore()
 	}
 	if stores.TaskSchedules == nil {
 		stores.TaskSchedules = store.NewTaskScheduleStore()
+	}
+	if stores.TaskApprovals == nil {
+		stores.TaskApprovals = store.NewTaskApprovalStore()
 	}
 	if stores.TaskWebhooks == nil {
 		stores.TaskWebhooks = store.NewTaskWebhookStore()
@@ -322,6 +329,8 @@ func (s *Server) routes() {
 
 	s.mux.HandleFunc("/v1/tool-approvals", s.handleToolApprovals)
 	s.mux.HandleFunc("/v1/tool-approvals/", s.handleToolApprovalByName)
+	s.mux.HandleFunc("/v1/task-approvals", s.handleTaskApprovals)
+	s.mux.HandleFunc("/v1/task-approvals/", s.handleTaskApprovalByName)
 
 	s.mux.HandleFunc("/v1/tasks", s.handleTasks)
 	s.mux.HandleFunc("/v1/tasks/watch", s.watchTasks)
@@ -2037,21 +2046,35 @@ func (s *Server) handleToolApprovalByName(w http.ResponseWriter, r *http.Request
 	}
 }
 
+type approvalDecisionRequest struct {
+	DecidedBy string `json:"decided_by"`
+	Comment   string `json:"comment"`
+	Reason    string `json:"reason"`
+}
+
+func readApprovalDecisionRequest(r *http.Request) approvalDecisionRequest {
+	var body approvalDecisionRequest
+	if r == nil || r.Body == nil {
+		return body
+	}
+	raw, _ := io.ReadAll(r.Body)
+	if len(raw) == 0 {
+		return body
+	}
+	_ = json.Unmarshal(raw, &body)
+	if strings.TrimSpace(body.Comment) == "" {
+		body.Comment = strings.TrimSpace(body.Reason)
+	}
+	return body
+}
+
 func (s *Server) handleToolApprovalDecision(w http.ResponseWriter, r *http.Request, name, phase, decision string) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	var body struct {
-		DecidedBy string `json:"decided_by"`
-	}
-	if r.Body != nil {
-		raw, _ := io.ReadAll(r.Body)
-		if len(raw) > 0 {
-			_ = json.Unmarshal(raw, &body)
-		}
-	}
+	body := readApprovalDecisionRequest(r)
 
 	key := scopedNameForRequest(r, name)
 	// Retry optimistic-concurrency loop: read, check phase, CAS-write.
@@ -2074,6 +2097,7 @@ func (s *Server) handleToolApprovalDecision(w http.ResponseWriter, r *http.Reque
 		obj.Status.Decision = decision
 		obj.Status.DecidedBy = body.DecidedBy
 		obj.Status.DecidedAt = time.Now().UTC().Format(time.RFC3339)
+		obj.Status.Comment = body.Comment
 		updated, err := s.stores.ToolApprovals.Upsert(r.Context(), obj)
 		if err != nil {
 			if store.IsConflict(err) {
@@ -2087,6 +2111,177 @@ func (s *Server) handleToolApprovalDecision(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	http.Error(w, "conflict updating tool approval, please retry", http.StatusConflict)
+}
+
+func (s *Server) handleTaskApprovals(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		limit, _ := paginationParams(r)
+		after := cursorParam(r)
+		ns, hasNS := namespaceFilter(r)
+		nsFilter := ""
+		if hasNS {
+			nsFilter = ns
+		}
+		items, err := s.stores.TaskApprovals.ListCursor(r.Context(), limit, after, nsFilter)
+		if writeStoreFetchError(w, err) {
+			return
+		}
+		cont := listContinue(limit, len(items), "")
+		if len(items) > 0 {
+			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
+		}
+		selector, err := labelSelectorFilter(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if len(selector) > 0 {
+			filtered := make([]resources.TaskApproval, 0, len(items))
+			for _, item := range items {
+				if !matchMetadataFilters(item.Metadata, "", false, selector) {
+					continue
+				}
+				filtered = append(filtered, item)
+			}
+			items = filtered
+		}
+		writeJSON(w, http.StatusOK, resources.TaskApprovalList{ListMeta: resources.ListMeta{Continue: cont}, Items: items})
+	case http.MethodPost:
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, "failed to read request body", http.StatusBadRequest)
+			return
+		}
+		var obj resources.TaskApproval
+		if err := json.Unmarshal(body, &obj); err != nil {
+			http.Error(w, fmt.Sprintf("invalid JSON: %v", err), http.StatusBadRequest)
+			return
+		}
+		if err := applyRequestNamespace(r, &obj.Metadata); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		existing, ok, err := s.stores.TaskApprovals.Get(r.Context(), store.ScopedName(obj.Metadata.Namespace, obj.Metadata.Name))
+		if writeStoreFetchError(w, err) {
+			return
+		}
+		if ok {
+			obj.Status = existing.Status
+		}
+		obj, err = s.stores.TaskApprovals.Upsert(r.Context(), obj)
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		s.logApply("TaskApproval", obj.Metadata.Name)
+		s.publishResourceEvent("TaskApproval", obj.Metadata.Name, "created", obj)
+		writeJSON(w, http.StatusCreated, obj)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleTaskApprovalByName(w http.ResponseWriter, r *http.Request) {
+	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/v1/task-approvals/"), "/")
+	if path == "" {
+		http.Error(w, "task approval name is required", http.StatusBadRequest)
+		return
+	}
+	if strings.HasSuffix(path, "/approve") {
+		name := strings.TrimSuffix(path, "/approve")
+		s.handleTaskApprovalDecision(w, r, name, "Approved", "approved")
+		return
+	}
+	if strings.HasSuffix(path, "/deny") {
+		name := strings.TrimSuffix(path, "/deny")
+		s.handleTaskApprovalDecision(w, r, name, "Denied", "denied")
+		return
+	}
+	if strings.HasSuffix(path, "/request-changes") {
+		name := strings.TrimSuffix(path, "/request-changes")
+		s.handleTaskApprovalDecision(w, r, name, "ChangesRequested", "request_changes")
+		return
+	}
+	name := path
+	key := scopedNameForRequest(r, name)
+	switch r.Method {
+	case http.MethodGet:
+		obj, ok, err := s.stores.TaskApprovals.Get(r.Context(), key)
+		if writeStoreFetchError(w, err) {
+			return
+		}
+		if !ok {
+			http.Error(w, fmt.Sprintf("taskapproval %q not found", name), http.StatusNotFound)
+			return
+		}
+		writeJSON(w, http.StatusOK, obj)
+	case http.MethodDelete:
+		if err := s.stores.TaskApprovals.Delete(r.Context(), key); err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		s.publishResourceEvent("TaskApproval", name, "deleted", map[string]any{"metadata": map[string]string{"name": name, "namespace": requestNamespace(r)}})
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+func (s *Server) handleTaskApprovalDecision(w http.ResponseWriter, r *http.Request, name, phase, decision string) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	body := readApprovalDecisionRequest(r)
+	if decision == "request_changes" && strings.TrimSpace(body.Comment) == "" {
+		http.Error(w, "comment is required for request_changes", http.StatusBadRequest)
+		return
+	}
+
+	key := scopedNameForRequest(r, name)
+	for attempt := 0; attempt < 5; attempt++ {
+		obj, ok, err := s.stores.TaskApprovals.Get(r.Context(), key)
+		if writeStoreFetchError(w, err) {
+			return
+		}
+		if !ok {
+			http.Error(w, fmt.Sprintf("taskapproval %q not found", name), http.StatusNotFound)
+			return
+		}
+		if obj.Status.Phase != "Pending" {
+			http.Error(w, fmt.Sprintf("taskapproval %q is already %s", name, obj.Status.Phase), http.StatusConflict)
+			return
+		}
+		if decision == "request_changes" {
+			if !resources.TaskApprovalAllowsRequestChanges(obj) {
+				http.Error(w, fmt.Sprintf("taskapproval %q does not allow request_changes", name), http.StatusConflict)
+				return
+			}
+			if obj.Spec.ReviewCycle >= resources.TaskApprovalMaxReviewCycles(obj) {
+				http.Error(w, fmt.Sprintf("taskapproval %q has reached max_review_cycles", name), http.StatusConflict)
+				return
+			}
+		}
+		obj.Status.Phase = phase
+		obj.Status.Decision = decision
+		obj.Status.DecidedBy = body.DecidedBy
+		obj.Status.DecidedAt = time.Now().UTC().Format(time.RFC3339)
+		obj.Status.Comment = body.Comment
+		updated, err := s.stores.TaskApprovals.Upsert(r.Context(), obj)
+		if err != nil {
+			if store.IsConflict(err) {
+				continue
+			}
+			writeStoreError(w, err)
+			return
+		}
+		s.publishResourceEvent("TaskApproval", updated.Metadata.Name, decision, updated)
+		writeJSON(w, http.StatusOK, updated)
+		return
+	}
+	http.Error(w, "conflict updating task approval, please retry", http.StatusConflict)
 }
 
 func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {

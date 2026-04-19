@@ -67,6 +67,7 @@ func newRootCommand() *cobra.Command {
 		newCreateCommand(),
 		newApproveCommand(),
 		newDenyCommand(),
+		newRequestChangesCommand(),
 		newGetCommand(),
 		newDeleteCommand(),
 		newDescribeCommand(),
@@ -444,13 +445,14 @@ func newCreateTokenCommand() *cobra.Command {
 func newApproveCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "approve <resource> <name>",
-		Short: "Approve a pending tool approval",
+		Short: "Approve a pending approval",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runToolApprovalDecision(cmd, "approve", args)
+			return runApprovalDecision(cmd, "approve", args)
 		},
 	}
 	cmd.Flags().String("decided-by", "", "identity of the decision maker")
+	cmd.Flags().String("comment", "", "comment for the decision")
 	cmd.Flags().String("reason", "", "reason for the decision")
 	return cmd
 }
@@ -458,34 +460,57 @@ func newApproveCommand() *cobra.Command {
 func newDenyCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "deny <resource> <name>",
-		Short: "Deny a pending tool approval",
+		Short: "Deny a pending approval",
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runToolApprovalDecision(cmd, "deny", args)
+			return runApprovalDecision(cmd, "deny", args)
 		},
 	}
 	cmd.Flags().String("decided-by", "", "identity of the decision maker")
+	cmd.Flags().String("comment", "", "comment for the decision")
 	cmd.Flags().String("reason", "", "reason for the decision")
 	return cmd
 }
 
-func runToolApprovalDecision(cmd *cobra.Command, action string, args []string) error {
+func newRequestChangesCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "request-changes <resource> <name>",
+		Short: "Request changes on a pending task approval",
+		Args:  cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runApprovalDecision(cmd, "request-changes", args)
+		},
+	}
+	cmd.Flags().String("decided-by", "", "identity of the decision maker")
+	cmd.Flags().String("comment", "", "comment for the requested changes")
+	cmd.Flags().String("reason", "", "reason for the requested changes")
+	return cmd
+}
+
+func runApprovalDecision(cmd *cobra.Command, action string, args []string) error {
 	server := resolveServer(cmd)
 	ns := resolveNamespace(cmd)
 	decidedBy, _ := cmd.Flags().GetString("decided-by")
+	comment, _ := cmd.Flags().GetString("comment")
 	reason, _ := cmd.Flags().GetString("reason")
+	if strings.TrimSpace(comment) == "" {
+		comment = reason
+	}
 
 	resourceArg := args[0]
 	resource := normalizeResource(resourceArg)
-	if resource != "tool-approvals" {
-		return fmt.Errorf("unsupported %s resource %q (supported: tool-approval)", action, resourceArg)
+	if resource != "tool-approvals" && resource != "task-approvals" {
+		return fmt.Errorf("unsupported %s resource %q (supported: tool-approval, task-approval)", action, resourceArg)
+	}
+	if action == "request-changes" && resource != "task-approvals" {
+		return fmt.Errorf("request-changes is only supported for task-approval resources")
 	}
 	name := strings.TrimSpace(args[1])
 	if name == "" {
-		return errors.New("tool approval name is required")
+		return errors.New("approval name is required")
 	}
 
-	path := "/v1/tool-approvals/" + url.PathEscape(name) + "/" + action
+	path := "/v1/" + resource + "/" + url.PathEscape(name) + "/" + action
 	requestURL := strings.TrimRight(server, "/") + path
 	if strings.TrimSpace(ns) != "" {
 		requestURL += "?namespace=" + url.QueryEscape(strings.TrimSpace(ns))
@@ -495,7 +520,8 @@ func runToolApprovalDecision(cmd *cobra.Command, action string, args []string) e
 	if trimmed := strings.TrimSpace(decidedBy); trimmed != "" {
 		bodyPayload["decided_by"] = trimmed
 	}
-	if trimmed := strings.TrimSpace(reason); trimmed != "" {
+	if trimmed := strings.TrimSpace(comment); trimmed != "" {
+		bodyPayload["comment"] = trimmed
 		bodyPayload["reason"] = trimmed
 	}
 
@@ -529,11 +555,14 @@ func runToolApprovalDecision(cmd *cobra.Command, action string, args []string) e
 		return fmt.Errorf("%s failed: %s", action, bytes.TrimSpace(payload))
 	}
 
-	if action == "approve" {
-		fmt.Printf("approved tool-approval/%s\n", name)
-		return nil
+	switch action {
+	case "approve":
+		fmt.Printf("approved %s/%s\n", strings.TrimSuffix(resource, "s"), name)
+	case "deny":
+		fmt.Printf("denied %s/%s\n", strings.TrimSuffix(resource, "s"), name)
+	default:
+		fmt.Printf("requested changes for %s/%s\n", strings.TrimSuffix(resource, "s"), name)
 	}
-	fmt.Printf("denied tool-approval/%s\n", name)
 	return nil
 }
 
@@ -742,6 +771,20 @@ func runGet(cmd *cobra.Command, args []string) error {
 				item.Metadata.Name, item.Spec.TaskRef, item.Spec.Tool,
 				item.Spec.OperationClass, item.Spec.Agent, item.Status.Phase,
 				item.Status.ExpiresAt, item.Status.DecidedBy)
+		}
+		_ = tw.Flush()
+	case "task-approvals":
+		var list resources.TaskApprovalList
+		if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
+			return fmt.Errorf("failed to decode response: %w", err)
+		}
+		tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+		fmt.Fprintln(tw, "NAME\tTASK\tCHECKPOINT\tTYPE\tAGENT\tPHASE\tREVIEW_CYCLE\tDECIDED_BY")
+		for _, item := range list.Items {
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\n",
+				item.Metadata.Name, item.Spec.TaskRef, item.Spec.CheckpointID,
+				item.Spec.CheckpointType, item.Spec.Agent, item.Status.Phase,
+				item.Spec.ReviewCycle, item.Status.DecidedBy)
 		}
 		_ = tw.Flush()
 	case "tasks":
@@ -2007,6 +2050,7 @@ var applyEndpoints = map[string]string{
 	"agentrole":      "/v1/agent-roles",
 	"toolpermission": "/v1/tool-permissions",
 	"toolapproval":   "/v1/tool-approvals",
+	"taskapproval":   "/v1/task-approvals",
 	"task":           "/v1/tasks",
 	"taskschedule":   "/v1/task-schedules",
 	"taskwebhook":    "/v1/task-webhooks",
@@ -2067,6 +2111,8 @@ func normalizeResource(resource string) string {
 		return "tool-permissions"
 	case "tool-approvals", "tool-approval", "toolapprovals", "toolapproval":
 		return "tool-approvals"
+	case "task-approvals", "task-approval", "taskapprovals", "taskapproval":
+		return "task-approvals"
 	case "tasks", "task":
 		return "tasks"
 	case "task-schedules", "taskschedules", "taskschedule":
@@ -2106,6 +2152,8 @@ func listEndpointForResource(resource string) (string, error) {
 		return "/v1/tool-permissions", nil
 	case "tool-approvals":
 		return "/v1/tool-approvals", nil
+	case "task-approvals":
+		return "/v1/task-approvals", nil
 	case "tasks":
 		return "/v1/tasks", nil
 	case "task-schedules":

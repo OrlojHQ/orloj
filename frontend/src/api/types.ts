@@ -18,12 +18,16 @@ export interface AgentSystem {
 export interface AgentSystemSpec {
   agents?: string[];
   graph?: Record<string, GraphEdge>;
+  completion_review?: ReviewCheckpointSpec;
 }
 
 export interface GraphEdge {
   next?: string;
   edges?: GraphRoute[];
   join?: GraphJoin;
+  delegates?: GraphRoute[];
+  delegate_join?: GraphJoin;
+  review?: ReviewCheckpointSpec;
 }
 
 export interface GraphRoute {
@@ -37,6 +41,15 @@ export interface GraphJoin {
   quorum_count?: number;
   quorum_percent?: number;
   on_failure?: string;
+}
+
+export interface ReviewCheckpointSpec {
+  checkpoint_id?: string;
+  display_name?: string;
+  reason?: string;
+  ttl?: string;
+  allow_request_changes?: boolean;
+  max_review_cycles?: number;
 }
 
 export interface AgentSystemStatus {
@@ -325,7 +338,15 @@ export interface TaskStatus {
   messages?: TaskMessage[];
   message_idempotency?: TaskMessageIdempotency[];
   join_states?: TaskJoinState[];
+  delegation_states?: TaskDelegationState[];
+  blocked_on?: TaskBlockedOn;
   observedGeneration?: number;
+}
+
+export interface TaskBlockedOn {
+  kind?: string;
+  name?: string;
+  reason?: string;
 }
 
 export interface TaskSchedule {
@@ -498,6 +519,18 @@ export interface TaskJoinState {
   sources?: TaskJoinSource[];
 }
 
+export interface TaskDelegationState {
+  attempt?: number;
+  node?: string;
+  mode?: string;
+  expected?: number;
+  quorum_required?: number;
+  activated?: boolean;
+  activated_at?: string;
+  activated_by?: string;
+  sources?: TaskJoinSource[];
+}
+
 export interface ToolApproval {
   apiVersion: string;
   kind: string;
@@ -521,6 +554,40 @@ export interface ToolApprovalStatus {
   decision?: string;
   decided_by?: string;
   decided_at?: string;
+  comment?: string;
+  expires_at?: string;
+}
+
+export interface TaskApproval {
+  apiVersion: string;
+  kind: string;
+  metadata: ObjectMeta;
+  spec: TaskApprovalSpec;
+  status?: TaskApprovalStatus;
+}
+
+export interface TaskApprovalSpec {
+  task_ref?: string;
+  checkpoint_id?: string;
+  checkpoint_type?: string;
+  agent?: string;
+  reason?: string;
+  ttl?: string;
+  allow_request_changes?: boolean;
+  max_review_cycles?: number;
+  review_cycle?: number;
+  supersedes?: string;
+  output?: unknown;
+  output_format?: string;
+  resume_context?: Record<string, unknown>;
+}
+
+export interface TaskApprovalStatus {
+  phase?: string;
+  decision?: string;
+  decided_by?: string;
+  decided_at?: string;
+  comment?: string;
   expires_at?: string;
 }
 
@@ -682,6 +749,7 @@ export type ResourceKind =
   | "AgentRole"
   | "ToolPermission"
   | "ToolApproval"
+  | "TaskApproval"
   | "Task"
   | "TaskSchedule"
   | "TaskWebhook"
@@ -699,6 +767,7 @@ export const RESOURCE_ENDPOINTS: Record<ResourceKind, string> = {
   AgentRole: "agent-roles",
   ToolPermission: "tool-permissions",
   ToolApproval: "tool-approvals",
+  TaskApproval: "task-approvals",
   Task: "tasks",
   TaskSchedule: "task-schedules",
   TaskWebhook: "task-webhooks",
@@ -718,6 +787,7 @@ export const RESOURCE_DETAIL_BASE_PATH: Record<ResourceKind, string> = {
   AgentRole: "/roles",
   ToolPermission: "/permissions",
   ToolApproval: "/approvals",
+  TaskApproval: "/approvals/task",
   Task: "/tasks",
   TaskSchedule: "/task-schedules",
   TaskWebhook: "/task-webhooks",

@@ -41,3 +41,18 @@ func ToolApprovalResourceName(taskKey, messageID string) string {
 	_, _ = h.Write([]byte(strings.TrimSpace(messageID)))
 	return fmt.Sprintf("ta-%08x", h.Sum32())
 }
+
+// TaskApprovalResourceName returns a deterministic resource name for a TaskApproval
+// keyed by (taskKey, checkpointID, cycle).
+func TaskApprovalResourceName(taskKey, checkpointID string, cycle int) string {
+	if cycle <= 0 {
+		cycle = 1
+	}
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(strings.TrimSpace(taskKey)))
+	_, _ = h.Write([]byte{0})
+	_, _ = h.Write([]byte(strings.TrimSpace(checkpointID)))
+	_, _ = h.Write([]byte{0})
+	_, _ = h.Write([]byte(fmt.Sprintf("%d", cycle)))
+	return fmt.Sprintf("tra-%08x", h.Sum32())
+}

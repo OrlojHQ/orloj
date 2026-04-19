@@ -139,7 +139,21 @@ export function TaskDetail() {
 
       <div className="tab-content">
         {tab === "overview" && (
-          <div className="detail-grid">
+          <>
+            {task.status?.blocked_on?.name && (
+              <div className="card" style={{ marginBottom: 16 }}>
+                <div className="detail-field">
+                  <span className="detail-field__label">Blocked On</span>
+                  <span
+                    className="detail-field__value detail-field__link"
+                    onClick={() => navigate((task.status?.blocked_on?.kind ?? "").toLowerCase() === "taskapproval" ? `/approvals/task/${task.status?.blocked_on?.name}` : `/approvals/${task.status?.blocked_on?.name}`)}
+                  >
+                    {task.status?.blocked_on?.kind ?? "Approval"} · {task.status?.blocked_on?.name}
+                  </span>
+                </div>
+              </div>
+            )}
+            <div className="detail-grid">
             <div className="detail-field">
               <span className="detail-field__label">Phase</span>
               <StatusBadge phase={task.status?.phase} size="md" />
@@ -191,7 +205,8 @@ export function TaskDetail() {
                 <pre className="detail-field__pre">{JSON.stringify(task.status.output, null, 2)}</pre>
               </div>
             )}
-          </div>
+            </div>
+          </>
         )}
 
         {tab === "messages" && (

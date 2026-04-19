@@ -193,6 +193,7 @@ func main() {
 	taskController.SetExecutionMode(*taskExecutionMode)
 	taskController.SetGovernanceStores(stores.Roles, stores.ToolPerms)
 	taskController.SetToolApprovalStore(stores.ToolApprovals)
+	taskController.SetTaskApprovalStore(stores.TaskApprovals)
 	taskController.SetModelEndpointStore(stores.ModelEPs)
 	taskController.SetExecutor(taskExecutor)
 	taskController.SetExtensions(extensions)
@@ -244,6 +245,7 @@ func main() {
 		AgentRoles:    stores.Roles,
 		ToolPerms:     stores.ToolPerms,
 		ToolApprovals: stores.ToolApprovals,
+		TaskApprovals: stores.TaskApprovals,
 		Tasks:         stores.Tasks,
 		TaskSchedules: stores.TaskSchedules,
 		TaskWebhooks:  stores.TaskWebhooks,
@@ -334,29 +336,30 @@ func main() {
 			if agentMessageBus == nil {
 				logger.Printf("embedded runtime inbox consumer disabled: agent message bus backend is none")
 			} else {
-			consumer := agentruntime.NewAgentMessageConsumerManager(
-				agentMessageBus, stores.Agents, stores.AgentSystems, stores.Tasks, logger,
-				agentruntime.AgentMessageConsumerOptions{
-					WorkerID:            *taskWorkerID,
-					RefreshEvery:        10 * time.Second,
-					DedupeWindow:        10 * time.Minute,
-					LeaseExtendDuration: *taskLeaseDuration,
-					Executor:            taskExecutor,
-					Tools:               stores.Tools,
-					Roles:               stores.Roles,
-					ToolPermissions:     stores.ToolPerms,
-					IsolatedToolRuntime: isolatedToolRuntime,
-					McpSessionManager:   mcpSessionManager,
-					McpServerStore:      stores.McpServers,
-					SecretResolver:      cliSecretResolver,
-					Extensions:          extensions,
-					Memories:            stores.Memories,
-					MemoryBackends:      memoryBackendRegistry,
-					ModelEndpoints:      stores.ModelEPs,
-					ToolApprovals:       stores.ToolApprovals,
-					Policies:            stores.Policies,
-				},
-			)
+				consumer := agentruntime.NewAgentMessageConsumerManager(
+					agentMessageBus, stores.Agents, stores.AgentSystems, stores.Tasks, logger,
+					agentruntime.AgentMessageConsumerOptions{
+						WorkerID:            *taskWorkerID,
+						RefreshEvery:        10 * time.Second,
+						DedupeWindow:        10 * time.Minute,
+						LeaseExtendDuration: *taskLeaseDuration,
+						Executor:            taskExecutor,
+						Tools:               stores.Tools,
+						Roles:               stores.Roles,
+						ToolPermissions:     stores.ToolPerms,
+						IsolatedToolRuntime: isolatedToolRuntime,
+						McpSessionManager:   mcpSessionManager,
+						McpServerStore:      stores.McpServers,
+						SecretResolver:      cliSecretResolver,
+						Extensions:          extensions,
+						Memories:            stores.Memories,
+						MemoryBackends:      memoryBackendRegistry,
+						ModelEndpoints:      stores.ModelEPs,
+						ToolApprovals:       stores.ToolApprovals,
+						TaskApprovals:       stores.TaskApprovals,
+						Policies:            stores.Policies,
+					},
+				)
 				startBackground(func() { consumer.Start(ctx) })
 				logger.Printf("embedded runtime inbox consumers enabled refresh=%s dedupe=%s", (10 * time.Second).String(), (10 * time.Minute).String())
 			}

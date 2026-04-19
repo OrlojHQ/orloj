@@ -72,6 +72,12 @@ func ParseManifest(kind string, raw []byte) (normKind string, name string, obj a
 			return "", "", nil, e
 		}
 		return normKind, o.Metadata.Name, o, nil
+	case "taskapproval":
+		o, e := ParseTaskApprovalManifest(raw)
+		if e != nil {
+			return "", "", nil, e
+		}
+		return normKind, o.Metadata.Name, o, nil
 	case "task":
 		o, e := ParseTaskManifest(raw)
 		if e != nil {

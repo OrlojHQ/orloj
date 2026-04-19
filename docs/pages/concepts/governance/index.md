@@ -68,9 +68,14 @@ Agent selects tool call
    Tool invoked
 ```
 
-## Approval Workflow
+## Approval Workflows
 
-When a tool call is flagged as `approval_required` by a [ToolPermission](./tool-permission.md) operation rule, the task pauses and a [ToolApproval](./tool-approval.md) resource is created. An external actor must approve or deny the request before the task can continue. See [ToolApproval](./tool-approval.md) for details.
+Orloj now supports two approval layers:
+
+- [ToolApproval](./tool-approval.md): "may this tool call happen?"
+- [TaskApproval](./task-approval.md): "is this agent output or final task output acceptable to continue?"
+
+When a tool call is flagged as `approval_required` by a [ToolPermission](./tool-permission.md) operation rule, the task pauses and a [ToolApproval](./tool-approval.md) resource is created. When an `AgentSystem` review checkpoint is reached, the task pauses and a [TaskApproval](./task-approval.md) resource is created. In both cases the task moves to `WaitingApproval`.
 
 ## End-to-End Example
 
@@ -143,5 +148,6 @@ In this configuration, `research-agent-governed` can invoke `web_search` (it hol
 - [AgentRole](./agent-role.md)
 - [ToolPermission](./tool-permission.md)
 - [ToolApproval](./tool-approval.md)
+- [TaskApproval](./task-approval.md)
 - [Security and Isolation](../../operations/security.md)
 - [Guide: Set Up Multi-Agent Governance](../../guides/setup-governance.md)

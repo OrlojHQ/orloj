@@ -1,0 +1,49 @@
+components:
+  schemas:
+    TaskApprovalSpec:
+      type: object
+      required: [task_ref, checkpoint_id]
+      properties:
+        task_ref: { type: string }
+        checkpoint_id: { type: string }
+        checkpoint_type: { type: string, enum: [agent_output, task_output] }
+        agent: { type: string }
+        reason: { type: string }
+        ttl: { type: string }
+        allow_request_changes: { type: boolean, default: true }
+        max_review_cycles: { type: integer, minimum: 1, default: 3 }
+        review_cycle: { type: integer, minimum: 1, default: 1 }
+        supersedes: { type: string }
+        output:
+          type: ["string", "null"]
+        output_format: { type: string, enum: [text, json] }
+        resume_context:
+          type: object
+          additionalProperties: true
+    TaskApprovalStatus:
+      type: object
+      properties:
+        phase: { type: string, enum: [Pending, Approved, Denied, ChangesRequested, Expired] }
+        decision: { type: string, enum: [approved, denied, request_changes] }
+        decided_by: { type: string }
+        decided_at: { type: string, format: date-time }
+        comment: { type: string }
+        expires_at: { type: string, format: date-time }
+    TaskApproval:
+      type: object
+      required: [apiVersion, kind, metadata, spec]
+      properties:
+        apiVersion: { type: string, enum: [orloj.dev/v1] }
+        kind: { type: string, enum: [TaskApproval] }
+        metadata: { $ref: "common.yaml#/components/schemas/ObjectMeta" }
+        spec: { $ref: "#/components/schemas/TaskApprovalSpec" }
+        status: { $ref: "#/components/schemas/TaskApprovalStatus" }
+    TaskApprovalList:
+      allOf:
+        - { $ref: "common.yaml#/components/schemas/ListMeta" }
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: { $ref: "#/components/schemas/TaskApproval" }

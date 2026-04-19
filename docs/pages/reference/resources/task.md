@@ -47,9 +47,10 @@ Primary fields:
 - `phase`: `Pending`, `Running`, `WaitingApproval`, `Succeeded`, `Failed`, `DeadLetter`.
 - `lastError`, `startedAt`, `completedAt`, `nextAttemptAt`, `attempts`
 - `output`, `assignedWorker`, `claimedBy`, `leaseUntil`, `lastHeartbeat`
+- `blocked_on`: exact approval resource currently pausing the task (`kind`, `name`, `reason`)
 - `observedGeneration`
 
-The `WaitingApproval` phase indicates the task is paused pending a `ToolApproval` decision. When the linked `ToolApproval` is approved, the task transitions back to `Running`. When denied or expired, the task transitions to `Failed` with an `approval_denied` or `approval_timeout` reason.
+The `WaitingApproval` phase indicates the task is paused pending either a `ToolApproval` or `TaskApproval`. `Task.status.blocked_on` identifies the exact blocker so resume logic is deterministic. Approved reviews transition the task back to `Running` or `Succeeded` depending on the checkpoint. Denied or expired approvals transition the task to `Failed`.
 
 Observability arrays:
 
@@ -58,6 +59,7 @@ Observability arrays:
 - `messages[]`: message bus records.
 - `message_idempotency[]`: message idempotency state.
 - `join_states[]`: fan-in join activation state.
+- `delegation_states[]`: delegation-gate activation state.
 
 Example: [`examples/resources/tasks/`](https://github.com/OrlojHQ/orloj/tree/main/examples/resources/tasks)
 

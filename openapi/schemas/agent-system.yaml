@@ -48,6 +48,15 @@ components:
         quorum_count: { type: integer }
         quorum_percent: { type: integer }
         on_failure: { type: string }
+    ReviewCheckpointSpec:
+      type: object
+      properties:
+        checkpoint_id: { type: string }
+        display_name: { type: string }
+        reason: { type: string }
+        ttl: { type: string }
+        allow_request_changes: { type: boolean, default: true }
+        max_review_cycles: { type: integer, minimum: 1, default: 3 }
     GraphEdge:
       type: object
       properties:
@@ -63,6 +72,9 @@ components:
         delegate_join:
           description: Controls how delegate returns are collected before the review phase.
           $ref: "#/components/schemas/GraphJoin"
+        review:
+          description: Optional human review checkpoint for this node's output before downstream routing continues.
+          $ref: "#/components/schemas/ReviewCheckpointSpec"
     AgentSystemSpec:
       type: object
       properties:
@@ -72,6 +84,9 @@ components:
         graph:
           type: object
           additionalProperties: { $ref: "#/components/schemas/GraphEdge" }
+        completion_review:
+          description: Optional final human review checkpoint before the task transitions to Succeeded.
+          $ref: "#/components/schemas/ReviewCheckpointSpec"
     AgentSystemStatus:
       type: object
       properties:

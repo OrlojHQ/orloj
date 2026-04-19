@@ -92,6 +92,10 @@ export default defineConfig({
               text: "ToolApproval",
               link: "/concepts/governance/tool-approval",
             },
+            {
+              text: "TaskApproval",
+              link: "/concepts/governance/task-approval",
+            },
           ],
         },
         { text: "Worker", link: "/concepts/infrastructure/worker" },
@@ -117,6 +121,10 @@ export default defineConfig({
         {
           text: "Configure Model Routing",
           link: "/guides/configure-model-routing",
+        },
+        {
+          text: "Human Review Checkpoints",
+          link: "/guides/human-review-checkpoints",
         },
         { text: "Connect an MCP Server", link: "/guides/connect-mcp-server" },
         { text: "Build a Custom Tool", link: "/guides/build-custom-tool" },
@@ -226,6 +234,7 @@ export default defineConfig({
                 { text: "AgentRole", link: "/reference/resources/agent-role" },
                 { text: "ToolPermission", link: "/reference/resources/tool-permission" },
                 { text: "ToolApproval", link: "/reference/resources/tool-approval" },
+                { text: "TaskApproval", link: "/reference/resources/task-approval" },
               ],
             },
             {

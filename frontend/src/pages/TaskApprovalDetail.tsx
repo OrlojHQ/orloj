@@ -1,42 +1,61 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { useToolApproval, useDeleteResource, useApproveToolApproval, useDenyToolApproval, useUpdateResource } from "../api/hooks";
+import {
+  useTaskApproval,
+  useDeleteResource,
+  useApproveTaskApproval,
+  useDenyTaskApproval,
+  useRequestChangesTaskApproval,
+  useUpdateResource,
+} from "../api/hooks";
 import { useAppStore } from "../store";
 import { saveNamespacedResourceYaml } from "../hooks/saveDetailYamlWithFreshRv";
 import { StatusBadge } from "../components/StatusBadge";
 import { YamlEditor } from "../components/YamlEditor";
 import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
-import { ArrowLeft, CheckCircle, XCircle } from "lucide-react";
+import { ArrowLeft, CheckCircle, MessageSquareWarning, XCircle } from "lucide-react";
 import clsx from "clsx";
 import { toast } from "../components/Toast";
-import type { ToolApproval } from "../api/types";
+import type { TaskApproval } from "../api/types";
 import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
 
-type Tab = "overview" | "yaml";
+type Tab = "overview" | "output" | "yaml";
 
 function formatDateTime(value?: string): string {
   return value ? new Date(value).toLocaleString() : "—";
 }
 
-export function ToolApprovalDetail() {
+function formatOutput(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value == null) return "—";
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+export function TaskApprovalDetail() {
   const { name: nameParam } = useParams<{ name: string }>();
   const navigate = useNavigate();
   const routeName = nameParam ?? "";
-  const { data: approval, isLoading, isError, error } = useToolApproval(routeName);
+  const { data: approval, isLoading, isError, error } = useTaskApproval(routeName);
   const queryClient = useQueryClient();
   const namespace = useAppStore((s) => s.namespace);
-  const deleteMutation = useDeleteResource("ToolApproval");
-  const updateMutation = useUpdateResource("ToolApproval");
-  const approveMutation = useApproveToolApproval();
-  const denyMutation = useDenyToolApproval();
+  const deleteMutation = useDeleteResource("TaskApproval");
+  const updateMutation = useUpdateResource("TaskApproval");
+  const approveMutation = useApproveTaskApproval();
+  const denyMutation = useDenyTaskApproval();
+  const requestChangesMutation = useRequestChangesTaskApproval();
   const [tab, setTab] = useState<Tab>("overview");
   const [comment, setComment] = useState("");
+  const outputText = useMemo(() => formatOutput(approval?.spec.output), [approval?.spec.output]);
 
   if (isError) {
     return (
       <ResourceDetailLoadError
-        title="Tool approval"
+        title="Task approval"
         message={error instanceof Error ? error.message : "Failed to load"}
         goBack={() => navigate("/approvals")}
       />
@@ -48,10 +67,15 @@ export function ToolApprovalDetail() {
   }
 
   const isPending = (approval.status?.phase ?? "Pending").toLowerCase() === "pending";
+  const allowRequestChanges = approval.spec.allow_request_changes ?? true;
+  const maxReviewCycles = approval.spec.max_review_cycles ?? 3;
+  const reviewCycle = approval.spec.review_cycle ?? 1;
+  const canRequestChanges = isPending && allowRequestChanges && reviewCycle < maxReviewCycles;
+  const body = comment.trim() ? { comment: comment.trim() } : undefined;
 
   const handleApprove = async () => {
     try {
-      await approveMutation.mutateAsync({ name: routeName, body: comment.trim() ? { comment: comment.trim() } : undefined });
+      await approveMutation.mutateAsync({ name: routeName, body });
       toast("success", "Approval granted");
     } catch (err) {
       toast("error", err instanceof Error ? err.message : "Failed to approve");
@@ -60,18 +84,31 @@ export function ToolApprovalDetail() {
 
   const handleDeny = async () => {
     try {
-      await denyMutation.mutateAsync({ name: routeName, body: comment.trim() ? { comment: comment.trim() } : undefined });
+      await denyMutation.mutateAsync({ name: routeName, body });
       toast("success", "Approval denied");
     } catch (err) {
       toast("error", err instanceof Error ? err.message : "Failed to deny");
     }
   };
 
+  const handleRequestChanges = async () => {
+    if (!comment.trim()) {
+      toast("error", "Comment is required when requesting changes");
+      return;
+    }
+    try {
+      await requestChangesMutation.mutateAsync({ name: routeName, body: { comment: comment.trim() } });
+      toast("success", "Requested changes");
+    } catch (err) {
+      toast("error", err instanceof Error ? err.message : "Failed to request changes");
+    }
+  };
+
   const handleDelete = async () => {
-    if (!window.confirm(`Delete ToolApproval ${approval.metadata.name}?`)) return;
+    if (!window.confirm(`Delete TaskApproval ${approval.metadata.name}?`)) return;
     try {
       await deleteMutation.mutateAsync(routeName);
-      toast("success", "ToolApproval deleted");
+      toast("success", "TaskApproval deleted");
       navigate("/approvals");
     } catch (err) {
       toast("error", err instanceof Error ? err.message : "Failed to delete");
@@ -80,6 +117,7 @@ export function ToolApprovalDetail() {
 
   const tabs: { id: Tab; label: string }[] = [
     { id: "overview", label: "Overview" },
+    { id: "output", label: "Output" },
     { id: "yaml", label: "YAML" },
   ];
 
@@ -92,38 +130,43 @@ export function ToolApprovalDetail() {
           </button>
           <div>
             <h1 className="page__title">{approval.metadata.name}</h1>
-            <p className="page__subtitle">{approval.spec.tool ?? "—"} · {approval.metadata.namespace}</p>
+            <p className="page__subtitle">{approval.spec.checkpoint_id ?? "checkpoint"} · {approval.metadata.namespace}</p>
           </div>
           <StatusBadge phase={approval.status?.phase} size="md" />
         </div>
         <div className="page__header-actions">
           {isPending && (
             <>
-              <button
-                className="btn-primary"
-                onClick={handleApprove}
-                disabled={approveMutation.isPending}
-              >
+              <button className="btn-primary" onClick={handleApprove} disabled={approveMutation.isPending}>
                 <CheckCircle size={14} /> {approveMutation.isPending ? "Approving..." : "Approve"}
               </button>
-              <button
-                className="btn-secondary text-red"
-                onClick={handleDeny}
-                disabled={denyMutation.isPending}
-              >
+              <button className="btn-secondary" onClick={handleRequestChanges} disabled={!canRequestChanges || requestChangesMutation.isPending}>
+                <MessageSquareWarning size={14} /> {requestChangesMutation.isPending ? "Requesting..." : "Request Changes"}
+              </button>
+              <button className="btn-secondary text-red" onClick={handleDeny} disabled={denyMutation.isPending}>
                 <XCircle size={14} /> {denyMutation.isPending ? "Denying..." : "Deny"}
               </button>
             </>
           )}
-          <button
-            className="btn-secondary text-red"
-            onClick={handleDelete}
-            disabled={deleteMutation.isPending}
-          >
+          <button className="btn-secondary text-red" onClick={handleDelete} disabled={deleteMutation.isPending}>
             {deleteMutation.isPending ? "Deleting..." : "Delete"}
           </button>
         </div>
       </div>
+
+      {isPending && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <label className="detail-field__label" htmlFor="approval-comment">Reviewer Comment</label>
+          <textarea
+            id="approval-comment"
+            className="yaml-editor"
+            style={{ minHeight: 96 }}
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="Optional for approve/deny, required for request changes"
+          />
+        </div>
+      )}
 
       <div className="tab-bar">
         {tabs.map((t) => (
@@ -140,29 +183,17 @@ export function ToolApprovalDetail() {
       <div className="tab-content">
         {tab === "overview" && (
           <div className="detail-grid">
-            {isPending && (
-              <div className="detail-field detail-field--full">
-                <span className="detail-field__label">Comment</span>
-                <textarea
-                  className="yaml-editor"
-                  style={{ minHeight: 88 }}
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                  placeholder="Optional reviewer comment"
-                />
-              </div>
-            )}
             <div className="detail-field">
               <span className="detail-field__label">Phase</span>
               <StatusBadge phase={approval.status?.phase} size="md" />
             </div>
             <div className="detail-field">
-              <span className="detail-field__label">Tool</span>
-              <span className="detail-field__value mono">{approval.spec.tool ?? "—"}</span>
+              <span className="detail-field__label">Checkpoint</span>
+              <span className="detail-field__value mono">{approval.spec.checkpoint_id ?? "—"}</span>
             </div>
             <div className="detail-field">
-              <span className="detail-field__label">Operation Class</span>
-              <span className="detail-field__value">{approval.spec.operation_class ?? "—"}</span>
+              <span className="detail-field__label">Checkpoint Type</span>
+              <span className="detail-field__value">{approval.spec.checkpoint_type ?? "—"}</span>
             </div>
             <div className="detail-field">
               <span className="detail-field__label">Agent</span>
@@ -170,12 +201,23 @@ export function ToolApprovalDetail() {
             </div>
             <div className="detail-field">
               <span className="detail-field__label">Task Ref</span>
-              <span
-                className={clsx("detail-field__value mono", approval.spec.task_ref && "detail-field__link")}
-                onClick={() => { if (approval.spec.task_ref) navigate(`/tasks/${approval.spec.task_ref}`); }}
-              >
-                {approval.spec.task_ref ?? "—"}
-              </span>
+              <span className="detail-field__value mono">{approval.spec.task_ref ?? "—"}</span>
+            </div>
+            <div className="detail-field">
+              <span className="detail-field__label">Review Cycle</span>
+              <span className="detail-field__value">{reviewCycle}</span>
+            </div>
+            <div className="detail-field">
+              <span className="detail-field__label">Allow Request Changes</span>
+              <span className="detail-field__value">{allowRequestChanges ? "true" : "false"}</span>
+            </div>
+            <div className="detail-field">
+              <span className="detail-field__label">Max Review Cycles</span>
+              <span className="detail-field__value">{maxReviewCycles}</span>
+            </div>
+            <div className="detail-field">
+              <span className="detail-field__label">Supersedes</span>
+              <span className="detail-field__value mono">{approval.spec.supersedes ?? "—"}</span>
             </div>
             <div className="detail-field">
               <span className="detail-field__label">TTL</span>
@@ -192,6 +234,10 @@ export function ToolApprovalDetail() {
               <span className="detail-field__value">{approval.status?.decision ?? "—"}</span>
             </div>
             <div className="detail-field">
+              <span className="detail-field__label">Comment</span>
+              <span className="detail-field__value">{approval.status?.comment ?? "—"}</span>
+            </div>
+            <div className="detail-field">
               <span className="detail-field__label">Decided By</span>
               <span className="detail-field__value">{approval.status?.decided_by ?? "—"}</span>
             </div>
@@ -200,32 +246,31 @@ export function ToolApprovalDetail() {
               <span className="detail-field__value">{formatDateTime(approval.status?.decided_at)}</span>
             </div>
             <div className="detail-field">
-              <span className="detail-field__label">Comment</span>
-              <span className="detail-field__value">{approval.status?.comment ?? "—"}</span>
-            </div>
-            <div className="detail-field">
               <span className="detail-field__label">Expires At</span>
               <span className="detail-field__value">{formatDateTime(approval.status?.expires_at)}</span>
             </div>
           </div>
+        )}
+        {tab === "output" && (
+          <pre className="yaml-editor" style={{ whiteSpace: "pre-wrap" }}>{outputText}</pre>
         )}
         {tab === "yaml" && (
           <YamlEditor
             value={JSON.stringify(approval, null, 2)}
             editable
             onSave={async (body) => {
-              const updated = await saveNamespacedResourceYaml<ToolApproval>(
+              const updated = await saveNamespacedResourceYaml<TaskApproval>(
                 queryClient,
-                "ToolApproval",
+                "TaskApproval",
                 namespace,
                 routeName,
                 body,
-                (a) => updateMutation.mutateAsync(a) as Promise<ToolApproval>,
+                (a) => updateMutation.mutateAsync(a) as Promise<TaskApproval>,
               );
               toast("success", "Approval updated");
               if (updated.metadata.name !== routeName) {
                 navigate(
-                  `${RESOURCE_DETAIL_BASE_PATH.ToolApproval}/${encodeURIComponent(updated.metadata.name)}`,
+                  `${RESOURCE_DETAIL_BASE_PATH.TaskApproval}/${encodeURIComponent(updated.metadata.name)}`,
                   { replace: true },
                 );
               }

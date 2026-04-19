@@ -6,6 +6,7 @@
 
 - `agents` ([]string): participating agent names.
 - `graph` (map[string]GraphEdge): per-node routing.
+- `completion_review` (ReviewCheckpoint): optional final human review before the task is marked `Succeeded`.
 
 `GraphEdge` fields:
 
@@ -19,6 +20,18 @@
   - `quorum_count` (int, >= 0)
   - `quorum_percent` (int, 0-100)
   - `on_failure`: `deadletter`, `skip`, `continue_partial`
+- `review` (ReviewCheckpoint): optional human review checkpoint for this node's output.
+
+`ReviewCheckpoint` fields:
+
+- `checkpoint_id` (string, required)
+- `display_name` (string)
+- `reason` (string)
+- `ttl` (duration string, defaults to `10m`)
+- `allow_request_changes` (bool, defaults to `true`)
+- `max_review_cycles` (int, defaults to `3`)
+
+If `allow_request_changes` is `false`, reviewers can only approve or deny that checkpoint. Once `max_review_cycles` is reached, additional `request_changes` attempts are rejected.
 
 ## Defaults and Validation
 
@@ -33,6 +46,7 @@
   - graph nodes/edges must reference agents in `spec.agents`
   - cyclic graphs require `Task.spec.max_turns > 0`
   - non-cyclic graphs require at least one entrypoint (zero indegree node)
+  - review `checkpoint_id` values must be unique within the system
 
 ## status
 

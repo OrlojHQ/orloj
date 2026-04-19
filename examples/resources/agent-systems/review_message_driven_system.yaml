@@ -1,0 +1,35 @@
+apiVersion: orloj.dev/v1
+kind: AgentSystem
+metadata:
+  name: review-message-driven-system
+  labels:
+    orloj.dev/domain: governed-workflows
+    orloj.dev/example: human-review-message-driven
+spec:
+  agents:
+    - planner-agent
+    - research-agent
+    - writer-agent
+  graph:
+    planner-agent:
+      review:
+        checkpoint_id: intake-review
+        display_name: Intake Review
+        reason: Human reviewer must approve the intake summary before downstream routing.
+        ttl: 20m
+      edges:
+        - to: research-agent
+    research-agent:
+      edges:
+        - to: writer-agent
+    writer-agent:
+      review:
+        checkpoint_id: draft-review
+        display_name: Draft Review
+        reason: Reviewer must approve the draft before the final task output is committed.
+        ttl: 30m
+  completion_review:
+    checkpoint_id: completion-review
+    display_name: Completion Review
+    reason: Final reviewer signoff is required before the task succeeds.
+    ttl: 30m

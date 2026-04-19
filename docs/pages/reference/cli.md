@@ -11,8 +11,9 @@ orlojctl apply -f <file-or-directory> [--run] [--dry-run] [--namespace <ns>]
 orlojctl validate -f <file|dir>
 orlojctl create secret <name> --from-literal key=value [...]
 orlojctl create token <name> --role <role>
-orlojctl approve tool-approval <name> [--decided-by <id>] [--reason <text>]
-orlojctl deny tool-approval <name> [--decided-by <id>] [--reason <text>]
+orlojctl approve tool-approval|task-approval <name> [--decided-by <id>] [--comment <text>]
+orlojctl deny tool-approval|task-approval <name> [--decided-by <id>] [--comment <text>]
+orlojctl request-changes task-approval <name> --decided-by <id> --comment <text>
 orlojctl get [-w] <resource> [name] [-o table|json|yaml]
 orlojctl get tokens
 orlojctl get memory-entries <memory-name> [--query <q>] [--prefix <p>] [--limit <n>]
@@ -124,10 +125,12 @@ orlojctl validate -f ./manifests/
 
 ## `orlojctl approve` / `orlojctl deny`
 
-Approves or denies a pending `ToolApproval`:
+Approves or denies a pending `ToolApproval` or `TaskApproval`:
 
 - `orlojctl approve tool-approval <name> ...`
 - `orlojctl deny tool-approval <name> ...`
+- `orlojctl approve task-approval <name> ...`
+- `orlojctl deny task-approval <name> ...`
 
 | Flag | Default | Description |
 |---|---|---|
@@ -135,7 +138,25 @@ Approves or denies a pending `ToolApproval`:
 | `--namespace` | global namespace (if set) | Optional namespace override. |
 | `-n` | global namespace (if set) | Shorthand for `--namespace`. |
 | `--decided-by` | empty | Decision actor identity. |
-| `--reason` | empty | Optional decision rationale. |
+| `--comment` | empty | Optional reviewer comment. |
+| `--reason` | empty | Legacy alias for `--comment`. |
+
+## `orlojctl request-changes`
+
+Requests changes on a pending `TaskApproval` and reruns the producing agent with injected `review.*` context:
+
+- `orlojctl request-changes task-approval <name> --decided-by reviewer@example.com --comment "Revise the disclaimer"`
+
+The command fails if the checkpoint disables `request_changes` or if the approval has already reached `max_review_cycles`.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--server` | resolved server | API server URL. |
+| `--namespace` | global namespace (if set) | Optional namespace override. |
+| `-n` | global namespace (if set) | Shorthand for `--namespace`. |
+| `--decided-by` | empty | Decision actor identity. |
+| `--comment` | empty | Required reviewer feedback unless you use the legacy `--reason` alias. |
+| `--reason` | empty | Legacy alias for `--comment`. |
 
 ## `orlojctl get`
 
@@ -159,6 +180,7 @@ Supported resources:
 - `agent-roles`
 - `tool-permissions`
 - `tool-approvals`
+- `task-approvals`
 - `tasks`
 - `task-schedules`
 - `task-webhooks`

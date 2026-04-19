@@ -28,6 +28,7 @@ const (
 	tableTaskWebhooks    = "task_webhooks"
 	tableWorkers         = "workers"
 	tableToolApprovals   = "tool_approvals"
+	tableTaskApprovals   = "task_approvals"
 	tableMcpServers      = "mcp_servers"
 )
 
@@ -473,6 +474,33 @@ func upsertToolApprovalSQL(ctx context.Context, db dbExecer, name string, item r
 		resources.NormalizeNamespace(item.Metadata.Namespace),
 		strings.TrimSpace(item.Spec.TaskRef),
 		strings.TrimSpace(item.Spec.Tool),
+		strings.ToLower(strings.TrimSpace(item.Status.Phase)),
+		string(payload),
+	)
+	return err
+}
+
+func upsertTaskApprovalSQL(ctx context.Context, db dbExecer, name string, item resources.TaskApproval) error {
+	payload, err := json.Marshal(item)
+	if err != nil {
+		return err
+	}
+	_, err = db.ExecContext(ctx,
+		`INSERT INTO task_approvals(name, namespace, task_ref, checkpoint_id, checkpoint_type, status_phase, payload, updated_at)
+		 VALUES($1, $2, $3, $4, $5, $6, $7::jsonb, NOW())
+		 ON CONFLICT(name) DO UPDATE SET
+		     namespace = EXCLUDED.namespace,
+		     task_ref = EXCLUDED.task_ref,
+		     checkpoint_id = EXCLUDED.checkpoint_id,
+		     checkpoint_type = EXCLUDED.checkpoint_type,
+		     status_phase = EXCLUDED.status_phase,
+		     payload = EXCLUDED.payload,
+		     updated_at = NOW()`,
+		name,
+		resources.NormalizeNamespace(item.Metadata.Namespace),
+		strings.TrimSpace(item.Spec.TaskRef),
+		strings.TrimSpace(item.Spec.CheckpointID),
+		strings.TrimSpace(item.Spec.CheckpointType),
 		strings.ToLower(strings.TrimSpace(item.Status.Phase)),
 		string(payload),
 	)

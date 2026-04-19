@@ -167,7 +167,23 @@ components:
       type: object
       properties:
         decided_by: { type: string }
+        comment: { type: string }
         reason: { type: string }
+    TaskApprovalDecisionRequest:
+      type: object
+      properties:
+        decided_by: { type: string }
+        comment: { type: string }
+        reason: { type: string }
+    TaskApprovalRequestChangesRequest:
+      type: object
+      properties:
+        decided_by: { type: string }
+        comment: { type: string }
+        reason: { type: string }
+      anyOf:
+        - required: [comment]
+        - required: [reason]
     MemoryEntriesResponse:
       type: object
       properties:
