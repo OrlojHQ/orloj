@@ -153,6 +153,47 @@ spec:
     secretRef: azure-openai-api-key
 ```
 
+## Adding AWS Bedrock
+
+Bedrock uses IAM credentials instead of a simple API key. For development, store explicit credentials as a JSON blob in a Secret:
+
+```bash
+orlojctl create secret aws-credentials --from-literal value='{"access_key_id":"AKIA...","secret_access_key":"..."}'
+```
+
+Then create the ModelEndpoint:
+
+```yaml
+apiVersion: orloj.dev/v1
+kind: ModelEndpoint
+metadata:
+  name: bedrock-claude
+spec:
+  provider: bedrock
+  default_model: anthropic.claude-sonnet-4-20250514-v1:0
+  options:
+    region: us-east-1
+    max_tokens: "4096"
+  auth:
+    secretRef: aws-credentials
+```
+
+For production deployments on AWS infrastructure (EC2, ECS, Lambda), you can omit `auth.secretRef` entirely and let the AWS SDK resolve credentials from the instance's IAM role:
+
+```yaml
+apiVersion: orloj.dev/v1
+kind: ModelEndpoint
+metadata:
+  name: bedrock-production
+spec:
+  provider: bedrock
+  default_model: anthropic.claude-sonnet-4-20250514-v1:0
+  options:
+    region: us-east-1
+```
+
+Cross-region inference profiles (e.g. `us.anthropic.claude-sonnet-4-20250514-v1:0`) work transparently -- use the profile ID as `default_model`.
+
 ## Adding Ollama (Local Models)
 
 For local model inference with no API key required:
@@ -174,6 +215,8 @@ Use the Ollama server root as `base_url` for `provider: ollama`. Do not append `
 
 The `openai-compatible` provider lets you connect to any service that speaks the OpenAI Chat Completions protocol. Set `base_url` to the provider's API base. `auth.secretRef` is optional.
 
+This covers a wide range of providers: Groq, Together AI, Fireworks AI, Mistral AI, DeepSeek, xAI (Grok), Google Gemini, Perplexity, OpenRouter, Cerebras, SambaNova, vLLM, text-generation-inference, LM Studio, and LiteLLM. See [ModelEndpoint > OpenAI-Compatible Providers](../concepts/tools/model-endpoint.md#openai-compatible-providers) for the full list with `base_url` values and example models.
+
 **Groq:**
 ```yaml
 apiVersion: orloj.dev/v1
@@ -183,9 +226,37 @@ metadata:
 spec:
   provider: openai-compatible
   base_url: https://api.groq.com/openai/v1
-  default_model: llama-3.1-70b-versatile
+  default_model: llama-3.3-70b-versatile
   auth:
     secretRef: groq-api-key
+```
+
+**Mistral AI:**
+```yaml
+apiVersion: orloj.dev/v1
+kind: ModelEndpoint
+metadata:
+  name: mistral-default
+spec:
+  provider: openai-compatible
+  base_url: https://api.mistral.ai/v1
+  default_model: mistral-large-latest
+  auth:
+    secretRef: mistral-api-key
+```
+
+**Google Gemini:**
+```yaml
+apiVersion: orloj.dev/v1
+kind: ModelEndpoint
+metadata:
+  name: gemini-default
+spec:
+  provider: openai-compatible
+  base_url: https://generativelanguage.googleapis.com/v1beta/openai
+  default_model: gemini-2.5-pro
+  auth:
+    secretRef: gemini-api-key
 ```
 
 **Ollama via OpenAI-compatible endpoint:**
@@ -199,8 +270,6 @@ spec:
   base_url: http://127.0.0.1:11434/v1
   default_model: llama3.1
 ```
-
-This works with any service that implements `/chat/completions`, including Together AI, Fireworks AI, vLLM, and text-generation-inference.
 
 ## Agent Requirement
 
