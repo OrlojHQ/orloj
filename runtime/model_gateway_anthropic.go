@@ -405,16 +405,17 @@ func chatMessagesToAnthropic(msgs []ChatMessage) (string, []anthropicMessagesInp
 		}
 
 		if role == "tool" && m.ToolCallID != "" {
-			blocks := []map[string]interface{}{
-				{
-					"type":        "tool_result",
-					"tool_use_id": m.ToolCallID,
-					"content":     content,
-				},
+			block := map[string]interface{}{
+				"type":        "tool_result",
+				"tool_use_id": m.ToolCallID,
+				"content":     content,
+			}
+			if m.IsError {
+				block["is_error"] = true
 			}
 			out = append(out, anthropicMessagesInput{
 				Role:    "user",
-				Content: blocks,
+				Content: []map[string]interface{}{block},
 			})
 			continue
 		}

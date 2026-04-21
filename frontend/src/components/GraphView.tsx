@@ -369,7 +369,10 @@ function buildTree(
     if (registeredNodes.has(id)) return;
     registeredNodes.add(id);
     const small = SECONDARY_KINDS.has(kind);
-    g.setNode(id, { width: small ? NODE_W_SM : NODE_W, height: small ? NODE_H_SM : NODE_H });
+    const baseW = small ? NODE_W_SM : NODE_W;
+    const textW = Math.ceil(label.length * 7.2) + (small ? 56 : 64);
+    const w = Math.min(Math.max(baseW, textW), 340);
+    g.setNode(id, { width: w, height: small ? NODE_H_SM : NODE_H });
     nodeMeta[id] = { kind, label, phase, subtitle, extra };
   }
 
@@ -637,13 +640,14 @@ function buildTree(
       );
 
       // Create a synthetic task node for the inline template so the graph
-      // shows webhook → task (same visual as the task_ref path) rather than
-      // an orphan webhook hanging off the system node.
+      // shows webhook → task → worker (same visual as the task_ref path)
+      // rather than an orphan webhook hanging off the system node.
+      // Edge direction matches normal tasks: system → task, webhook → task.
       const inlineTaskId = nid("task", `${webhook.metadata.name}-inline`);
       const tmpl = webhook.spec.task_template;
       regNode(inlineTaskId, "task", `${webhook.metadata.name} (inline)`, undefined, tmpl.priority ?? "normal");
       regEdge(webhookId, inlineTaskId, false);
-      regEdge(inlineTaskId, sysId, false);
+      regEdge(sysId, inlineTaskId, false);
     }
   }
 
@@ -660,9 +664,8 @@ function buildTree(
   for (const id of registeredNodes) {
     const pos = g.node(id);
     const meta = nodeMeta[id];
-    const small = SECONDARY_KINDS.has(meta.kind);
-    const w = small ? NODE_W_SM : NODE_W;
-    const h = small ? NODE_H_SM : NODE_H;
+    const w = pos.width as number;
+    const h = pos.height as number;
     nodePos[id] = { x: pos.x, y: pos.y };
     const data: CrdNodeData = { label: meta.label, kind: meta.kind, phase: meta.phase, subtitle: meta.subtitle, ...meta.extra };
     if (meta.kind === "agent" && agentDepCounts[meta.label]) {
@@ -938,7 +941,7 @@ export function GraphView({ system, related, onNodeClick, animated, runningAgent
         onNodeMouseLeave={handleNodeMouseLeave}
         nodeTypes={nodeTypes}
         fitView
-        fitViewOptions={{ padding: 0.25 }}
+        fitViewOptions={{ padding: 0.25, minZoom: 0.45, maxZoom: 1.0 }}
         minZoom={0.15}
         maxZoom={2}
         proOptions={{ hideAttribution: true }}

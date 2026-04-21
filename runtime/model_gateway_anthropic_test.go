@@ -384,6 +384,109 @@ func TestChatMessagesToAnthropicStructuredToolMessages(t *testing.T) {
 	}
 }
 
+func TestChatMessagesToAnthropicErrorToolResult(t *testing.T) {
+	msgs := []ChatMessage{
+		{Role: "user", Content: "step=1"},
+		{Role: "assistant", Content: "calling tools", ToolCalls: []ChatToolCall{
+			{ID: "toolu_01A", Name: "kubectl-get", Input: `{"resource":"pods"}`},
+			{ID: "toolu_01B", Name: "prometheus-query", Input: `{"query":"up"}`},
+		}},
+		{Role: "tool", Content: "<tool_result>\npod list\n</tool_result>", ToolCallID: "toolu_01A"},
+		{Role: "tool", Content: "<tool_error>\nmcp tool prometheus-query returned error: connection refused\n</tool_error>", ToolCallID: "toolu_01B", IsError: true},
+		{Role: "user", Content: "step=2"},
+	}
+
+	system, anthropicMsgs := chatMessagesToAnthropic(msgs)
+	if system != "" {
+		t.Fatalf("expected empty system, got %q", system)
+	}
+	if len(anthropicMsgs) != 5 {
+		t.Fatalf("expected 5 messages (user, assistant, tool-result, tool-error-result, user), got %d", len(anthropicMsgs))
+	}
+
+	successResult := anthropicMsgs[2]
+	successBlocks, ok := successResult.Content.([]map[string]interface{})
+	if !ok || len(successBlocks) != 1 {
+		t.Fatalf("expected 1 tool_result block for success, got %v", successResult.Content)
+	}
+	if successBlocks[0]["tool_use_id"] != "toolu_01A" {
+		t.Fatalf("expected tool_use_id=toolu_01A, got %v", successBlocks[0]["tool_use_id"])
+	}
+	if _, hasIsError := successBlocks[0]["is_error"]; hasIsError {
+		t.Fatal("successful tool_result should not have is_error field")
+	}
+
+	errorResult := anthropicMsgs[3]
+	if errorResult.Role != "user" {
+		t.Fatalf("expected user role for error tool_result, got %q", errorResult.Role)
+	}
+	errorBlocks, ok := errorResult.Content.([]map[string]interface{})
+	if !ok || len(errorBlocks) != 1 {
+		t.Fatalf("expected 1 tool_result block for error, got %v", errorResult.Content)
+	}
+	if errorBlocks[0]["type"] != "tool_result" {
+		t.Fatalf("expected type=tool_result, got %v", errorBlocks[0]["type"])
+	}
+	if errorBlocks[0]["tool_use_id"] != "toolu_01B" {
+		t.Fatalf("expected tool_use_id=toolu_01B, got %v", errorBlocks[0]["tool_use_id"])
+	}
+	if errorBlocks[0]["is_error"] != true {
+		t.Fatalf("expected is_error=true on error tool_result, got %v", errorBlocks[0]["is_error"])
+	}
+}
+
+func TestChatMessagesToAnthropicMixedToolResultsAllHaveMatchingIDs(t *testing.T) {
+	toolUseIDs := []string{"toolu_01A", "toolu_01B", "toolu_01C", "toolu_01D"}
+	msgs := []ChatMessage{
+		{Role: "user", Content: "step=1"},
+		{Role: "assistant", Content: "running 4 tools", ToolCalls: []ChatToolCall{
+			{ID: toolUseIDs[0], Name: "kubectl-get", Input: `{"resource":"pods"}`},
+			{ID: toolUseIDs[1], Name: "kubectl-get", Input: `{"resource":"nodes"}`},
+			{ID: toolUseIDs[2], Name: "prometheus-query", Input: `{"query":"up"}`},
+			{ID: toolUseIDs[3], Name: "prometheus-query", Input: `{"query":"down"}`},
+		}},
+		{Role: "tool", Content: "<tool_result>\npod list\n</tool_result>", ToolCallID: toolUseIDs[0]},
+		{Role: "tool", Content: "<tool_result>\nnode list\n</tool_result>", ToolCallID: toolUseIDs[1]},
+		{Role: "tool", Content: "<tool_error>\nconnection refused\n</tool_error>", ToolCallID: toolUseIDs[2], IsError: true},
+		{Role: "tool", Content: "<tool_error>\nconnection refused\n</tool_error>", ToolCallID: toolUseIDs[3], IsError: true},
+	}
+
+	_, anthropicMsgs := chatMessagesToAnthropic(msgs)
+
+	// Collect all tool_use IDs from assistant message
+	assistantMsg := anthropicMsgs[1]
+	blocks, _ := assistantMsg.Content.([]map[string]interface{})
+	emittedToolUseIDs := map[string]bool{}
+	for _, block := range blocks {
+		if block["type"] == "tool_use" {
+			emittedToolUseIDs[block["id"].(string)] = true
+		}
+	}
+
+	// Collect all tool_result IDs from subsequent messages
+	emittedToolResultIDs := map[string]bool{}
+	for _, msg := range anthropicMsgs[2:] {
+		resultBlocks, ok := msg.Content.([]map[string]interface{})
+		if !ok {
+			continue
+		}
+		for _, block := range resultBlocks {
+			if block["type"] == "tool_result" {
+				emittedToolResultIDs[block["tool_use_id"].(string)] = true
+			}
+		}
+	}
+
+	for _, id := range toolUseIDs {
+		if !emittedToolUseIDs[id] {
+			t.Errorf("tool_use ID %s missing from assistant message", id)
+		}
+		if !emittedToolResultIDs[id] {
+			t.Errorf("tool_result for tool_use ID %s missing — would cause orphaned tool_use error", id)
+		}
+	}
+}
+
 func TestAnthropicModelGatewaySendsOutputConfig(t *testing.T) {
 	var capturedBody map[string]any
 
