@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Parallel tool calls with mixed success/error results break subsequent model calls**: when the model issued multiple tool calls in one step and some failed (e.g. MCP `tool_backend_failure`), the failed results were not included as `tool_result` blocks in the conversation history. This left orphaned `tool_use` IDs that the Anthropic API rejected with a 400 error on every subsequent step, causing the agent to exhaust `max_steps` without making progress. Error tool results are now always appended to history with `is_error` set (Anthropic `is_error: true`, Bedrock `Status: error`), so the model receives feedback for every tool call regardless of outcome.
+- **Web UI system topology: inline webhook task node squished between webhook and system**: `TaskWebhook` resources with an inline `task_template` (no `task_ref`) created a synthetic task node with edges pointing back toward the system node (`inline_task → system`), causing dagre to place it to the left of the system and squeeze it into the webhook–system gap. The edge direction now matches normal tasks (`system → inline_task`), so inline webhook tasks sit alongside other tasks to the right of the system node.
+- **Web UI system topology: nodes with long names overlap across ranks**: dagre allocated a fixed 180px width for secondary nodes (tools, roles, secrets, models, memory) regardless of label length. Nodes with long names rendered wider than their allocated slot, causing visual overlap with adjacent ranks. Node width is now estimated from label length (capped at 340px) so dagre reserves enough horizontal space for the actual rendered content.
+
+### Changed
+
+- **Web UI system topology: initial zoom clamped for large systems**: the graph view now constrains `fitView` to a 0.45×–1.0× zoom range on load, matching the Argo CD convention. Large systems start at a readable zoom level (nodes visible, pan to explore) instead of shrinking to fit the entire graph; small systems no longer over-zoom beyond 1:1 scale. Manual zoom remains unrestricted (0.15×–2×).
+
 ## [0.10.0] - 2026-04-18
 
 ### Added

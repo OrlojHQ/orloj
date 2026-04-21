@@ -429,6 +429,12 @@ func (w *AgentWorker) Run(ctx context.Context) {
 					if w.onEvent != nil {
 						w.onEvent(fmt.Sprintf("step=%d tool=%s tool_contract=%s tool_request_id=%s tool_attempt=%d duration_ms=%d error=%v", step, tool, contractVersion, toolRequestID, toolAttempt, toolDurationMS, err))
 					}
+					w.history = append(w.history, ChatMessage{
+						Role:       "tool",
+						Content:    fmt.Sprintf("<tool_error>\n%s\n</tool_error>", err.Error()),
+						ToolCallID: requested.ID,
+						IsError:    true,
+					})
 					continue
 				}
 				toolResultCache[cacheKey] = result

@@ -220,16 +220,20 @@ func chatMessagesToBedrock(req ModelRequest) ([]types.SystemContentBlock, []type
 		}
 
 		if role == "tool" && m.ToolCallID != "" {
+			resultBlock := types.ToolResultBlock{
+				ToolUseId: aws.String(m.ToolCallID),
+				Content: []types.ToolResultContentBlock{
+					&types.ToolResultContentBlockMemberText{Value: content},
+				},
+			}
+			if m.IsError {
+				resultBlock.Status = types.ToolResultStatusError
+			}
 			out = append(out, types.Message{
 				Role: types.ConversationRoleUser,
 				Content: []types.ContentBlock{
 					&types.ContentBlockMemberToolResult{
-						Value: types.ToolResultBlock{
-							ToolUseId: aws.String(m.ToolCallID),
-							Content: []types.ToolResultContentBlock{
-								&types.ToolResultContentBlockMemberText{Value: content},
-							},
-						},
+						Value: resultBlock,
 					},
 				},
 			})

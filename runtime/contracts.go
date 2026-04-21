@@ -23,6 +23,7 @@ type ChatMessage struct {
 	Content    string
 	ToolCallID string         // role="tool": the ID of the tool call this result answers
 	ToolCalls  []ChatToolCall // role="assistant": tool calls the model made this turn
+	IsError    bool           // role="tool": true when this tool result represents a failure
 }
 
 // ChatToolCall captures one tool invocation from an assistant message.
