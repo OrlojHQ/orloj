@@ -4,6 +4,7 @@ import { useAgentSystems } from "../api/hooks";
 import { ResourceTable, type Column } from "../components/ResourceTable";
 import { StatusBadge } from "../components/StatusBadge";
 import { EmptyState } from "../components/EmptyState";
+import { ListFetchError } from "../components/ListFetchError";
 import { Network, Grid3X3, List } from "lucide-react";
 import clsx from "clsx";
 import type { AgentSystem } from "../api/types";
@@ -13,7 +14,7 @@ import { Plus } from "lucide-react";
 type ViewMode = "cards" | "table";
 
 export function AgentSystems() {
-  const { data, isLoading } = useAgentSystems();
+  const { data, isLoading, isError, error, refetch } = useAgentSystems();
   const navigate = useNavigate();
   const [view, setView] = useState<ViewMode>("cards");
   const [showCreate, setShowCreate] = useState(false);
@@ -81,7 +82,14 @@ export function AgentSystems() {
         </div>
       </div>
 
-      {systems.length === 0 && !isLoading ? (
+      {isError && (
+        <ListFetchError
+          message={error instanceof Error ? error.message : "Failed to load agent systems"}
+          onRetry={() => void refetch()}
+        />
+      )}
+
+      {systems.length === 0 && !isLoading && !isError ? (
         <EmptyState
           icon={<Network size={40} />}
           title="No Agent Systems"
@@ -93,7 +101,10 @@ export function AgentSystems() {
             <div
               key={sys.metadata.name}
               className="resource-card"
+              role="button"
+              tabIndex={0}
               onClick={() => navigate(`/systems/${sys.metadata.name}`)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate(`/systems/${sys.metadata.name}`); } }}
             >
               <div className="resource-card__header">
                 <Network size={16} className="resource-card__icon" />

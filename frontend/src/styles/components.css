@@ -1180,6 +1180,35 @@
   font-size: 0.9rem;
 }
 
+.list-fetch-error {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 20px;
+  color: var(--red);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  font-size: 0.9rem;
+}
+
+.btn-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.card--mb {
+  margin-bottom: 1rem;
+}
+
+.mb-md {
+  margin-bottom: 1rem;
+}
+
 .table-skeleton {
   display: flex;
   flex-direction: column;

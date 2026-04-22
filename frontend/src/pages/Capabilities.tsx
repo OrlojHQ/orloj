@@ -1,10 +1,11 @@
 import { ContextBackButton } from "../components/ContextBackButton";
 import { useCapabilities } from "../api/hooks";
 import { EmptyState } from "../components/EmptyState";
+import { ListFetchError } from "../components/ListFetchError";
 import { Sparkles } from "lucide-react";
 
 export function Capabilities() {
-  const { data, isLoading, isError, error } = useCapabilities();
+  const { data, isLoading, isError, error, refetch } = useCapabilities();
 
   return (
     <div className="page">
@@ -23,12 +24,15 @@ export function Capabilities() {
       {isLoading && <div className="loading-placeholder">Loading capabilities…</div>}
 
       {isError && (
-        <p className="text-red">{error instanceof Error ? error.message : "Failed to load capabilities"}</p>
+        <ListFetchError
+          message={error instanceof Error ? error.message : "Failed to load capabilities"}
+          onRetry={() => void refetch()}
+        />
       )}
 
       {!isLoading && !isError && data && (
         <>
-          <p className="text-muted" style={{ marginBottom: "1rem" }}>
+          <p className="text-muted mb-md">
             Generated at: {data.generated_at ? new Date(data.generated_at).toLocaleString() : "—"}
           </p>
           {(data.capabilities ?? []).length === 0 ? (

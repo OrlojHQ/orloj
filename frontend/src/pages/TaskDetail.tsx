@@ -125,10 +125,13 @@ export function TaskDetail() {
         </button>
       </div>
 
-      <div className="tab-bar">
+      <div className="tab-bar" role="tablist">
         {tabs.map((t) => (
           <button
             key={t.id}
+            role="tab"
+            aria-selected={tab === t.id}
+            aria-controls={`tabpanel-${t.id}`}
             className={clsx("tab-bar__tab", tab === t.id && "tab-bar__tab--active")}
             onClick={() => setTab(t.id)}
           >
@@ -137,19 +140,20 @@ export function TaskDetail() {
         ))}
       </div>
 
-      <div className="tab-content">
+      <div className="tab-content" role="tabpanel" id={`tabpanel-${tab}`} aria-labelledby={tab}>
         {tab === "overview" && (
           <>
             {task.status?.blocked_on?.name && (
-              <div className="card" style={{ marginBottom: 16 }}>
+              <div className="card card--mb">
                 <div className="detail-field">
                   <span className="detail-field__label">Blocked On</span>
-                  <span
-                    className="detail-field__value detail-field__link"
+                  <button
+                    type="button"
+                    className="detail-field__value detail-field__link btn-link"
                     onClick={() => navigate((task.status?.blocked_on?.kind ?? "").toLowerCase() === "taskapproval" ? `/approvals/task/${task.status?.blocked_on?.name}` : `/approvals/${task.status?.blocked_on?.name}`)}
                   >
-                    {task.status?.blocked_on?.kind ?? "Approval"} · {task.status?.blocked_on?.name}
-                  </span>
+                    {task.status?.blocked_on?.kind ?? "Approval"} &middot; {task.status?.blocked_on?.name}
+                  </button>
                 </div>
               </div>
             )}
@@ -160,12 +164,13 @@ export function TaskDetail() {
             </div>
             <div className="detail-field">
               <span className="detail-field__label">System</span>
-              <span
-                className="detail-field__value detail-field__link"
+              <button
+                type="button"
+                className="detail-field__value detail-field__link btn-link"
                 onClick={() => navigate(`/systems/${task.spec.system}`)}
               >
                 {task.spec.system}
-              </span>
+              </button>
             </div>
             <div className="detail-field">
               <span className="detail-field__label">Priority</span>
@@ -261,7 +266,12 @@ export function TaskDetail() {
               </button>
             </div>
             {messages.isLoading && <p className="text-muted">Loading messages…</p>}
-            {(messages.data ?? []).length === 0 && !messages.isLoading && (
+            {messages.isError && (
+              <p className="text-red">
+                {messages.error instanceof Error ? messages.error.message : "Failed to load messages"}
+              </p>
+            )}
+            {(messages.data ?? []).length === 0 && !messages.isLoading && !messages.isError && (
               <p className="text-muted">
                 {Object.keys(msgFiltersApplied).length > 0
                   ? "No messages match the current filters"
@@ -314,11 +324,22 @@ export function TaskDetail() {
           </div>
         )}
         {tab === "metrics" && !metrics.isLoading && !m && (
-          <p className="text-muted">No metrics available</p>
+          metrics.isError ? (
+            <p className="text-red">
+              {metrics.error instanceof Error ? metrics.error.message : "Failed to load metrics"}
+            </p>
+          ) : (
+            <p className="text-muted">No metrics available</p>
+          )
         )}
 
         {tab === "trace" && <TraceView trace={traceEvents} />}
 
+        {tab === "logs" && logs.isError && (
+          <p className="text-red">
+            {logs.error instanceof Error ? logs.error.message : "Failed to load logs"}
+          </p>
+        )}
         {tab === "logs" && <LogViewer logs={logs.data ?? ""} loading={logs.isLoading} />}
 
         {tab === "graph" && system.data && (
