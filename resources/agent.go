@@ -63,9 +63,10 @@ type AgentList struct {
 // AgentSpec defines desired runtime behavior.
 type AgentSpec struct {
 	// Model stores the resolved model id for runtime execution and is not part of the external Agent API.
-	Model        string             `json:"-"`
-	ModelRef     string             `json:"model_ref,omitempty"`
-	Prompt       string             `json:"prompt"`
+	Model             string             `json:"-"`
+	ModelRef          string             `json:"model_ref,omitempty"`
+	FallbackModelRefs []string           `json:"fallback_model_refs,omitempty"`
+	Prompt            string             `json:"prompt"`
 	Tools        []string           `json:"tools,omitempty"`
 	AllowedTools []string           `json:"allowed_tools,omitempty"`
 	Roles        []string           `json:"roles,omitempty"`
@@ -140,6 +141,21 @@ func (a *Agent) Normalize() error {
 	if a.Spec.ModelRef == "" {
 		return fmt.Errorf("spec.model_ref is required")
 	}
+	normalizedFallbacks := make([]string, 0, len(a.Spec.FallbackModelRefs))
+	seenFallbacks := make(map[string]struct{}, len(a.Spec.FallbackModelRefs))
+	for _, ref := range a.Spec.FallbackModelRefs {
+		ref = strings.TrimSpace(ref)
+		if ref == "" {
+			continue
+		}
+		key := strings.ToLower(ref)
+		if _, exists := seenFallbacks[key]; exists {
+			continue
+		}
+		seenFallbacks[key] = struct{}{}
+		normalizedFallbacks = append(normalizedFallbacks, ref)
+	}
+	a.Spec.FallbackModelRefs = normalizedFallbacks
 	a.Spec.Memory.Ref = strings.TrimSpace(a.Spec.Memory.Ref)
 	a.Spec.Memory.Type = strings.TrimSpace(a.Spec.Memory.Type)
 	a.Spec.Memory.Provider = strings.TrimSpace(a.Spec.Memory.Provider)

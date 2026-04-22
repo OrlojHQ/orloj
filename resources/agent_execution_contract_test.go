@@ -158,3 +158,45 @@ func TestAgentNormalizeRejectsInvalidExecutionProfile(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestAgentNormalizeFallbackModelRefs(t *testing.T) {
+	agent := Agent{
+		Kind:     "Agent",
+		Metadata: ObjectMeta{Name: "fb-agent"},
+		Spec: AgentSpec{
+			Prompt:            "test",
+			ModelRef:          "primary",
+			FallbackModelRefs: []string{" openai-gpt4 ", "", "ollama-local", "  ", "OpenAI-GPT4", "ollama-local"},
+		},
+	}
+	if err := agent.Normalize(); err != nil {
+		t.Fatalf("normalize failed: %v", err)
+	}
+	got := agent.Spec.FallbackModelRefs
+	if len(got) != 2 {
+		t.Fatalf("expected 2 fallback refs after normalization, got %d: %v", len(got), got)
+	}
+	if got[0] != "openai-gpt4" {
+		t.Fatalf("expected first ref 'openai-gpt4', got %q", got[0])
+	}
+	if got[1] != "ollama-local" {
+		t.Fatalf("expected second ref 'ollama-local', got %q", got[1])
+	}
+}
+
+func TestAgentNormalizeFallbackModelRefsEmpty(t *testing.T) {
+	agent := Agent{
+		Kind:     "Agent",
+		Metadata: ObjectMeta{Name: "no-fb-agent"},
+		Spec: AgentSpec{
+			Prompt:   "test",
+			ModelRef: "primary",
+		},
+	}
+	if err := agent.Normalize(); err != nil {
+		t.Fatalf("normalize failed: %v", err)
+	}
+	if len(agent.Spec.FallbackModelRefs) != 0 {
+		t.Fatalf("expected empty fallback refs, got %v", agent.Spec.FallbackModelRefs)
+	}
+}

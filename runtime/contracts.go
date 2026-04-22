@@ -42,9 +42,10 @@ type ToolSchemaInfo struct {
 
 // ModelRequest defines one model inference request for an agent step.
 type ModelRequest struct {
-	Model        string
-	ModelRef     string
-	Namespace    string
+	Model             string
+	ModelRef          string
+	FallbackModelRefs []string
+	Namespace         string
 	Agent        string
 	Prompt       string
 	Step         int

@@ -162,6 +162,36 @@ spec:
     You are a writing agent.
 ```
 
+## Fallback Routing
+
+When a model provider is down or rate-limited, you can configure `fallback_model_refs` on an agent to cascade through backup endpoints automatically:
+
+```yaml
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: writer-agent
+spec:
+  model_ref: anthropic-claude
+  fallback_model_refs:
+    - openai-gpt4
+    - ollama-local
+  prompt: |
+    You are a writing agent.
+```
+
+The router tries endpoints in order -- primary first, then each fallback. The first successful response wins. Fallback is triggered only on **retryable errors**:
+
+- **429** (rate limit)
+- **5xx** (server errors: 500, 502, 503, etc.)
+- Connection failures, DNS errors, and timeouts
+
+**Non-retryable errors** (400, 401, 403, 404, etc.) fail immediately without trying fallbacks -- these indicate configuration problems that retrying with a different provider won't solve.
+
+If all endpoints are exhausted, the last error is returned to the agent worker.
+
+Fallback is handled entirely within the model router. The agent worker and execution engine are unaware of it -- they still call `Complete()` once per step. [AgentPolicy](../agents/agent-policy.md) governance applies independently to each endpoint in the fallback chain.
+
 ## How Routing Works
 
 When a worker executes an agent turn:

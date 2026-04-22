@@ -190,9 +190,10 @@ func (w *AgentWorker) Run(ctx context.Context) {
 			})
 			modelStart := time.Now()
 			modelResp, modelErr := w.modelGateway.Complete(ctx, ModelRequest{
-				Model:        w.agent.Spec.Model,
-				ModelRef:     w.agent.Spec.ModelRef,
-				Namespace:    w.agent.Metadata.Namespace,
+				Model:             w.agent.Spec.Model,
+				ModelRef:          w.agent.Spec.ModelRef,
+				FallbackModelRefs: w.agent.Spec.FallbackModelRefs,
+				Namespace:         w.agent.Metadata.Namespace,
 				Agent:        w.agent.Metadata.Name,
 				Prompt:       w.agent.Spec.Prompt,
 				Step:         step,
