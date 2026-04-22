@@ -759,7 +759,7 @@ func TestBuildContainerStdioTransport(t *testing.T) {
 		}
 		_ = server.Normalize()
 
-		transport, err := mgr.buildContainerStdioTransport(server, "", &resolvedMcpEnv{})
+		transport, err := mgr.buildContainerStdioTransport(server, "", &resolvedMcpEnv{}, nil)
 		if err != nil {
 			t.Fatalf("build failed: %v", err)
 		}
@@ -800,7 +800,7 @@ func TestBuildContainerStdioTransport(t *testing.T) {
 		}
 		_ = server.Normalize()
 
-		transport, err := mgr.buildContainerStdioTransport(server, "npx", &resolvedMcpEnv{})
+		transport, err := mgr.buildContainerStdioTransport(server, "npx", &resolvedMcpEnv{}, nil)
 		if err != nil {
 			t.Fatalf("build failed: %v", err)
 		}
@@ -831,7 +831,7 @@ func TestBuildContainerStdioTransport(t *testing.T) {
 		_ = server.Normalize()
 
 		resolved := &resolvedMcpEnv{EnvVars: []string{"FOO=bar", "BAZ=qux"}}
-		transport, err := mgr.buildContainerStdioTransport(server, "", resolved)
+		transport, err := mgr.buildContainerStdioTransport(server, "", resolved, nil)
 		if err != nil {
 			t.Fatalf("build failed: %v", err)
 		}
@@ -854,7 +854,7 @@ func TestBuildContainerStdioTransport(t *testing.T) {
 		}
 		_ = server.Normalize()
 
-		transport, err := mgr.buildContainerStdioTransport(server, "", &resolvedMcpEnv{})
+		transport, err := mgr.buildContainerStdioTransport(server, "", &resolvedMcpEnv{}, nil)
 		if err != nil {
 			t.Fatalf("build failed: %v", err)
 		}
@@ -890,7 +890,7 @@ func TestBuildContainerStdioTransport(t *testing.T) {
 				{Content: `{"token":"secret"}`, ContainerPath: "/secrets/creds.json"},
 			},
 		}
-		transport, err := mgr.buildContainerStdioTransport(server, "", resolved)
+		transport, err := mgr.buildContainerStdioTransport(server, "", resolved, nil)
 		if err != nil {
 			t.Fatalf("build failed: %v", err)
 		}
@@ -941,7 +941,7 @@ func TestBuildContainerStdioTransport(t *testing.T) {
 				{Content: "key-data", ContainerPath: "/secrets/key.json"},
 			},
 		}
-		transport, err := mgr.buildContainerStdioTransport(server, "", resolved)
+		transport, err := mgr.buildContainerStdioTransport(server, "", resolved, nil)
 		if err != nil {
 			t.Fatalf("build failed: %v", err)
 		}
@@ -997,16 +997,16 @@ func TestBuildContainerStdioTransport(t *testing.T) {
 
 func TestEnsureImagePulledDoesNotPullOnInspectInfrastructureError(t *testing.T) {
 	mgr := NewMcpSessionManager(nil)
-	mgr.imageInspect = func(context.Context, string, string) (bool, error) {
+	mgr.imageInspect = func(_ context.Context, _, _ string, _ []string) (bool, error) {
 		return false, context.DeadlineExceeded
 	}
 	pulled := false
-	mgr.imagePull = func(context.Context, string, string) error {
+	mgr.imagePull = func(_ context.Context, _, _ string, _ []string) error {
 		pulled = true
 		return nil
 	}
 
-	err := mgr.ensureImagePulled(context.Background(), "docker", "example:latest")
+	err := mgr.ensureImagePulled(context.Background(), "docker", "example:latest", nil)
 	if err == nil {
 		t.Fatal("expected inspect infrastructure error")
 	}
@@ -1017,20 +1017,76 @@ func TestEnsureImagePulledDoesNotPullOnInspectInfrastructureError(t *testing.T) 
 
 func TestEnsureImagePulledPullsOnlyWhenImageIsMissing(t *testing.T) {
 	mgr := NewMcpSessionManager(nil)
-	mgr.imageInspect = func(context.Context, string, string) (bool, error) {
+	mgr.imageInspect = func(_ context.Context, _, _ string, _ []string) (bool, error) {
 		return false, nil
 	}
 	pulls := 0
-	mgr.imagePull = func(context.Context, string, string) error {
+	mgr.imagePull = func(_ context.Context, _, _ string, _ []string) error {
 		pulls++
 		return nil
 	}
 
-	if err := mgr.ensureImagePulled(context.Background(), "docker", "example:latest"); err != nil {
+	if err := mgr.ensureImagePulled(context.Background(), "docker", "example:latest", nil); err != nil {
 		t.Fatalf("ensureImagePulled failed: %v", err)
 	}
 	if pulls != 1 {
 		t.Fatalf("expected one image pull, got %d", pulls)
+	}
+}
+
+func TestEnsureImagePulledPassesExtraEnv(t *testing.T) {
+	mgr := NewMcpSessionManager(nil)
+	var capturedEnv []string
+	mgr.imageInspect = func(_ context.Context, _, _ string, env []string) (bool, error) {
+		return false, nil
+	}
+	mgr.imagePull = func(_ context.Context, _, _ string, env []string) error {
+		capturedEnv = env
+		return nil
+	}
+
+	extraEnv := []string{"DOCKER_CONFIG=/tmp/test-config"}
+	if err := mgr.ensureImagePulled(context.Background(), "docker", "example:latest", extraEnv); err != nil {
+		t.Fatalf("ensureImagePulled failed: %v", err)
+	}
+	if len(capturedEnv) != 1 || capturedEnv[0] != "DOCKER_CONFIG=/tmp/test-config" {
+		t.Fatalf("expected DOCKER_CONFIG env to be passed through, got %v", capturedEnv)
+	}
+}
+
+func TestBuildContainerStdioTransportWithRegistryCreds(t *testing.T) {
+	mgr := NewMcpSessionManager(nil)
+	mgr.SetContainerConfig(ContainerToolRuntimeConfig{
+		RuntimeBinary: "docker",
+		Network:       "bridge",
+	})
+
+	server := resources.McpServer{
+		Metadata: resources.ObjectMeta{Name: "test-mcp", Namespace: "default"},
+		Spec:     resources.McpServerSpec{Transport: "stdio", Image: "ghcr.io/org/mcp:v1"},
+	}
+	_ = server.Normalize()
+
+	creds := &registryCredentials{configDir: t.TempDir()}
+
+	transport, err := mgr.buildContainerStdioTransport(server, "", &resolvedMcpEnv{}, creds)
+	if err != nil {
+		t.Fatalf("build failed: %v", err)
+	}
+
+	stdio, ok := transport.(*StdioMcpTransport)
+	if !ok {
+		t.Fatal("expected StdioMcpTransport")
+	}
+
+	foundDockerConfig := false
+	for _, e := range stdio.env {
+		if e == "DOCKER_CONFIG="+creds.configDir {
+			foundDockerConfig = true
+		}
+	}
+	if !foundDockerConfig {
+		t.Fatalf("expected DOCKER_CONFIG env in transport, got env=%v", stdio.env)
 	}
 }
 

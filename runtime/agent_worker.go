@@ -173,8 +173,8 @@ func (w *AgentWorker) Run(ctx context.Context) {
 			}
 			return
 		case <-ticker.C:
-			availableTools := w.agent.Spec.Tools
-			if strings.EqualFold(duplicatePolicy, resources.AgentDuplicateToolCallPolicyShortCircuit) && len(toolCalled) > 0 {
+		availableTools := w.agent.Spec.Tools
+		if strings.EqualFold(duplicatePolicy, resources.AgentDuplicateToolCallPolicyShortCircuit) && len(toolCalled) > 0 {
 				filtered := make([]string, 0, len(w.agent.Spec.Tools))
 				for _, t := range w.agent.Spec.Tools {
 					if !toolCalled[normalizeToolKey(t)] {
@@ -269,7 +269,7 @@ func (w *AgentWorker) Run(ctx context.Context) {
 				continue
 			}
 
-			requestedCalls, selectErr := selectAuthorizedToolCalls(modelResp, availableTools)
+			requestedCalls, selectErr := selectAuthorizedToolCalls(modelResp, w.agent.Spec.Tools)
 			if selectErr != nil {
 				failedTool := "model_tool_selection"
 				if toolErr, ok := AsToolError(selectErr); ok {

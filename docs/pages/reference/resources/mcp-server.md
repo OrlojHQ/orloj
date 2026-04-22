@@ -15,6 +15,7 @@ Represents a connection to an external MCP (Model Context Protocol) server. The 
   - `secretRef` (string): resolve value from a Secret resource. Mutually exclusive with `value`.
   - `mountPath` (string): absolute path inside the container where the resolved value is written as a file. Only valid when `image` is set. The env var is set to the mount path so the MCP server can locate the file.
 - `image` (string): stdio transport: container image. When set, the MCP server runs inside a Docker container (`docker run --rm -i`) with sandboxing.
+- `image_pull_secret` (string): name of a Secret containing registry credentials for pulling `spec.image`. The Secret must contain either a `.dockerconfigjson` key with a complete Docker config JSON, or `registry`, `username`, and `password` keys. Requires `image` to be set.
 - `idle_timeout` (duration string): duration after which an idle session is shut down (e.g. `5m`). Default `0` means never evict.
 - `endpoint` (string): http transport: the MCP server URL.
 - `auth` (object): http transport: authentication configuration.
@@ -32,6 +33,7 @@ Represents a connection to an external MCP (Model Context Protocol) server. The 
 - `command` or `image` is required when `transport=stdio`.
 - `endpoint` is required when `transport=http`.
 - `image` is only valid with `transport=stdio`.
+- `image_pull_secret` requires `image` to be set.
 - `env[].secretRef` and `env[].value` are mutually exclusive.
 - `env[].mountPath` requires `image` to be set and must be an absolute path.
 - `idle_timeout` defaults to `0` (never evict).
