@@ -190,7 +190,7 @@ The router tries endpoints in order -- primary first, then each fallback. The fi
 
 If all endpoints are exhausted, the last error is returned to the agent worker.
 
-Fallback is handled entirely within the model router. The agent worker and execution engine are unaware of it -- they still call `Complete()` once per step. [AgentPolicy](../agents/agent-policy.md) governance applies independently to each endpoint in the fallback chain.
+Fallback is handled entirely within the model router. The agent worker and execution engine are unaware of it -- they still call `Complete()` once per step. [AgentPolicy](../governance/agent-policy.md) governance applies independently to each endpoint in the fallback chain.
 
 ## How Routing Works
 
