@@ -180,15 +180,25 @@ func TestWASMToolRuntimeBuildsExecutorFromFactory(t *testing.T) {
 	}
 }
 
-func TestWASMToolRuntimeFactoryRequiresModulePath(t *testing.T) {
+func TestWASMToolRuntimeNoGlobalModulePathUsesPerToolConfig(t *testing.T) {
 	runtime := NewWASMToolRuntimeWithFactory(
 		NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
-			"wasm_tool": {RiskLevel: "high"},
+			"wasm_tool": {
+				RiskLevel: "high",
+				Wasm: resources.ToolWasmSpec{
+					Module:     "/tmp/per-tool.wasm",
+					Entrypoint: "run",
+					EnableWASI: true,
+				},
+			},
 		}),
 		testWASMExecutorFactory{
 			build: func(_ context.Context, _ WASMToolRuntimeConfig) (WASMToolExecutor, error) {
 				return testWASMExecutor{
 					call: func(_ context.Context, req WASMToolExecuteRequest) (WASMToolExecuteResponse, error) {
+						if req.Runtime.ModulePath != "/tmp/per-tool.wasm" {
+							t.Fatalf("expected per-tool module path, got %q", req.Runtime.ModulePath)
+						}
 						return WASMToolExecuteResponse{Output: "ok:" + req.Tool}, nil
 					},
 				}, nil
@@ -198,19 +208,12 @@ func TestWASMToolRuntimeFactoryRequiresModulePath(t *testing.T) {
 			ModulePath: "",
 		},
 	)
-	_, err := runtime.Call(context.Background(), "wasm_tool", "payload")
-	if err == nil {
-		t.Fatal("expected runtime policy invalid error")
+	out, err := runtime.Call(context.Background(), "wasm_tool", "payload")
+	if err != nil {
+		t.Fatalf("expected success with per-tool config, got %v", err)
 	}
-	code, reason, retryable, ok := ToolErrorMeta(err)
-	if !ok {
-		t.Fatal("expected tool error metadata")
-	}
-	if code != ToolCodeRuntimePolicyInvalid || reason != ToolReasonRuntimePolicyInvalid {
-		t.Fatalf("unexpected metadata code=%s reason=%s", code, reason)
-	}
-	if retryable {
-		t.Fatal("expected non-retryable runtime policy invalid error")
+	if out != "ok:wasm_tool" {
+		t.Fatalf("unexpected output %q", out)
 	}
 }
 

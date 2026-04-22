@@ -75,7 +75,7 @@ Model routing (provider, base URL, default model, API key, timeout) is configure
 
 | Flag | Default | Description | Condition / Notes |
 |---|---|---|---|
-| `--tool-isolation-backend` | `none` | Tool isolation executor backend. | `none|container|wasm`; env `ORLOJ_TOOL_ISOLATION_BACKEND`. |
+| `--tool-isolation-backend` | `none` | Container isolation backend for tool sandboxing. | `none|container`; env `ORLOJ_TOOL_ISOLATION_BACKEND`. |
 | `--tool-container-runtime` | `docker` | Container runtime binary. | Container backend; env `ORLOJ_TOOL_CONTAINER_RUNTIME`. |
 | `--tool-container-image` | `curlimages/curl:8.8.0` | Container image for isolated tool calls. | Container backend; env `ORLOJ_TOOL_CONTAINER_IMAGE`. |
 | `--tool-container-network` | `none` | Container network mode. | Container backend; env `ORLOJ_TOOL_CONTAINER_NETWORK`. |
@@ -84,13 +84,11 @@ Model routing (provider, base URL, default model, API key, timeout) is configure
 | `--tool-container-pids-limit` | `64` | Container PID limit. | Container backend. |
 | `--tool-container-user` | `65532:65532` | Container user. | Container backend; env `ORLOJ_TOOL_CONTAINER_USER`. |
 | `--tool-secret-env-prefix` | `ORLOJ_SECRET_` | Env prefix for tool `secretRef` resolution. | Env fallback: `ORLOJ_TOOL_SECRET_ENV_PREFIX`. |
-| `--tool-wasm-module` | empty | WASM module path or identifier. | WASM backend; env `ORLOJ_TOOL_WASM_MODULE`. |
-| `--tool-wasm-entrypoint` | `run` | WASM entrypoint function. | WASM backend; env `ORLOJ_TOOL_WASM_ENTRYPOINT`. |
-| `--tool-wasm-runtime-binary` | `wasmtime` | WASM runtime binary. | WASM backend; env `ORLOJ_TOOL_WASM_RUNTIME_BINARY`. |
-| `--tool-wasm-runtime-args` | empty | Comma-separated args passed to WASM runtime binary. | WASM backend; env `ORLOJ_TOOL_WASM_RUNTIME_ARGS`. |
-| `--tool-wasm-memory-bytes` | `67108864` | Max WASM memory bytes. | WASM backend; env `ORLOJ_TOOL_WASM_MEMORY_BYTES`. |
-| `--tool-wasm-fuel` | `0` | WASM execution fuel limit. | `0` disables; env `ORLOJ_TOOL_WASM_FUEL`. |
-| `--tool-wasm-wasi` | `true` | Enable WASI host functions. | WASM backend; env `ORLOJ_TOOL_WASM_WASI`. |
+| `--tool-wasm-module` | empty | Default WASM module path (per-tool `spec.wasm.module` takes precedence). | Always available; env `ORLOJ_TOOL_WASM_MODULE`. |
+| `--tool-wasm-entrypoint` | `run` | Default WASM entrypoint function. | Always available; env `ORLOJ_TOOL_WASM_ENTRYPOINT`. |
+| `--tool-wasm-memory-bytes` | `67108864` | Default max WASM memory bytes. | Always available; env `ORLOJ_TOOL_WASM_MEMORY_BYTES`. |
+| `--tool-wasm-fuel` | `1000000` | Default WASM execution fuel limit. | Always available; env `ORLOJ_TOOL_WASM_FUEL`. |
+| `--tool-wasm-wasi` | `true` | Default: enable WASI host functions. | Always available; env `ORLOJ_TOOL_WASM_WASI`. |
 
 ---
 
@@ -152,7 +150,7 @@ Model routing (provider, base URL, default model, API key, timeout) is configure
 
 | Flag | Default | Description | Condition / Notes |
 |---|---|---|---|
-| `--tool-isolation-backend` | `none` | Tool isolation executor backend. | `none|container|wasm`; env `ORLOJ_TOOL_ISOLATION_BACKEND`. |
+| `--tool-isolation-backend` | `none` | Container isolation backend for tool sandboxing. | `none|container`; env `ORLOJ_TOOL_ISOLATION_BACKEND`. |
 | `--tool-container-runtime` | `docker` | Container runtime binary. | Container backend; env `ORLOJ_TOOL_CONTAINER_RUNTIME`. |
 | `--tool-container-image` | `curlimages/curl:8.8.0` | Container image for isolated tool calls. | Container backend; env `ORLOJ_TOOL_CONTAINER_IMAGE`. |
 | `--tool-container-network` | `none` | Container network mode. | Container backend; env `ORLOJ_TOOL_CONTAINER_NETWORK`. |
@@ -161,13 +159,11 @@ Model routing (provider, base URL, default model, API key, timeout) is configure
 | `--tool-container-pids-limit` | `64` | Container PID limit. | Container backend; env `ORLOJ_TOOL_CONTAINER_PIDS_LIMIT`. |
 | `--tool-container-user` | `65532:65532` | Container user. | Container backend; env `ORLOJ_TOOL_CONTAINER_USER`. |
 | `--tool-secret-env-prefix` | `ORLOJ_SECRET_` | Env prefix for tool `secretRef` resolution. | Env fallback: `ORLOJ_TOOL_SECRET_ENV_PREFIX`. |
-| `--tool-wasm-module` | empty | WASM module path or identifier. | WASM backend; env `ORLOJ_TOOL_WASM_MODULE`. |
-| `--tool-wasm-entrypoint` | `run` | WASM entrypoint function. | WASM backend; env `ORLOJ_TOOL_WASM_ENTRYPOINT`. |
-| `--tool-wasm-runtime-binary` | `wasmtime` | WASM runtime binary. | WASM backend; env `ORLOJ_TOOL_WASM_RUNTIME_BINARY`. |
-| `--tool-wasm-runtime-args` | empty | Comma-separated args passed to WASM runtime binary. | WASM backend; env `ORLOJ_TOOL_WASM_RUNTIME_ARGS`. |
-| `--tool-wasm-memory-bytes` | `67108864` | Max WASM memory bytes. | WASM backend; env `ORLOJ_TOOL_WASM_MEMORY_BYTES`. |
-| `--tool-wasm-fuel` | `0` | WASM execution fuel limit. | `0` disables; env `ORLOJ_TOOL_WASM_FUEL`. |
-| `--tool-wasm-wasi` | `true` | Enable WASI host functions. | WASM backend; env `ORLOJ_TOOL_WASM_WASI`. |
+| `--tool-wasm-module` | empty | Default WASM module path (per-tool `spec.wasm.module` takes precedence). | Always available; env `ORLOJ_TOOL_WASM_MODULE`. |
+| `--tool-wasm-entrypoint` | `run` | Default WASM entrypoint function. | Always available; env `ORLOJ_TOOL_WASM_ENTRYPOINT`. |
+| `--tool-wasm-memory-bytes` | `67108864` | Default max WASM memory bytes. | Always available; env `ORLOJ_TOOL_WASM_MEMORY_BYTES`. |
+| `--tool-wasm-fuel` | `1000000` | Default WASM execution fuel limit. | Always available; env `ORLOJ_TOOL_WASM_FUEL`. |
+| `--tool-wasm-wasi` | `true` | Default: enable WASI host functions. | Always available; env `ORLOJ_TOOL_WASM_WASI`. |
 
 ## Command Discovery
 

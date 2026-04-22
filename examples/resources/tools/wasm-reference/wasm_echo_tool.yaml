@@ -1,17 +1,19 @@
 apiVersion: orloj.dev/v1
 kind: Tool
 metadata:
-  name: wasm_echo
+  name: wasm-echo
 spec:
   type: wasm
+  description: Reference WASM tool that echoes input back as output
+  wasm:
+    module: examples/resources/tools/wasm-reference/echo_guest.wasm
+    entrypoint: run
+    max_memory_bytes: 16777216
+    fuel: 100000
+    enable_wasi: true
   capabilities:
     - wasm.echo.invoke
-  risk_level: high
+  risk_level: low
   runtime:
     isolation_mode: wasm
     timeout: 5s
-    retry:
-      max_attempts: 1
-      backoff: 0s
-      max_backoff: 1s
-      jitter: none

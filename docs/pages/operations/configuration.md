@@ -25,7 +25,7 @@ Example:
 | `ORLOJ_TASK_WORKER_REGION` | `orlojd` | `--task-worker-region` | Region for embedded worker registration. |
 | `ORLOJ_WORKER_HEALTHZ_ADDR` | `orlojworker` | `--healthz-addr` | Optional worker liveness endpoint bind address. |
 | `ORLOJ_MODEL_SECRET_ENV_PREFIX` | `orlojd`, `orlojworker` | `--model-secret-env-prefix` | Env prefix for model endpoint `secretRef` lookups. |
-| `ORLOJ_TOOL_ISOLATION_BACKEND` | `orlojd`, `orlojworker` | `--tool-isolation-backend` | Tool runtime backend: `none`, `container`, or `wasm`. |
+| `ORLOJ_TOOL_ISOLATION_BACKEND` | `orlojd`, `orlojworker` | `--tool-isolation-backend` | Container isolation backend: `none` or `container`. WASM tools run independently. |
 | `ORLOJ_TOOL_CONTAINER_RUNTIME` | `orlojd`, `orlojworker` | `--tool-container-runtime` | Container runtime binary for tool isolation. |
 | `ORLOJ_TOOL_CONTAINER_IMAGE` | `orlojd`, `orlojworker` | `--tool-container-image` | Container image used by isolated tool execution. |
 | `ORLOJ_TOOL_CONTAINER_NETWORK` | `orlojd`, `orlojworker` | `--tool-container-network` | Container network mode for isolated tools. |
@@ -34,13 +34,11 @@ Example:
 | `ORLOJ_TOOL_CONTAINER_PIDS_LIMIT` | `orlojworker` | `--tool-container-pids-limit` | Container PID limit for isolated tools. |
 | `ORLOJ_TOOL_CONTAINER_USER` | `orlojd`, `orlojworker` | `--tool-container-user` | Container user/group for isolated tools. |
 | `ORLOJ_TOOL_SECRET_ENV_PREFIX` | `orlojd`, `orlojworker` | `--tool-secret-env-prefix` | Env prefix for tool `secretRef` lookups. |
-| `ORLOJ_TOOL_WASM_MODULE` | `orlojd`, `orlojworker` | `--tool-wasm-module` | WASM module path/identifier for WASM tool backend. |
-| `ORLOJ_TOOL_WASM_ENTRYPOINT` | `orlojd`, `orlojworker` | `--tool-wasm-entrypoint` | WASM entrypoint function name. |
-| `ORLOJ_TOOL_WASM_RUNTIME_BINARY` | `orlojd`, `orlojworker` | `--tool-wasm-runtime-binary` | WASM runtime binary used for command-backed WASM execution. |
-| `ORLOJ_TOOL_WASM_RUNTIME_ARGS` | `orlojd`, `orlojworker` | `--tool-wasm-runtime-args` | Comma-separated extra args passed to WASM runtime. |
-| `ORLOJ_TOOL_WASM_MEMORY_BYTES` | `orlojd`, `orlojworker` | `--tool-wasm-memory-bytes` | Max memory bytes for WASM runtime. |
-| `ORLOJ_TOOL_WASM_FUEL` | `orlojd`, `orlojworker` | `--tool-wasm-fuel` | Optional WASM execution fuel limit (`0` disables fuel limiting). |
-| `ORLOJ_TOOL_WASM_WASI` | `orlojd`, `orlojworker` | `--tool-wasm-wasi` | Enable WASI host functions for WASM runtime. |
+| `ORLOJ_TOOL_WASM_MODULE` | `orlojd`, `orlojworker` | `--tool-wasm-module` | Default WASM module path (per-tool `spec.wasm.module` takes precedence). |
+| `ORLOJ_TOOL_WASM_ENTRYPOINT` | `orlojd`, `orlojworker` | `--tool-wasm-entrypoint` | Default WASM entrypoint function name. |
+| `ORLOJ_TOOL_WASM_MEMORY_BYTES` | `orlojd`, `orlojworker` | `--tool-wasm-memory-bytes` | Default max memory bytes for WASM runtime. |
+| `ORLOJ_TOOL_WASM_FUEL` | `orlojd`, `orlojworker` | `--tool-wasm-fuel` | Default WASM execution fuel limit. |
+| `ORLOJ_TOOL_WASM_WASI` | `orlojd`, `orlojworker` | `--tool-wasm-wasi` | Default: enable WASI host functions for WASM tools. |
 | `ORLOJ_EVENT_BUS_BACKEND` | `orlojd` | `--event-bus-backend` | Control-plane event bus backend: `memory` or `nats`. |
 | `ORLOJ_NATS_URL` | `orlojd`, `orlojworker` | `--nats-url` (server), `--agent-message-nats-url` (runtime bus) | Base NATS URL; also fallback for runtime message bus URL. |
 | `ORLOJ_NATS_SUBJECT_PREFIX` | `orlojd` | `--nats-subject-prefix` | Subject prefix used for control-plane NATS event bus. |

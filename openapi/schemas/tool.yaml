@@ -49,6 +49,14 @@ components:
         env_from:
           type: array
           items: { $ref: "#/components/schemas/ToolCliEnvRef" }
+    ToolWasmSpec:
+      type: object
+      properties:
+        module: { type: string, description: "Path to the .wasm module file" }
+        entrypoint: { type: string, description: "Exported function name to call (default: run)" }
+        max_memory_bytes: { type: integer, format: int64, description: "Maximum memory in bytes (default: 64MB)" }
+        fuel: { type: integer, format: uint64, description: "Maximum fuel units for execution metering" }
+        enable_wasi: { type: boolean, description: "Enable WASI capabilities (stdin/stdout/stderr)" }
     ToolSpec:
       type: object
       properties:
@@ -59,6 +67,7 @@ components:
         mcp_server_ref: { type: string }
         mcp_tool_name: { type: string }
         cli: { $ref: "#/components/schemas/ToolCliSpec" }
+        wasm: { $ref: "#/components/schemas/ToolWasmSpec" }
         capabilities:
           type: array
           items: { type: string }

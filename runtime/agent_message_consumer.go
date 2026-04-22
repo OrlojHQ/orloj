@@ -62,6 +62,7 @@ type AgentMessageConsumerOptions struct {
 	Roles               AgentRoleLookup
 	ToolPermissions     ToolPermissionLookup
 	IsolatedToolRuntime ToolRuntime
+	WasmToolRuntime     ToolRuntime
 	CliToolConfig       CLIToolRuntimeConfig
 	SecretResolver      SecretResolver
 	McpSessionManager   *McpSessionManager
@@ -96,6 +97,7 @@ type AgentMessageConsumerManager struct {
 	roles          AgentRoleLookup
 	toolPerms      ToolPermissionLookup
 	isolated       ToolRuntime
+	wasmRT         ToolRuntime
 	cliConfig      CLIToolRuntimeConfig
 	secretResolver SecretResolver
 	mcpSessionMgr  *McpSessionManager
@@ -160,6 +162,7 @@ func NewAgentMessageConsumerManager(
 		roles:          opts.Roles,
 		toolPerms:      opts.ToolPermissions,
 		isolated:       opts.IsolatedToolRuntime,
+		wasmRT:         opts.WasmToolRuntime,
 		cliConfig:      opts.CliToolConfig,
 		secretResolver: opts.SecretResolver,
 		mcpSessionMgr:  opts.McpSessionManager,
@@ -499,6 +502,7 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 	ConfigureExternalRuntime(toolRT, m.secretResolver, ns)
 	ConfigureGRPCRuntime(toolRT, m.secretResolver, ns)
 	ConfigureWebhookCallbackRuntime(toolRT, m.secretResolver, ns)
+	ConfigureWasmRuntime(toolRT, m.wasmRT, ns)
 	if orlojStore, ok := m.tasks.(OrlojTaskStore); ok && AgentHasOrlojTools(agent) {
 		orlojCfg := OrlojToolConfig{
 			ParentNamespace: ns,

@@ -288,12 +288,15 @@ spec:
 ```yaml
 spec:
   type: wasm
+  wasm:
+    module: /opt/orloj/tools/my-tool.wasm
+    enable_wasi: true
   runtime:
     isolation_mode: wasm
     timeout: 5s
 ```
 
-WASM tools communicate over stdin/stdout using the same JSON envelope.
+WASM tools communicate over stdin/stdout using a JSON contract and run in the embedded wazero runtime. See [Build a WASM Tool](./build-wasm-tool.md) for the full contract specification and authoring guide.
 
 **Sandboxed isolation** (secure-by-default container):
 ```yaml
@@ -321,4 +324,5 @@ Orloj provides a tool runtime conformance harness that tests your tool against t
 ## Next Steps
 
 - [Tool](../concepts/tools/tool.md) -- tool types, isolation, and contract details
+- [Build a WASM Tool](./build-wasm-tool.md) -- authoring WebAssembly tools with the stdin/stdout contract
 - [Connect an MCP Server](./connect-mcp-server.md) -- for MCP-compatible tool servers instead of custom implementations

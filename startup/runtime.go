@@ -1,6 +1,7 @@
 package startup
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strings"
@@ -8,6 +9,7 @@ import (
 
 	agentruntime "github.com/OrlojHQ/orloj/runtime"
 	"github.com/OrlojHQ/orloj/store"
+	"github.com/tetratelabs/wazero"
 )
 
 type IsolatedToolRuntimeConfig struct {
@@ -22,8 +24,6 @@ type IsolatedToolRuntimeConfig struct {
 	SecretEnvPrefix  string
 	WASMModule       string
 	WASMEntrypoint   string
-	WASMRuntimeBin   string
-	WASMRuntimeArgs  []string
 	WASMMemoryBytes  int64
 	WASMFuel         uint64
 	WASMWASI         bool
@@ -48,22 +48,10 @@ func NewIsolatedToolRuntime(cfg IsolatedToolRuntimeConfig, logger *log.Logger) (
 	envResolver := agentruntime.NewEnvSecretResolver(strings.TrimSpace(cfg.SecretEnvPrefix))
 	resolver := agentruntime.NewChainSecretResolver(storeResolver, envResolver)
 
-	wasmCfg := agentruntime.WASMToolRuntimeConfig{
-		ModulePath:     strings.TrimSpace(cfg.WASMModule),
-		Entrypoint:     strings.TrimSpace(cfg.WASMEntrypoint),
-		RuntimeBinary:  strings.TrimSpace(cfg.WASMRuntimeBin),
-		RuntimeArgs:    append([]string(nil), cfg.WASMRuntimeArgs...),
-		MaxMemoryBytes: cfg.WASMMemoryBytes,
-		Fuel:           cfg.WASMFuel,
-		EnableWASI:     cfg.WASMWASI,
-	}
-	wasmFactory := agentruntime.NewWASMCommandExecutorFactory()
 	runtime, err := agentruntime.BuildToolIsolationRuntime(agentruntime.ToolIsolationBackendOptions{
-		Mode:                mode,
-		ContainerConfig:     containerCfg,
-		SecretResolver:      resolver,
-		WASMConfig:          wasmCfg,
-		WASMExecutorFactory: wasmFactory,
+		Mode:            mode,
+		ContainerConfig: containerCfg,
+		SecretResolver:  resolver,
 	})
 	if err != nil {
 		return nil, err
@@ -75,13 +63,31 @@ func NewIsolatedToolRuntime(cfg IsolatedToolRuntimeConfig, logger *log.Logger) (
 		case "container":
 			logger.Printf("tool isolation backend=%s runtime=%s image=%s network=%s",
 				"container", containerCfg.RuntimeBinary, containerCfg.Image, containerCfg.Network)
-		case "wasm":
-			logger.Printf("tool isolation backend=%s module=%s entrypoint=%s runtime=%s runtime_args=%d wasi=%t memory_bytes=%d fuel=%d",
-				"wasm", wasmCfg.ModulePath, wasmCfg.Entrypoint, wasmCfg.RuntimeBinary,
-				len(wasmCfg.RuntimeArgs), wasmCfg.EnableWASI, wasmCfg.MaxMemoryBytes, wasmCfg.Fuel)
 		}
 	}
 	return runtime, nil
+}
+
+// NewWASMToolRuntime creates an embedded wazero-backed WASM tool runtime.
+// This is always initialized regardless of --tool-isolation-backend because
+// the wazero engine is pure Go with zero external dependencies.
+func NewWASMToolRuntime(cfg IsolatedToolRuntimeConfig, logger *log.Logger) (agentruntime.ToolRuntime, func(), error) {
+	wasmEngine := wazero.NewRuntimeWithConfig(context.Background(), wazero.NewRuntimeConfigInterpreter())
+	wasmFactory := agentruntime.NewWazeroExecutorFactory(wasmEngine)
+	wasmCfg := agentruntime.WASMToolRuntimeConfig{
+		ModulePath:     strings.TrimSpace(cfg.WASMModule),
+		Entrypoint:     strings.TrimSpace(cfg.WASMEntrypoint),
+		MaxMemoryBytes: cfg.WASMMemoryBytes,
+		Fuel:           cfg.WASMFuel,
+		EnableWASI:     cfg.WASMWASI,
+	}
+	rt := agentruntime.NewWASMToolRuntimeWithFactory(nil, wasmFactory, wasmCfg)
+	cleanup := func() { wasmEngine.Close(context.Background()) }
+	if logger != nil {
+		logger.Printf("wasm runtime=wazero (embedded) module=%s entrypoint=%s wasi=%t memory_bytes=%d fuel=%d",
+			wasmCfg.ModulePath, wasmCfg.Entrypoint, wasmCfg.EnableWASI, wasmCfg.MaxMemoryBytes, wasmCfg.Fuel)
+	}
+	return rt, cleanup, nil
 }
 
 func NewAgentMessageBus(

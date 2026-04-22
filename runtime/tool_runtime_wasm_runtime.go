@@ -14,16 +14,14 @@ type WASMToolRuntimeConfig struct {
 	MaxMemoryBytes int64
 	Fuel           uint64
 	EnableWASI     bool
-	RuntimeBinary  string
-	RuntimeArgs    []string
 }
 
 func DefaultWASMToolRuntimeConfig() WASMToolRuntimeConfig {
 	return WASMToolRuntimeConfig{
 		Entrypoint:     "run",
 		MaxMemoryBytes: 64 * 1024 * 1024,
+		Fuel:           1_000_000,
 		EnableWASI:     true,
-		RuntimeBinary:  "wasmtime",
 	}
 }
 
@@ -46,25 +44,8 @@ func (c WASMToolRuntimeConfig) normalized() WASMToolRuntimeConfig {
 		strings.TrimSpace(c.ModulePath) == "" &&
 		strings.TrimSpace(c.Entrypoint) == "" &&
 		c.MaxMemoryBytes == 0 &&
-		c.Fuel == 0 &&
-		strings.TrimSpace(c.RuntimeBinary) == "" &&
-		len(c.RuntimeArgs) == 0 {
+		c.Fuel == 0 {
 		out.EnableWASI = defaults.EnableWASI
-	}
-	out.RuntimeBinary = strings.TrimSpace(out.RuntimeBinary)
-	if out.RuntimeBinary == "" {
-		out.RuntimeBinary = defaults.RuntimeBinary
-	}
-	if len(out.RuntimeArgs) > 0 {
-		normalized := make([]string, 0, len(out.RuntimeArgs))
-		for _, arg := range out.RuntimeArgs {
-			arg = strings.TrimSpace(arg)
-			if arg == "" {
-				continue
-			}
-			normalized = append(normalized, arg)
-		}
-		out.RuntimeArgs = normalized
 	}
 	return out
 }
@@ -77,6 +58,8 @@ type WASMToolExecuteRequest struct {
 	Capabilities []string
 	RiskLevel    string
 	Runtime      WASMToolRuntimeConfig
+	AuthProfile  string
+	AuthHeaders  map[string]string
 }
 
 type WASMToolExecuteResponse struct {
@@ -241,13 +224,29 @@ func (r *WASMToolRuntime) Call(ctx context.Context, tool string, input string) (
 			},
 		)
 	}
+	runtimeCfg := r.config.normalized()
+	if spec.Wasm.Module != "" {
+		runtimeCfg.ModulePath = spec.Wasm.Module
+	}
+	if spec.Wasm.Entrypoint != "" {
+		runtimeCfg.Entrypoint = spec.Wasm.Entrypoint
+	}
+	if spec.Wasm.MaxMemoryBytes > 0 {
+		runtimeCfg.MaxMemoryBytes = spec.Wasm.MaxMemoryBytes
+	}
+	if spec.Wasm.Fuel > 0 {
+		runtimeCfg.Fuel = spec.Wasm.Fuel
+	}
+	if spec.Wasm.EnableWASI {
+		runtimeCfg.EnableWASI = true
+	}
 	response, err := executeWASMToolBounded(ctx, executor, WASMToolExecuteRequest{
 		Namespace:    strings.TrimSpace(r.namespace),
 		Tool:         tool,
 		Input:        input,
 		Capabilities: append([]string(nil), spec.Capabilities...),
 		RiskLevel:    strings.ToLower(strings.TrimSpace(spec.RiskLevel)),
-		Runtime:      r.config.normalized(),
+		Runtime:      runtimeCfg,
 	})
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
@@ -291,10 +290,6 @@ func (r *WASMToolRuntime) resolveExecutor(ctx context.Context) (WASMToolExecutor
 		return nil, r.buildErr
 	}
 	config := r.config.normalized()
-	if strings.TrimSpace(config.ModulePath) == "" {
-		r.buildErr = fmt.Errorf("wasm module path is required when a wasm executor factory is configured")
-		return nil, r.buildErr
-	}
 	executor, err := r.factory.Build(ctx, config)
 	if err != nil {
 		r.buildErr = err

@@ -501,25 +501,6 @@ func (d *externalConformanceDoer) Do(req *http.Request) (*http.Response, error) 
 	}, nil
 }
 
-func TestWASMStubRuntimeFailsClosed(t *testing.T) {
-	executor := agentruntime.NewToolContractExecutor(agentruntime.NewUnsupportedWASMToolRuntime())
-	cases := []conformance.Case{
-		{
-			Name:     "wasm-stub-isolation-unavailable",
-			Request:  conformancecases.BaseRequest("req-wasm-stub", "danger_tool"),
-			Expected: conformance.Expected{Status: agentruntime.ToolExecutionStatusError, ErrorCode: agentruntime.ToolCodeIsolationUnavailable, Reason: agentruntime.ToolReasonIsolationUnavailable, Retryable: conformancecases.BoolPtr(false)},
-		},
-		conformancecases.UnknownVersionCase("req-wasm-stub-unknown-version", "danger_tool"),
-	}
-	failures := conformance.RunCases(context.Background(), executor, cases)
-	if len(failures) > 0 {
-		for _, failure := range failures {
-			t.Errorf("case=%s err=%v", failure.Case, failure.Err)
-		}
-		t.Fatalf("wasm stub conformance failures: %d", len(failures))
-	}
-}
-
 func TestWASMRuntimeScaffoldConformanceSuite(t *testing.T) {
 	registry := agentruntime.NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"wasm_tool": {

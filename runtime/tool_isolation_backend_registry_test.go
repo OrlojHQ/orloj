@@ -42,20 +42,6 @@ func TestToolIsolationBackendRegistryBuildsDefaults(t *testing.T) {
 		t.Fatalf("expected *ContainerToolRuntime, got %T", containerRuntime)
 	}
 
-	wasmRuntime, err := BuildToolIsolationRuntime(ToolIsolationBackendOptions{
-		Mode:                "wasm",
-		WASMExecutorFactory: noopWASMExecutorFactory{executor: noopWASMExecutor{}},
-		WASMConfig: WASMToolRuntimeConfig{
-			ModulePath: "/tmp/test.wasm",
-			Entrypoint: "run",
-		},
-	})
-	if err != nil {
-		t.Fatalf("wasm backend build failed: %v", err)
-	}
-	if _, ok := wasmRuntime.(*WASMToolRuntime); !ok {
-		t.Fatalf("expected *WASMToolRuntime, got %T", wasmRuntime)
-	}
 }
 
 func TestToolIsolationBackendRegistrySupportsCustomBackend(t *testing.T) {
