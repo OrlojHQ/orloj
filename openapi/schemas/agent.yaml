@@ -35,6 +35,10 @@ components:
       type: object
       properties:
         model_ref: { type: string }
+        fallback_model_refs:
+          type: array
+          items: { type: string }
+          description: Ordered list of fallback ModelEndpoint refs tried when the primary model_ref fails with a retryable error.
         prompt: { type: string }
         tools:
           type: array

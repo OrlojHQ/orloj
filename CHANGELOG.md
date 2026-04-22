@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Agent `spec.fallback_model_refs` enables ordered model endpoint failover; the router cascades to fallback endpoints on retryable provider errors (429, 5xx, connection failures).
+
 ## [0.10.2] - 2026-04-22
 
 ### Added

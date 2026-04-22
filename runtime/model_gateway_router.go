@@ -63,23 +63,58 @@ func (r *ModelRouter) Complete(ctx context.Context, req ModelRequest) (ModelResp
 		return ModelResponse{}, fmt.Errorf("model endpoint store is not configured")
 	}
 
-	endpoint, endpointKey, ok, err := r.resolveEndpoint(ctx, req.Namespace, modelRef)
-	if err != nil {
-		return ModelResponse{}, fmt.Errorf("model endpoint %q lookup failed: %w", modelRef, err)
-	}
-	if !ok {
-		return ModelResponse{}, fmt.Errorf("model endpoint %q not found in namespace %q", modelRef, resources.NormalizeNamespace(req.Namespace))
-	}
-	gateway, err := r.gatewayForEndpoint(ctx, endpoint, endpointKey)
-	if err != nil {
-		return ModelResponse{}, err
+	refs := make([]string, 0, 1+len(req.FallbackModelRefs))
+	refs = append(refs, modelRef)
+	for _, ref := range req.FallbackModelRefs {
+		if r := strings.TrimSpace(ref); r != "" {
+			refs = append(refs, r)
+		}
 	}
 
-	routedReq := req
-	if strings.TrimSpace(routedReq.Model) == "" {
-		routedReq.Model = strings.TrimSpace(endpoint.Spec.DefaultModel)
+	var lastErr error
+	for _, ref := range refs {
+		if ctx.Err() != nil {
+			if lastErr != nil {
+				return ModelResponse{}, lastErr
+			}
+			return ModelResponse{}, ctx.Err()
+		}
+
+		endpoint, endpointKey, ok, err := r.resolveEndpoint(ctx, req.Namespace, ref)
+		if err != nil {
+			lastErr = fmt.Errorf("model endpoint %q lookup failed: %w", ref, err)
+			continue
+		}
+		if !ok {
+			lastErr = fmt.Errorf("model endpoint %q not found in namespace %q", ref, resources.NormalizeNamespace(req.Namespace))
+			continue
+		}
+
+		gateway, err := r.gatewayForEndpoint(ctx, endpoint, endpointKey)
+		if err != nil {
+			lastErr = fmt.Errorf("configure model endpoint %s failed: %w", ref, err)
+			continue
+		}
+
+		routedReq := req
+		routedReq.ModelRef = ref
+		if strings.TrimSpace(routedReq.Model) == "" {
+			routedReq.Model = strings.TrimSpace(endpoint.Spec.DefaultModel)
+		}
+
+		resp, err := gateway.Complete(ctx, routedReq)
+		if err == nil {
+			return resp, nil
+		}
+
+		lastErr = err
+
+		if mge, retryable := IsModelGatewayError(err); mge != nil && !retryable {
+			return ModelResponse{}, err
+		}
 	}
-	return gateway.Complete(ctx, routedReq)
+
+	return ModelResponse{}, lastErr
 }
 
 func (r *ModelRouter) resolveEndpoint(ctx context.Context, namespace string, modelRef string) (resources.ModelEndpoint, string, bool, error) {

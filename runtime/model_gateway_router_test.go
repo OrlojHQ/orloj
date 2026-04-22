@@ -347,3 +347,268 @@ func TestModelRouterOpenAICompatibleUsesProvidedSecretWhenPresent(t *testing.T) 
 		t.Fatalf("expected resolved api key %q, got %q", secretValue, gw.apiKey)
 	}
 }
+
+// --- Fallback routing test helpers ---
+
+type fallbackFailingGateway struct {
+	err error
+}
+
+func (g *fallbackFailingGateway) Complete(_ context.Context, _ ModelRequest) (ModelResponse, error) {
+	return ModelResponse{}, g.err
+}
+
+type countingModelGateway struct {
+	calls   int
+	wrapped ModelGateway
+}
+
+func (g *countingModelGateway) Complete(ctx context.Context, req ModelRequest) (ModelResponse, error) {
+	g.calls++
+	return g.wrapped.Complete(ctx, req)
+}
+
+func newFallbackRouter(endpoints map[string]resources.ModelEndpoint) *ModelRouter {
+	return NewModelRouter(ModelRouterConfig{
+		Endpoints: &stubModelEndpointLookup{items: endpoints},
+	})
+}
+
+func injectGateway(router *ModelRouter, key string, gw ModelGateway, rv string) {
+	router.mu.Lock()
+	router.cache[key] = cachedModelGateway{ResourceVersion: rv, Gateway: gw}
+	router.mu.Unlock()
+}
+
+// --- Fallback routing tests ---
+
+func TestModelRouterFallbackOnRetryableError(t *testing.T) {
+	endpoints := map[string]resources.ModelEndpoint{
+		"default/primary": {
+			Metadata: resources.ObjectMeta{Name: "primary", Namespace: "default", ResourceVersion: "1"},
+			Spec:     resources.ModelEndpointSpec{Provider: "mock", DefaultModel: "primary-model"},
+		},
+		"default/fallback": {
+			Metadata: resources.ObjectMeta{Name: "fallback", Namespace: "default", ResourceVersion: "1"},
+			Spec:     resources.ModelEndpointSpec{Provider: "mock", DefaultModel: "fallback-model"},
+		},
+	}
+	router := newFallbackRouter(endpoints)
+	injectGateway(router, "default/primary", &fallbackFailingGateway{
+		err: &ModelGatewayError{StatusCode: 500, Provider: "mock", Message: "server error"},
+	}, "1")
+
+	resp, err := router.Complete(context.Background(), ModelRequest{
+		Namespace:         "default",
+		ModelRef:          "primary",
+		FallbackModelRefs: []string{"fallback"},
+		Step:              1,
+	})
+	if err != nil {
+		t.Fatalf("expected fallback success, got error: %v", err)
+	}
+	if !strings.Contains(resp.Content, "fallback-model") {
+		t.Fatalf("expected fallback-model in response, got %q", resp.Content)
+	}
+}
+
+func TestModelRouterNoFallbackOnNonRetryableError(t *testing.T) {
+	endpoints := map[string]resources.ModelEndpoint{
+		"default/primary": {
+			Metadata: resources.ObjectMeta{Name: "primary", Namespace: "default", ResourceVersion: "1"},
+			Spec:     resources.ModelEndpointSpec{Provider: "mock", DefaultModel: "primary-model"},
+		},
+		"default/fallback": {
+			Metadata: resources.ObjectMeta{Name: "fallback", Namespace: "default", ResourceVersion: "1"},
+			Spec:     resources.ModelEndpointSpec{Provider: "mock", DefaultModel: "fallback-model"},
+		},
+	}
+	router := newFallbackRouter(endpoints)
+	injectGateway(router, "default/primary", &fallbackFailingGateway{
+		err: &ModelGatewayError{StatusCode: 401, Provider: "mock", Message: "unauthorized"},
+	}, "1")
+
+	fallbackGW := &countingModelGateway{wrapped: &MockModelGateway{}}
+	injectGateway(router, "default/fallback", fallbackGW, "1")
+
+	_, err := router.Complete(context.Background(), ModelRequest{
+		Namespace:         "default",
+		ModelRef:          "primary",
+		FallbackModelRefs: []string{"fallback"},
+		Step:              1,
+	})
+	if err == nil {
+		t.Fatal("expected 401 error, got nil")
+	}
+	mge, retryable := IsModelGatewayError(err)
+	if mge == nil || retryable {
+		t.Fatalf("expected non-retryable ModelGatewayError, got retryable=%v err=%v", retryable, err)
+	}
+	if fallbackGW.calls != 0 {
+		t.Fatalf("expected fallback gateway to not be called, got %d calls", fallbackGW.calls)
+	}
+}
+
+func TestModelRouterFallbackOn429(t *testing.T) {
+	endpoints := map[string]resources.ModelEndpoint{
+		"default/primary": {
+			Metadata: resources.ObjectMeta{Name: "primary", Namespace: "default", ResourceVersion: "1"},
+			Spec:     resources.ModelEndpointSpec{Provider: "mock", DefaultModel: "primary-model"},
+		},
+		"default/fallback": {
+			Metadata: resources.ObjectMeta{Name: "fallback", Namespace: "default", ResourceVersion: "1"},
+			Spec:     resources.ModelEndpointSpec{Provider: "mock", DefaultModel: "fallback-model"},
+		},
+	}
+	router := newFallbackRouter(endpoints)
+	injectGateway(router, "default/primary", &fallbackFailingGateway{
+		err: &ModelGatewayError{StatusCode: 429, Provider: "mock", Message: "rate limited"},
+	}, "1")
+
+	resp, err := router.Complete(context.Background(), ModelRequest{
+		Namespace:         "default",
+		ModelRef:          "primary",
+		FallbackModelRefs: []string{"fallback"},
+		Step:              1,
+	})
+	if err != nil {
+		t.Fatalf("expected fallback success on 429, got error: %v", err)
+	}
+	if !strings.Contains(resp.Content, "fallback-model") {
+		t.Fatalf("expected fallback-model in response, got %q", resp.Content)
+	}
+}
+
+func TestModelRouterAllEndpointsExhausted(t *testing.T) {
+	endpoints := map[string]resources.ModelEndpoint{
+		"default/primary": {
+			Metadata: resources.ObjectMeta{Name: "primary", Namespace: "default", ResourceVersion: "1"},
+			Spec:     resources.ModelEndpointSpec{Provider: "mock", DefaultModel: "primary-model"},
+		},
+		"default/fallback1": {
+			Metadata: resources.ObjectMeta{Name: "fallback1", Namespace: "default", ResourceVersion: "1"},
+			Spec:     resources.ModelEndpointSpec{Provider: "mock", DefaultModel: "fb1-model"},
+		},
+		"default/fallback2": {
+			Metadata: resources.ObjectMeta{Name: "fallback2", Namespace: "default", ResourceVersion: "1"},
+			Spec:     resources.ModelEndpointSpec{Provider: "mock", DefaultModel: "fb2-model"},
+		},
+	}
+	router := newFallbackRouter(endpoints)
+	injectGateway(router, "default/primary", &fallbackFailingGateway{
+		err: &ModelGatewayError{StatusCode: 500, Provider: "mock", Message: "primary down"},
+	}, "1")
+	injectGateway(router, "default/fallback1", &fallbackFailingGateway{
+		err: &ModelGatewayError{StatusCode: 502, Provider: "mock", Message: "fallback1 down"},
+	}, "1")
+	injectGateway(router, "default/fallback2", &fallbackFailingGateway{
+		err: &ModelGatewayError{StatusCode: 503, Provider: "mock", Message: "fallback2 down"},
+	}, "1")
+
+	_, err := router.Complete(context.Background(), ModelRequest{
+		Namespace:         "default",
+		ModelRef:          "primary",
+		FallbackModelRefs: []string{"fallback1", "fallback2"},
+		Step:              1,
+	})
+	if err == nil {
+		t.Fatal("expected error when all endpoints exhausted")
+	}
+	if !strings.Contains(err.Error(), "fallback2 down") {
+		t.Fatalf("expected last error from fallback2, got %v", err)
+	}
+}
+
+func TestModelRouterFallbackSkippedOnContextCancel(t *testing.T) {
+	endpoints := map[string]resources.ModelEndpoint{
+		"default/primary": {
+			Metadata: resources.ObjectMeta{Name: "primary", Namespace: "default", ResourceVersion: "1"},
+			Spec:     resources.ModelEndpointSpec{Provider: "mock", DefaultModel: "primary-model"},
+		},
+		"default/fallback": {
+			Metadata: resources.ObjectMeta{Name: "fallback", Namespace: "default", ResourceVersion: "1"},
+			Spec:     resources.ModelEndpointSpec{Provider: "mock", DefaultModel: "fallback-model"},
+		},
+	}
+	router := newFallbackRouter(endpoints)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	primaryGW := &fallbackFailingGateway{
+		err: &ModelGatewayError{StatusCode: 500, Provider: "mock", Message: "server error"},
+	}
+	injectGateway(router, "default/primary", primaryGW, "1")
+
+	fallbackGW := &countingModelGateway{wrapped: &MockModelGateway{}}
+	injectGateway(router, "default/fallback", fallbackGW, "1")
+
+	// Cancel the context before calling Complete so the fallback is skipped.
+	cancel()
+
+	_, err := router.Complete(ctx, ModelRequest{
+		Namespace:         "default",
+		ModelRef:          "primary",
+		FallbackModelRefs: []string{"fallback"},
+		Step:              1,
+	})
+	if err == nil {
+		t.Fatal("expected error with cancelled context")
+	}
+	if fallbackGW.calls != 0 {
+		t.Fatalf("expected fallback gateway to not be called with cancelled context, got %d calls", fallbackGW.calls)
+	}
+}
+
+func TestModelRouterFallbackEndpointNotFound(t *testing.T) {
+	endpoints := map[string]resources.ModelEndpoint{
+		"default/primary": {
+			Metadata: resources.ObjectMeta{Name: "primary", Namespace: "default", ResourceVersion: "1"},
+			Spec:     resources.ModelEndpointSpec{Provider: "mock", DefaultModel: "primary-model"},
+		},
+		"default/fallback2": {
+			Metadata: resources.ObjectMeta{Name: "fallback2", Namespace: "default", ResourceVersion: "1"},
+			Spec:     resources.ModelEndpointSpec{Provider: "mock", DefaultModel: "fb2-model"},
+		},
+	}
+	router := newFallbackRouter(endpoints)
+	injectGateway(router, "default/primary", &fallbackFailingGateway{
+		err: &ModelGatewayError{StatusCode: 500, Provider: "mock", Message: "primary down"},
+	}, "1")
+
+	resp, err := router.Complete(context.Background(), ModelRequest{
+		Namespace:         "default",
+		ModelRef:          "primary",
+		FallbackModelRefs: []string{"missing-endpoint", "fallback2"},
+		Step:              1,
+	})
+	if err != nil {
+		t.Fatalf("expected second fallback to succeed, got error: %v", err)
+	}
+	if !strings.Contains(resp.Content, "fb2-model") {
+		t.Fatalf("expected fb2-model in response, got %q", resp.Content)
+	}
+}
+
+func TestModelRouterNoFallbackRefsUsesOriginalBehavior(t *testing.T) {
+	endpoints := map[string]resources.ModelEndpoint{
+		"default/primary": {
+			Metadata: resources.ObjectMeta{Name: "primary", Namespace: "default", ResourceVersion: "1"},
+			Spec:     resources.ModelEndpointSpec{Provider: "mock", DefaultModel: "primary-model"},
+		},
+	}
+	router := newFallbackRouter(endpoints)
+	injectGateway(router, "default/primary", &fallbackFailingGateway{
+		err: &ModelGatewayError{StatusCode: 500, Provider: "mock", Message: "server error"},
+	}, "1")
+
+	_, err := router.Complete(context.Background(), ModelRequest{
+		Namespace: "default",
+		ModelRef:  "primary",
+		Step:      1,
+	})
+	if err == nil {
+		t.Fatal("expected error with no fallback refs")
+	}
+	if !strings.Contains(err.Error(), "server error") {
+		t.Fatalf("expected original server error, got %v", err)
+	}
+}
