@@ -4,12 +4,13 @@ import { useAgents } from "../api/hooks";
 import { ResourceTable, type Column } from "../components/ResourceTable";
 import { StatusBadge } from "../components/StatusBadge";
 import { EmptyState } from "../components/EmptyState";
+import { ListFetchError } from "../components/ListFetchError";
 import { Bot, Plus } from "lucide-react";
 import type { Agent } from "../api/types";
 import { CreateResourceDialog } from "../components/CreateResourceDialog";
 
 export function Agents() {
-  const { data, isLoading } = useAgents();
+  const { data, isLoading, isError, error, refetch } = useAgents();
   const navigate = useNavigate();
   const [showCreate, setShowCreate] = useState(false);
   const agents = data ?? [];
@@ -23,6 +24,22 @@ export function Agents() {
     { key: "namespace", header: "Namespace", render: (r) => <span className="text-muted">{r.metadata.namespace}</span> },
     { key: "phase", header: "Status", render: (r) => <StatusBadge phase={r.status?.phase} />, width: "120px" },
   ];
+
+  if (isError) {
+    return (
+      <div className="page">
+        <div className="page__header">
+          <div>
+            <h1 className="page__title">Agents</h1>
+          </div>
+        </div>
+        <ListFetchError
+          message={error instanceof Error ? error.message : "Failed to load agents"}
+          onRetry={() => void refetch()}
+        />
+      </div>
+    );
+  }
 
   if (agents.length === 0 && !isLoading) {
     return (

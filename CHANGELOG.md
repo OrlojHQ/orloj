@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Agent `spec.fallback_model_refs` enables ordered model endpoint failover; the router cascades to fallback endpoints on retryable provider errors (429, 5xx, connection failures).
 
+### Fixed
+
+- Frontend: list pages (Agents, Tasks, Agent Systems, Secrets) now show error states with retry instead of silently displaying "No resources" on API failures.
+- Frontend: Capabilities page error state upgraded from raw `<p>` to reusable `ListFetchError` component with retry button.
+- Frontend: TaskDetail sub-resource queries (messages, metrics, logs) surface fetch errors instead of showing empty placeholders.
+- Frontend: clickable cards and navigation spans replaced with keyboard-accessible elements (`role="button"`, `tabIndex`, or `<button>`).
+- Frontend: TaskDetail tab bar uses ARIA `role="tablist"` / `role="tab"` / `aria-selected` semantics.
+- Frontend: removed inline styles in TaskDetail and Capabilities; replaced with utility CSS classes.
+
 ## [0.10.2] - 2026-04-22
 
 ### Added

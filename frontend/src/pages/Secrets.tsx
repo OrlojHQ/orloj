@@ -6,6 +6,7 @@ import { useSecrets } from "../api/hooks";
 import { ResourceTable, type Column } from "../components/ResourceTable";
 import { StatusBadge } from "../components/StatusBadge";
 import { EmptyState } from "../components/EmptyState";
+import { ListFetchError } from "../components/ListFetchError";
 import { Lock, Plus } from "lucide-react";
 import type { Secret } from "../api/types";
 import { CreateResourceDialog } from "../components/CreateResourceDialog";
@@ -13,7 +14,7 @@ import { CreateResourceDialog } from "../components/CreateResourceDialog";
 export function Secrets() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { data, isLoading } = useSecrets();
+  const { data, isLoading, isError, error, refetch } = useSecrets();
   const [showCreate, setShowCreate] = useState(false);
   const secrets = data ?? [];
 
@@ -45,7 +46,14 @@ export function Secrets() {
           </button>
         </div>
       </div>
-      {secrets.length === 0 && !isLoading ? (
+      {isError && (
+        <ListFetchError
+          message={error instanceof Error ? error.message : "Failed to load secrets"}
+          onRetry={() => void refetch()}
+        />
+      )}
+
+      {secrets.length === 0 && !isLoading && !isError ? (
         <EmptyState icon={<Lock size={40} />} title="No Secrets" description="Secrets store sensitive values for tool authentication." />
       ) : (
         <ResourceTable

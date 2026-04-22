@@ -5,6 +5,7 @@ import { ResourceTable, type Column } from "../components/ResourceTable";
 import { StatusBadge } from "../components/StatusBadge";
 import { FilterPills } from "../components/FilterPills";
 import { EmptyState } from "../components/EmptyState";
+import { ListFetchError } from "../components/ListFetchError";
 import { ListTodo, Plus } from "lucide-react";
 import type { Task } from "../api/types";
 import { CreateResourceDialog } from "../components/CreateResourceDialog";
@@ -21,6 +22,9 @@ export function Tasks() {
   const {
     data,
     isLoading,
+    isError,
+    error,
+    refetch,
     hasNextPage,
     fetchNextPage,
     isFetchingNextPage,
@@ -129,7 +133,14 @@ export function Tasks() {
         onSelect={setPhaseFilter}
       />
 
-      {filtered.length === 0 && !isLoading ? (
+      {isError && (
+        <ListFetchError
+          message={error instanceof Error ? error.message : "Failed to load tasks"}
+          onRetry={() => void refetch()}
+        />
+      )}
+
+      {filtered.length === 0 && !isLoading && !isError ? (
         <EmptyState
           icon={<ListTodo size={40} />}
           title={phaseFilter === "All" ? "No Tasks" : `No ${phaseFilter} Tasks`}
