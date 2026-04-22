@@ -51,8 +51,12 @@ export function Tasks() {
   }, [visibleTasks]);
 
   const filtered = useMemo(() => {
-    if (phaseFilter === "All") return visibleTasks;
-    return visibleTasks.filter((t) => (t.status?.phase ?? "Pending") === phaseFilter);
+    const list = phaseFilter === "All" ? visibleTasks : visibleTasks.filter((t) => (t.status?.phase ?? "Pending") === phaseFilter);
+    return [...list].sort((a, b) => {
+      const ta = a.metadata.createdAt ? new Date(a.metadata.createdAt).getTime() : 0;
+      const tb = b.metadata.createdAt ? new Date(b.metadata.createdAt).getTime() : 0;
+      return tb - ta;
+    });
   }, [visibleTasks, phaseFilter]);
 
   const columns: Column<Task>[] = [

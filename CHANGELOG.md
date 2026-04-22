@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Private registry image pull support for McpServer and CLI tools**: `McpServer` and CLI `Tool` specs now accept an `image_pull_secret` field referencing a Secret with registry credentials. The Secret can contain structured `registry`/`username`/`password` keys or a raw `.dockerconfigjson` blob. Orloj writes a temporary Docker config and sets `DOCKER_CONFIG` for pull and run commands, keeping the host daemon's credential store clean. Works with Docker Hub, GHCR, GitLab, Google Artifact Registry, Azure ACR, Quay, Harbor, JFrog, and any registry accepting static credentials.
+
+### Fixed
+
+- **`short_circuit` duplicate tool call policy falsely denies re-requested tools**: when the `short_circuit` policy filtered already-called tools from the available list, the same filtered list was used for tool authorization. If the model re-requested a tool from a previous step (e.g. `kubectl-get` with different parameters), `selectAuthorizedToolCalls` rejected it as unauthorized instead of letting the existing short-circuit cache handler decide. This caused intermittent `tool_permission_denied` fatal errors (~50% of multi-step agent runs). Authorization now checks against the full agent tool list, so re-requested tools reach the cache handler which correctly returns cached results for same-input calls or executes normally for different inputs.
+
 ## [0.10.1] - 2026-04-20
 
 ### Changed

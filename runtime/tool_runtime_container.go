@@ -359,6 +359,28 @@ func (r *ContainerToolRuntime) callCLI(ctx context.Context, tool string, spec re
 			fmt.Sprintf("tool=%s missing cli.image for container isolation", tool), ErrInvalidToolRuntimePolicy, map[string]string{"tool": tool})
 	}
 
+	var creds *registryCredentials
+	if pullSecret := strings.TrimSpace(spec.Cli.ImagePullSecret); pullSecret != "" {
+		var resolveErr error
+		creds, resolveErr = resolveRegistryAuth(ctx, r.secrets, pullSecret)
+		if resolveErr != nil {
+			return "", NewToolError(ToolStatusError, ToolCodeExecutionFailed, ToolReasonBackendFailure, false,
+				fmt.Sprintf("tool=%s failed to resolve image_pull_secret %q: %v", tool, pullSecret, resolveErr),
+				fmt.Errorf("%w: %v", ErrToolSecretResolution, resolveErr),
+				map[string]string{"tool": tool, "image_pull_secret": pullSecret})
+		}
+		defer creds.Cleanup()
+
+		pullEnv := map[string]string{"DOCKER_CONFIG": creds.configDir}
+		pullArgs := []string{"pull", "--quiet", image}
+		_, pullStderr, pullErr := runContainerCommandBounded(ctx, r.runner, r.config.RuntimeBinary, pullArgs, "", pullEnv)
+		if pullErr != nil {
+			return "", NewToolError(ToolStatusError, ToolCodeExecutionFailed, ToolReasonBackendFailure, true,
+				fmt.Sprintf("tool=%s image pull failed for %s: %s", tool, image, RedactSensitive(compactStderr(pullStderr))),
+				pullErr, map[string]string{"tool": tool, "image": image})
+		}
+	}
+
 	args, err := evaluateCLIArgs(spec.Cli.Args, input)
 	if err != nil {
 		return "", err
@@ -390,7 +412,11 @@ func (r *ContainerToolRuntime) callCLI(ctx context.Context, tool string, spec re
 		stdinData = strings.TrimSpace(input)
 	}
 
-	stdout, stderr, runErr := runContainerCommandBounded(ctx, r.runner, r.config.RuntimeBinary, dockerArgs, stdinData, nil)
+	var runEnv map[string]string
+	if creds != nil {
+		runEnv = map[string]string{"DOCKER_CONFIG": creds.configDir}
+	}
+	stdout, stderr, runErr := runContainerCommandBounded(ctx, r.runner, r.config.RuntimeBinary, dockerArgs, stdinData, runEnv)
 	if runErr != nil {
 		if errors.Is(runErr, context.DeadlineExceeded) || errors.Is(runErr, context.Canceled) {
 			return "", mapContainerContextError(tool, runErr)

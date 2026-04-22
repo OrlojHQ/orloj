@@ -317,6 +317,7 @@ type ToolCliSpec struct {
 	Command        string            `json:"command,omitempty"`
 	Args           []string          `json:"args,omitempty"`
 	Image          string            `json:"image,omitempty"`
+	ImagePullSecret string           `json:"image_pull_secret,omitempty"`
 	Network        string            `json:"network,omitempty"`
 	StdinFromInput bool              `json:"stdin_from_input,omitempty"`
 	Output         string            `json:"output,omitempty"`
@@ -430,6 +431,7 @@ func (t *Tool) Normalize() error {
 			return fmt.Errorf("spec.cli.command is required when spec.type is cli")
 		}
 		t.Spec.Cli.Image = strings.TrimSpace(t.Spec.Cli.Image)
+		t.Spec.Cli.ImagePullSecret = strings.TrimSpace(t.Spec.Cli.ImagePullSecret)
 		t.Spec.Cli.WorkingDir = strings.TrimSpace(t.Spec.Cli.WorkingDir)
 		output := strings.ToLower(strings.TrimSpace(t.Spec.Cli.Output))
 		if output == "" {
@@ -539,6 +541,9 @@ func (t *Tool) Normalize() error {
 	}
 	if toolType == "cli" && mode != "none" && t.Spec.Cli.Image == "" {
 		return fmt.Errorf("spec.cli.image is required when spec.type is cli and isolation_mode is not none")
+	}
+	if t.Spec.Cli.ImagePullSecret != "" && t.Spec.Cli.Image == "" {
+		return fmt.Errorf("spec.cli.image is required when spec.cli.image_pull_secret is set")
 	}
 
 	if t.Spec.Runtime.Retry.MaxAttempts <= 0 {
@@ -2056,16 +2061,17 @@ type McpServer struct {
 }
 
 type McpServerSpec struct {
-	Transport   string             `json:"transport"`
-	Command     string             `json:"command,omitempty"`
-	Args        []string           `json:"args,omitempty"`
-	Env         []McpServerEnvVar  `json:"env,omitempty"`
-	Endpoint    string             `json:"endpoint,omitempty"`
-	Image       string             `json:"image,omitempty"`
-	IdleTimeout string             `json:"idle_timeout,omitempty"`
-	Auth        ToolAuth           `json:"auth,omitempty"`
-	ToolFilter  McpToolFilter      `json:"tool_filter,omitempty"`
-	Reconnect   McpReconnectPolicy `json:"reconnect,omitempty"`
+	Transport       string             `json:"transport"`
+	Command         string             `json:"command,omitempty"`
+	Args            []string           `json:"args,omitempty"`
+	Env             []McpServerEnvVar  `json:"env,omitempty"`
+	Endpoint        string             `json:"endpoint,omitempty"`
+	Image           string             `json:"image,omitempty"`
+	ImagePullSecret string             `json:"image_pull_secret,omitempty"`
+	IdleTimeout     string             `json:"idle_timeout,omitempty"`
+	Auth            ToolAuth           `json:"auth,omitempty"`
+	ToolFilter      McpToolFilter      `json:"tool_filter,omitempty"`
+	Reconnect       McpReconnectPolicy `json:"reconnect,omitempty"`
 }
 
 type McpServerEnvVar struct {
@@ -2134,6 +2140,10 @@ func (m *McpServer) Normalize() error {
 	m.Spec.Command = strings.TrimSpace(m.Spec.Command)
 	m.Spec.Endpoint = strings.TrimSpace(m.Spec.Endpoint)
 	m.Spec.Image = strings.TrimSpace(m.Spec.Image)
+	m.Spec.ImagePullSecret = strings.TrimSpace(m.Spec.ImagePullSecret)
+	if m.Spec.ImagePullSecret != "" && m.Spec.Image == "" {
+		return fmt.Errorf("spec.image is required when spec.image_pull_secret is set")
+	}
 	for i, env := range m.Spec.Env {
 		m.Spec.Env[i].Name = strings.TrimSpace(env.Name)
 		m.Spec.Env[i].Value = strings.TrimSpace(env.Value)

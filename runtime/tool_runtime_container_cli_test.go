@@ -144,6 +144,102 @@ func TestContainerToolRuntimeCallCLIWithEnv(t *testing.T) {
 	}
 }
 
+type recordingContainerRunner struct {
+	calls []recordedCall
+}
+
+type recordedCall struct {
+	binary string
+	args   []string
+	stdin  string
+	env    map[string]string
+}
+
+func (r *recordingContainerRunner) Run(_ context.Context, binary string, args []string, stdin string, env map[string]string) (string, string, error) {
+	r.calls = append(r.calls, recordedCall{
+		binary: binary,
+		args:   append([]string(nil), args...),
+		stdin:  stdin,
+		env:    copyStringMap(env),
+	})
+	return "ok", "", nil
+}
+
+func TestContainerToolRuntimeCallCLIWithImagePullSecret(t *testing.T) {
+	runner := &recordingContainerRunner{}
+	secrets := staticSecretResolver{values: map[string]string{
+		"ghcr-creds:registry": "ghcr.io",
+		"ghcr-creds:username": "bot",
+		"ghcr-creds:password": "ghp_token123",
+	}}
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
+		"private-tool": {
+			Type: "cli",
+			Cli: resources.ToolCliSpec{
+				Command:         "myapp",
+				Image:           "ghcr.io/org/private-tool:v1",
+				ImagePullSecret: "ghcr-creds",
+				Output:          "stdout",
+			},
+		},
+	})
+	rt := NewContainerToolRuntimeWithRunnerAndSecrets(registry, DefaultContainerToolRuntimeConfig(), runner, secrets)
+	_, err := rt.Call(context.Background(), "private-tool", "{}")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(runner.calls) != 2 {
+		t.Fatalf("expected 2 calls (pull + run), got %d", len(runner.calls))
+	}
+
+	pullCall := runner.calls[0]
+	if !containsArg(pullCall.args, "pull") {
+		t.Fatalf("first call should be pull, got args: %v", pullCall.args)
+	}
+	if !containsArg(pullCall.args, "ghcr.io/org/private-tool:v1") {
+		t.Fatalf("pull should reference the image, got args: %v", pullCall.args)
+	}
+	if pullCall.env["DOCKER_CONFIG"] == "" {
+		t.Fatal("pull call should have DOCKER_CONFIG env set")
+	}
+
+	runCall := runner.calls[1]
+	if !containsArg(runCall.args, "run") {
+		t.Fatalf("second call should be run, got args: %v", runCall.args)
+	}
+	if runCall.env["DOCKER_CONFIG"] == "" {
+		t.Fatal("run call should have DOCKER_CONFIG env set")
+	}
+	if pullCall.env["DOCKER_CONFIG"] != runCall.env["DOCKER_CONFIG"] {
+		t.Fatal("pull and run should use the same DOCKER_CONFIG")
+	}
+}
+
+func TestContainerToolRuntimeCallCLIWithImagePullSecretMissing(t *testing.T) {
+	runner := &recordingContainerRunner{}
+	secrets := staticSecretResolver{values: map[string]string{}}
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
+		"private-tool": {
+			Type: "cli",
+			Cli: resources.ToolCliSpec{
+				Command:         "myapp",
+				Image:           "ghcr.io/org/private-tool:v1",
+				ImagePullSecret: "missing-creds",
+				Output:          "stdout",
+			},
+		},
+	})
+	rt := NewContainerToolRuntimeWithRunnerAndSecrets(registry, DefaultContainerToolRuntimeConfig(), runner, secrets)
+	_, err := rt.Call(context.Background(), "private-tool", "{}")
+	if err == nil {
+		t.Fatal("expected error for missing image pull secret")
+	}
+	if len(runner.calls) != 0 {
+		t.Fatalf("expected no runner calls on secret resolution failure, got %d", len(runner.calls))
+	}
+}
+
 func containsArg(args []string, target string) bool {
 	for _, a := range args {
 		if a == target {

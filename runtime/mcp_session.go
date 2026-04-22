@@ -32,8 +32,8 @@ type McpSessionManager struct {
 	secretResolver  SecretResolver
 	allowedCommands []string // if non-empty, only these binaries may be launched for stdio
 	containerConfig *ContainerToolRuntimeConfig
-	imageInspect    func(ctx context.Context, runtimeBinary, image string) (bool, error)
-	imagePull       func(ctx context.Context, runtimeBinary, image string) error
+	imageInspect    func(ctx context.Context, runtimeBinary, image string, env []string) (bool, error)
+	imagePull       func(ctx context.Context, runtimeBinary, image string, env []string) error
 }
 
 func NewMcpSessionManager(secretResolver SecretResolver) *McpSessionManager {
@@ -44,6 +44,11 @@ func NewMcpSessionManager(secretResolver SecretResolver) *McpSessionManager {
 		imagePull:      defaultMcpImagePull,
 	}
 }
+
+// RegistryAuthResolver is an optional hook for resolving image pull secrets
+// into temporary Docker config directories. When nil, the manager resolves
+// secrets using its own secretResolver.
+type RegistryAuthResolver func(ctx context.Context, resolver SecretResolver, secretRef string) (*registryCredentials, error)
 
 // SetContainerConfig sets the container runtime configuration used when
 // McpServer resources specify spec.image for containerised stdio transport.
@@ -225,10 +230,26 @@ func (m *McpSessionManager) buildStdioTransport(ctx context.Context, server reso
 	}
 
 	if image != "" {
-		if err := m.ensureImagePulled(ctx, m.containerRuntimeBinary(), image); err != nil {
+		var creds *registryCredentials
+		if pullSecret := strings.TrimSpace(server.Spec.ImagePullSecret); pullSecret != "" {
+			resolver := m.secretScopedToServer(server)
+			var resolveErr error
+			creds, resolveErr = resolveRegistryAuth(ctx, resolver, pullSecret)
+			if resolveErr != nil {
+				return nil, fmt.Errorf("resolve image_pull_secret %q: %w", pullSecret, resolveErr)
+			}
+		}
+		var extraEnv []string
+		if creds != nil {
+			extraEnv = []string{creds.DockerConfigEnv()}
+		}
+		if err := m.ensureImagePulled(ctx, m.containerRuntimeBinary(), image, extraEnv); err != nil {
+			if creds != nil {
+				creds.Cleanup()
+			}
 			return nil, fmt.Errorf("pull image %q: %w", image, err)
 		}
-		return m.buildContainerStdioTransport(server, command, resolved)
+		return m.buildContainerStdioTransport(server, command, resolved, creds)
 	}
 
 	return NewStdioMcpTransport(StdioMcpTransportConfig{
@@ -238,7 +259,7 @@ func (m *McpSessionManager) buildStdioTransport(ctx context.Context, server reso
 	}), nil
 }
 
-func (m *McpSessionManager) buildContainerStdioTransport(server resources.McpServer, command string, resolved *resolvedMcpEnv) (McpTransport, error) {
+func (m *McpSessionManager) buildContainerStdioTransport(server resources.McpServer, command string, resolved *resolvedMcpEnv, creds *registryCredentials) (McpTransport, error) {
 	m.mu.Lock()
 	cfg := m.containerConfig
 	m.mu.Unlock()
@@ -303,14 +324,24 @@ func (m *McpSessionManager) buildContainerStdioTransport(server resources.McpSer
 	dockerArgs = append(dockerArgs, image)
 	dockerArgs = append(dockerArgs, server.Spec.Args...)
 
-	var onClose func()
-	if cleanupDir != "" {
-		onClose = func() { _ = os.RemoveAll(cleanupDir) }
+	onClose := func() {
+		if cleanupDir != "" {
+			_ = os.RemoveAll(cleanupDir)
+		}
+		if creds != nil {
+			creds.Cleanup()
+		}
+	}
+
+	var transportEnv []string
+	if creds != nil {
+		transportEnv = []string{creds.DockerConfigEnv()}
 	}
 
 	return NewStdioMcpTransport(StdioMcpTransportConfig{
 		Command: runtimeBinary,
 		Args:    dockerArgs,
+		Env:     transportEnv,
 		OnClose: onClose,
 	}), nil
 }
@@ -328,10 +359,12 @@ func (m *McpSessionManager) containerRuntimeBinary() string {
 // ensureImagePulled runs "<runtime> image inspect" to check if the image
 // exists locally and, if not, pulls it with a generous timeout so that the
 // image-pull cost does not eat into the MCP initialize handshake timeout.
-func (m *McpSessionManager) ensureImagePulled(ctx context.Context, runtimeBinary, image string) error {
+// The extraEnv slice is appended to the process environment for both inspect
+// and pull commands (used to inject DOCKER_CONFIG for private registries).
+func (m *McpSessionManager) ensureImagePulled(ctx context.Context, runtimeBinary, image string, extraEnv []string) error {
 	inspectCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	present, err := m.inspectImage(inspectCtx, runtimeBinary, image)
+	present, err := m.inspectImage(inspectCtx, runtimeBinary, image, extraEnv)
 	if err != nil {
 		return err
 	}
@@ -341,25 +374,28 @@ func (m *McpSessionManager) ensureImagePulled(ctx context.Context, runtimeBinary
 
 	pullCtx, pullCancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer pullCancel()
-	return m.pullImage(pullCtx, runtimeBinary, image)
+	return m.pullImage(pullCtx, runtimeBinary, image, extraEnv)
 }
 
-func (m *McpSessionManager) inspectImage(ctx context.Context, runtimeBinary, image string) (bool, error) {
+func (m *McpSessionManager) inspectImage(ctx context.Context, runtimeBinary, image string, extraEnv []string) (bool, error) {
 	if m != nil && m.imageInspect != nil {
-		return m.imageInspect(ctx, runtimeBinary, image)
+		return m.imageInspect(ctx, runtimeBinary, image, extraEnv)
 	}
-	return defaultMcpImageInspect(ctx, runtimeBinary, image)
+	return defaultMcpImageInspect(ctx, runtimeBinary, image, extraEnv)
 }
 
-func (m *McpSessionManager) pullImage(ctx context.Context, runtimeBinary, image string) error {
+func (m *McpSessionManager) pullImage(ctx context.Context, runtimeBinary, image string, extraEnv []string) error {
 	if m != nil && m.imagePull != nil {
-		return m.imagePull(ctx, runtimeBinary, image)
+		return m.imagePull(ctx, runtimeBinary, image, extraEnv)
 	}
-	return defaultMcpImagePull(ctx, runtimeBinary, image)
+	return defaultMcpImagePull(ctx, runtimeBinary, image, extraEnv)
 }
 
-func defaultMcpImageInspect(ctx context.Context, runtimeBinary, image string) (bool, error) {
+func defaultMcpImageInspect(ctx context.Context, runtimeBinary, image string, extraEnv []string) (bool, error) {
 	cmd := exec.CommandContext(ctx, runtimeBinary, "image", "inspect", image)
+	if len(extraEnv) > 0 {
+		cmd.Env = append(cmd.Environ(), extraEnv...)
+	}
 	out, err := cmd.CombinedOutput()
 	if err == nil {
 		return true, nil
@@ -371,8 +407,11 @@ func defaultMcpImageInspect(ctx context.Context, runtimeBinary, image string) (b
 	return false, fmt.Errorf("%s image inspect failed: %w\n%s", runtimeBinary, err, out)
 }
 
-func defaultMcpImagePull(ctx context.Context, runtimeBinary, image string) error {
+func defaultMcpImagePull(ctx context.Context, runtimeBinary, image string, extraEnv []string) error {
 	pullCmd := exec.CommandContext(ctx, runtimeBinary, "pull", "--quiet", image)
+	if len(extraEnv) > 0 {
+		pullCmd.Env = append(pullCmd.Environ(), extraEnv...)
+	}
 	if out, err := pullCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("%s pull failed: %w\n%s", runtimeBinary, err, out)
 	}

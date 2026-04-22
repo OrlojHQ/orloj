@@ -38,6 +38,7 @@ components:
           type: array
           items: { type: string }
         image: { type: string }
+        image_pull_secret: { type: string, description: "Name of a Secret containing registry credentials for pulling cli.image." }
         network: { type: string }
         stdin_from_input: { type: boolean }
         output: { type: string }
