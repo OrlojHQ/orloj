@@ -111,7 +111,7 @@ func TestAgentMessageConsumerExecutesGraphAndCompletesTask(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go manager.Start(ctx)
-	time.Sleep(40 * time.Millisecond)
+	waitForConsumerSubscriptions(t, manager, bus, 2*time.Second)
 
 	if _, err := bus.Publish(context.Background(), AgentMessage{
 		MessageID: "msg-1",
@@ -213,7 +213,7 @@ func TestAgentMessageConsumerWaitsForLeaseThenTakesOver(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go manager.Start(ctx)
-	time.Sleep(40 * time.Millisecond)
+	waitForConsumerSubscriptions(t, manager, bus, 2*time.Second)
 
 	if _, err := bus.Publish(context.Background(), AgentMessage{
 		MessageID: "msg-skip",
@@ -331,7 +331,7 @@ func TestAgentMessageConsumerRetriesThenDeadLettersMessage(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go manager.Start(ctx)
-	time.Sleep(40 * time.Millisecond)
+	waitForConsumerSubscriptions(t, manager, bus, 2*time.Second)
 
 	if _, err := bus.Publish(context.Background(), AgentMessage{
 		MessageID: "msg-retry",
@@ -443,7 +443,7 @@ func TestAgentMessageConsumerNonRetryableInvalidSystemDeadLettersImmediately(t *
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go manager.Start(ctx)
-	time.Sleep(40 * time.Millisecond)
+	waitForConsumerSubscriptions(t, manager, bus, 2*time.Second)
 
 	if _, err := bus.Publish(context.Background(), AgentMessage{
 		MessageID: "msg-invalid-agent",
@@ -566,7 +566,7 @@ func TestAgentMessageConsumerContractViolationDeadLettersWithoutRetry(t *testing
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go manager.Start(ctx)
-	time.Sleep(40 * time.Millisecond)
+	waitForConsumerSubscriptions(t, manager, bus, 2*time.Second)
 
 	if _, err := bus.Publish(context.Background(), AgentMessage{
 		MessageID: "msg-contract-violation",
@@ -741,7 +741,7 @@ func TestAgentMessageConsumerFanOutJoinWaitForAll(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go manager.Start(ctx)
-	time.Sleep(40 * time.Millisecond)
+	waitForConsumerSubscriptions(t, manager, bus, 2*time.Second)
 
 	if _, err := bus.Publish(context.Background(), AgentMessage{
 		MessageID:      "msg-fanout-root",
@@ -759,7 +759,7 @@ func TestAgentMessageConsumerFanOutJoinWaitForAll(t *testing.T) {
 		t.Fatalf("publish failed: %v", err)
 	}
 
-	waitForConsumer(t, 4*time.Second, func() bool {
+	waitForConsumer(t, 8*time.Second, func() bool {
 		task, ok, _ := taskStore.Get(context.Background(), "fanout-task")
 		return ok && strings.EqualFold(task.Status.Phase, "succeeded")
 	})
@@ -857,7 +857,7 @@ func TestAgentMessageConsumerJoinWaitPersistsIdempotencyAndSkipsDuplicate(t *tes
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go manager.Start(ctx)
-	time.Sleep(40 * time.Millisecond)
+	waitForConsumerSubscriptions(t, manager, bus, 2*time.Second)
 
 	first := AgentMessage{
 		MessageID:      "msg-join-1",
@@ -991,7 +991,7 @@ func TestAgentMessageConsumerStopsCyclicBranchAtTaskMaxTurns(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go manager.Start(ctx)
-	time.Sleep(40 * time.Millisecond)
+	waitForConsumerSubscriptions(t, manager, bus, 2*time.Second)
 
 	if _, err := bus.Publish(context.Background(), AgentMessage{
 		MessageID: "cycle-msg-1",
@@ -1145,7 +1145,7 @@ func TestAgentMessageConsumerEnforcesPolicyBlockedModel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go manager.Start(ctx)
-	time.Sleep(40 * time.Millisecond)
+	waitForConsumerSubscriptions(t, manager, bus, 2*time.Second)
 
 	if _, err := bus.Publish(context.Background(), AgentMessage{
 		MessageID: "msg-policy-block",
@@ -1250,7 +1250,7 @@ func TestAgentMessageConsumerEnforcesPolicyBlockedTool(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go manager.Start(ctx)
-	time.Sleep(40 * time.Millisecond)
+	waitForConsumerSubscriptions(t, manager, bus, 2*time.Second)
 
 	if _, err := bus.Publish(context.Background(), AgentMessage{
 		MessageID: "msg-tool-block",
@@ -1343,7 +1343,7 @@ func TestAgentMessageConsumerPassesWithNoPolicies(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go manager.Start(ctx)
-	time.Sleep(40 * time.Millisecond)
+	waitForConsumerSubscriptions(t, manager, bus, 2*time.Second)
 
 	if _, err := bus.Publish(context.Background(), AgentMessage{
 		MessageID: "msg-free",
@@ -1466,7 +1466,7 @@ func TestConditionalEdgeRoutingSkipsUnmatchedAgents(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go manager.Start(ctx)
-	time.Sleep(40 * time.Millisecond)
+	waitForConsumerSubscriptions(t, manager, bus, 2*time.Second)
 
 	if _, err := bus.Publish(context.Background(), AgentMessage{
 		MessageID: "cond-msg-1",
@@ -1570,6 +1570,33 @@ func waitForConsumer(t *testing.T, timeout time.Duration, cond func() bool) {
 		time.Sleep(15 * time.Millisecond)
 	}
 	t.Fatal("condition not met before timeout")
+}
+
+func waitForConsumerSubscriptions(t *testing.T, manager *AgentMessageConsumerManager, bus *MemoryAgentMessageBus, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		manager.mu.Lock()
+		consumerCount := len(manager.consumers)
+		manager.mu.Unlock()
+
+		bus.mu.Lock()
+		subscriberCount := len(bus.subs)
+		bus.mu.Unlock()
+
+		if consumerCount > 0 && subscriberCount == consumerCount {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	manager.mu.Lock()
+	consumerCount := len(manager.consumers)
+	manager.mu.Unlock()
+	bus.mu.Lock()
+	subscriberCount := len(bus.subs)
+	bus.mu.Unlock()
+	t.Fatalf("consumer subscriptions not ready before timeout: consumers=%d subscribers=%d", consumerCount, subscriberCount)
 }
 
 func countMessages(messages []resources.TaskMessage, messageID string) int {

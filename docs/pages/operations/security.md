@@ -170,16 +170,16 @@ WASM backend uses executor-factory boundaries and command-backed runtime executi
 
 When `isolation_mode=sandboxed` (the default for `high`/`critical` risk tools), the container backend enforces these security constraints:
 
-| Control | Value |
-|---|---|
-| Filesystem | `--read-only` |
-| Linux capabilities | `--cap-drop=ALL` |
+| Control              | Value                              |
+| -------------------- | ---------------------------------- |
+| Filesystem           | `--read-only`                      |
+| Linux capabilities   | `--cap-drop=ALL`                   |
 | Privilege escalation | `--security-opt no-new-privileges` |
-| Network | `--network none` |
-| User | `65532:65532` (non-root) |
-| Memory | `128m` |
-| CPU | `0.50` cores |
-| Process limit | `64` PIDs |
+| Network              | `--network none`                   |
+| User                 | `65532:65532` (non-root)           |
+| Memory               | `128m`                             |
+| CPU                  | `0.50` cores                       |
+| Process limit        | `64` PIDs                          |
 
 These defaults are enforced by `SandboxedContainerDefaults()` in the runtime and validated by conformance tests. Override with `--tool-container-*` flags only when necessary.
 
@@ -249,13 +249,61 @@ The key must be identical across all server and worker processes that share the 
 
 **Without** an encryption key, `Secret` data is stored as base64-encoded plaintext in the JSONB payload -- suitable for development but not for production.
 
+On `orlojd`, the same `--secret-encryption-key` / `ORLOJ_SECRET_ENCRYPTION_KEY` setting also wraps the private key used for `SealedSecret` decryption when sealing is enabled. If no encryption key is configured, `SealedSecret` resources remain storable but reconcile to `Error`, and `GET /v1/sealing-key/public` returns `503`.
+
+### Git-safe Sealed Secrets
+
+`Secret` resources protect values in the API and optionally at rest in Postgres, but they are still plaintext manifests before apply. Use `SealedSecret` when you need to commit encrypted secret manifests to git.
+
+The workflow is:
+
+1. `orlojd` creates or loads one active sealing keypair in the control plane.
+2. Clients fetch the public key from `GET /v1/sealing-key/public` or `orlojctl seal public-key`.
+3. Clients convert a normal `Secret` manifest into a `SealedSecret` manifest locally with `orlojctl seal secret -f secret.yaml`, or generate one directly from literals with `orlojctl seal secret <name> --from-literal key=value`.
+4. `orlojd` decrypts the `SealedSecret` and writes a normal `Secret` through the existing secret store path.
+5. Workers continue to read the generated `Secret` exactly as they do for manually created secrets.
+
+`SealedSecret` and the generated `Secret` use the same name and namespace in v1. Generated Secrets are marked with `orloj.dev/sealedsecret-owner=<namespace>/<name>`. If a Secret with that name already exists and is not owned by the same `SealedSecret`, reconcile fails closed instead of overwriting user-managed data.
+
+Examples:
+
+```bash
+# Seal an existing Secret manifest into secret.sealed.yaml
+orlojctl seal secret -f secret.yaml
+
+# Generate a SealedSecret file directly from literals
+orlojctl seal secret openai-api-key \
+  --from-literal value=sk-prod-123 \
+  --out secrets/openai-api-key.sealed.yaml
+```
+
+### Sealing Key Security Model
+
+Orloj v1 uses one active control-plane sealing keypair per backing store.
+
+- `orlojd` only generates a sealing key if no active key exists and `ORLOJ_SECRET_ENCRYPTION_KEY` is set. Startup loads an existing active key when present; it does not generate a new key on every restart.
+- The generated sealing keypair is RSA-4096.
+- The sealing private key is stored in Postgres encrypted with AES-256-GCM under `ORLOJ_SECRET_ENCRYPTION_KEY`.
+- Each `SealedSecret` entry uses a fresh random 32-byte AES data key. The entry plaintext is encrypted with AES-256-GCM, and the AES data key is wrapped with RSA-OAEP-SHA256.
+- The AES-GCM authenticated data binds the ciphertext to `<namespace>`, `<name>`, and the secret entry key. A ciphertext copied to a different secret identity will fail to decrypt.
+
+Operationally, this means:
+
+- A committed `SealedSecret` manifest is safe to store in git as long as the control-plane private key remains protected.
+- If an attacker gets both the database and `ORLOJ_SECRET_ENCRYPTION_KEY`, they can recover the stored sealing private key.
+- If an attacker gets code execution on `orlojd`, they can unseal secrets.
+- Losing `ORLOJ_SECRET_ENCRYPTION_KEY` makes both encrypted `Secret` data and the stored sealing private key unrecoverable.
+- Orloj v1 does not rotate sealing keys automatically yet; it keeps one active key until a future manual rotation flow is introduced.
+
 ### Production
 
 For production, choose one or both of the following approaches:
 
 **1. Encrypted Secret resources** -- enable `--secret-encryption-key` and continue using `Secret` resources as in development. This is the simplest upgrade path.
 
-**2. Environment variables** -- bypass `Secret` resources entirely by injecting provider keys into the runtime environment:
+**2. SealedSecret manifests** -- keep declarative secret manifests in git without exposing plaintext. This works well when you want resource-driven configuration and reviewable manifests, but do not want plaintext `Secret` YAML in the repository.
+
+**3. Environment variables** -- bypass `Secret` resources entirely by injecting provider keys into the runtime environment:
 
 ```bash
 export ORLOJ_SECRET_openai_api_key="sk-prod-key"
@@ -263,13 +311,13 @@ export ORLOJ_SECRET_openai_api_key="sk-prod-key"
 
 The resolver normalizes the secret name: a `secretRef: openai-api-key` looks up `ORLOJ_SECRET_openai_api_key` (hyphens become underscores).
 
-**3. External secret managers** -- inject secrets as environment variables using your platform's native mechanism:
+**4. External secret managers** -- inject secrets as environment variables using your platform's native mechanism:
 
 - **Kubernetes**: Use [external-secrets-operator](https://external-secrets.io/) or the CSI secrets driver to sync Vault/AWS Secrets Manager/GCP Secret Manager values into pod env vars.
 - **HashiCorp Vault**: Use [Vault Agent](https://developer.hashicorp.com/vault/docs/agent-and-proxy/agent) sidecar to render secrets into env or files.
 - **Cloud providers**: Use AWS Secrets Manager, GCP Secret Manager, or Azure Key Vault with their respective injection mechanisms.
 
-Approaches 2 and 3 do not require `Secret` resources -- the env-var resolver handles resolution directly.
+Approaches 3 and 4 do not require `Secret` resources -- the env-var resolver handles resolution directly.
 
 ### API Redaction
 
@@ -277,32 +325,35 @@ The REST API never returns plaintext secret data. All `GET` responses for `Secre
 
 Event bus messages for secret create/update operations are also redacted before publication.
 
+`SealedSecret` resources are returned as ciphertext blobs. The API never exposes the control-plane private key.
+
 ### Security Requirements
 
 - Raw secret values must not appear in logs or trace payloads.
 - Store the encryption key itself in a secure location (e.g., a KMS, Vault, or hardware security module). Do not commit it to version control.
 - Validate redaction behavior during incident drills.
+- Back up `ORLOJ_SECRET_ENCRYPTION_KEY` separately from the database. Losing it prevents decrypting encrypted `Secret` values and the stored `SealedSecret` private key.
 
 ## Tool Auth Profiles
 
 Tools can authenticate using one of four profiles via `spec.auth.profile`:
 
-| Profile | Suitable for | Notes |
-|---------|-------------|-------|
-| `bearer` (default) | API tokens, service keys | Injected as `Authorization: Bearer <token>` |
-| `api_key_header` | APIs using custom header auth (e.g., `X-Api-Key`) | Requires `auth.headerName` |
-| `basic` | Legacy HTTP basic auth | Secret must be `username:password` |
-| `oauth2_client_credentials` | Machine-to-machine OAuth2 | Requires `auth.tokenURL`; uses multi-key secret with `client_id` and `client_secret` |
+| Profile                     | Suitable for                                      | Notes                                                                                |
+| --------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `bearer` (default)          | API tokens, service keys                          | Injected as `Authorization: Bearer <token>`                                          |
+| `api_key_header`            | APIs using custom header auth (e.g., `X-Api-Key`) | Requires `auth.headerName`                                                           |
+| `basic`                     | Legacy HTTP basic auth                            | Secret must be `username:password`                                                   |
+| `oauth2_client_credentials` | Machine-to-machine OAuth2                         | Requires `auth.tokenURL`; uses multi-key secret with `client_id` and `client_secret` |
 
 ### Auth in Container Isolation
 
 For container-isolated tools, auth is injected as environment variables rather than HTTP headers. The container's entrypoint script maps these to the appropriate `curl` headers:
 
-| Env Var | Auth Profile |
-|---------|-------------|
-| `TOOL_AUTH_BEARER` | `bearer`, `oauth2_client_credentials` |
-| `TOOL_AUTH_BASIC` | `basic` |
-| `TOOL_AUTH_HEADER_NAME` + `TOOL_AUTH_HEADER_VALUE` | `api_key_header` |
+| Env Var                                            | Auth Profile                          |
+| -------------------------------------------------- | ------------------------------------- |
+| `TOOL_AUTH_BEARER`                                 | `bearer`, `oauth2_client_credentials` |
+| `TOOL_AUTH_BASIC`                                  | `basic`                               |
+| `TOOL_AUTH_HEADER_NAME` + `TOOL_AUTH_HEADER_VALUE` | `api_key_header`                      |
 
 ### Auth Error Handling
 
@@ -317,6 +368,7 @@ Every tool invocation records `tool_auth_profile` and `tool_auth_secret_ref` (th
 Tools can declare operation classes (`read`, `write`, `delete`, `admin`) via `spec.operation_classes`. Policy rules in `ToolPermission.spec.operation_rules` define per-class verdicts: `allow`, `deny`, or `approval_required`.
 
 When a tool call triggers `approval_required`:
+
 - The task enters `WaitingApproval` phase.
 - A `ToolApproval` resource is created for the pending decision.
 - An operator approves or denies via the REST API.

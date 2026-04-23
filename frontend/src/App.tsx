@@ -35,6 +35,8 @@ import { Memories } from "./pages/Memories";
 import { MemoryDetail } from "./pages/MemoryDetail";
 import { Secrets } from "./pages/Secrets";
 import { SecretDetail } from "./pages/SecretDetail";
+import { SealedSecrets } from "./pages/SealedSecrets";
+import { SealedSecretDetail } from "./pages/SealedSecretDetail";
 import { Policies } from "./pages/Policies";
 import { AgentPolicyDetail } from "./pages/AgentPolicyDetail";
 import { Roles } from "./pages/Roles";
@@ -168,6 +170,8 @@ function AppLayout({
               <Route path="/memories/:name" element={<MemoryDetail />} />
               <Route path="/secrets" element={<Secrets />} />
               <Route path="/secrets/:name" element={<SecretDetail />} />
+              <Route path="/sealed-secrets" element={<SealedSecrets />} />
+              <Route path="/sealed-secrets/:name" element={<SealedSecretDetail />} />
               <Route path="/policies" element={<Policies />} />
               <Route path="/policies/:name" element={<AgentPolicyDetail />} />
               <Route path="/roles" element={<Roles />} />

@@ -56,6 +56,23 @@ const TEMPLATES: Record<string, string> = {
     metadata: { name: "my-secret", namespace: "default" },
     spec: { stringData: { api_key: "your-key-here" } },
   }, null, 2),
+  SealedSecret: JSON.stringify({
+    apiVersion: "orloj.dev/v1",
+    kind: "SealedSecret",
+    metadata: { name: "my-secret", namespace: "default" },
+    spec: {
+      encryptedData: {
+        api_key: {
+          keyId: "active-key-id",
+          wrappedKey: "BASE64_RSA_OAEP_WRAPPED_KEY",
+          ciphertext: "BASE64_NONCE_PLUS_AES_GCM_CIPHERTEXT",
+        },
+      },
+      template: {
+        labels: { app: "example" },
+      },
+    },
+  }, null, 2),
   ModelEndpoint: JSON.stringify({
     apiVersion: "orloj.dev/v1",
     kind: "ModelEndpoint",

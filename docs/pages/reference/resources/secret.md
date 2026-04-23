@@ -19,4 +19,7 @@
 
 Examples: `examples/resources/secrets/*.yaml`
 
-See also: [Secret concepts](../../concepts/tools/secret.md).
+See also:
+
+- [Secret concepts](../../concepts/tools/secret.md)
+- [SealedSecret](./sealed-secret.md)

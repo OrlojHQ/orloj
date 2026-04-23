@@ -87,7 +87,7 @@ func TestAgentMessageConsumerReviewRequestChangesCreatesNextTaskApprovalCycle(t 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go manager.Start(ctx)
-	time.Sleep(40 * time.Millisecond)
+	waitForConsumerSubscriptions(t, manager, bus, 2*time.Second)
 
 	if _, err := bus.Publish(context.Background(), AgentMessage{
 		MessageID: "msg-review-rerun-1",

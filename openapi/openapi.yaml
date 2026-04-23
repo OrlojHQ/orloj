@@ -30,6 +30,7 @@ tags:
     real base64 (`spec.data`) or plaintext (`spec.stringData`). PUT may rename the
     secret when `metadata.name` differs from the path (HTTP 409 if the target name
     exists).
+- name: sealed-secrets
 - name: memories
 - name: agent-policies
 - name: agent-roles
@@ -1670,6 +1671,260 @@ paths:
                 "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
         '503':
           description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/sealed-secrets":
+    get:
+      tags:
+      - sealed-secrets
+      parameters:
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+      - name: after
+        in: query
+        schema:
+          type: string
+      - name: labelSelector
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/sealed-secret.yaml#/components/schemas/SealedSecretList"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    post:
+      tags:
+      - sealed-secrets
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/sealed-secret.yaml#/components/schemas/SealedSecret"
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/sealed-secret.yaml#/components/schemas/SealedSecret"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/sealed-secrets/{name}":
+    get:
+      tags:
+      - sealed-secrets
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/sealed-secret.yaml#/components/schemas/SealedSecret"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    put:
+      tags:
+      - sealed-secrets
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/sealed-secret.yaml#/components/schemas/SealedSecret"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/sealed-secret.yaml#/components/schemas/SealedSecret"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    delete:
+      tags:
+      - sealed-secrets
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/sealing-key/public":
+    get:
+      tags:
+      - sealed-secrets
+      summary: Get the active sealing public key
+      description: Returns the active public key used to seal `SealedSecret` manifests.
+        When no active sealing key is configured, the server returns HTTP 503.
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/sealed-secret.yaml#/components/schemas/SealedSecretPublicKeyResponse"
+        '503':
+          description: Sealing key unavailable
           content:
             text/plain:
               schema:

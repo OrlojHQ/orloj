@@ -138,6 +138,16 @@ func main() {
 		logger.Fatalf("%v", err)
 	}
 	defer stores.Close()
+	if len(secretEncryptionKey) > 0 {
+		activeSealingKey, err := stores.SealingKeys.EnsureActive(context.Background())
+		if err != nil {
+			logger.Printf("WARNING: failed to initialize active sealing key: %v", err)
+		} else {
+			logger.Printf("sealed secret key active key_id=%s", activeSealingKey.KeyID)
+		}
+	} else {
+		logger.Printf("sealed secret key initialization skipped: ORLOJ_SECRET_ENCRYPTION_KEY is not set")
+	}
 	if strings.TrimSpace(*authResetAdminPassword) != "" {
 		if err := runLocalAdminPasswordReset(stores, strings.TrimSpace(*authResetAdminUsername), strings.TrimSpace(*authResetAdminPassword)); err != nil {
 			logger.Fatalf("admin password reset failed: %v", err)
@@ -181,6 +191,7 @@ func main() {
 	memoryController.SetModelEndpointStore(stores.ModelEPs)
 	policyController := controllers.NewPolicyController(stores.Policies, logger, 5*time.Second)
 	secretController := controllers.NewSecretController(stores.Secrets, logger, 5*time.Second)
+	sealedSecretController := controllers.NewSealedSecretController(stores.SealedSecrets, stores.Secrets, stores.SealingKeys, logger, 5*time.Second, 60*time.Second)
 	taskController := controllers.NewTaskController(
 		stores.Tasks, stores.AgentSystems, stores.Agents, stores.Tools,
 		stores.Memories, stores.Policies, stores.Workers, logger, *reconcile,
@@ -250,6 +261,8 @@ func main() {
 		ModelEPs:      stores.ModelEPs,
 		Tools:         stores.Tools,
 		Secrets:       stores.Secrets,
+		SealedSecrets: stores.SealedSecrets,
+		SealingKeys:   stores.SealingKeys,
 		Memories:      stores.Memories,
 		Policies:      stores.Policies,
 		AgentRoles:    stores.Roles,
@@ -317,6 +330,7 @@ func main() {
 	startBackground(func() { memoryController.Start(ctx) })
 	startBackground(func() { policyController.Start(ctx) })
 	startBackground(func() { secretController.Start(ctx) })
+	startBackground(func() { sealedSecretController.Start(ctx) })
 	startBackground(func() { taskSchedulerController.Start(ctx) })
 	startBackground(func() { taskScheduleController.Start(ctx) })
 	startBackground(func() { workerController.Start(ctx) })
