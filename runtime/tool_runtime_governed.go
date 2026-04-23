@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/OrlojHQ/orloj/resources"
+	"github.com/OrlojHQ/orloj/telemetry"
 )
 
 var (
@@ -93,6 +94,7 @@ func (r *UnsupportedIsolatedToolRuntime) Call(_ context.Context, tool string, _ 
 type GovernedToolRuntime struct {
 	baseRuntime            ToolRuntime
 	isolatedRuntime        ToolRuntime
+	wasmRuntime            ToolRuntime
 	mcpRuntime             ToolRuntime
 	cliRuntime             ToolRuntime
 	externalRuntime        ToolRuntime
@@ -222,6 +224,29 @@ func buildGovernedToolRuntime(
 	}
 	governed := NewGovernedToolRuntimeWithAuthorizer(baseRuntime, isolatedRuntime, NewStaticToolCapabilityRegistry(specs), authorizer, true)
 	return governed
+}
+
+// SetWasmRuntime configures the embedded WASM tool runtime used for type=wasm tools.
+func (r *GovernedToolRuntime) SetWasmRuntime(wasmRuntime ToolRuntime) {
+	if r != nil {
+		r.wasmRuntime = wasmRuntime
+	}
+}
+
+// ConfigureWasmRuntime builds and attaches a WASM runtime for type=wasm tools.
+// The runtime is scoped to the governed runtime's registry and the provided namespace.
+func ConfigureWasmRuntime(rt ToolRuntime, wasmRT ToolRuntime, namespace string) {
+	governed, ok := rt.(*GovernedToolRuntime)
+	if !ok || governed == nil || wasmRT == nil {
+		return
+	}
+	if scoped, ok := wasmRT.(namespaceAwareToolRuntime); ok {
+		wasmRT = scoped.WithNamespace(namespace)
+	}
+	if aware, ok := wasmRT.(registryAwareToolRuntime); ok && governed.registry != nil {
+		wasmRT = aware.WithRegistry(governed.registry)
+	}
+	governed.wasmRuntime = wasmRT
 }
 
 // SetMcpRuntime configures the MCP tool runtime used for type=mcp tools.
@@ -528,19 +553,18 @@ func (r *GovernedToolRuntime) resolveTargetRuntime(tool string, spec resources.T
 		}
 		return r.resolveWithIsolationOverride(tool, spec, r.webhookCallbackRuntime)
 	case "wasm":
-		// WASM tools always require isolation; route directly to the isolated runtime.
-		if r.isolatedRuntime == nil {
+		if r.wasmRuntime == nil {
 			return nil, NewToolError(
 				ToolStatusError,
 				ToolCodeIsolationUnavailable,
 				ToolReasonIsolationUnavailable,
 				false,
-				fmt.Sprintf("wasm isolation runtime unavailable for tool=%s", tool),
+				fmt.Sprintf("wasm runtime unavailable for tool=%s", tool),
 				ErrToolIsolationUnavailable,
 				map[string]string{"tool": tool, "type": "wasm"},
 			)
 		}
-		return r.isolatedRuntime, nil
+		return r.wasmRuntime, nil
 	default:
 		return nil, NewToolError(
 			ToolStatusError,
@@ -587,6 +611,7 @@ func (r *GovernedToolRuntime) resolveWithIsolationOverride(tool string, spec res
 }
 
 func (r *GovernedToolRuntime) callWithPolicy(ctx context.Context, tool string, input string, spec resources.ToolSpec) (string, error) {
+	callStart := time.Now()
 	target, err := r.resolveTargetRuntime(tool, spec)
 	if err != nil {
 		return "", err
@@ -626,6 +651,11 @@ func (r *GovernedToolRuntime) callWithPolicy(ctx context.Context, tool string, i
 		result, callErr := callToolRuntimeBounded(callCtx, target, tool, input)
 		cancel()
 		if callErr == nil {
+			toolType := strings.ToLower(strings.TrimSpace(spec.Type))
+			if toolType == "" {
+				toolType = "http"
+			}
+			telemetry.RecordToolExecution(tool, toolType, "ok", time.Since(callStart).Seconds())
 			return result, nil
 		}
 		callErr = normalizeToolError(callErr, tool, timeout)
@@ -645,6 +675,12 @@ func (r *GovernedToolRuntime) callWithPolicy(ctx context.Context, tool string, i
 		case <-timer.C:
 		}
 	}
+	toolType := strings.ToLower(strings.TrimSpace(spec.Type))
+	if toolType == "" {
+		toolType = "http"
+	}
+	telemetry.RecordToolExecution(tool, toolType, "error", time.Since(callStart).Seconds())
+
 	if lastErr == nil {
 		return "", NewToolError(
 			ToolStatusError,

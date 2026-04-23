@@ -305,11 +305,23 @@ type ToolSpec struct {
 	McpServerRef     string            `json:"mcp_server_ref,omitempty"`
 	McpToolName      string            `json:"mcp_tool_name,omitempty"`
 	Cli              ToolCliSpec       `json:"cli,omitempty"`
+	Wasm             ToolWasmSpec      `json:"wasm,omitempty"`
 	Capabilities     []string          `json:"capabilities,omitempty"`
 	OperationClasses []string          `json:"operation_classes,omitempty"`
 	RiskLevel        string            `json:"risk_level,omitempty"`
 	Runtime          ToolRuntimePolicy `json:"runtime,omitempty"`
 	Auth             ToolAuth          `json:"auth,omitempty"`
+}
+
+// ToolWasmSpec configures per-tool WASM module execution.
+// Module may be a local path, HTTPS URL, or OCI artifact reference (oci://...).
+type ToolWasmSpec struct {
+	Module          string `json:"module,omitempty"`
+	Entrypoint      string `json:"entrypoint,omitempty"`
+	MaxMemoryBytes  int64  `json:"max_memory_bytes,omitempty"`
+	Fuel            uint64 `json:"fuel,omitempty"`
+	EnableWASI      bool   `json:"enable_wasi"`
+	ImagePullSecret string `json:"image_pull_secret,omitempty"`
 }
 
 // ToolCliSpec defines the configuration for CLI tool invocations.
@@ -459,6 +471,23 @@ func (t *Tool) Normalize() error {
 				return fmt.Errorf("spec.cli.env_from[%d].secretRef is required", i)
 			}
 			t.Spec.Cli.EnvFrom[i] = ref
+		}
+	}
+	if toolType == "wasm" {
+		t.Spec.Wasm.Module = strings.TrimSpace(t.Spec.Wasm.Module)
+		if t.Spec.Wasm.Module == "" {
+			return fmt.Errorf("spec.wasm.module is required when spec.type is wasm")
+		}
+		t.Spec.Wasm.ImagePullSecret = strings.TrimSpace(t.Spec.Wasm.ImagePullSecret)
+		t.Spec.Wasm.Entrypoint = strings.TrimSpace(t.Spec.Wasm.Entrypoint)
+		if t.Spec.Wasm.Entrypoint == "" {
+			t.Spec.Wasm.Entrypoint = "run"
+		}
+		if t.Spec.Wasm.MaxMemoryBytes <= 0 {
+			t.Spec.Wasm.MaxMemoryBytes = 64 * 1024 * 1024
+		}
+		if t.Spec.Wasm.Fuel == 0 {
+			t.Spec.Wasm.Fuel = 1_000_000
 		}
 	}
 	normalizedCaps := make([]string, 0, len(t.Spec.Capabilities))

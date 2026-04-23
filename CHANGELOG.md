@@ -10,6 +10,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Agent `spec.fallback_model_refs` enables ordered model endpoint failover; the router cascades to fallback endpoints on retryable provider errors (429, 5xx, connection failures).
+- **Embedded WASM tool runtime (wazero)**: WASM tools now execute in-process via a pure-Go [wazero](https://wazero.io) runtime instead of shelling out to an external binary. No external WASM runtime binary is required. Each tool declares its module path and resource limits in `spec.wasm` (module, entrypoint, max_memory_bytes, fuel, enable_wasi). Compiled modules are cached for reuse. WASM tools work independently of `--tool-isolation-backend` and coexist with container-isolated tools in the same agent system.
+- **Remote WASM module loading**: `spec.wasm.module` now accepts HTTPS URLs and OCI artifact references (`oci://...`) in addition to local paths. Modules are fetched, SHA-256-keyed, and cached on disk (`--tool-wasm-cache-dir`). Private OCI registries are supported via `spec.wasm.image_pull_secret`. SSRF protection is enforced on all remote fetches.
+- **Frontend WASM tool UI**: The web console now shows WASM-specific configuration (module, entrypoint, memory limit, fuel, WASI, image pull secret) on the Tool detail page and offers a "Tool (WASM)" template in the create resource dialog.
+- **WASM tool observability**: Prometheus metrics for tool execution duration (`orloj_tool_execution_duration_seconds`), fuel consumed (`orloj_wasm_fuel_consumed`), compilation cache hits/misses, and remote module fetch duration. The tool execution duration metric covers all tool types, not just WASM.
+- **`orlojctl tool scaffold`**: Generates a ready-to-build WASM tool project with contract-compliant guest code (Go or Rust), Makefile, tool manifest, test fixtures, and a README. Usage: `orlojctl tool scaffold <name> --lang go|rust`.
+- **`orlojctl tool test`**: Test framework that validates WASM modules against JSON fixture files. Checks contract compliance, expected output, and resource budgets. Usage: `orlojctl tool test <module.wasm> --fixtures <dir>`.
+
+### Changed
+
+- `--tool-isolation-backend` now only controls container sandboxing (`none|container`). The `wasm` option has been removed; WASM tools always use the embedded wazero runtime.
+- Default WASM fuel limit changed from `0` (disabled) to `1000000` to enforce execution step limits by default.
+
+### Removed
+
+- `--tool-wasm-runtime-binary` and `--tool-wasm-runtime-args` server flags (and corresponding `ORLOJ_TOOL_WASM_RUNTIME_BINARY` / `ORLOJ_TOOL_WASM_RUNTIME_ARGS` env vars). The embedded wazero runtime replaces subprocess-based execution.
 
 ### Fixed
 

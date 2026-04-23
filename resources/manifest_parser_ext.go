@@ -495,6 +495,9 @@ func ParseToolManifest(data []byte) (Tool, error) {
 		if section == "spec" && subsection == "cli" && indent <= 4 && !strings.HasSuffix(trimmed, ":") && !strings.HasPrefix(trimmed, "- ") {
 			runtimeSubsection = ""
 		}
+		if section == "spec" && subsection == "wasm" && indent <= 4 && !strings.HasSuffix(trimmed, ":") && !strings.HasPrefix(trimmed, "- ") {
+			runtimeSubsection = ""
+		}
 
 		if strings.HasSuffix(trimmed, ":") {
 			switch strings.TrimSuffix(trimmed, ":") {
@@ -542,6 +545,11 @@ func ParseToolManifest(data []byte) (Tool, error) {
 			case "input_schema", "inputSchema":
 				if section == "spec" {
 					subsection = "input_schema"
+					runtimeSubsection = ""
+				}
+			case "wasm":
+				if section == "spec" {
+					subsection = "wasm"
 					runtimeSubsection = ""
 				}
 			case "cli":
@@ -681,6 +689,26 @@ func ParseToolManifest(data []byte) (Tool, error) {
 			out.Spec.Cli.WorkingDir = value
 		case section == "spec" && subsection == "cli" && runtimeSubsection == "" && (key == "stdin_from_input" || key == "stdinFromInput"):
 			out.Spec.Cli.StdinFromInput = strings.EqualFold(value, "true")
+		case section == "spec" && subsection == "wasm" && key == "module":
+			out.Spec.Wasm.Module = value
+		case section == "spec" && subsection == "wasm" && key == "entrypoint":
+			out.Spec.Wasm.Entrypoint = value
+		case section == "spec" && subsection == "wasm" && (key == "max_memory_bytes" || key == "maxMemoryBytes"):
+			v, err := strconv.ParseInt(value, 10, 64)
+			if err != nil {
+				return Tool{}, fmt.Errorf("invalid spec.wasm.max_memory_bytes value %q", value)
+			}
+			out.Spec.Wasm.MaxMemoryBytes = v
+		case section == "spec" && subsection == "wasm" && key == "fuel":
+			v, err := strconv.ParseUint(value, 10, 64)
+			if err != nil {
+				return Tool{}, fmt.Errorf("invalid spec.wasm.fuel value %q", value)
+			}
+			out.Spec.Wasm.Fuel = v
+		case section == "spec" && subsection == "wasm" && (key == "enable_wasi" || key == "enableWasi"):
+			out.Spec.Wasm.EnableWASI = strings.EqualFold(value, "true")
+		case section == "spec" && subsection == "wasm" && (key == "image_pull_secret" || key == "imagePullSecret"):
+			out.Spec.Wasm.ImagePullSecret = value
 		}
 	}
 

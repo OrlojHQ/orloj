@@ -1,6 +1,9 @@
 package resources
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestParseToolManifestRuntimePolicyYAML(t *testing.T) {
 	raw := []byte(`
@@ -91,6 +94,9 @@ func TestToolNormalizeAcceptsValidToolTypes(t *testing.T) {
 				Type:     toolType,
 				Endpoint: "https://api.example.com",
 			},
+		}
+		if strings.EqualFold(toolType, "wasm") {
+			tool.Spec.Wasm = ToolWasmSpec{Module: "/tmp/tool.wasm"}
 		}
 		if err := tool.Normalize(); err != nil {
 			t.Fatalf("expected valid tool type %q to normalize, got %v", toolType, err)

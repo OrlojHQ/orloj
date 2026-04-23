@@ -62,6 +62,10 @@ func BuildWASMToolModuleRequest(req WASMToolExecuteRequest) WASMToolModuleReques
 			Fuel:           runtime.Fuel,
 			EnableWASI:     runtime.EnableWASI,
 		},
+		Auth: WASMToolModuleReqAuth{
+			Profile: strings.TrimSpace(req.AuthProfile),
+			Headers: req.AuthHeaders,
+		},
 	}
 }
 
@@ -113,4 +117,57 @@ func IsWASMToolModuleContractError(err error) bool {
 
 func newWASMToolModuleContractError(message string) error {
 	return fmt.Errorf("%w: %s", errWASMToolModuleContract, strings.TrimSpace(message))
+}
+
+func wasmToolModuleFailureAsToolError(tool string, response WASMToolModuleResponse, status string) error {
+	defaultCode := ToolCodeExecutionFailed
+	defaultReason := ToolReasonBackendFailure
+	defaultRetryable := true
+	if status == ToolStatusDenied {
+		defaultCode = ToolCodePermissionDenied
+		defaultReason = ToolReasonPermissionDenied
+		defaultRetryable = false
+	}
+
+	code := defaultCode
+	reason := defaultReason
+	retryable := defaultRetryable
+	message := "wasm module execution failed"
+	details := map[string]string{
+		"isolation_mode":   "wasm",
+		"contract_version": strings.TrimSpace(response.ContractVersion),
+		"module_status":    strings.TrimSpace(response.Status),
+		"tool":             strings.TrimSpace(tool),
+	}
+	if response.Error != nil {
+		if trimmed := strings.TrimSpace(response.Error.Code); trimmed != "" {
+			code = trimmed
+		}
+		if trimmed := strings.TrimSpace(response.Error.Reason); trimmed != "" {
+			reason = trimmed
+		}
+		retryable = response.Error.Retryable
+		if trimmed := strings.TrimSpace(response.Error.Message); trimmed != "" {
+			message = trimmed
+		}
+		for key, value := range response.Error.Details {
+			key = strings.TrimSpace(key)
+			if key == "" {
+				continue
+			}
+			details[key] = strings.TrimSpace(value)
+		}
+	}
+	if strings.TrimSpace(tool) != "" {
+		message = fmt.Sprintf("wasm module error for tool=%s: %s", strings.TrimSpace(tool), message)
+	}
+	return NewToolError(
+		status,
+		code,
+		reason,
+		retryable,
+		message,
+		nil,
+		details,
+	)
 }

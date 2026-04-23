@@ -39,7 +39,7 @@ func main() {
 	maxConcurrentTasks := flag.Int("max-concurrent-tasks", 1, "worker max concurrent task capacity")
 	taskExecutionMode := flag.String("task-execution-mode", env("ORLOJ_TASK_EXECUTION_MODE", "sequential"), "task execution mode: sequential|message-driven")
 	modelSecretEnvPrefix := flag.String("model-secret-env-prefix", env("ORLOJ_MODEL_SECRET_ENV_PREFIX", "ORLOJ_SECRET_"), "environment variable prefix used to resolve ModelEndpoint.spec.auth.secretRef")
-	toolIsolationBackend := flag.String("tool-isolation-backend", env("ORLOJ_TOOL_ISOLATION_BACKEND", "none"), "isolated tool executor backend: none|container|wasm")
+	toolIsolationBackend := flag.String("tool-isolation-backend", env("ORLOJ_TOOL_ISOLATION_BACKEND", "none"), "isolated tool executor backend for container sandboxing: none|container")
 	toolContainerRuntime := flag.String("tool-container-runtime", env("ORLOJ_TOOL_CONTAINER_RUNTIME", "docker"), "container runtime binary for isolated tool execution")
 	toolContainerImage := flag.String("tool-container-image", env("ORLOJ_TOOL_CONTAINER_IMAGE", "curlimages/curl:8.8.0"), "container image used by isolated tool execution")
 	toolContainerNetwork := flag.String("tool-container-network", env("ORLOJ_TOOL_CONTAINER_NETWORK", "none"), "container network mode for isolated tools")
@@ -48,13 +48,12 @@ func main() {
 	toolContainerPidsLimit := flag.Int("tool-container-pids-limit", envInt("ORLOJ_TOOL_CONTAINER_PIDS_LIMIT", 64), "container pids limit for isolated tools")
 	toolContainerUser := flag.String("tool-container-user", env("ORLOJ_TOOL_CONTAINER_USER", "65532:65532"), "container user for isolated tools")
 	toolSecretEnvPrefix := flag.String("tool-secret-env-prefix", env("ORLOJ_TOOL_SECRET_ENV_PREFIX", "ORLOJ_SECRET_"), "environment variable prefix used to resolve Tool.spec.auth.secretRef")
-	toolWASMModule := flag.String("tool-wasm-module", env("ORLOJ_TOOL_WASM_MODULE", ""), "wasm module path or identifier for wasm tool isolation runtime")
-	toolWASMEntrypoint := flag.String("tool-wasm-entrypoint", env("ORLOJ_TOOL_WASM_ENTRYPOINT", "run"), "wasm entrypoint function for wasm tool isolation runtime")
-	toolWASMRuntimeBinary := flag.String("tool-wasm-runtime-binary", env("ORLOJ_TOOL_WASM_RUNTIME_BINARY", "wasmtime"), "wasm runtime binary used by command-backed wasm executor")
-	toolWASMRuntimeArgs := flag.String("tool-wasm-runtime-args", env("ORLOJ_TOOL_WASM_RUNTIME_ARGS", ""), "comma-separated extra args passed to wasm runtime binary")
-	toolWASMMemoryBytes := flag.Int64("tool-wasm-memory-bytes", envInt64("ORLOJ_TOOL_WASM_MEMORY_BYTES", 64*1024*1024), "max wasm runtime memory bytes for tool isolation runtime")
-	toolWASMFuel := flag.Uint64("tool-wasm-fuel", envUint64("ORLOJ_TOOL_WASM_FUEL", 0), "optional wasm execution fuel limit (0 disables fuel limiting)")
-	toolWASMWASI := flag.Bool("tool-wasm-wasi", envBool("ORLOJ_TOOL_WASM_WASI", true), "enable WASI host functions for wasm tool isolation runtime")
+	toolWASMModule := flag.String("tool-wasm-module", env("ORLOJ_TOOL_WASM_MODULE", ""), "default wasm module path (per-tool spec.wasm.module takes precedence)")
+	toolWASMEntrypoint := flag.String("tool-wasm-entrypoint", env("ORLOJ_TOOL_WASM_ENTRYPOINT", "run"), "default wasm entrypoint function")
+	toolWASMMemoryBytes := flag.Int64("tool-wasm-memory-bytes", envInt64("ORLOJ_TOOL_WASM_MEMORY_BYTES", 64*1024*1024), "default max wasm runtime memory bytes")
+	toolWASMFuel := flag.Uint64("tool-wasm-fuel", envUint64("ORLOJ_TOOL_WASM_FUEL", 1000000), "default wasm execution fuel limit")
+	toolWASMWASI := flag.Bool("tool-wasm-wasi", envBool("ORLOJ_TOOL_WASM_WASI", true), "default: enable WASI host functions for wasm tools")
+	toolWASMCacheDir := flag.String("tool-wasm-cache-dir", env("ORLOJ_TOOL_WASM_CACHE_DIR", ""), "disk cache directory for remote WASM modules (default: ~/.orloj/wasm-cache)")
 	cliToolAllowedCommands := flag.String("cli-tool-allowed-commands", env("ORLOJ_CLI_TOOL_ALLOWED_COMMANDS", ""), "comma-separated allowlist of commands for CLI tools (empty allows all)")
 	cliToolMaxArgvLength := flag.Int("cli-tool-max-argv-length", envInt("ORLOJ_CLI_TOOL_MAX_ARGV_LENGTH", 4096), "max total argv byte length for CLI tool invocations")
 	agentMessageBusBackend := flag.String("agent-message-bus-backend", env("ORLOJ_AGENT_MESSAGE_BUS_BACKEND", "none"), "runtime agent message bus backend: none|memory|nats-jetstream")
@@ -139,6 +138,16 @@ func main() {
 	taskController.SetModelEndpointStore(stores.ModelEPs)
 	taskController.SetExecutor(taskExecutor)
 	taskController.SetExtensions(extensions)
+	wasmRuntimeCfg := startup.IsolatedToolRuntimeConfig{
+		WASMModule:      *toolWASMModule,
+		WASMEntrypoint:  *toolWASMEntrypoint,
+		WASMMemoryBytes: *toolWASMMemoryBytes,
+		WASMFuel:        *toolWASMFuel,
+		WASMWASI:        *toolWASMWASI,
+		WASMCacheDir:    *toolWASMCacheDir,
+		SecretEnvPrefix: *toolSecretEnvPrefix,
+		Secrets:         stores.Secrets,
+	}
 	isolatedToolRuntime, err := startup.NewIsolatedToolRuntime(startup.IsolatedToolRuntimeConfig{
 		Backend:          *toolIsolationBackend,
 		ContainerRuntime: *toolContainerRuntime,
@@ -149,19 +158,20 @@ func main() {
 		ContainerPids:    *toolContainerPidsLimit,
 		ContainerUser:    *toolContainerUser,
 		SecretEnvPrefix:  *toolSecretEnvPrefix,
-		WASMModule:       *toolWASMModule,
-		WASMEntrypoint:   *toolWASMEntrypoint,
-		WASMRuntimeBin:   *toolWASMRuntimeBinary,
-		WASMRuntimeArgs:  startup.ParseCSV(*toolWASMRuntimeArgs),
-		WASMMemoryBytes:  *toolWASMMemoryBytes,
-		WASMFuel:         *toolWASMFuel,
-		WASMWASI:         *toolWASMWASI,
 		Secrets:          stores.Secrets,
 	}, logger)
 	if err != nil {
 		logger.Fatalf("failed to configure isolated tool runtime: %v", err)
 	}
+	wasmToolRuntime, closeWasm, err := startup.NewWASMToolRuntime(wasmRuntimeCfg, logger)
+	if err != nil {
+		logger.Fatalf("failed to configure wasm tool runtime: %v", err)
+	}
+	if closeWasm != nil {
+		defer closeWasm()
+	}
 	taskController.SetIsolatedToolRuntime(isolatedToolRuntime)
+	taskController.SetWasmToolRuntime(wasmToolRuntime)
 
 	toolStoreResolver := agentruntime.NewStoreSecretResolver(stores.Secrets, "value")
 	toolEnvResolver := agentruntime.NewEnvSecretResolver(strings.TrimSpace(*toolSecretEnvPrefix))
@@ -217,6 +227,7 @@ func main() {
 					Roles:               stores.Roles,
 					ToolPermissions:     stores.ToolPerms,
 					IsolatedToolRuntime: isolatedToolRuntime,
+					WasmToolRuntime:     wasmToolRuntime,
 					CliToolConfig:       cliConfig,
 					SecretResolver:      toolSecretResolver,
 					Extensions:          extensions,

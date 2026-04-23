@@ -329,9 +329,9 @@ func TestGovernedToolRuntimeWebhookCallbackMissingRuntimeErrors(t *testing.T) {
 	}
 }
 
-func TestGovernedToolRuntimeRoutesWASMToIsolatedRuntime(t *testing.T) {
+func TestGovernedToolRuntimeRoutesWASMToDedicatedRuntime(t *testing.T) {
 	base := &recordingToolRuntime{result: "base-ok"}
-	isolated := &recordingToolRuntime{result: "wasm-isolated-ok"}
+	wasmRT := &recordingToolRuntime{result: "wasm-ok"}
 	specs := map[string]resources.ToolSpec{
 		"wasm-tool": {
 			Type: "wasm",
@@ -340,16 +340,17 @@ func TestGovernedToolRuntimeRoutesWASMToIsolatedRuntime(t *testing.T) {
 			},
 		},
 	}
-	governed := NewGovernedToolRuntime(base, isolated, NewStaticToolCapabilityRegistry(specs), true)
+	governed := NewGovernedToolRuntime(base, nil, NewStaticToolCapabilityRegistry(specs), true)
+	governed.SetWasmRuntime(wasmRT)
 	result, err := governed.Call(context.Background(), "wasm-tool", `{"input":"data"}`)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result != "wasm-isolated-ok" {
-		t.Fatalf("expected isolated result for wasm tool, got %q", result)
+	if result != "wasm-ok" {
+		t.Fatalf("expected wasm result, got %q", result)
 	}
-	if isolated.callCount != 1 {
-		t.Fatalf("expected 1 call to isolated runtime, got %d", isolated.callCount)
+	if wasmRT.callCount != 1 {
+		t.Fatalf("expected 1 call to wasm runtime, got %d", wasmRT.callCount)
 	}
 	if base.callCount != 0 {
 		t.Fatalf("expected 0 calls to base runtime, got %d", base.callCount)

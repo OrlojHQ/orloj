@@ -93,6 +93,7 @@ func newRootCommand() *cobra.Command {
 		newAuthCommand(),
 		newConfigCommand(),
 		newValidateCommand(),
+		newToolCommand(),
 	)
 
 	return root

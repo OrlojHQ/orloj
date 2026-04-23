@@ -102,9 +102,6 @@ func DefaultToolIsolationBackendRegistry() *ToolIsolationBackendRegistry {
 			}
 			return NewContainerToolRuntimeWithRunnerAndSecrets(nil, cfg, nil, resolver), nil
 		})
-		_ = registry.Register("wasm", func(options ToolIsolationBackendOptions) (ToolRuntime, error) {
-			return NewWASMToolRuntimeWithFactory(nil, options.WASMExecutorFactory, options.WASMConfig), nil
-		})
 		_ = registry.Register("external", func(options ToolIsolationBackendOptions) (ToolRuntime, error) {
 			resolver := options.SecretResolver
 			if resolver == nil {

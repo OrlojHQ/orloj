@@ -128,6 +128,7 @@ export default defineConfig({
         },
         { text: "Connect an MCP Server", link: "/guides/connect-mcp-server" },
         { text: "Build a Custom Tool", link: "/guides/build-custom-tool" },
+        { text: "Build a WASM Tool", link: "/guides/build-wasm-tool" },
         { text: "Starter Blueprints", link: "/guides/starter-blueprints" },
       ],
     },
