@@ -335,6 +335,35 @@ def build() -> dict:
     }
     add_crud(
         paths,
+        "/v1/sealed-secrets",
+        "sealed-secrets",
+        "./schemas/sealed-secret.yaml#/components/schemas/SealedSecretList",
+        "./schemas/sealed-secret.yaml#/components/schemas/SealedSecret",
+        with_status=False,
+    )
+    paths["/v1/sealing-key/public"] = {
+        "get": {
+            "tags": ["sealed-secrets"],
+            "summary": "Get the active sealing public key",
+            "description": (
+                "Returns the active public key used to seal `SealedSecret` manifests. "
+                "When no active sealing key is configured, the server returns HTTP 503."
+            ),
+            "security": SEC_READER,
+            "responses": {
+                "200": {
+                    "description": "OK",
+                    "content": json_body(
+                        "./schemas/sealed-secret.yaml#/components/schemas/SealedSecretPublicKeyResponse"
+                    ),
+                },
+                "503": {"description": "Sealing key unavailable", "content": text_plain_error()},
+                "default": {"description": "Error", "content": text_plain_error()},
+            },
+        }
+    }
+    add_crud(
+        paths,
         "/v1/memories",
         "memories",
         "./schemas/memory.yaml#/components/schemas/MemoryList",
@@ -1267,6 +1296,7 @@ def build() -> dict:
                     "PUT may rename the secret when `metadata.name` differs from the path (HTTP 409 if the target name exists)."
                 ),
             },
+            {"name": "sealed-secrets"},
             {"name": "memories"},
             {"name": "agent-policies"},
             {"name": "agent-roles"},

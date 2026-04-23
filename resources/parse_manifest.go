@@ -42,6 +42,12 @@ func ParseManifest(kind string, raw []byte) (normKind string, name string, obj a
 			return "", "", nil, e
 		}
 		return normKind, o.Metadata.Name, o, nil
+	case "sealedsecret":
+		o, e := ParseSealedSecretManifest(raw)
+		if e != nil {
+			return "", "", nil, e
+		}
+		return normKind, o.Metadata.Name, o, nil
 	case "memory":
 		o, e := ParseMemoryManifest(raw)
 		if e != nil {

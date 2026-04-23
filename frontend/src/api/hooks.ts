@@ -13,6 +13,7 @@ import type {
   ModelEndpoint,
   Tool,
   Secret,
+  SealedSecret,
   Memory,
   MemoryEntriesResponse,
   AgentPolicy,
@@ -137,6 +138,13 @@ export function useSecrets() {
 }
 export function useSecret(name: string) {
   return useResourceGet<Secret>("Secret", RESOURCE_ENDPOINTS.Secret, name);
+}
+
+export function useSealedSecrets() {
+  return useResourceList<SealedSecret>("SealedSecret", RESOURCE_ENDPOINTS.SealedSecret);
+}
+export function useSealedSecret(name: string) {
+  return useResourceGet<SealedSecret>("SealedSecret", RESOURCE_ENDPOINTS.SealedSecret, name);
 }
 
 export function useMemories() {

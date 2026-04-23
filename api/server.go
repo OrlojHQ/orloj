@@ -31,6 +31,8 @@ type Stores struct {
 	ModelEPs      *store.ModelEndpointStore
 	Tools         *store.ToolStore
 	Secrets       *store.SecretStore
+	SealedSecrets *store.SealedSecretStore
+	SealingKeys   *store.SealingKeyStore
 	Memories      *store.MemoryStore
 	Policies      *store.AgentPolicyStore
 	AgentRoles    *store.AgentRoleStore
@@ -97,6 +99,12 @@ func NewServerWithOptions(stores Stores, runtime *agentruntime.Manager, logger *
 	}
 	if stores.Secrets == nil {
 		stores.Secrets = store.NewSecretStore()
+	}
+	if stores.SealedSecrets == nil {
+		stores.SealedSecrets = store.NewSealedSecretStore()
+	}
+	if stores.SealingKeys == nil {
+		stores.SealingKeys = store.NewSealingKeyStore()
 	}
 	if stores.TaskSchedules == nil {
 		stores.TaskSchedules = store.NewTaskScheduleStore()
@@ -314,6 +322,9 @@ func (s *Server) routes() {
 
 	s.mux.HandleFunc("/v1/secrets", s.handleSecrets)
 	s.mux.HandleFunc("/v1/secrets/", s.handleSecretByName)
+	s.mux.HandleFunc("/v1/sealed-secrets", s.handleSealedSecrets)
+	s.mux.HandleFunc("/v1/sealed-secrets/", s.handleSealedSecretByName)
+	s.mux.HandleFunc("/v1/sealing-key/public", s.handleSealingKeyPublic)
 
 	s.mux.HandleFunc("/v1/memories", s.handleMemories)
 	s.mux.HandleFunc("/v1/memories/", s.handleMemoryByName)
@@ -413,6 +424,13 @@ func (s *Server) handleNamespaces(w http.ResponseWriter, r *http.Request) {
 		return
 	} else {
 		for _, item := range secrets {
+			collect(item.Metadata.Namespace)
+		}
+	}
+	if sealedSecrets, err := s.stores.SealedSecrets.List(r.Context()); writeStoreFetchError(w, err) {
+		return
+	} else {
+		for _, item := range sealedSecrets {
 			collect(item.Metadata.Namespace)
 		}
 	}

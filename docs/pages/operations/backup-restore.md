@@ -11,7 +11,7 @@ This guide covers backup and restore procedures for Orloj deployments using the 
 | Server/worker configuration | Flags, env vars, Kubernetes manifests | Recommended |
 | Monitoring profiles | `monitoring/` directory | Recommended |
 
-The secret encryption key is critical. Without it, encrypted `Secret` resource values cannot be decrypted after restore. Store it separately from the database backup in a secure vault.
+The secret encryption key is critical. Without it, encrypted `Secret` resource values cannot be decrypted after restore, and `orlojd` cannot unwrap the stored `SealedSecret` private key. Store it separately from the database backup in a secure vault.
 
 ## Postgres Backup
 
@@ -76,7 +76,7 @@ Point `ORLOJ_POSTGRES_DSN` to the restored database before restarting services.
 
 ### 4. Verify the Encryption Key
 
-Ensure `ORLOJ_SECRET_ENCRYPTION_KEY` matches the key that was active when the backup was taken. A mismatched key will cause Secret resource decryption failures at runtime.
+Ensure `ORLOJ_SECRET_ENCRYPTION_KEY` matches the key that was active when the backup was taken. A mismatched key will cause Secret resource decryption failures at runtime and prevent `SealedSecret` reconciliation.
 
 ### 5. Restart and Validate
 

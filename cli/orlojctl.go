@@ -92,6 +92,7 @@ func newRootCommand() *cobra.Command {
 		newAdminCommand(),
 		newAuthCommand(),
 		newConfigCommand(),
+		newSealCommand(),
 		newValidateCommand(),
 		newToolCommand(),
 	)
@@ -708,6 +709,17 @@ func runGet(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(tw, "NAME\tKEYS\tSTATUS")
 		for _, item := range list.Items {
 			fmt.Fprintf(tw, "%s\t%d\t%s\n", item.Metadata.Name, len(item.Spec.Data), item.Status.Phase)
+		}
+		_ = tw.Flush()
+	case "sealed-secrets":
+		var list resources.SealedSecretList
+		if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
+			return fmt.Errorf("failed to decode response: %w", err)
+		}
+		tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+		fmt.Fprintln(tw, "NAME\tKEYS\tSTATUS")
+		for _, item := range list.Items {
+			fmt.Fprintf(tw, "%s\t%d\t%s\n", item.Metadata.Name, len(item.Spec.EncryptedData), item.Status.Phase)
 		}
 		_ = tw.Flush()
 	case "memories":
@@ -2046,6 +2058,7 @@ var applyEndpoints = map[string]string{
 	"modelendpoint":  "/v1/model-endpoints",
 	"tool":           "/v1/tools",
 	"secret":         "/v1/secrets",
+	"sealedsecret":   "/v1/sealed-secrets",
 	"memory":         "/v1/memories",
 	"agentpolicy":    "/v1/agent-policies",
 	"agentrole":      "/v1/agent-roles",
@@ -2102,6 +2115,8 @@ func normalizeResource(resource string) string {
 		return "tools"
 	case "secrets", "secret":
 		return "secrets"
+	case "sealed-secrets", "sealedsecrets", "sealedsecret":
+		return "sealed-secrets"
 	case "memories", "memory":
 		return "memories"
 	case "agent-policies", "agentpolicies", "agentpolicy", "policies", "policy":
@@ -2143,6 +2158,8 @@ func listEndpointForResource(resource string) (string, error) {
 		return "/v1/tools", nil
 	case "secrets":
 		return "/v1/secrets", nil
+	case "sealed-secrets":
+		return "/v1/sealed-secrets", nil
 	case "memories":
 		return "/v1/memories", nil
 	case "agent-policies":

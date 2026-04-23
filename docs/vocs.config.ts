@@ -225,6 +225,7 @@ export default defineConfig({
                 { text: "McpServer", link: "/reference/resources/mcp-server" },
                 { text: "Memory", link: "/reference/resources/memory" },
                 { text: "Secret", link: "/reference/resources/secret" },
+                { text: "SealedSecret", link: "/reference/resources/sealed-secret" },
               ],
             },
             {

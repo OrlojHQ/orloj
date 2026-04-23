@@ -56,6 +56,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/mcp-servers", icon: <Plug size={18} />, label: "MCP Servers", group: "Infra" },
   { to: "/memories", icon: <Brain size={18} />, label: "Memories", group: "Infra" },
   { to: "/secrets", icon: <Lock size={18} />, label: "Secrets", group: "Infra" },
+  { to: "/sealed-secrets", icon: <Lock size={18} />, label: "Sealed Secrets", group: "Infra" },
   { to: "/policies", icon: <Shield size={18} />, label: "Policies", group: "Governance" },
   { to: "/roles", icon: <UserCog size={18} />, label: "Roles", group: "Governance" },
   { to: "/permissions", icon: <KeyRound size={18} />, label: "Permissions", group: "Governance" },

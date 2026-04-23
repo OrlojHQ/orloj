@@ -2,6 +2,8 @@
 
 A **Secret** stores sensitive values (API keys, tokens, passwords) used by other resources. ModelEndpoints, Tools, McpServers, and TaskWebhooks reference Secrets for authentication.
 
+If you need to commit encrypted secret manifests to git, use [SealedSecret](../../reference/resources/sealed-secret.md). `SealedSecret` is decrypted by `orlojd` and reconciled into a normal `Secret`, while consumers continue to reference the generated `Secret`.
+
 ## Defining a Secret
 
 The simplest way to create a Secret is with the CLI:
@@ -52,3 +54,4 @@ See [Secret Handling](../../operations/security.md#secret-handling) for details.
 - [Tool](./tool.md) -- uses Secrets for tool auth
 - [McpServer](./mcp-server.md) -- uses Secrets for MCP server auth
 - [Resource Reference: Secret](../../reference/resources/secret.md)
+- [Resource Reference: SealedSecret](../../reference/resources/sealed-secret.md)

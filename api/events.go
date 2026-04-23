@@ -34,6 +34,8 @@ func extractResourceNamespace(resource any) string {
 		return resources.NormalizeNamespace(obj.Metadata.Namespace)
 	case resources.Secret:
 		return resources.NormalizeNamespace(obj.Metadata.Namespace)
+	case resources.SealedSecret:
+		return resources.NormalizeNamespace(obj.Metadata.Namespace)
 	case resources.Memory:
 		return resources.NormalizeNamespace(obj.Metadata.Namespace)
 	case resources.AgentPolicy:

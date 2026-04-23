@@ -2,6 +2,7 @@ export interface ObjectMeta {
   name: string;
   namespace?: string;
   labels?: Record<string, string>;
+  annotations?: Record<string, string>;
   resourceVersion?: string;
   generation?: number;
   createdAt?: string;
@@ -196,6 +197,36 @@ export interface SecretStatus {
   phase?: string;
   lastError?: string;
   observedGeneration?: number;
+}
+
+export interface SealedValue {
+  keyId?: string;
+  wrappedKey?: string;
+  ciphertext?: string;
+}
+
+export interface SealedSecretTemplateSecret {
+  labels?: Record<string, string>;
+  annotations?: Record<string, string>;
+}
+
+export interface SealedSecretSpec {
+  encryptedData?: Record<string, SealedValue>;
+  template?: SealedSecretTemplateSecret;
+}
+
+export interface SealedSecretStatus {
+  phase?: string;
+  lastError?: string;
+  observedGeneration?: number;
+}
+
+export interface SealedSecret {
+  apiVersion: string;
+  kind: string;
+  metadata: ObjectMeta;
+  spec: SealedSecretSpec;
+  status?: SealedSecretStatus;
 }
 
 export interface Memory {
@@ -754,6 +785,7 @@ export type ResourceKind =
   | "ModelEndpoint"
   | "Tool"
   | "Secret"
+  | "SealedSecret"
   | "Memory"
   | "AgentPolicy"
   | "AgentRole"
@@ -772,6 +804,7 @@ export const RESOURCE_ENDPOINTS: Record<ResourceKind, string> = {
   ModelEndpoint: "model-endpoints",
   Tool: "tools",
   Secret: "secrets",
+  SealedSecret: "sealed-secrets",
   Memory: "memories",
   AgentPolicy: "agent-policies",
   AgentRole: "agent-roles",
@@ -792,6 +825,7 @@ export const RESOURCE_DETAIL_BASE_PATH: Record<ResourceKind, string> = {
   ModelEndpoint: "/models",
   Tool: "/tools",
   Secret: "/secrets",
+  SealedSecret: "/sealed-secrets",
   Memory: "/memories",
   AgentPolicy: "/policies",
   AgentRole: "/roles",

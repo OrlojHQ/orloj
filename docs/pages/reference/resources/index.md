@@ -28,6 +28,7 @@ Each kind has a dedicated page; see [Resource reference pages](#resource-referen
 - [McpServer](./mcp-server.md)
 - [Memory](./memory.md)
 - [Secret](./secret.md)
+- [SealedSecret](./sealed-secret.md)
 - [AgentPolicy](./agent-policy.md)
 - [AgentRole](./agent-role.md)
 - [ToolPermission](./tool-permission.md)

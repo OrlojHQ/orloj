@@ -11,6 +11,9 @@ orlojctl apply -f <file-or-directory> [--run] [--dry-run] [--namespace <ns>]
 orlojctl validate -f <file|dir>
 orlojctl create secret <name> --from-literal key=value [...]
 orlojctl create token <name> --role <role>
+orlojctl seal public-key
+orlojctl seal secret -f <secret-manifest> [--out <file>] [--stdout]
+orlojctl seal secret <name> --from-literal key=value [...] [--out <file>] [--stdout]
 orlojctl approve tool-approval|task-approval <name> [--decided-by <id>] [--comment <text>]
 orlojctl deny tool-approval|task-approval <name> [--decided-by <id>] [--comment <text>]
 orlojctl request-changes task-approval <name> --decided-by <id> --comment <text>
@@ -123,6 +126,47 @@ orlojctl validate -f ./manifests/
 | `--role` | none | Token role (`admin`, `writer`, `reader`, `controller`). Required. |
 | `--server` | resolved server | API server URL. |
 
+## `orlojctl seal`
+
+Git-safe secret workflow commands:
+
+- `orlojctl seal public-key` -- fetch the active control-plane sealing public key from `GET /v1/sealing-key/public`
+- `orlojctl seal secret -f <secret-manifest>` -- read a normal `Secret` manifest, fetch the active public key, and write `<name>.sealed.yaml` by default
+- `orlojctl seal secret <name> --from-literal key=value [...]` -- build a transient `Secret` locally, seal it, and write `<name>.sealed.yaml` without creating an intermediate plaintext manifest
+
+`seal secret` does not talk to workers. The generated `SealedSecret` is later applied through the normal resource API.
+
+By default, `seal secret` writes YAML to a file:
+
+- with `-f secret.yaml`, the default output is `secret.sealed.yaml` next to the source file
+- with inline `--from-literal`, the default output is `<name>.sealed.yaml` in the current directory
+
+Useful flags:
+
+| Flag | Default | Description |
+|---|---|---|
+| `-f` | none | Path to an existing `Secret` manifest. |
+| `--from-literal` | none | Repeatable `key=value` pair used to build a transient `Secret` locally. |
+| `-o` / `--out` | auto-generated path | Explicit output path for the generated `SealedSecret` manifest. |
+| `--stdout` | `false` | Print the generated manifest to stdout instead of writing a file. |
+| `--format` | `yaml` | Output format: `yaml` or `json`. |
+| `--namespace` / `-n` | global namespace or `default` | Namespace override for sealed secrets generated from literals or manifests. |
+
+Examples:
+
+```bash
+# Seal an existing Secret manifest into secret.sealed.yaml
+orlojctl seal secret -f secret.yaml
+
+# Seal literals directly into payment-gateway.sealed.yaml
+orlojctl seal secret payment-gateway \
+  --from-literal api_key=sk-prod-123 \
+  --from-literal org=acme
+
+# Keep stdout for scripting
+orlojctl seal secret -f secret.yaml --stdout
+```
+
 ## `orlojctl approve` / `orlojctl deny`
 
 Approves or denies a pending `ToolApproval` or `TaskApproval`:
@@ -175,6 +219,7 @@ Supported resources:
 - `model-endpoints`
 - `tools`
 - `secrets`
+- `sealed-secrets`
 - `memories`
 - `agent-policies`
 - `agent-roles`

@@ -13,6 +13,7 @@ This page summarizes key HTTP endpoints and behavior contracts.
 - model-endpoints
 - tools
 - secrets
+- sealed-secrets
 - memories
 - mcp-servers
 - agent-policies
@@ -26,6 +27,8 @@ This page summarizes key HTTP endpoints and behavior contracts.
 - workers
 
 Namespace defaults to `default` and can be overridden with `?namespace=<ns>`.
+
+`GET /v1/sealing-key/public` is cluster-scoped and returns the active public key used to create `SealedSecret` manifests. It returns `503` when no active sealing key is available.
 
 ## Capabilities
 

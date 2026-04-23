@@ -27,7 +27,7 @@ go run ./cmd/orlojd -h
 | `--auth-reset-admin-username` | empty | One-shot admin reset username. | Env fallback: `ORLOJ_AUTH_RESET_ADMIN_USERNAME`. |
 | `--auth-reset-admin-password` | empty | One-shot admin reset password and exit. | Env fallback: `ORLOJ_AUTH_RESET_ADMIN_PASSWORD`. |
 | `--trusted-proxies` | empty | Comma-separated CIDRs of reverse proxies whose `X-Forwarded-For` / `X-Real-IP` headers are trusted for client IP extraction. | Env fallback: `ORLOJ_TRUSTED_PROXIES`. Required for correct per-client auth rate limiting behind a proxy. See [Security — Trusted proxy configuration](../operations/security.md#trusted-proxy-configuration). |
-| `--secret-encryption-key` | empty | AES-256-GCM key for Secret encryption at rest. | Env fallback: `ORLOJ_SECRET_ENCRYPTION_KEY`. |
+| `--secret-encryption-key` | empty | AES-256-GCM key for Secret encryption at rest. | Env fallback: `ORLOJ_SECRET_ENCRYPTION_KEY`. On `orlojd`, also wraps the DB-stored `SealedSecret` private key. |
 | `--storage-backend` | `memory` | State backend. | `memory|postgres`. |
 | `--postgres-dsn` | empty | Postgres DSN. | Required when `--storage-backend=postgres`; env `ORLOJ_POSTGRES_DSN`. |
 | `--sql-driver` | `pgx` | `database/sql` driver for Postgres backend. | Postgres backend only. |
@@ -118,7 +118,7 @@ go run ./cmd/orlojworker -h
 | `--postgres-max-open-conns` | `20` | Max open Postgres connections. | Postgres backend only. |
 | `--postgres-max-idle-conns` | `10` | Max idle Postgres connections. | Postgres backend only. |
 | `--postgres-conn-max-lifetime` | `30m` | Max Postgres connection lifetime. | Postgres backend only. |
-| `--secret-encryption-key` | empty | AES-256-GCM key for Secret encryption at rest. | Env fallback: `ORLOJ_SECRET_ENCRYPTION_KEY`. |
+| `--secret-encryption-key` | empty | AES-256-GCM key for Secret encryption at rest. | Env fallback: `ORLOJ_SECRET_ENCRYPTION_KEY`. Workers do not use the `SealedSecret` private key. |
 
 ### Task execution and runtime inbox consumers
 

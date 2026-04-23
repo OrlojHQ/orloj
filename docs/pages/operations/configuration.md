@@ -57,7 +57,7 @@ Example:
 | `ORLOJ_AUTH_RESET_ADMIN_USERNAME` | `orlojd` | `--auth-reset-admin-username` | One-shot local admin reset username. |
 | `ORLOJ_AUTH_RESET_ADMIN_PASSWORD` | `orlojd` | `--auth-reset-admin-password` | One-shot local admin reset password and exit. |
 | `ORLOJ_SETUP_TOKEN` | `orlojd` | none | Protects `/v1/auth/setup`; required request value for initial setup when set. |
-| `ORLOJ_SECRET_ENCRYPTION_KEY` | `orlojd`, `orlojworker` | `--secret-encryption-key` | AES key for encrypting Secret resource data at rest. |
+| `ORLOJ_SECRET_ENCRYPTION_KEY` | `orlojd`, `orlojworker` | `--secret-encryption-key` | AES key for encrypting Secret resource data at rest. On `orlojd`, it also wraps the stored `SealedSecret` private key. |
 | `ORLOJ_SECRET_<name>` | `orlojd`, `orlojworker` | `--model-secret-env-prefix`, `--tool-secret-env-prefix` | Dynamic secret lookup fallback for `secretRef` resolution. |
 | `ORLOJ_SERVER` | `orlojctl` | `--server` | Default API base URL after `ORLOJCTL_SERVER`. |
 | `ORLOJCTL_SERVER` | `orlojctl` | `--server` | Highest-precedence env default API base URL. |
@@ -110,6 +110,7 @@ Model endpoints and tools resolve `secretRef` values in this order:
 Set `--secret-encryption-key` (or `ORLOJ_SECRET_ENCRYPTION_KEY`) on every process sharing the same backing store.
 
 - Use one consistent key for all `orlojd`/`orlojworker` processes against the same database.
+- On `orlojd`, the same key also protects the persisted `SealedSecret` private key.
 - Rotating keys requires a migration procedure (see security/upgrade runbooks).
 
 ## Postgres Tuning

@@ -18,6 +18,8 @@ type StoreSet struct {
 	ModelEPs      *store.ModelEndpointStore
 	Tools         *store.ToolStore
 	Secrets       *store.SecretStore
+	SealedSecrets *store.SealedSecretStore
+	SealingKeys   *store.SealingKeyStore
 	Memories      *store.MemoryStore
 	Policies      *store.AgentPolicyStore
 	Roles         *store.AgentRoleStore
@@ -67,6 +69,9 @@ func OpenStores(cfg StoreConfig, logger *log.Logger) (*StoreSet, error) {
 		s.ModelEPs = store.NewModelEndpointStore()
 		s.Tools = store.NewToolStore()
 		s.Secrets = store.NewSecretStore()
+		s.SealedSecrets = store.NewSealedSecretStore()
+		s.SealingKeys = store.NewSealingKeyStore()
+		s.SealingKeys.SetEncryptionKey(cfg.SecretEncryptionKey)
 		s.Memories = store.NewMemoryStore()
 		s.Policies = store.NewAgentPolicyStore()
 		s.Roles = store.NewAgentRoleStore()
@@ -135,6 +140,8 @@ func OpenStores(cfg StoreConfig, logger *log.Logger) (*StoreSet, error) {
 		s.ModelEPs = store.NewModelEndpointStoreWithDB(db)
 		s.Tools = store.NewToolStoreWithDB(db)
 		s.Secrets = store.NewSecretStoreWithEncryption(db, cfg.SecretEncryptionKey)
+		s.SealedSecrets = store.NewSealedSecretStoreWithDB(db)
+		s.SealingKeys = store.NewSealingKeyStoreWithDB(db, cfg.SecretEncryptionKey)
 		s.Memories = store.NewMemoryStoreWithDB(db)
 		s.Policies = store.NewAgentPolicyStoreWithDB(db)
 		s.Roles = store.NewAgentRoleStoreWithDB(db)
