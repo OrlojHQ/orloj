@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-04-23
+
 ### Added
 
 - **`SealedSecret` resource and sealing workflow**: Orloj now supports git-safe encrypted secret manifests. `orlojd` manages a DB-backed RSA sealing keypair, exposes `GET /v1/sealing-key/public`, and reconciles `SealedSecret` resources into normal `Secret` resources through the existing secret storage path. `orlojctl` adds `seal public-key` plus `seal secret` workflows for both source manifests and inline `--from-literal` input, defaults to writing `*.sealed.yaml` files for git usage, the API/UI/OpenAPI now expose `sealed-secrets`, and generated Secrets are marked with `orloj.dev/sealedsecret-owner` for conflict detection and orphan cleanup.
@@ -335,7 +337,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Homebrew tap distribution (`OrlojHQ/orloj`)
 - Blueprint scaffolding via `orlojctl init`
 
-[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.10.2...HEAD
+[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/OrlojHQ/orloj/compare/v0.10.2...v0.11.0
 [0.10.2]: https://github.com/OrlojHQ/orloj/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/OrlojHQ/orloj/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/OrlojHQ/orloj/compare/v0.9.0...v0.10.0
