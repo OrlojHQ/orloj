@@ -89,6 +89,7 @@ Model routing (provider, base URL, default model, API key, timeout) is configure
 | `--tool-wasm-memory-bytes` | `67108864` | Default max WASM memory bytes. | Always available; env `ORLOJ_TOOL_WASM_MEMORY_BYTES`. |
 | `--tool-wasm-fuel` | `1000000` | Default WASM execution fuel limit. | Always available; env `ORLOJ_TOOL_WASM_FUEL`. |
 | `--tool-wasm-wasi` | `true` | Default: enable WASI host functions. | Always available; env `ORLOJ_TOOL_WASM_WASI`. |
+| `--tool-wasm-cache-dir` | `~/.orloj/wasm-cache` | Disk cache directory for remote WASM modules (HTTPS/OCI). | Always available; env `ORLOJ_TOOL_WASM_CACHE_DIR`. |
 
 ---
 
@@ -164,6 +165,7 @@ Model routing (provider, base URL, default model, API key, timeout) is configure
 | `--tool-wasm-memory-bytes` | `67108864` | Default max WASM memory bytes. | Always available; env `ORLOJ_TOOL_WASM_MEMORY_BYTES`. |
 | `--tool-wasm-fuel` | `1000000` | Default WASM execution fuel limit. | Always available; env `ORLOJ_TOOL_WASM_FUEL`. |
 | `--tool-wasm-wasi` | `true` | Default: enable WASI host functions. | Always available; env `ORLOJ_TOOL_WASM_WASI`. |
+| `--tool-wasm-cache-dir` | `~/.orloj/wasm-cache` | Disk cache directory for remote WASM modules (HTTPS/OCI). | Always available; env `ORLOJ_TOOL_WASM_CACHE_DIR`. |
 
 ## Command Discovery
 

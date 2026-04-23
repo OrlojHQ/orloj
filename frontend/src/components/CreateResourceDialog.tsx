@@ -32,6 +32,24 @@ const TEMPLATES: Record<string, string> = {
       runtime: { timeout: "30s", isolation_mode: "none" },
     },
   }, null, 2),
+  "Tool (WASM)": JSON.stringify({
+    apiVersion: "orloj.dev/v1",
+    kind: "Tool",
+    metadata: { name: "my-wasm-tool", namespace: "default" },
+    spec: {
+      type: "wasm",
+      wasm: {
+        module: "path/to/tool.wasm",
+        entrypoint: "run",
+        max_memory_bytes: 67108864,
+        fuel: 1000000,
+        enable_wasi: true,
+      },
+      capabilities: ["wasm.my-tool.invoke"],
+      risk_level: "low",
+      runtime: { timeout: "5s", isolation_mode: "wasm" },
+    },
+  }, null, 2),
   Secret: JSON.stringify({
     apiVersion: "orloj.dev/v1",
     kind: "Secret",

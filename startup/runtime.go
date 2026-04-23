@@ -27,6 +27,7 @@ type IsolatedToolRuntimeConfig struct {
 	WASMMemoryBytes  int64
 	WASMFuel         uint64
 	WASMWASI         bool
+	WASMCacheDir     string
 	Secrets          agentruntime.SecretResourceLookup
 }
 
@@ -73,7 +74,22 @@ func NewIsolatedToolRuntime(cfg IsolatedToolRuntimeConfig, logger *log.Logger) (
 // the wazero engine is pure Go with zero external dependencies.
 func NewWASMToolRuntime(cfg IsolatedToolRuntimeConfig, logger *log.Logger) (agentruntime.ToolRuntime, func(), error) {
 	wasmEngine := wazero.NewRuntimeWithConfig(context.Background(), wazero.NewRuntimeConfigInterpreter())
-	wasmFactory := agentruntime.NewWazeroExecutorFactory(wasmEngine)
+
+	// Build module resolver for remote (HTTPS/OCI) module references.
+	storeResolver := agentruntime.NewStoreSecretResolver(cfg.Secrets, "value")
+	envResolver := agentruntime.NewEnvSecretResolver(strings.TrimSpace(cfg.SecretEnvPrefix))
+	secretResolver := agentruntime.NewChainSecretResolver(storeResolver, envResolver)
+
+	moduleResolver, err := agentruntime.NewWASMModuleResolver(agentruntime.WASMModuleResolverConfig{
+		CacheDir:       strings.TrimSpace(cfg.WASMCacheDir),
+		AllowPrivate:   false,
+		SecretResolver: secretResolver,
+	})
+	if err != nil && logger != nil {
+		logger.Printf("WARNING: wasm module resolver init failed: %v (remote modules will not be available)", err)
+	}
+
+	wasmFactory := agentruntime.NewWazeroExecutorFactoryWithResolver(wasmEngine, moduleResolver)
 	wasmCfg := agentruntime.WASMToolRuntimeConfig{
 		ModulePath:     strings.TrimSpace(cfg.WASMModule),
 		Entrypoint:     strings.TrimSpace(cfg.WASMEntrypoint),
@@ -84,8 +100,12 @@ func NewWASMToolRuntime(cfg IsolatedToolRuntimeConfig, logger *log.Logger) (agen
 	rt := agentruntime.NewWASMToolRuntimeWithFactory(nil, wasmFactory, wasmCfg)
 	cleanup := func() { wasmEngine.Close(context.Background()) }
 	if logger != nil {
-		logger.Printf("wasm runtime=wazero (embedded) module=%s entrypoint=%s wasi=%t memory_bytes=%d fuel=%d",
-			wasmCfg.ModulePath, wasmCfg.Entrypoint, wasmCfg.EnableWASI, wasmCfg.MaxMemoryBytes, wasmCfg.Fuel)
+		cacheDir := strings.TrimSpace(cfg.WASMCacheDir)
+		if cacheDir == "" {
+			cacheDir = "(default)"
+		}
+		logger.Printf("wasm runtime=wazero (embedded) module=%s entrypoint=%s wasi=%t memory_bytes=%d fuel=%d cache_dir=%s",
+			wasmCfg.ModulePath, wasmCfg.Entrypoint, wasmCfg.EnableWASI, wasmCfg.MaxMemoryBytes, wasmCfg.Fuel, cacheDir)
 	}
 	return rt, cleanup, nil
 }

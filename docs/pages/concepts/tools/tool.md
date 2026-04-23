@@ -201,7 +201,7 @@ WASM tools communicate over stdin/stdout using a JSON contract (v1). The host wr
 
 ### Per-Tool Configuration
 
-Each WASM tool declares its module and resource limits in `spec.wasm`:
+Each WASM tool declares its module and resource limits in `spec.wasm`. The `module` field accepts a local path, HTTPS URL, or OCI artifact reference:
 
 ```yaml
 apiVersion: orloj.dev/v1
@@ -211,11 +211,12 @@ metadata:
 spec:
   type: wasm
   wasm:
-    module: path/to/echo.wasm        # Path to .wasm file (required)
+    module: path/to/echo.wasm        # Local path, HTTPS URL, or oci://... reference
     entrypoint: run                    # Exported function (default: run)
     max_memory_bytes: 67108864         # 64 MB (default)
     fuel: 1000000                      # Execution fuel limit (default: 1M)
     enable_wasi: true                  # Enable stdin/stdout/stderr via WASI
+    image_pull_secret: ghcr-creds      # Optional: Secret for private OCI registries
   capabilities:
     - wasm.echo.invoke
   risk_level: low
@@ -265,6 +266,13 @@ Memory and fuel limits are enforced by the host runtime, not by the guest module
 ### Coexistence with Containers
 
 WASM tools have their own dedicated runtime slot and work independently of `--tool-isolation-backend`. You can run WASM tools and container-isolated tools in the same agent system without conflict.
+
+### CLI Development Tools
+
+`orlojctl` provides scaffold and test commands for WASM tool development:
+
+- **`orlojctl tool scaffold <name> --lang go|rust`** generates a ready-to-build project with guest code, Makefile, tool manifest, and test fixtures.
+- **`orlojctl tool test <module.wasm> --fixtures <dir>`** runs the module against JSON test fixtures and validates contract compliance, expected output, and resource budgets.
 
 For a complete walkthrough including the full stdin/stdout contract specification, error handling, multi-language examples, and local testing, see the [Build a WASM Tool](../../guides/build-wasm-tool.md) guide.
 

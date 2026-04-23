@@ -111,10 +111,52 @@ export function ToolDetail() {
                 <span className="detail-field__value mono">{tool.spec.mcp_server_ref}</span>
               </div>
             )}
-            <div className="detail-field">
-              <span className="detail-field__label">Endpoint</span>
-              <span className="detail-field__value mono">{tool.spec.endpoint ?? "-"}</span>
-            </div>
+            {tool.spec.type !== "wasm" && (
+              <div className="detail-field">
+                <span className="detail-field__label">Endpoint</span>
+                <span className="detail-field__value mono">{tool.spec.endpoint ?? "-"}</span>
+              </div>
+            )}
+            {tool.spec.type === "wasm" && (
+              <>
+                <div className="detail-field">
+                  <span className="detail-field__label">Module</span>
+                  <span className="detail-field__value mono" style={{ wordBreak: "break-all" }}>
+                    {tool.spec.wasm?.module ?? "-"}
+                  </span>
+                </div>
+                <div className="detail-field">
+                  <span className="detail-field__label">Entrypoint</span>
+                  <span className="detail-field__value">{tool.spec.wasm?.entrypoint ?? "run"}</span>
+                </div>
+                <div className="detail-field">
+                  <span className="detail-field__label">Memory Limit</span>
+                  <span className="detail-field__value">
+                    {tool.spec.wasm?.max_memory_bytes
+                      ? `${Math.round(tool.spec.wasm.max_memory_bytes / (1024 * 1024))} MB`
+                      : "64 MB"}
+                  </span>
+                </div>
+                <div className="detail-field">
+                  <span className="detail-field__label">Fuel Limit</span>
+                  <span className="detail-field__value">
+                    {(tool.spec.wasm?.fuel ?? 1_000_000).toLocaleString()}
+                  </span>
+                </div>
+                <div className="detail-field">
+                  <span className="detail-field__label">WASI</span>
+                  <span className={clsx("detail-field__value", tool.spec.wasm?.enable_wasi ? "text-green" : "text-muted")}>
+                    {tool.spec.wasm?.enable_wasi ? "Enabled" : "Disabled"}
+                  </span>
+                </div>
+                {tool.spec.wasm?.image_pull_secret && (
+                  <div className="detail-field">
+                    <span className="detail-field__label">Image Pull Secret</span>
+                    <span className="detail-field__value mono">{tool.spec.wasm.image_pull_secret}</span>
+                  </div>
+                )}
+              </>
+            )}
             <div className="detail-field">
               <span className="detail-field__label">Risk Level</span>
               <span className="detail-field__value">{tool.spec.risk_level ?? "-"}</span>

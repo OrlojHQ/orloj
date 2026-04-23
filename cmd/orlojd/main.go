@@ -66,6 +66,7 @@ func main() {
 	toolWASMMemoryBytes := flag.Int64("tool-wasm-memory-bytes", envInt64("ORLOJ_TOOL_WASM_MEMORY_BYTES", 64*1024*1024), "default max wasm runtime memory bytes")
 	toolWASMFuel := flag.Uint64("tool-wasm-fuel", envUint64("ORLOJ_TOOL_WASM_FUEL", 1000000), "default wasm execution fuel limit")
 	toolWASMWASI := flag.Bool("tool-wasm-wasi", envBool("ORLOJ_TOOL_WASM_WASI", true), "default: enable WASI host functions for wasm tools")
+	toolWASMCacheDir := flag.String("tool-wasm-cache-dir", env("ORLOJ_TOOL_WASM_CACHE_DIR", ""), "disk cache directory for remote WASM modules (default: ~/.orloj/wasm-cache)")
 	cliToolAllowedCommands := flag.String("cli-tool-allowed-commands", env("ORLOJ_CLI_TOOL_ALLOWED_COMMANDS", ""), "comma-separated allowlist of commands for CLI tools (empty allows all)")
 	cliToolMaxArgvLength := flag.Int("cli-tool-max-argv-length", envInt("ORLOJ_CLI_TOOL_MAX_ARGV_LENGTH", 4096), "max total argv byte length for CLI tool invocations")
 	eventBusBackend := flag.String("event-bus-backend", env("ORLOJ_EVENT_BUS_BACKEND", "memory"), "event bus backend: memory|nats")
@@ -196,11 +197,14 @@ func main() {
 	taskController.SetExecutor(taskExecutor)
 	taskController.SetExtensions(extensions)
 	wasmRuntimeCfg := startup.IsolatedToolRuntimeConfig{
-		WASMModule:     *toolWASMModule,
-		WASMEntrypoint: *toolWASMEntrypoint,
+		WASMModule:      *toolWASMModule,
+		WASMEntrypoint:  *toolWASMEntrypoint,
 		WASMMemoryBytes: *toolWASMMemoryBytes,
-		WASMFuel:       *toolWASMFuel,
-		WASMWASI:       *toolWASMWASI,
+		WASMFuel:        *toolWASMFuel,
+		WASMWASI:        *toolWASMWASI,
+		WASMCacheDir:    *toolWASMCacheDir,
+		SecretEnvPrefix: *toolSecretEnvPrefix,
+		Secrets:         stores.Secrets,
 	}
 	isolatedToolRuntime, err := startup.NewIsolatedToolRuntime(startup.IsolatedToolRuntimeConfig{
 		Backend:          *toolIsolationBackend,

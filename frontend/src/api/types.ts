@@ -122,11 +122,21 @@ export interface Tool {
   status?: ToolStatus;
 }
 
+export interface ToolWasmSpec {
+  module?: string;
+  entrypoint?: string;
+  max_memory_bytes?: number;
+  fuel?: number;
+  enable_wasi?: boolean;
+  image_pull_secret?: string;
+}
+
 export interface ToolSpec {
   type?: string;
   endpoint?: string;
   /** Reference to an McpServer resource when tools are sourced from MCP. */
   mcp_server_ref?: string;
+  wasm?: ToolWasmSpec;
   capabilities?: string[];
   operation_classes?: string[];
   risk_level?: string;

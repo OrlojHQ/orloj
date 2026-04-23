@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/OrlojHQ/orloj/resources"
+	"github.com/OrlojHQ/orloj/telemetry"
 )
 
 var (
@@ -610,6 +611,7 @@ func (r *GovernedToolRuntime) resolveWithIsolationOverride(tool string, spec res
 }
 
 func (r *GovernedToolRuntime) callWithPolicy(ctx context.Context, tool string, input string, spec resources.ToolSpec) (string, error) {
+	callStart := time.Now()
 	target, err := r.resolveTargetRuntime(tool, spec)
 	if err != nil {
 		return "", err
@@ -649,6 +651,11 @@ func (r *GovernedToolRuntime) callWithPolicy(ctx context.Context, tool string, i
 		result, callErr := callToolRuntimeBounded(callCtx, target, tool, input)
 		cancel()
 		if callErr == nil {
+			toolType := strings.ToLower(strings.TrimSpace(spec.Type))
+			if toolType == "" {
+				toolType = "http"
+			}
+			telemetry.RecordToolExecution(tool, toolType, "ok", time.Since(callStart).Seconds())
 			return result, nil
 		}
 		callErr = normalizeToolError(callErr, tool, timeout)
@@ -668,6 +675,12 @@ func (r *GovernedToolRuntime) callWithPolicy(ctx context.Context, tool string, i
 		case <-timer.C:
 		}
 	}
+	toolType := strings.ToLower(strings.TrimSpace(spec.Type))
+	if toolType == "" {
+		toolType = "http"
+	}
+	telemetry.RecordToolExecution(tool, toolType, "error", time.Since(callStart).Seconds())
+
 	if lastErr == nil {
 		return "", NewToolError(
 			ToolStatusError,

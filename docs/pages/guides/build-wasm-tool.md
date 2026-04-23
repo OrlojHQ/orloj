@@ -258,13 +258,35 @@ orlojctl apply -f my-wasm-tool.yaml
 
 | Field | Default | Description |
 |---|---|---|
-| `module` | *(required)* | Path to the `.wasm` file on the server's filesystem. |
+| `module` | *(required)* | Local path, HTTPS URL, or OCI artifact reference (`oci://...`) to the `.wasm` module. |
 | `entrypoint` | `run` | Exported function name to invoke. |
 | `max_memory_bytes` | `67108864` (64 MB) | Maximum WASM linear memory. Host-enforced. |
 | `fuel` | `1000000` (1M) | Execution fuel limit. Prevents runaway modules. Host-enforced. |
 | `enable_wasi` | `false` | Enable WASI (stdin/stdout/stderr). Most tools need this set to `true`. |
+| `image_pull_secret` | *(optional)* | Name of a Secret containing registry credentials for pulling OCI-referenced modules. The Secret must have `username` and `password` keys. |
 
-The `module` path must be accessible to the `orlojd` / `orlojworker` process. In a containerized deployment, mount the `.wasm` file into the pod.
+#### Module reference formats
+
+The `module` field accepts three formats:
+
+- **Local path** (existing): `/opt/orloj/tools/echo.wasm`
+- **HTTPS URL**: `https://artifacts.example.com/tools/echo-v1.2.wasm`
+- **OCI reference**: `oci://ghcr.io/orloj-tools/echo:v1.2`
+
+Remote modules (HTTPS and OCI) are fetched once and cached on disk in `--tool-wasm-cache-dir` (default `~/.orloj/wasm-cache`), keyed by SHA-256 of the reference. Subsequent invocations use the cached copy.
+
+For local paths, the `module` path must be accessible to the `orlojd` / `orlojworker` process. In a containerized deployment, mount the `.wasm` file into the pod.
+
+#### Private OCI registries
+
+For private OCI registries, set `image_pull_secret` to reference a Secret with `username` and `password` keys:
+
+```yaml
+spec:
+  wasm:
+    module: oci://ghcr.io/my-org/private-tool:v1
+    image_pull_secret: ghcr-creds
+```
 
 ## Step 3: Grant Agent Access
 
@@ -342,6 +364,58 @@ spec:
 2. **Use `contract_version: "v1"` and a valid `status`.** Missing or unsupported values cause a contract error.
 3. **Prefer structured errors over panics.** Write an error response JSON instead of crashing. Panics produce an opaque host-level error with no retry information.
 4. **Set `retryable` accurately.** The runtime uses this field to decide whether to retry or dead-letter the invocation.
+
+## Scaffold a New Tool
+
+Use `orlojctl tool scaffold` to generate a ready-to-build project:
+
+```bash
+orlojctl tool scaffold my-echo --lang go
+```
+
+This creates a `my-echo/` directory with a contract-compliant guest module, Makefile, tool manifest, test fixtures, and a README. Supported languages: `go`, `rust`.
+
+## Test a Tool
+
+Use `orlojctl tool test` to validate a WASM module against fixture files:
+
+```bash
+orlojctl tool test my-echo.wasm --fixtures fixtures/
+```
+
+Each fixture is a JSON file specifying input, expected status, and expected output:
+
+```json
+{
+  "name": "echo hello",
+  "input": "{\"query\": \"hello\"}",
+  "expected_status": "ok",
+  "expected_output": "processed: {\"query\": \"hello\"}",
+  "timeout": "5s"
+}
+```
+
+The test runner validates the contract (v1, valid status), asserts expected output, and reports pass/fail with timing.
+
+Options:
+
+| Flag | Default | Description |
+|---|---|---|
+| `--fixtures` | `fixtures/` | Directory containing JSON fixture files. |
+| `--fuel-budget` | `1000000` | Maximum fuel per fixture run. |
+| `--memory-budget` | `67108864` | Maximum memory bytes per fixture run. |
+
+## Observability
+
+WASM tool execution emits Prometheus metrics automatically:
+
+| Metric | Type | Labels | Description |
+|---|---|---|---|
+| `orloj_tool_execution_duration_seconds` | Histogram | `tool`, `type`, `status` | Duration of tool execution (all types). |
+| `orloj_wasm_fuel_consumed` | Counter | `tool` | Total fuel consumed. |
+| `orloj_wasm_compilation_cache_hits_total` | Counter | `tool` | Module compilation cache hits. |
+| `orloj_wasm_compilation_cache_misses_total` | Counter | `tool` | Module compilation cache misses. |
+| `orloj_wasm_module_fetch_duration_seconds` | Histogram | `source` | Remote module fetch duration. |
 
 ## Reference Example
 

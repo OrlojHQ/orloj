@@ -52,14 +52,15 @@ func (c WASMToolRuntimeConfig) normalized() WASMToolRuntimeConfig {
 
 // WASMToolExecuteRequest is the portable execution envelope used by wasm executors.
 type WASMToolExecuteRequest struct {
-	Namespace    string
-	Tool         string
-	Input        string
-	Capabilities []string
-	RiskLevel    string
-	Runtime      WASMToolRuntimeConfig
-	AuthProfile  string
-	AuthHeaders  map[string]string
+	Namespace       string
+	Tool            string
+	Input           string
+	Capabilities    []string
+	RiskLevel       string
+	Runtime         WASMToolRuntimeConfig
+	AuthProfile     string
+	AuthHeaders     map[string]string
+	ImagePullSecret string
 }
 
 type WASMToolExecuteResponse struct {
@@ -241,12 +242,13 @@ func (r *WASMToolRuntime) Call(ctx context.Context, tool string, input string) (
 		runtimeCfg.EnableWASI = true
 	}
 	response, err := executeWASMToolBounded(ctx, executor, WASMToolExecuteRequest{
-		Namespace:    strings.TrimSpace(r.namespace),
-		Tool:         tool,
-		Input:        input,
-		Capabilities: append([]string(nil), spec.Capabilities...),
-		RiskLevel:    strings.ToLower(strings.TrimSpace(spec.RiskLevel)),
-		Runtime:      runtimeCfg,
+		Namespace:       strings.TrimSpace(r.namespace),
+		Tool:            tool,
+		Input:           input,
+		Capabilities:    append([]string(nil), spec.Capabilities...),
+		RiskLevel:       strings.ToLower(strings.TrimSpace(spec.RiskLevel)),
+		Runtime:         runtimeCfg,
+		ImagePullSecret: strings.TrimSpace(spec.Wasm.ImagePullSecret),
 	})
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {

@@ -314,12 +314,14 @@ type ToolSpec struct {
 }
 
 // ToolWasmSpec configures per-tool WASM module execution.
+// Module may be a local path, HTTPS URL, or OCI artifact reference (oci://...).
 type ToolWasmSpec struct {
-	Module         string `json:"module,omitempty"`
-	Entrypoint     string `json:"entrypoint,omitempty"`
-	MaxMemoryBytes int64  `json:"max_memory_bytes,omitempty"`
-	Fuel           uint64 `json:"fuel,omitempty"`
-	EnableWASI     bool   `json:"enable_wasi"`
+	Module          string `json:"module,omitempty"`
+	Entrypoint      string `json:"entrypoint,omitempty"`
+	MaxMemoryBytes  int64  `json:"max_memory_bytes,omitempty"`
+	Fuel            uint64 `json:"fuel,omitempty"`
+	EnableWASI      bool   `json:"enable_wasi"`
+	ImagePullSecret string `json:"image_pull_secret,omitempty"`
 }
 
 // ToolCliSpec defines the configuration for CLI tool invocations.
@@ -476,6 +478,7 @@ func (t *Tool) Normalize() error {
 		if t.Spec.Wasm.Module == "" {
 			return fmt.Errorf("spec.wasm.module is required when spec.type is wasm")
 		}
+		t.Spec.Wasm.ImagePullSecret = strings.TrimSpace(t.Spec.Wasm.ImagePullSecret)
 		t.Spec.Wasm.Entrypoint = strings.TrimSpace(t.Spec.Wasm.Entrypoint)
 		if t.Spec.Wasm.Entrypoint == "" {
 			t.Spec.Wasm.Entrypoint = "run"

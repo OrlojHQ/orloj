@@ -39,6 +39,7 @@ Example:
 | `ORLOJ_TOOL_WASM_MEMORY_BYTES` | `orlojd`, `orlojworker` | `--tool-wasm-memory-bytes` | Default max memory bytes for WASM runtime. |
 | `ORLOJ_TOOL_WASM_FUEL` | `orlojd`, `orlojworker` | `--tool-wasm-fuel` | Default WASM execution fuel limit. |
 | `ORLOJ_TOOL_WASM_WASI` | `orlojd`, `orlojworker` | `--tool-wasm-wasi` | Default: enable WASI host functions for WASM tools. |
+| `ORLOJ_TOOL_WASM_CACHE_DIR` | `orlojd`, `orlojworker` | `--tool-wasm-cache-dir` | Disk cache directory for remote WASM modules (HTTPS/OCI). Default: `~/.orloj/wasm-cache`. |
 | `ORLOJ_EVENT_BUS_BACKEND` | `orlojd` | `--event-bus-backend` | Control-plane event bus backend: `memory` or `nats`. |
 | `ORLOJ_NATS_URL` | `orlojd`, `orlojworker` | `--nats-url` (server), `--agent-message-nats-url` (runtime bus) | Base NATS URL; also fallback for runtime message bus URL. |
 | `ORLOJ_NATS_SUBJECT_PREFIX` | `orlojd` | `--nats-subject-prefix` | Subject prefix used for control-plane NATS event bus. |
