@@ -120,7 +120,7 @@ func (b *HTTPMemoryBackend) post(ctx context.Context, path string, body []byte) 
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 32*1024*1024))
 	if err != nil {
 		return nil, fmt.Errorf("memory http %s: read body: %w", path, err)
 	}

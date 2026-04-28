@@ -86,6 +86,10 @@ func newSealSecretCommand() *cobra.Command {
 				return err
 			}
 
+			// Status is server-side state set on apply; omit it from
+			// the CLI output so sealed manifests are clean for VCS.
+			sealed.Status = resources.SealedSecretStatus{}
+
 			body, err := marshalSealOutput(sealed, format)
 			if err != nil {
 				return err

@@ -57,8 +57,9 @@ func (s *SealedSecret) Normalize() error {
 		return fmt.Errorf("unsupported kind %q for SealedSecret", s.Kind)
 	}
 	NormalizeObjectMetaNamespace(&s.Metadata)
-	if strings.TrimSpace(s.Metadata.Name) == "" {
-		return fmt.Errorf("metadata.name is required")
+	s.Metadata.Name = strings.TrimSpace(s.Metadata.Name)
+	if err := ValidateMetadataName(s.Metadata.Name); err != nil {
+		return err
 	}
 
 	if s.Spec.EncryptedData == nil {

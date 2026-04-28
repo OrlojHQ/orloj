@@ -11,8 +11,6 @@ import (
 	"github.com/OrlojHQ/orloj/resources"
 )
 
-const tableSealingKeys = "sealing_keys"
-
 type SealingKey struct {
 	KeyID         string
 	Status        string

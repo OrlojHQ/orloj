@@ -103,21 +103,15 @@ func (s *Server) handleAuthSetup(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	userCount, err := s.stores.LocalAdmins.CountUsers()
-	if err != nil {
-		http.Error(w, "auth store error", http.StatusInternalServerError)
-		return
-	}
-	if userCount > 0 {
-		http.Error(w, "admin account is already configured", http.StatusConflict)
-		return
-	}
 	hash, err := store.GeneratePasswordHash(req.Password)
 	if err != nil {
 		http.Error(w, "failed to hash password", http.StatusInternalServerError)
 		return
 	}
-	user, err := s.stores.LocalAdmins.CreateUser(req.Username, hash, "admin")
+	// CreateFirstAdmin atomically checks that no users exist and inserts the
+	// admin in one operation, preventing the TOCTOU race where concurrent
+	// setup requests both observe zero users.
+	user, err := s.stores.LocalAdmins.CreateFirstAdmin(req.Username, hash)
 	if err != nil {
 		if errors.Is(err, store.ErrAuthUserExists) {
 			http.Error(w, "admin account is already configured", http.StatusConflict)

@@ -221,8 +221,11 @@ func TestAuthRateLimiter_ExhaustsBurst(t *testing.T) {
 	req := mustReq(t, http.MethodPost, "/v1/auth/login", nil)
 	req.RemoteAddr = "192.0.2.99:1"
 
-	if !rl.allow(req) || !rl.allow(req) {
-		t.Fatal("expected first two requests to be allowed")
+	if !rl.allow(req) {
+		t.Fatal("expected first request to be allowed")
+	}
+	if !rl.allow(req) {
+		t.Fatal("expected second request to be allowed")
 	}
 	if rl.allow(req) {
 		t.Fatal("expected third request to be rate limited")

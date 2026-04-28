@@ -1,23 +1,8 @@
 package agentruntime
 
 import (
-	"context"
 	"testing"
 )
-
-type noopWASMExecutorFactory struct {
-	executor WASMToolExecutor
-}
-
-func (f noopWASMExecutorFactory) Build(_ context.Context, _ WASMToolRuntimeConfig) (WASMToolExecutor, error) {
-	return f.executor, nil
-}
-
-type noopWASMExecutor struct{}
-
-func (e noopWASMExecutor) Execute(_ context.Context, _ WASMToolExecuteRequest) (WASMToolExecuteResponse, error) {
-	return WASMToolExecuteResponse{Output: "ok"}, nil
-}
 
 func TestToolIsolationBackendRegistryBuildsDefaults(t *testing.T) {
 	noneRuntime, err := BuildToolIsolationRuntime(ToolIsolationBackendOptions{Mode: "none"})

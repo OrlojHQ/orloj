@@ -110,12 +110,9 @@ func (c *TaskSchedulerController) ReconcileOnce(ctx context.Context) error {
 			continue
 		}
 
-		changed, err := c.reconcileTaskAssignment(ctx, task, eligible, newAssignments)
+		_, err := c.reconcileTaskAssignment(ctx, task, eligible, newAssignments)
 		if err != nil {
 			return err
-		}
-		if changed {
-			continue
 		}
 	}
 

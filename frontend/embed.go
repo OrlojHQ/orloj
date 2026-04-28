@@ -72,11 +72,4 @@ func patchedIndex(fsys fs.FS, basePath string) []byte {
 	return out
 }
 
-func hasDistIndex() bool {
-	file, err := staticFS.Open("dist/index.html")
-	if err != nil {
-		return false
-	}
-	_ = file.Close()
-	return true
-}
+

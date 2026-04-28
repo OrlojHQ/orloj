@@ -393,8 +393,15 @@ func main() {
 	}
 
 	httpServer := &http.Server{
-		Addr:    *addr,
-		Handler: telemetry.RequestIDMiddleware(server.Handler()),
+		Addr:              *addr,
+		Handler:           telemetry.RequestIDMiddleware(server.Handler()),
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		// WriteTimeout is deliberately omitted: watch/SSE endpoints stream
+		// indefinitely and a global write deadline would break them. Per-
+		// handler timeouts via http.TimeoutHandler should be used for non-
+		// streaming routes instead.
 	}
 
 	go func() {

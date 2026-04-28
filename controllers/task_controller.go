@@ -1876,9 +1876,7 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 				MaxDepth:        orlojMaxDepth,
 				MaxChildren:     orlojMaxChildren,
 			})
-			for _, name := range agentruntime.BuiltinOrlojToolNames() {
-				agent.Spec.Tools = append(agent.Spec.Tools, name)
-			}
+			agent.Spec.Tools = append(agent.Spec.Tools, agentruntime.BuiltinOrlojToolNames()...)
 			agent.Spec.Tools = dedupeStringsController(agent.Spec.Tools)
 		}
 		result, err := c.executor.ExecuteAgentWithRuntime(agentCtx, agent, runtimeInput, finalRT)
@@ -2283,9 +2281,7 @@ func (c *TaskController) executeTaskFromResume(
 				MaxDepth:        orlojMaxDepth,
 				MaxChildren:     orlojMaxChildren,
 			})
-			for _, name := range agentruntime.BuiltinOrlojToolNames() {
-				agent.Spec.Tools = append(agent.Spec.Tools, name)
-			}
+			agent.Spec.Tools = append(agent.Spec.Tools, agentruntime.BuiltinOrlojToolNames()...)
 			agent.Spec.Tools = dedupeStringsController(agent.Spec.Tools)
 		}
 
@@ -2862,18 +2858,6 @@ func (c *TaskController) appendTaskTrace(task *resources.Task, event resources.T
 	if len(task.Status.Trace) > 500 {
 		task.Status.Trace = task.Status.Trace[len(task.Status.Trace)-500:]
 	}
-}
-
-func hasTraceEventForType(trace []resources.TaskTraceEvent, eventType string, attempt int) bool {
-	for _, event := range trace {
-		if !strings.EqualFold(strings.TrimSpace(event.Type), strings.TrimSpace(eventType)) {
-			continue
-		}
-		if attempt <= 0 || event.Attempt == 0 || event.Attempt == attempt {
-			return true
-		}
-	}
-	return false
 }
 
 func countTraceEventsForType(trace []resources.TaskTraceEvent, eventType string, attempt int) int {

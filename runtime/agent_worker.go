@@ -231,7 +231,7 @@ func (w *AgentWorker) Run(ctx context.Context) {
 			if len(modelResp.ToolCalls) > 0 {
 				chatCalls := make([]ChatToolCall, len(modelResp.ToolCalls))
 				for i, tc := range modelResp.ToolCalls {
-					chatCalls[i] = ChatToolCall{ID: tc.ID, Name: tc.Name, Input: tc.Input}
+					chatCalls[i] = ChatToolCall(tc)
 				}
 				w.history = append(w.history, ChatMessage{
 					Role: "assistant", Content: modelOutput, ToolCalls: chatCalls,

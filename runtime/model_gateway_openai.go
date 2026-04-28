@@ -141,7 +141,7 @@ func (g *OpenAIModelGateway) Complete(ctx context.Context, req ModelRequest) (Mo
 	}
 	defer httpResp.Body.Close()
 
-	respBody, err := io.ReadAll(httpResp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(httpResp.Body, 32*1024*1024))
 	if err != nil {
 		return ModelResponse{}, fmt.Errorf("read model response: %w", err)
 	}
