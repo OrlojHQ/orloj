@@ -1,7 +1,6 @@
 package agentruntime
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -23,9 +22,10 @@ func (r *osExecCLICommandRunner) Run(ctx context.Context, command string, args [
 	if stdin != "" {
 		cmd.Stdin = strings.NewReader(stdin)
 	}
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	stdout := NewBoundedWriter(DefaultMaxToolOutputBytes)
+	stderr := NewBoundedWriter(DefaultMaxToolOutputBytes)
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 	if len(env) > 0 {
 		cmd.Env = env
 	}

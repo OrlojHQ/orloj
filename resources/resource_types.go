@@ -201,8 +201,8 @@ func (a *AgentSystem) Normalize() error {
 		return fmt.Errorf("unsupported kind %q for AgentSystem", a.Kind)
 	}
 	NormalizeObjectMetaNamespace(&a.Metadata)
-	if a.Metadata.Name == "" {
-		return fmt.Errorf("metadata.name is required")
+	if err := ValidateMetadataName(a.Metadata.Name); err != nil {
+		return err
 	}
 	if a.Spec.Graph == nil {
 		a.Spec.Graph = make(map[string]GraphEdge)
@@ -414,8 +414,8 @@ func (t *Tool) Normalize() error {
 		return fmt.Errorf("unsupported kind %q for Tool", t.Kind)
 	}
 	NormalizeObjectMetaNamespace(&t.Metadata)
-	if t.Metadata.Name == "" {
-		return fmt.Errorf("metadata.name is required")
+	if err := ValidateMetadataName(t.Metadata.Name); err != nil {
+		return err
 	}
 	toolType := strings.ToLower(strings.TrimSpace(t.Spec.Type))
 	if toolType == "" {
@@ -655,8 +655,8 @@ func (s *Secret) Normalize() error {
 		return fmt.Errorf("unsupported kind %q for Secret", s.Kind)
 	}
 	NormalizeObjectMetaNamespace(&s.Metadata)
-	if s.Metadata.Name == "" {
-		return fmt.Errorf("metadata.name is required")
+	if err := ValidateMetadataName(s.Metadata.Name); err != nil {
+		return err
 	}
 	if s.Spec.Data == nil {
 		s.Spec.Data = make(map[string]string)
@@ -731,8 +731,8 @@ func (m *Memory) Normalize() error {
 		return fmt.Errorf("unsupported kind %q for Memory", m.Kind)
 	}
 	NormalizeObjectMetaNamespace(&m.Metadata)
-	if m.Metadata.Name == "" {
-		return fmt.Errorf("metadata.name is required")
+	if err := ValidateMetadataName(m.Metadata.Name); err != nil {
+		return err
 	}
 	if m.Status.Phase == "" {
 		m.Status.Phase = "Pending"
@@ -782,8 +782,8 @@ func (p *AgentPolicy) Normalize() error {
 		return fmt.Errorf("unsupported kind %q for AgentPolicy", p.Kind)
 	}
 	NormalizeObjectMetaNamespace(&p.Metadata)
-	if p.Metadata.Name == "" {
-		return fmt.Errorf("metadata.name is required")
+	if err := ValidateMetadataName(p.Metadata.Name); err != nil {
+		return err
 	}
 	if p.Spec.ApplyMode == "" {
 		p.Spec.ApplyMode = "scoped"
@@ -833,8 +833,8 @@ func (r *AgentRole) Normalize() error {
 		return fmt.Errorf("unsupported kind %q for AgentRole", r.Kind)
 	}
 	NormalizeObjectMetaNamespace(&r.Metadata)
-	if r.Metadata.Name == "" {
-		return fmt.Errorf("metadata.name is required")
+	if err := ValidateMetadataName(r.Metadata.Name); err != nil {
+		return err
 	}
 	normalized := make([]string, 0, len(r.Spec.Permissions))
 	seen := make(map[string]struct{}, len(r.Spec.Permissions))
@@ -901,8 +901,8 @@ func (p *ToolPermission) Normalize() error {
 		return fmt.Errorf("unsupported kind %q for ToolPermission", p.Kind)
 	}
 	NormalizeObjectMetaNamespace(&p.Metadata)
-	if p.Metadata.Name == "" {
-		return fmt.Errorf("metadata.name is required")
+	if err := ValidateMetadataName(p.Metadata.Name); err != nil {
+		return err
 	}
 	p.Spec.ToolRef = strings.TrimSpace(p.Spec.ToolRef)
 	if p.Spec.ToolRef == "" {
@@ -1046,8 +1046,8 @@ func (a *ToolApproval) Normalize() error {
 		return fmt.Errorf("unsupported kind %q for ToolApproval", a.Kind)
 	}
 	NormalizeObjectMetaNamespace(&a.Metadata)
-	if a.Metadata.Name == "" {
-		return fmt.Errorf("metadata.name is required")
+	if err := ValidateMetadataName(a.Metadata.Name); err != nil {
+		return err
 	}
 	a.Spec.TaskRef = strings.TrimSpace(a.Spec.TaskRef)
 	if a.Spec.TaskRef == "" {
@@ -1204,8 +1204,8 @@ func (a *TaskApproval) Normalize() error {
 		return fmt.Errorf("unsupported kind %q for TaskApproval", a.Kind)
 	}
 	NormalizeObjectMetaNamespace(&a.Metadata)
-	if a.Metadata.Name == "" {
-		return fmt.Errorf("metadata.name is required")
+	if err := ValidateMetadataName(a.Metadata.Name); err != nil {
+		return err
 	}
 	a.Spec.TaskRef = strings.TrimSpace(a.Spec.TaskRef)
 	if a.Spec.TaskRef == "" {
@@ -1489,8 +1489,8 @@ func (t *Task) Normalize() error {
 		return fmt.Errorf("unsupported kind %q for Task", t.Kind)
 	}
 	NormalizeObjectMetaNamespace(&t.Metadata)
-	if t.Metadata.Name == "" {
-		return fmt.Errorf("metadata.name is required")
+	if err := ValidateMetadataName(t.Metadata.Name); err != nil {
+		return err
 	}
 	if t.Spec.Input == nil {
 		t.Spec.Input = make(map[string]string)
@@ -1630,8 +1630,8 @@ func (t *TaskSchedule) Normalize() error {
 		return fmt.Errorf("unsupported kind %q for TaskSchedule", t.Kind)
 	}
 	NormalizeObjectMetaNamespace(&t.Metadata)
-	if t.Metadata.Name == "" {
-		return fmt.Errorf("metadata.name is required")
+	if err := ValidateMetadataName(t.Metadata.Name); err != nil {
+		return err
 	}
 
 	t.Spec.TaskRef = strings.TrimSpace(t.Spec.TaskRef)
@@ -1768,8 +1768,8 @@ func (t *TaskWebhook) Normalize() error {
 		return fmt.Errorf("unsupported kind %q for TaskWebhook", t.Kind)
 	}
 	NormalizeObjectMetaNamespace(&t.Metadata)
-	if t.Metadata.Name == "" {
-		return fmt.Errorf("metadata.name is required")
+	if err := ValidateMetadataName(t.Metadata.Name); err != nil {
+		return err
 	}
 
 	t.Spec.TaskRef = strings.TrimSpace(t.Spec.TaskRef)
@@ -2066,8 +2066,8 @@ func (w *Worker) Normalize() error {
 		return fmt.Errorf("unsupported kind %q for Worker", w.Kind)
 	}
 	NormalizeObjectMetaNamespace(&w.Metadata)
-	if w.Metadata.Name == "" {
-		return fmt.Errorf("metadata.name is required")
+	if err := ValidateMetadataName(w.Metadata.Name); err != nil {
+		return err
 	}
 	if w.Spec.MaxConcurrentTasks <= 0 {
 		w.Spec.MaxConcurrentTasks = 1
@@ -2144,8 +2144,8 @@ func (m *McpServer) Normalize() error {
 		return fmt.Errorf("unsupported kind %q for McpServer", m.Kind)
 	}
 	NormalizeObjectMetaNamespace(&m.Metadata)
-	if m.Metadata.Name == "" {
-		return fmt.Errorf("metadata.name is required")
+	if err := ValidateMetadataName(m.Metadata.Name); err != nil {
+		return err
 	}
 	transport := strings.ToLower(strings.TrimSpace(m.Spec.Transport))
 	if transport == "" {

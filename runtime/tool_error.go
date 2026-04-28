@@ -92,9 +92,7 @@ func (e *ToolError) Error() string {
 		fmt.Sprintf("retryable=%t", e.Retryable),
 		fmt.Sprintf("message=%s", msg),
 	}
-	for _, detail := range formatToolDetails(e.Details) {
-		parts = append(parts, detail)
-	}
+	parts = append(parts, formatToolDetails(e.Details)...)
 	return strings.Join(parts, " ")
 }
 

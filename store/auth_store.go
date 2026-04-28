@@ -15,12 +15,6 @@ import (
 	"time"
 )
 
-const (
-	tableAuthLocalAdmin = "auth_local_admin"
-	tableAuthLocalUsers = "auth_local_users"
-	tableAuthSessions   = "auth_sessions"
-	tableAuthAPITokens  = "auth_api_tokens"
-)
 
 var (
 	ErrAuthUserExists     = errors.New("auth user already exists")
@@ -360,6 +354,70 @@ func (s *LocalAdminStore) CreateUser(username, passwordHash, role string) (Local
 	account := LocalAdminAccount{
 		Username:     username,
 		Role:         r,
+		PasswordHash: passwordHash,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	s.users[username] = account
+	return account, nil
+}
+
+// CreateFirstAdmin atomically creates the first admin account. It returns
+// ErrAuthUserExists if any user already exists, preventing the TOCTOU race
+// where concurrent setup requests both observe zero users.
+func (s *LocalAdminStore) CreateFirstAdmin(username, passwordHash string) (LocalAdminAccount, error) {
+	username = normalizeLocalUsername(username)
+	passwordHash = strings.TrimSpace(passwordHash)
+	if username == "" {
+		return LocalAdminAccount{}, fmt.Errorf("username is required")
+	}
+	if passwordHash == "" {
+		return LocalAdminAccount{}, fmt.Errorf("password hash is required")
+	}
+
+	if s.db != nil {
+		// Atomic insert-if-no-users via INSERT ... WHERE NOT EXISTS.
+		result, err := s.db.Exec(
+			`INSERT INTO auth_local_users(username, role, password_hash, created_at, updated_at)
+			 SELECT $1, $2, $3, NOW(), NOW()
+			 WHERE NOT EXISTS (SELECT 1 FROM auth_local_users)`,
+			username,
+			"admin",
+			passwordHash,
+		)
+		if err != nil {
+			if strings.Contains(strings.ToLower(err.Error()), "duplicate") || strings.Contains(strings.ToLower(err.Error()), "unique") {
+				return LocalAdminAccount{}, ErrAuthUserExists
+			}
+			return LocalAdminAccount{}, err
+		}
+		rows, err := result.RowsAffected()
+		if err != nil {
+			return LocalAdminAccount{}, err
+		}
+		if rows == 0 {
+			return LocalAdminAccount{}, ErrAuthUserExists
+		}
+		user, ok, err := s.GetByUsername(username)
+		if err != nil {
+			return LocalAdminAccount{}, err
+		}
+		if !ok {
+			return LocalAdminAccount{}, fmt.Errorf("created admin %q not found", username)
+		}
+		return user, nil
+	}
+
+	// In-memory path: hold the write lock across check-and-insert.
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.users) > 0 {
+		return LocalAdminAccount{}, ErrAuthUserExists
+	}
+	account := LocalAdminAccount{
+		Username:     username,
+		Role:         "admin",
 		PasswordHash: passwordHash,
 		CreatedAt:    now,
 		UpdatedAt:    now,

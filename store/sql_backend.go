@@ -194,6 +194,17 @@ func listFromTableCursor[T any](ctx context.Context, db dbExecer, table string, 
 		limit = defaultListLimit
 	}
 
+	// afterName arrives as unscoped metadata.name from the API continue
+	// token, but the name column stores scoped keys (namespace/name). Scope
+	// it so the cursor comparison is against the same key format.
+	if afterName != "" && !strings.Contains(afterName, "/") {
+		if namespace != "" {
+			afterName = scopedName(namespace, afterName)
+		} else {
+			afterName = scopedName(resources.DefaultNamespace, afterName)
+		}
+	}
+
 	var rows *sql.Rows
 	var err error
 	switch {

@@ -252,14 +252,14 @@ spec:
     isolation_mode: wasm
     timeout: 5s
 `, name, name, name),
-		"fixtures/test_echo.json": fmt.Sprintf(`{
+		"fixtures/test_echo.json": `{
   "name": "echo hello",
   "input": "{\"query\": \"hello\"}",
   "expected_status": "ok",
   "expected_output": "processed: {\"query\": \"hello\"}",
   "timeout": "5s"
 }
-`),
+`,
 		"README.md": fmt.Sprintf(`# %s
 
 A WASM tool for Orloj agents.

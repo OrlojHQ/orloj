@@ -2,259 +2,345 @@
   <img src="docs/public/logo.png" alt="Orloj" width="200" />
 </p>
 
-# Orloj
+# Agents are infrastructure.
 
-_Named after the [Prague Orloj](https://en.wikipedia.org/wiki/Prague_astronomical_clock), an astronomical clock that has coordinated complex mechanisms for over 600 years._
+## Orloj is the full stack for agentic systems.
 
-[![Release](https://img.shields.io/github/v/release/OrlojHQ/orloj?display_name=tag&sort=semver)](https://github.com/OrlojHQ/orloj/releases)
-[![CI](https://img.shields.io/github/actions/workflow/status/OrlojHQ/orloj/ci.yml?branch=main&label=ci)](https://github.com/OrlojHQ/orloj/actions/workflows/ci.yml)
-[![Docs](https://img.shields.io/github/actions/workflow/status/OrlojHQ/orloj/docs.yml?branch=main&label=docs)](https://docs.orloj.dev)
-[![Go Report Card](https://goreportcard.com/badge/github.com/OrlojHQ/orloj)](https://goreportcard.com/report/github.com/OrlojHQ/orloj)
-[![Go Reference](https://pkg.go.dev/badge/github.com/OrlojHQ/orloj.svg)](https://pkg.go.dev/github.com/OrlojHQ/orloj)
-[![PyPI - orloj-sdk](https://img.shields.io/pypi/v/orloj-sdk)](https://pypi.org/project/orloj-sdk/)
-[![npm - orloj](https://img.shields.io/npm/v/orloj)](https://www.npmjs.com/package/orloj)
-[![License](https://img.shields.io/github/license/OrlojHQ/orloj)](LICENSE)
+Build, run, govern, and observe multi-agent systems from one declarative stack: agents, tools, models, memory, schedules, webhooks, approvals, policies, workers, traces, metrics, and deployment primitives.
 
-**An orchestration runtime for multi-agent AI systems.**
+**[Quickstart](#quickstart)** | **[Docs](https://docs.orloj.dev)** | **[Stack](#the-orloj-agent-stack)** | **[How It Works](#how-it-works)** | **[Screenshots](#screenshots)**
 
-Declare your agents, tools, and policies as YAML. Orloj schedules, executes, routes, and governs them so you can run multi-agent systems in production with the same operational rigor you expect from infrastructure.
-
-> **Status:** Orloj is under active development. APIs and resource schemas may change between minor versions before 1.0.
-
-### Official SDKs
-
-Call the Orloj HTTP API from application code using the official clients (complementing **`orlojctl`** for operators). For REST shapes and generated types, see [HTTP API (OpenAPI)](#http-api-openapi).
-
-| Language     | Install                  | Links                                                                                    |
-| ------------ | ------------------------ | ---------------------------------------------------------------------------------------- |
-| Python       | `pip install orloj-sdk`  | [PyPI](https://pypi.org/project/orloj-sdk/) · [Repository](https://github.com/OrlojHQ/orloj-python-sdk) |
-| TypeScript   | `npm install orloj`      | [npm](https://www.npmjs.com/package/orloj) · [Repository](https://github.com/OrlojHQ/orloj-js-sdk)      |
-
-**Start here:** [See Orloj in Action](#orloj-in-action) · [5-minute tutorial](https://docs.orloj.dev/guides/five-minute-tutorial)
-
-## Orloj in Action
-
-Orloj is API/CLI-first; the web console is an optional operator UI.
-
-### Web Console Walkthrough
-
-These captures are from the web console running the `testing/scenarios-real/01-pipeline` scenario locally.
-
-### Run Lifecycle (GIF)
+> **Status:** Orloj is under active development. APIs and resource schemas may change before 1.0.
 
 ![Orloj task lifecycle animation](docs/public/readme/task-run-lifecycle.gif)
 
-Watch a full run flow from task creation through running to success in the live frontend.
+## What Is Orloj?
 
-### Dashboard Overview
+Orloj is the open-source full stack for developing and operating agentic systems.
+
+An agent system is no longer just a prompt and a loop. It has model routing, tool permissions, credentials, memory, retries,
+human approvals, schedules, webhooks, workers, traces, logs, metrics, and deployment topology. Orloj treats those pieces the
+way infrastructure platforms treat services: as versioned resources with desired state, status, controllers, leases,
+workers, runtime policy, and operational visibility.
+
+|                                            |                                                                                                                     |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| **If agents are services**                 | Orloj gives them manifests, runtime bounds, credentials, routing, observability, and lifecycle management.          |
+| **If agent teams are distributed systems** | Orloj gives them durable handoffs, fan-out, fan-in, retries, idempotency, dead-letter states, and worker ownership. |
+| **If tools are production access**         | Orloj gives them isolation, authorization, approval gates, retry policy, secrets, and audit-friendly traces.        |
+
+## The Orloj Agent Stack
+
+Orloj is not a single runtime component. It spans the layers teams need to develop, run, govern, and observe agentic systems.
+
+![The Orloj Agent Stack](docs/public/readme/orloj-agent-stack.svg)
+
+| Stack Layer                      | What Orloj Provides                                                                                                      |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| **Interfaces**                   | YAML manifests, `orlojctl`, REST API, SDKs, and web console.                                                             |
+| **Agent Definitions**            | `Agent`, `AgentSystem`, prompts, graph topology, roles, execution contracts, and runtime bounds.                         |
+| **Execution Runtime**            | Sequential and message-driven execution, workers, leases, heartbeats, retries, idempotency keys, and dead-letter states. |
+| **Model & Context Layer**        | `ModelEndpoint` resources, provider routing, fallback models, secrets, token budgets, and `Memory`.                      |
+| **Tool & Integration Layer**     | HTTP, gRPC, external services, webhook callbacks, MCP, CLI, WASM, auth, isolation, timeouts, and retries.                |
+| **Governance & Human Review**    | `AgentPolicy`, `AgentRole`, `ToolPermission`, `ToolApproval`, and `TaskApproval`.                                        |
+| **Observability & Operations**   | Traces, logs, messages, task history, watch streams, events, Prometheus metrics, OpenTelemetry spans, and UI views.      |
+| **State & Deployment Substrate** | In-memory and Postgres state, NATS JetStream messaging, Docker Compose, VPS deployments, and Kubernetes paths.           |
+
+## How The Stack Operates
+
+|                                                                                                                       |                                                                                                                              |                                                                                                                      |
+| --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| **Declare:** Write YAML resources for agents, systems, tools, model endpoints, memory, tasks, and policy.             | **Reconcile:** Controllers validate resources, update status, discover MCP tools, manage schedules, and drive state forward. | **Schedule:** Tasks target an AgentSystem and are assigned to workers based on capacity and requirements.            |
+| **Claim:** Workers claim tasks with leases, renew heartbeats, and allow takeover when ownership expires.              | **Execute:** Bounded agent loops route model calls, invoke tools, use memory, and pass messages through the graph.           | **Govern:** Policies, roles, tool permissions, ToolApprovals, and TaskApprovals fail closed during runtime.          |
+| **Observe:** Every run records trace events, task history, messages, logs, metrics, and optional OpenTelemetry spans. | **Scale:** Start local with an embedded worker, then move to Postgres, NATS JetStream, and distributed workers.              | **Operate:** Use the CLI, REST API, watch streams, web console, Prometheus metrics, and standard deployment targets. |
+
+## Orloj Is Right For You If
+
+|                                                                                                                              |
+| ---------------------------------------------------------------------------------------------------------------------------- |
+| You are moving from agent demos to systems that need owners, policies, retries, credentials, and traces.                     |
+| You want agents, tools, models, and workflows in version-controlled manifests instead of scattered scripts.                  |
+| You need multiple agents to hand off work through pipelines, hierarchies, fan-out, fan-in, loops, or delegated review.       |
+| You need tool calls to be authorized, isolated, approved, retried, and observable.                                           |
+| You want to develop locally in one process and keep the same resource model when you scale to workers and durable messaging. |
+
+## Problems Orloj Solves
+
+| Without Orloj                                                                                   | With Orloj                                                                                                                      |
+| ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Agent scripts, prompts, tool configs, and credentials drift across repos and machines.          | Agents, tools, models, memory, triggers, workers, and policy are declared as resources and applied through one API.             |
+| Multi-agent handoffs are hidden in custom code and hard to inspect after the run.               | AgentSystem graphs define the routing, while Task status records messages, branches, joins, delegation, trace, and history.     |
+| A failed process can leave work half-owned, duplicated, or silently lost.                       | Workers claim tasks with leases and heartbeats. Retries, idempotency keys, and dead-letter phases make failure visible.         |
+| Tool access is whatever the prompt or script happens to allow.                                  | Tool execution passes through policies, roles, permissions, operation rules, isolation modes, timeouts, retries, and approvals. |
+| Switching model providers means editing every agent or duplicating config.                      | Agents reference ModelEndpoint resources, with provider-specific config, secrets, and fallback routing centralized.             |
+| Recurring and event-driven agent work needs separate cron jobs, webhook glue, and dedupe logic. | TaskSchedule and TaskWebhook resources create Tasks from templates with concurrency, signature verification, and idempotency.   |
+| Debugging requires reading scattered logs and guessing what each agent did.                     | Task traces capture model calls, tool calls, errors, token usage, latency, approvals, retries, messages, and output.            |
+
+## What Is In The Stack
+
+| Layer          | Resources and Runtime Behavior                                                                                                                 |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Agents**     | `Agent` resources define prompts, model refs, fallback models, tools, roles, memory access, execution contracts, and bounds.                   |
+| **Systems**    | `AgentSystem` resources compose agents into graphs with edges, conditional routing, fan-out, fan-in, delegation, and human review checkpoints. |
+| **Tasks**      | `Task` resources execute an AgentSystem and track phase, output, attempts, leases, messages, joins, delegation, trace, history, and blockers.  |
+| **Models**     | `ModelEndpoint` resources route calls to OpenAI, Anthropic, AWS Bedrock, Azure OpenAI, Ollama, mock, and OpenAI-compatible providers.          |
+| **Tools**      | `Tool` resources support HTTP, external services, gRPC, webhook callbacks, MCP, CLI, and WASM with runtime policy and auth.                    |
+| **Memory**     | `Memory` resources back task-scoped and persistent memory through in-memory, pgvector, or HTTP providers.                                      |
+| **Triggers**   | `TaskSchedule` and `TaskWebhook` resources create Tasks from cron schedules and signed HTTP events.                                            |
+| **Governance** | `AgentPolicy`, `AgentRole`, `ToolPermission`, `ToolApproval`, and `TaskApproval` enforce model, tool, and review controls at runtime.          |
+| **Workers**    | `Worker` resources declare capacity, region, supported models, GPU support, heartbeat, and current task load.                                  |
+
+## Example: An Agent System As Code
+
+Define an agent:
+
+```yaml
+apiVersion: orloj.dev/v1
+kind: Agent
+metadata:
+  name: research-agent
+spec:
+  model_ref: openai-default
+  prompt: |
+    You are the research stage.
+    Produce concise, verifiable findings for the writer.
+  tools:
+    - web_search
+  allowed_tools:
+    - web_search
+  limits:
+    max_steps: 6
+    timeout: 30s
+```
+
+Bind it to a model endpoint:
+
+```yaml
+apiVersion: orloj.dev/v1
+kind: ModelEndpoint
+metadata:
+  name: openai-default
+spec:
+  provider: openai
+  base_url: https://api.openai.com/v1
+  default_model: gpt-4o
+  auth:
+    secretRef: openai-api-key
+```
+
+Wire agents into a graph:
+
+```yaml
+apiVersion: orloj.dev/v1
+kind: AgentSystem
+metadata:
+  name: report-system
+spec:
+  agents:
+    - planner-agent
+    - research-agent
+    - writer-agent
+  graph:
+    planner-agent:
+      edges:
+        - to: research-agent
+    research-agent:
+      edges:
+        - to: writer-agent
+```
+
+Run it as a task:
+
+```yaml
+apiVersion: orloj.dev/v1
+kind: Task
+metadata:
+  name: weekly-report
+spec:
+  system: report-system
+  input:
+    topic: enterprise AI copilots
+  retry:
+    max_attempts: 2
+    backoff: 2s
+  message_retry:
+    max_attempts: 2
+    backoff: 250ms
+    max_backoff: 2s
+    jitter: full
+```
+
+## Governance Built Into The Runtime
+
+Governance in Orloj is not a documentation convention. It is evaluated while work is being executed.
+
+|                    |                                                                                               |
+| ------------------ | --------------------------------------------------------------------------------------------- |
+| **AgentPolicy**    | Constrains allowed models, blocked tools, token budget, child depth, and child task creation. |
+| **AgentRole**      | Grants named permissions to agents.                                                           |
+| **ToolPermission** | Defines what permissions or operation rules are required for a tool invocation.               |
+| **ToolApproval**   | Pauses risky tool calls until a reviewer approves or denies them.                             |
+| **TaskApproval**   | Pauses graph nodes or final output for human review, denial, or request-changes loops.        |
+
+Unauthorized actions fail closed and appear in the task trace.
+
+## How It Works
+
+| Component         | Responsibility                                                                                                                                                 |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `orlojd`          | Runs the REST API, web console, resource stores, watch/event endpoints, controllers, schedulers, and optional embedded worker.                                 |
+| `orlojworker`     | Claims tasks, renews leases, executes agent graphs, consumes message-driven inboxes, routes models, invokes tools, and reports status.                         |
+| `orlojctl`        | Applies manifests, scaffolds systems, creates secrets, runs tasks, watches resources, reviews approvals, inspects logs, traces, graphs, messages, and metrics. |
+| **Storage**       | Uses in-memory storage for local development or Postgres for production resource state, task claiming, leases, and persistence.                                |
+| **Messaging**     | Uses sequential mode for local simplicity or message-driven mode with memory or NATS JetStream for distributed handoffs.                                       |
+| **Observability** | Exposes task trace and history, task logs, message lifecycle, Prometheus metrics, OpenTelemetry spans, structured logs, and web console views.                 |
+
+## Screenshots
+
+### Operator Dashboard
 
 ![Orloj dashboard overview](docs/public/readme/dashboard-overview.png)
 
-View the operator dashboard with system status and active workload at a glance.
+System status and active workload at a glance.
 
 ### System Topology
 
 ![Orloj system topology view](docs/public/readme/system-topology.png)
 
-Inspect the agent-system graph topology and understand how nodes connect.
+Inspect the graph that connects agents.
 
-## Why Orloj
+### Task Graph
 
-Running AI agents in production today looks a lot like running containers before container orchestration: ad-hoc scripts, no governance, no observability, and no standard way to manage an agent fleet. Orloj provides:
+![Orloj task detail graph view](docs/public/readme/task-detail-graph.png)
 
-- **Agents-as-Code** -- declare agents, their models, tools, and constraints in version-controlled YAML manifests.
-- **DAG-based orchestration** -- pipeline, hierarchical, and swarm-loop topologies with fan-out/fan-in support.
-- **Model routing** -- bind agents to OpenAI, Anthropic, Azure OpenAI, Ollama, and other endpoints. Switch providers without changing agent definitions.
-- **Tool isolation** -- execute tools in containers, WASM sandboxes, or process isolation with configurable timeout and retry.
-- **Governance built in** -- policies, roles, and tool permissions enforced at the execution layer. Unauthorized tool calls fail closed.
-- **Production reliability** -- lease-based task ownership, idempotent replay, capped exponential retry with jitter, and dead-letter handling.
-- **Web console** -- built-in UI with topology views, task inspection, and live event streaming.
+Follow node-level execution progress.
+
+### Trace And Logs
+
+![Orloj task trace and logs view](docs/public/readme/task-trace-logs.png)
+
+Debug model calls, tool calls, latency, errors, and output.
 
 ## Quickstart
 
-**[Get started in 5 minutes](https://docs.orloj.dev/guides/five-minute-tutorial)** — scaffold with `orlojctl init`, add your API key, apply manifests, and run a pipeline with `orlojctl run`.
-
-Install **orlojctl** (CLI) via Homebrew:
+Install the CLI:
 
 ```bash
 brew tap OrlojHQ/orloj
 brew install orlojctl
 ```
 
-Formula versions follow [Orloj releases](https://github.com/OrlojHQ/orloj/releases).
-
-Or install all binaries (**orlojd**, **orlojworker**, **orlojctl**) with the install script:
+Or install the binaries:
 
 ```bash
 curl -sSfL https://raw.githubusercontent.com/OrlojHQ/orloj/main/scripts/install.sh | sh
 ```
 
-You can also download binaries manually from [GitHub Releases](https://github.com/OrlojHQ/orloj/releases). Then run:
+Start Orloj with an embedded worker and in-memory state:
 
 ```bash
-# Start the server with an embedded worker
-./orlojd --storage-backend=memory --task-execution-mode=sequential --embedded-worker
+orlojd --storage-backend=memory --embedded-worker
 ```
 
-Open **[http://127.0.0.1:8080/](http://127.0.0.1:8080/)** to explore the web console, then apply a starter blueprint. The example manifests live in this repo -- clone it or [browse them on GitHub](https://github.com/OrlojHQ/orloj/tree/main/examples):
+Scaffold a pipeline:
 
 ```bash
-# Apply a starter blueprint (pipeline: planner -> research -> writer)
-./orlojctl apply -f examples/blueprints/pipeline/ --run
-
-# Check the result
-./orlojctl get task bp-pipeline-task
+orlojctl init demo
 ```
 
-Or build from source (requires Go 1.25+):
+Create the model secret expected by the scaffold:
 
 ```bash
-go build -o orlojd ./cmd/orlojd
-go build -o orlojctl ./cmd/orlojctl
+orlojctl create secret openai-api-key --from-literal value=sk-your-key-here
 ```
 
-When you are ready to scale, switch to message-driven mode with distributed workers and Postgres persistence. See the [Quickstart guide](https://docs.orloj.dev/getting-started/quickstart#scaling-to-production) for details. Full walkthrough: [5-minute tutorial](https://docs.orloj.dev/guides/five-minute-tutorial).
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────┐
-│                  Server (orlojd)                     │
-│                                                     │
-│  ┌──────────────┐   ┌────────────────┐              │
-│  │  API Server   │──►│ Resource Store  │             │
-│  │   (REST)      │   │ mem / postgres  │             │
-│  └──────┬───────┘   └────────────────┘              │
-│         │                                           │
-│         ▼                                           │
-│  ┌──────────────┐   ┌────────────────┐              │
-│  │   Services    │──►│ Task Scheduler │              │
-│  └──────────────┘   └───────┬────────┘              │
-└─────────────────────────────┼───────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────┐
-│                 Workers (orlojworker)                │
-│                                                     │
-│  ┌──────────────┐   ┌───────────────┐               │
-│  │  Task Worker  │──►│ Model Gateway │               │
-│  │              │   └───────────────┘               │
-│  │              │──►┌───────────────┐               │
-│  │              │   │  Tool Runtime  │               │
-│  │              │   └───────────────┘               │
-│  │       ◄──────┼───┌───────────────┐               │
-│  │              │──►│  Message Bus   │               │
-│  └──────────────┘   └───────────────┘               │
-└─────────────────────────────────────────────────────┘
-```
-
-**Server** (`orlojd`) -- API server, resource store (in-memory or Postgres), background services, and task scheduler.
-
-**Workers** (`orlojworker`) -- claim tasks, execute agent graphs, route model requests, run tools, and handle inter-agent messaging.
-
-**Governance** -- AgentPolicy, AgentRole, and ToolPermission resources enforced inline during every tool call and model interaction.
-
-Persistence is backed by Postgres (or in-memory for local dev). Message-driven mode uses NATS JetStream for durable agent-to-agent messaging.
-
-## HTTP API (OpenAPI)
-
-The v1 REST API is described in [openapi/openapi.yaml](openapi/openapi.yaml) (OpenAPI 3.1). Shared request/response models live under [openapi/schemas/](openapi/schemas/); the root file is **generated** by [openapi/build_openapi.py](openapi/build_openapi.py) (`python3 openapi/build_openapi.py`). CI runs `npx @redocly/cli lint openapi/openapi.yaml`. Contributors: see [Contributing — OpenAPI](CONTRIBUTING.md#openapi) for what to edit and what not to hand-edit.
-
-## Resources
-
-Orloj manages 15 resource types, all defined as declarative YAML with `apiVersion`, `kind`, `metadata`, `spec`, and `status` fields:
-
-**Core**
-
-
-| Resource      | Purpose                                              |
-| ------------- | ---------------------------------------------------- |
-| Agent         | Unit of work backed by a language model              |
-| AgentSystem   | Directed graph composing multiple agents             |
-| ModelEndpoint | Connection to a model provider                       |
-| Tool          | External capability with isolation and retry         |
-| Secret        | Credential storage                                   |
-| Memory        | Vector-backed retrieval for agents                   |
-| McpServer     | MCP server connection that discovers/syncs MCP tools |
-
-
-**Governance**
-
-
-| Resource       | Purpose                                    |
-| -------------- | ------------------------------------------ |
-| AgentPolicy    | Token, model, and tool constraints         |
-| AgentRole      | Named permission set bound to agents       |
-| ToolPermission | Required permissions for tool invocation   |
-| ToolApproval   | Approval record for gated tool invocations |
-
-
-**Scheduling & Triggers**
-
-
-| Resource     | Purpose                                    |
-| ------------ | ------------------------------------------ |
-| Task         | Request to execute an AgentSystem          |
-| TaskSchedule | Cron-based task creation                   |
-| TaskWebhook  | Event-triggered task creation              |
-| Worker       | Execution unit with capability declaration |
-
-
-## More Screenshots
-
-### Task Detail and Graph
-
-![Orloj task detail graph view](docs/public/readme/task-detail-graph.png)
-
-Drill into a task to see node-level execution state and graph progress.
-
-### Trace and Logs
-
-![Orloj task trace and logs view](docs/public/readme/task-trace-logs.png)
-
-Open trace and log detail to debug runtime behavior without leaving the task view.
-
-## Documentation
-
-Browse **[docs.orloj.dev](https://docs.orloj.dev)**.
-
-- [Changelog](CHANGELOG.md) -- notable changes by release
-- [5-minute tutorial](https://docs.orloj.dev/guides/five-minute-tutorial) -- scaffold, model key, first run
-- [Getting Started](https://docs.orloj.dev/getting-started/install) -- install, quickstart
-- [Concepts](https://docs.orloj.dev/concepts/architecture) -- architecture, agents, tasks, tools, model routing, governance
-- [Guides](https://docs.orloj.dev/guides/) -- deploy a pipeline, configure routing, build tools, set up governance
-- [Deploy & Operate](https://docs.orloj.dev/deploy/) -- local, VPS, Kubernetes, [remote CLI access](https://docs.orloj.dev/deploy/remote-cli-access)
-- [Reference](https://docs.orloj.dev/reference/cli) -- CLI, API, resource schemas
-- [Security](https://docs.orloj.dev/operations/security) -- control plane API tokens, secrets, tool isolation
-- [Examples](examples/README.md) -- per-kind YAML under `examples/resources/`, starter `blueprints/`, and `use-cases/` (in this repo)
-
-## Docker Compose
-
-Run the full stack (Postgres + server + 2 workers) with Docker Compose:
+Apply the resources and include the sample task:
 
 ```bash
-docker compose up --build -d
-docker compose ps
+orlojctl apply -f demo/ --run
 ```
 
-The Compose images include the server and workers only. To drive the API from your machine, install **`orlojctl`**:
+Run a new task with your own input:
 
 ```bash
-brew tap OrlojHQ/orloj
-brew install orlojctl
+orlojctl run --system demo-system topic="The future of open source AI"
 ```
 
-Or via the install script:
+Inspect the run:
 
 ```bash
-curl -sSfL https://raw.githubusercontent.com/OrlojHQ/orloj/main/scripts/install.sh | ORLOJ_BINARIES="orlojctl" sh
+orlojctl get tasks
+orlojctl trace task <task-name>
+orlojctl logs task/<task-name>
 ```
 
-You can also download it from [GitHub Releases](https://github.com/OrlojHQ/orloj/releases). See [Deploy & Operate](https://docs.orloj.dev/deploy/) for more details.
+Open the console at [http://127.0.0.1:8080/](http://127.0.0.1:8080/).
+
+## Production Shape
+
+Local development can run in one process. Production can split the Orloj server and workers:
+
+|                      |                                                                                          |
+| -------------------- | ---------------------------------------------------------------------------------------- |
+| **Local**            | `orlojd --storage-backend=memory --embedded-worker`                                      |
+| **Persistent**       | `orlojd --storage-backend=postgres` with Postgres-backed resource state.                 |
+| **Distributed**      | `orlojd` plus one or more `orlojworker` processes with message-driven execution.         |
+| **Durable handoffs** | `--agent-message-bus-backend=nats-jetstream` for runtime agent messages.                 |
+| **Observability**    | `/metrics`, OpenTelemetry export, task traces, logs, message views, and the web console. |
+
+Configure `ORLOJ_POSTGRES_DSN` before using the Postgres examples. Configure `ORLOJ_NATS_URL` or
+`ORLOJ_AGENT_MESSAGE_NATS_URL` when NATS is not running on the default local address.
+
+```bash
+orlojd \
+  --storage-backend=postgres \
+  --task-execution-mode=message-driven \
+  --agent-message-bus-backend=nats-jetstream
+```
+
+```bash
+orlojworker \
+  --storage-backend=postgres \
+  --task-execution-mode=message-driven \
+  --agent-message-bus-backend=nats-jetstream \
+  --agent-message-consume
+```
+
+## What Orloj Is Not
+
+|                               |                                                                                                                                                 |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Not an agent framework**    | Orloj does not force a prompt style or reasoning pattern. It operates the stack around agents as infrastructure resources.                      |
+| **Not a prompt manager**      | Prompts live in Agent manifests, but the product is the operating stack around execution, routing, policy, and operations.                      |
+| **Not just governance**       | Governance is built in, but Orloj also handles scheduling, workers, model routing, memory, tools, triggers, messaging, traces, and deployments. |
+| **Not just a dashboard**      | The web console is an operator UI over the same API and resource model used by `orlojctl` and automation.                                       |
+| **Not a toy workflow runner** | The same manifest model can run locally, with Postgres persistence, or across distributed workers and durable message queues.                   |
+
+## Docs And Examples
+
+|                                                                         |                                                                                |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| [5-minute tutorial](https://docs.orloj.dev/guides/five-minute-tutorial) | Scaffold, configure a model key, and run a first agent system.                 |
+| [Architecture](https://docs.orloj.dev/concepts/architecture)            | Server, workers, governance, execution modes, and reliability characteristics. |
+| [Starter blueprints](https://docs.orloj.dev/guides/starter-blueprints)  | Pipeline, hierarchical, and swarm-loop topologies.                             |
+| [Governance guide](https://docs.orloj.dev/guides/setup-governance)      | Policies, roles, tool permissions, and runtime enforcement.                    |
+| [Deploy and operate](https://docs.orloj.dev/deploy/)                    | Local, VPS, Kubernetes, remote CLI access, and production configuration.       |
+| Examples                                                                | Resource samples, blueprints, and use-case bundles.                            |
+
+## SDKs
+
+Use the REST API directly, operate through `orlojctl`, or call Orloj from application code with official SDKs.
+
+| Language   | Install                 | Links                                       |
+| ---------- | ----------------------- | ------------------------------------------- | --------------------------------------------------------- |
+| Python     | `pip install orloj-sdk` | [PyPI](https://pypi.org/project/orloj-sdk/) | [Repository](https://github.com/OrlojHQ/orloj-python-sdk) |
+| TypeScript | `npm install orloj`     | [npm](https://www.npmjs.com/package/orloj)  | [Repository](https://github.com/OrlojHQ/orloj-js-sdk)     |
 
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for environment setup, test matrix, and PR lifecycle details.
+
+Helpful starting points:
 
 - [Good first issue](https://github.com/OrlojHQ/orloj/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22good%20first%20issue%22)
 - [Help wanted](https://github.com/OrlojHQ/orloj/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22help%20wanted%22)

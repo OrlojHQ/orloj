@@ -118,7 +118,6 @@ type AgentMessageConsumerManager struct {
 	taskApprovals  TaskApprovalUpserter
 	policies       AgentPolicyLookup
 	mu             sync.Mutex
-	seenMu         sync.Mutex
 	consumers      map[string]context.CancelFunc
 	seenMessage    map[string]time.Time
 	taskMemory     map[string]*SharedMemoryStore
@@ -517,9 +516,7 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 			}
 		}
 		toolRT = NewOrlojToolRuntime(toolRT, orlojStore, orlojCfg)
-		for _, name := range BuiltinOrlojToolNames() {
-			agent.Spec.Tools = append(agent.Spec.Tools, name)
-		}
+		agent.Spec.Tools = append(agent.Spec.Tools, BuiltinOrlojToolNames()...)
 		agent.Spec.Tools = dedupeStrings(agent.Spec.Tools)
 	}
 	if memRef := strings.TrimSpace(agent.Spec.Memory.Ref); memRef != "" {
@@ -532,9 +529,7 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 			}
 		}
 		toolRT = memRT
-		for _, name := range resources.MemoryToolNamesForOperations(agent.Spec.Memory.Allow) {
-			agent.Spec.Tools = append(agent.Spec.Tools, name)
-		}
+		agent.Spec.Tools = append(agent.Spec.Tools, resources.MemoryToolNamesForOperations(agent.Spec.Memory.Allow)...)
 		agent.Spec.Tools = dedupeStrings(agent.Spec.Tools)
 	}
 	agentCtx, agentSpan := telemetry.StartAgentSpan(ctx, agent.Metadata.Name, msg.MessageID, msg.Attempt)
@@ -1653,39 +1648,6 @@ func (m *AgentMessageConsumerManager) recordRetryOrDeadLetter(ctx context.Contex
 	return false, 0, lastErr
 }
 
-func (m *AgentMessageConsumerManager) isDuplicate(msg AgentMessage) bool {
-	now := time.Now().UTC()
-	id := strings.TrimSpace(msg.MessageID)
-	if id == "" {
-		id = fmt.Sprintf("%s|%s|%s|%s|%d", strings.TrimSpace(msg.TaskID), strings.TrimSpace(msg.FromAgent), strings.TrimSpace(msg.ToAgent), strings.TrimSpace(msg.Timestamp), msg.Attempt)
-	}
-
-	m.seenMu.Lock()
-	defer m.seenMu.Unlock()
-	cutoff := now.Add(-m.dedupeTTL)
-	for seenID, seenAt := range m.seenMessage {
-		if seenAt.Before(cutoff) {
-			delete(m.seenMessage, seenID)
-		}
-	}
-	if seenAt, exists := m.seenMessage[id]; exists && now.Sub(seenAt) <= m.dedupeTTL {
-		return true
-	}
-	m.seenMessage[id] = now
-	return false
-}
-
-func appendIncomingMessage(task *resources.Task, msg AgentMessage) {
-	if task == nil {
-		return
-	}
-	_ = ensureTaskMessageRecord(task, msg)
-	trimTaskMessages(task)
-}
-
-func appendOutgoingMessage(task *resources.Task, msg AgentMessage) {
-	appendIncomingMessage(task, msg)
-}
 
 func ensureTaskMessageRecord(task *resources.Task, msg AgentMessage) int {
 	if task == nil {
@@ -1967,18 +1929,6 @@ func extendWorkerLease(task *resources.Task, workerID string, duration time.Dura
 	task.Status.LeaseUntil = now.Add(duration).Format(time.RFC3339Nano)
 }
 
-func hasTaskMessage(messages []resources.TaskMessage, messageID string) bool {
-	messageID = strings.TrimSpace(messageID)
-	if messageID == "" {
-		return false
-	}
-	for _, message := range messages {
-		if strings.EqualFold(strings.TrimSpace(message.MessageID), messageID) {
-			return true
-		}
-	}
-	return false
-}
 
 func hasTraceMarker(trace []resources.TaskTraceEvent, eventType, messageID string) bool {
 	messageID = strings.TrimSpace(messageID)
@@ -2298,10 +2248,6 @@ func durableName(workerID, namespace, agent string) string {
 		base = "worker"
 	}
 	return sanitizeSubjectToken(base) + "-" + sanitizeSubjectToken(namespace) + "-" + sanitizeSubjectToken(agent)
-}
-
-func nextAgentsFromSystem(system resources.AgentSystem, current string) []string {
-	return nextAgentsFromSystemForOutput(system, current, "", "")
 }
 
 func nextAgentsFromSystemForOutput(system resources.AgentSystem, current string, output string, delegateOf string) []string {

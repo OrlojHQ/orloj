@@ -39,6 +39,32 @@ func NormalizeObjectMetaNamespace(meta *ObjectMeta) {
 	meta.Namespace = NormalizeNamespace(meta.Namespace)
 }
 
+// reservedSubresourceSuffixes are path segments that collide with API sub-
+// resource routes (e.g. /agents/{name}/status).
+var reservedSubresourceSuffixes = []string{"status", "logs", "exec", "scale", "proxy", "binding"}
+
+// ValidateMetadataName checks that a resource name is safe for use as a URL
+// path segment and as a store key component. It rejects empty names, names
+// containing '/', whitespace, or reserved subresource suffixes.
+func ValidateMetadataName(name string) error {
+	if name == "" {
+		return fmt.Errorf("metadata.name is required")
+	}
+	if strings.ContainsAny(name, "/ \t\n\r") {
+		return fmt.Errorf("metadata.name %q must not contain '/', spaces, or whitespace", name)
+	}
+	if strings.HasPrefix(name, ".") || strings.HasPrefix(name, "..") {
+		return fmt.Errorf("metadata.name %q must not start with '.'", name)
+	}
+	lower := strings.ToLower(name)
+	for _, suffix := range reservedSubresourceSuffixes {
+		if lower == suffix {
+			return fmt.Errorf("metadata.name %q is a reserved subresource name", name)
+		}
+	}
+	return nil
+}
+
 // ListMeta carries pagination metadata in list responses. Continue holds the
 // cursor (last item's name) for the next page; empty means no more results.
 type ListMeta struct {
@@ -133,8 +159,8 @@ func (a *Agent) Normalize() error {
 		return fmt.Errorf("unsupported kind %q: only Agent is supported in MVP", a.Kind)
 	}
 	NormalizeObjectMetaNamespace(&a.Metadata)
-	if a.Metadata.Name == "" {
-		return fmt.Errorf("metadata.name is required")
+	if err := ValidateMetadataName(a.Metadata.Name); err != nil {
+		return err
 	}
 	a.Spec.Model = strings.TrimSpace(a.Spec.Model)
 	a.Spec.ModelRef = strings.TrimSpace(a.Spec.ModelRef)

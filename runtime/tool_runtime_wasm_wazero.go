@@ -160,7 +160,8 @@ func (e *WazeroExecutor) Execute(ctx context.Context, req WASMToolExecuteRequest
 		)
 	}
 
-	var stdout, stderr bytes.Buffer
+	stdout := NewBoundedWriter(DefaultMaxToolOutputBytes)
+	stderr := NewBoundedWriter(DefaultMaxToolOutputBytes)
 	instanceID := atomic.AddUint64(&wasmInstanceCounter, 1)
 	moduleName := strings.TrimSpace(req.Tool)
 	if moduleName == "" {
@@ -170,8 +171,8 @@ func (e *WazeroExecutor) Execute(ctx context.Context, req WASMToolExecuteRequest
 
 	modCfg := wazero.NewModuleConfig().
 		WithStdin(bytes.NewReader(payload)).
-		WithStdout(&stdout).
-		WithStderr(&stderr).
+		WithStdout(stdout).
+		WithStderr(stderr).
 		WithName(moduleName).
 		WithStartFunctions("_start")
 

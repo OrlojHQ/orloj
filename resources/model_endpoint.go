@@ -58,8 +58,9 @@ func (m *ModelEndpoint) Normalize() error {
 		return fmt.Errorf("unsupported kind %q for ModelEndpoint", m.Kind)
 	}
 	NormalizeObjectMetaNamespace(&m.Metadata)
-	if strings.TrimSpace(m.Metadata.Name) == "" {
-		return fmt.Errorf("metadata.name is required")
+	m.Metadata.Name = strings.TrimSpace(m.Metadata.Name)
+	if err := ValidateMetadataName(m.Metadata.Name); err != nil {
+		return err
 	}
 
 	provider := strings.ToLower(strings.TrimSpace(m.Spec.Provider))

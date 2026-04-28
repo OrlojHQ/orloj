@@ -1,7 +1,6 @@
 package agentruntime
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -143,10 +142,10 @@ type osExecContainerCommandRunner struct{}
 func (r *osExecContainerCommandRunner) Run(ctx context.Context, binary string, args []string, stdin string, env map[string]string) (string, string, error) {
 	cmd := exec.CommandContext(ctx, binary, args...) //nolint:gosec
 	cmd.Stdin = strings.NewReader(stdin)
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	stdout := NewBoundedWriter(DefaultMaxToolOutputBytes)
+	stderr := NewBoundedWriter(DefaultMaxToolOutputBytes)
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 	if len(env) > 0 {
 		cmd.Env = append(os.Environ(), mapToEnv(env)...)
 	}
