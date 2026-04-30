@@ -7,18 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-04-30
+
 ### Added
 
-- **Memory `spec.endpoint_secret_ref`**: Memory resources now support resolving the endpoint connection string from a Secret reference, keeping sensitive infrastructure details (hostnames, DSNs) out of plaintext manifests. Mutually exclusive with `spec.endpoint`; when set, the controller resolves the Secret and uses its value as the endpoint.
-- **AgentPolicy `spec.target_agents`**: Policies can now target specific agents within a system. When `target_agents` is set, only listed agents are subject to the policy's constraints (model checks, blocked tools, token budget). Enables per-agent token budgets and fine-grained tool restrictions without splitting agent systems.
 - **`ContextAdapter` resource and AgentSystem `spec.context_adapter`**: reference a sanitization Tool (`spec.tool_ref`) with `spec.on_error` (`reject`|`passthrough`). The tool receives raw task input as JSON and returns sanitized JSON — the adapter enforces the contract but leaves sanitization logic entirely to the tool. Adapts input before the first agent runs in both sequential and message-driven execution flows. CRUD at `/v1/context-adapters`; web console includes list/detail pages, sidebar navigation, create template, and Agent System status linking.
-
+- **AgentPolicy `spec.target_agents`**: Policies can now target specific agents within a system. When `target_agents` is set, only listed agents are subject to the policy's constraints (model checks, blocked tools, token budget). Enables per-agent token budgets and fine-grained tool restrictions without splitting agent systems.
+- **Memory `spec.endpoint_secret_ref`**: Memory resources now support resolving the endpoint connection string from a Secret reference, keeping sensitive infrastructure details (hostnames, DSNs) out of plaintext manifests. Mutually exclusive with `spec.endpoint`; when set, the controller resolves the Secret and uses its value as the endpoint.
 - **Approval resolution trace events**: Task and tool approval outcomes (`approved`, `denied`, `expired`, `changes_requested`) are now recorded in `task.status.trace` with the reviewer identity and comment. Previously only the `pending` event was traced, leaving no audit trail for the decision itself.
 
 ### Fixed
 
 - YAML manifest parser now correctly strips inline comments after quoted values (e.g. `value: "sk-secret" # comment`). Previously the comment text and quotes leaked into the stored value, causing silent authentication failures when used in Secrets.
 - Model gateway cache now invalidates when a referenced Secret's `ResourceVersion` changes, not only when the `ModelEndpoint` itself changes. Previously, rotating an API key Secret required restarting `orlojd` or re-applying the ModelEndpoint for the new key to take effect.
+- Anthropic and Bedrock model gateways now auto-strip unsupported JSON Schema keywords (`additionalProperties`, `minimum`, `maximum`, `pattern`, etc.) from `output_schema` before sending to the provider, preventing 400 errors when using structured output with schemas authored for OpenAI.
+- `orlojctl apply -f <dir>` no longer errors on non-manifest files (e.g. JSON data files without a `kind` field); such files are silently skipped.
 
 ## [0.11.0] - 2026-04-23
 
@@ -350,7 +353,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Homebrew tap distribution (`OrlojHQ/orloj`)
 - Blueprint scaffolding via `orlojctl init`
 
-[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/OrlojHQ/orloj/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/OrlojHQ/orloj/compare/v0.10.2...v0.11.0
 [0.10.2]: https://github.com/OrlojHQ/orloj/compare/v0.10.1...v0.10.2
 [0.10.1]: https://github.com/OrlojHQ/orloj/compare/v0.10.0...v0.10.1
