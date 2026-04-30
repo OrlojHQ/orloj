@@ -224,6 +224,7 @@ export default defineConfig({
                 { text: "ModelEndpoint", link: "/reference/resources/model-endpoint" },
                 { text: "McpServer", link: "/reference/resources/mcp-server" },
                 { text: "Memory", link: "/reference/resources/memory" },
+                { text: "ContextAdapter", link: "/reference/resources/context-adapter" },
                 { text: "Secret", link: "/reference/resources/secret" },
                 { text: "SealedSecret", link: "/reference/resources/sealed-secret" },
               ],

@@ -13,29 +13,30 @@ import (
 // StoreSet holds all resource stores. Schedule/webhook stores are nil when
 // IncludeScheduleStores is false (worker-only mode).
 type StoreSet struct {
-	Agents        *store.AgentStore
-	AgentSystems  *store.AgentSystemStore
-	ModelEPs      *store.ModelEndpointStore
-	Tools         *store.ToolStore
-	Secrets       *store.SecretStore
-	SealedSecrets *store.SealedSecretStore
-	SealingKeys   *store.SealingKeyStore
-	Memories      *store.MemoryStore
-	Policies      *store.AgentPolicyStore
-	Roles         *store.AgentRoleStore
-	ToolPerms     *store.ToolPermissionStore
-	ToolApprovals *store.ToolApprovalStore
-	TaskApprovals *store.TaskApprovalStore
-	Tasks         *store.TaskStore
-	TaskSchedules *store.TaskScheduleStore
-	TaskWebhooks  *store.TaskWebhookStore
-	WebhookDedupe *store.WebhookDedupeStore
-	Workers       *store.WorkerStore
-	McpServers    *store.McpServerStore
-	LocalAdmins   *store.LocalAdminStore
-	APITokens     *store.APITokenStore
-	AuthSessions  *store.AuthSessionStore
-	DB            *sql.DB
+	Agents          *store.AgentStore
+	AgentSystems    *store.AgentSystemStore
+	ModelEPs        *store.ModelEndpointStore
+	Tools           *store.ToolStore
+	Secrets         *store.SecretStore
+	SealedSecrets   *store.SealedSecretStore
+	SealingKeys     *store.SealingKeyStore
+	Memories        *store.MemoryStore
+	ContextAdapters *store.ContextAdapterStore
+	Policies        *store.AgentPolicyStore
+	Roles           *store.AgentRoleStore
+	ToolPerms       *store.ToolPermissionStore
+	ToolApprovals   *store.ToolApprovalStore
+	TaskApprovals   *store.TaskApprovalStore
+	Tasks           *store.TaskStore
+	TaskSchedules   *store.TaskScheduleStore
+	TaskWebhooks    *store.TaskWebhookStore
+	WebhookDedupe   *store.WebhookDedupeStore
+	Workers         *store.WorkerStore
+	McpServers      *store.McpServerStore
+	LocalAdmins     *store.LocalAdminStore
+	APITokens       *store.APITokenStore
+	AuthSessions    *store.AuthSessionStore
+	DB              *sql.DB
 }
 
 // Close closes the database connection if one is open.
@@ -81,6 +82,7 @@ func OpenStores(cfg StoreConfig, logger *log.Logger) (*StoreSet, error) {
 		s.Tasks = store.NewTaskStore()
 		s.Workers = store.NewWorkerStore()
 		s.McpServers = store.NewMcpServerStore()
+		s.ContextAdapters = store.NewContextAdapterStore()
 		s.LocalAdmins = store.NewLocalAdminStore()
 		s.APITokens = store.NewAPITokenStore()
 		s.AuthSessions = store.NewAuthSessionStore()
@@ -151,6 +153,7 @@ func OpenStores(cfg StoreConfig, logger *log.Logger) (*StoreSet, error) {
 		s.Tasks = store.NewTaskStoreWithDB(db)
 		s.Workers = store.NewWorkerStoreWithDB(db)
 		s.McpServers = store.NewMcpServerStoreWithDB(db)
+		s.ContextAdapters = store.NewContextAdapterStoreWithDB(db)
 		s.LocalAdmins = store.NewLocalAdminStoreWithDB(db)
 		s.APITokens = store.NewAPITokenStoreWithDB(db)
 		s.AuthSessions = store.NewAuthSessionStoreWithDB(db)

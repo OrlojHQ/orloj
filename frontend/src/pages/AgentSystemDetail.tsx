@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useAgentSystem,
@@ -201,10 +201,15 @@ export function AgentSystemDetail() {
       case "worker":
         navigate("/workers", fromGraph);
         break;
+      case "adapter":
+        navigate(`/context-adapters/${encodeURIComponent(nodeName)}`, fromGraph);
+        break;
     }
   };
 
   const yamlContent = JSON.stringify(system, null, 2);
+
+  const contextAdapterRef = system.spec.context_adapter?.trim();
 
   const tabs: { id: Tab; label: string }[] = [
     { id: "graph", label: "Resource Tree" },
@@ -299,6 +304,17 @@ export function AgentSystemDetail() {
               <span className="detail-field__label">Agents</span>
               <span className="detail-field__value">{(system.spec.agents ?? []).join(", ")}</span>
             </div>
+            {contextAdapterRef && (
+              <div className="detail-field">
+                <span className="detail-field__label">Context adapter</span>
+                <Link
+                  className="detail-field__value mono"
+                  to={`/context-adapters/${encodeURIComponent(contextAdapterRef)}`}
+                >
+                  {contextAdapterRef}
+                </Link>
+              </div>
+            )}
             {system.status?.lastError && (
               <div className="detail-field">
                 <span className="detail-field__label">Last Error</span>

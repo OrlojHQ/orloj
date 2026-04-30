@@ -46,6 +46,20 @@ func (s *MemoryStore) UpsertMovingKey(ctx context.Context, oldStoreKey string, i
 	)
 }
 
+func (s *ContextAdapterStore) UpsertMovingKey(ctx context.Context, oldStoreKey string, item resources.ContextAdapter) (resources.ContextAdapter, error) {
+	return jsonPayloadMovingKey(ctx, s.db, s.items, &s.mu, oldStoreKey, item,
+		"ContextAdapter", tableContextAdapters,
+		func(it resources.ContextAdapter) error { return it.Normalize() },
+		func(it resources.ContextAdapter) string { return scopedNameFromMeta(it.Metadata) },
+		func(it resources.ContextAdapter) any { return it.Spec },
+		upsertContextAdapterSQL,
+		func(it *resources.ContextAdapter) *resources.ObjectMeta { return &it.Metadata },
+		func(ctx context.Context, it resources.ContextAdapter) (resources.ContextAdapter, error) {
+			return s.Upsert(ctx, it)
+		},
+	)
+}
+
 func (s *AgentPolicyStore) UpsertMovingKey(ctx context.Context, oldStoreKey string, item resources.AgentPolicy) (resources.AgentPolicy, error) {
 	return jsonPayloadMovingKey(ctx, s.db, s.items, &s.mu, oldStoreKey, item,
 		"AgentPolicy", tableAgentPolicies,

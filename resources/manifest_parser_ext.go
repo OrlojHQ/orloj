@@ -264,6 +264,8 @@ func ParseAgentSystemManifest(data []byte) (AgentSystem, error) {
 			if err := applyObjectMetaField(&out.Metadata, key, value); err != nil {
 				return AgentSystem{}, err
 			}
+		case section == "spec" && subsection == "" && (key == "context_adapter" || key == "contextAdapter"):
+			out.Spec.ContextAdapter = value
 		case section == "spec" && subsection == "graph" && currentGraphNode != "":
 			node := out.Spec.Graph[currentGraphNode]
 			switch {
@@ -958,6 +960,10 @@ func ParseMemoryManifest(data []byte) (Memory, error) {
 				if section == "metadata" {
 					section = "metadata.labels"
 				}
+			case "auth":
+				if section == "spec" {
+					section = "spec.auth"
+				}
 			}
 			continue
 		}
@@ -988,6 +994,12 @@ func ParseMemoryManifest(data []byte) (Memory, error) {
 			out.Spec.Provider = value
 		case section == "spec" && (key == "embedding_model" || key == "embeddingModel"):
 			out.Spec.EmbeddingModel = value
+		case section == "spec" && key == "endpoint":
+			out.Spec.Endpoint = value
+		case section == "spec" && (key == "endpoint_secret_ref" || key == "endpointSecretRef"):
+			out.Spec.EndpointSecretRef = value
+		case section == "spec.auth" && (key == "secretRef" || key == "secret_ref"):
+			out.Spec.Auth.SecretRef = value
 		}
 	}
 
@@ -1050,6 +1062,10 @@ func ParseAgentPolicyManifest(data []byte) (AgentPolicy, error) {
 				if section == "spec" {
 					subsection = "target_tasks"
 				}
+			case "target_agents":
+				if section == "spec" {
+					subsection = "target_agents"
+				}
 			}
 			continue
 		}
@@ -1068,6 +1084,10 @@ func ParseAgentPolicyManifest(data []byte) (AgentPolicy, error) {
 		}
 		if section == "spec" && subsection == "target_tasks" && strings.HasPrefix(trimmed, "- ") {
 			out.Spec.TargetTasks = append(out.Spec.TargetTasks, stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))))
+			continue
+		}
+		if section == "spec" && subsection == "target_agents" && strings.HasPrefix(trimmed, "- ") {
+			out.Spec.TargetAgents = append(out.Spec.TargetAgents, stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))))
 			continue
 		}
 

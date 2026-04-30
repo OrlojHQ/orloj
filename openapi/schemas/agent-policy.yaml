@@ -17,6 +17,10 @@ components:
         target_tasks:
           type: array
           items: { type: string }
+        target_agents:
+          type: array
+          items: { type: string }
+          description: Agent names this policy applies to. When set, only listed agents are affected; other agents in the same system/task are unconstrained by this policy.
         max_child_depth:
           type: integer
           description: Maximum nesting depth for tasks created by orloj.task.create. Default 5.

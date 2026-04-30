@@ -6,6 +6,7 @@
 
 - `agents` ([]string): participating agent names.
 - `graph` (map[string]GraphEdge): per-node routing.
+- `context_adapter` (string): optional reference to a [ContextAdapter](./context-adapter.md) resource. When set, the adapter's tool sanitizes raw task input before the first agent runs.
 - `completion_review` (ReviewCheckpoint): optional final human review before the task is marked `Succeeded`.
 
 `GraphEdge` fields:

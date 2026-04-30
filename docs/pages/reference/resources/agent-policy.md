@@ -10,6 +10,7 @@
 - `apply_mode` (string): `scoped` or `global`
 - `target_systems` ([]string)
 - `target_tasks` ([]string)
+- `target_agents` ([]string): when set, only listed agents are subject to this policy's constraints (model checks, blocked tools, token budget). Agents not in the list are unaffected. When empty, the policy applies to all agents in the matched systems/tasks.
 
 ## Defaults and Validation
 

@@ -120,6 +120,12 @@ export function MemoryDetail() {
                 <span className="detail-field__value mono">{memory.spec.endpoint}</span>
               </div>
             )}
+            {memory.spec.endpoint_secret_ref && (
+              <div className="detail-field">
+                <span className="detail-field__label">Endpoint Secret</span>
+                <span className="detail-field__value mono">{memory.spec.endpoint_secret_ref}</span>
+              </div>
+            )}
             {memory.spec.auth?.secretRef && (
               <div className="detail-field">
                 <span className="detail-field__label">Auth Secret</span>

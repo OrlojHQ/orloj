@@ -90,6 +90,15 @@ const TEMPLATES: Record<string, string> = {
     metadata: { name: "my-memory", namespace: "default" },
     spec: { type: "vector", provider: "in-memory", embedding_model: "text-embedding-3-small" },
   }, null, 2),
+  ContextAdapter: JSON.stringify({
+    apiVersion: "orloj.dev/v1",
+    kind: "ContextAdapter",
+    metadata: { name: "my-context-adapter", namespace: "default" },
+    spec: {
+      tool_ref: "my-sanitizer-tool",
+      on_error: "reject",
+    },
+  }, null, 2),
   AgentPolicy: JSON.stringify({
     apiVersion: "orloj.dev/v1",
     kind: "AgentPolicy",

@@ -49,6 +49,11 @@ type AgentPolicyLookup interface {
 	List(ctx context.Context) ([]resources.AgentPolicy, error)
 }
 
+// ContextAdapterGetter resolves ContextAdapter resources by store key (namespace-qualified).
+type ContextAdapterGetter interface {
+	Get(ctx context.Context, key string) (resources.ContextAdapter, bool, error)
+}
+
 // AgentMessageConsumerOptions configures inbox consumers in a worker.
 type AgentMessageConsumerOptions struct {
 	WorkerID            string
@@ -74,6 +79,7 @@ type AgentMessageConsumerOptions struct {
 	ToolApprovals       ToolApprovalUpserter
 	TaskApprovals       TaskApprovalUpserter
 	Policies            AgentPolicyLookup
+	ContextAdapters     ContextAdapterGetter
 }
 
 // ToolApprovalUpserter persists ToolApproval resources when a governed tool requires approval.
@@ -117,6 +123,7 @@ type AgentMessageConsumerManager struct {
 	toolApprovals  ToolApprovalUpserter
 	taskApprovals  TaskApprovalUpserter
 	policies       AgentPolicyLookup
+	contextAdapters ContextAdapterGetter
 	mu             sync.Mutex
 	consumers      map[string]context.CancelFunc
 	seenMessage    map[string]time.Time
@@ -180,6 +187,7 @@ func NewAgentMessageConsumerManager(
 		toolApprovals:  opts.ToolApprovals,
 		taskApprovals:  opts.TaskApprovals,
 		policies:       opts.Policies,
+		contextAdapters: opts.ContextAdapters,
 		extensions:     NormalizeExtensions(opts.Extensions),
 		consumers:      make(map[string]context.CancelFunc),
 		seenMessage:    make(map[string]time.Time),
@@ -414,11 +422,12 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 	}
 	agent.Spec.Model = effectiveModel
 
+	var matchedPolicies []resources.AgentPolicy
 	if m.policies != nil {
 		allPolicies, policyErr := m.policies.List(ctx)
 		if policyErr == nil && len(allPolicies) > 0 {
-			policies := MatchedPolicies(task, system, allPolicies)
-			if err := EnforcePoliciesForAgent(agent, effectiveModel, policies); err != nil {
+			matchedPolicies = MatchedPolicies(task, system, allPolicies)
+			if err := EnforcePoliciesForAgent(agent, effectiveModel, matchedPolicies); err != nil {
 				_ = m.tasks.AppendLog(ctx, taskKey, fmt.Sprintf("agent policy violation: %s error=%s", agent.Metadata.Name, err))
 				retryScheduled, delay, markErr := m.recordRetryOrDeadLetter(ctx, taskKey, msg, record, fmt.Errorf("agent %s policy violation: %w", agent.Metadata.Name, err))
 				if markErr != nil {
@@ -433,6 +442,48 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 	}
 
 	input := copyStringMap(task.Spec.Input)
+	var contextAdapterEvent *AgentStepEvent
+	if resources.IsFirstExecutionAgent(system, strings.TrimSpace(msg.ToAgent)) && strings.TrimSpace(system.Spec.ContextAdapter) != "" && m.contextAdapters != nil {
+		deps := ContextAdapterDeps{
+			Tools:          m.tools,
+			Isolated:       m.isolated,
+			Wasm:           m.wasmRT,
+			SecretResolver: m.secretResolver,
+			Cli:            m.cliConfig,
+			McpMgr:         m.mcpSessionMgr,
+			McpStore:       m.mcpServerStore,
+		}
+		adapterRef := strings.TrimSpace(system.Spec.ContextAdapter)
+		adaptStart := time.Now()
+		var adaptErr error
+		input, adaptErr = AdaptTaskInputViaContextAdapter(ctx, ns, scopedTaskName(ns, adapterRef), m.contextAdapters, deps, input)
+		if adaptErr != nil {
+			_ = m.tasks.AppendLog(ctx, taskKey, fmt.Sprintf("context adapter: %v", adaptErr))
+			task.Status.Trace = append(task.Status.Trace, resources.TaskTraceEvent{
+				Timestamp: adaptStart.UTC().Format(time.RFC3339Nano),
+				Type:      "context_adapter",
+				Agent:     strings.TrimSpace(msg.ToAgent),
+				Attempt:   max(msg.Attempt, task.Status.Attempts),
+				BranchID:  strings.TrimSpace(msg.BranchID),
+				Message:   fmt.Sprintf("adapter=%s error=%v", adapterRef, adaptErr),
+				LatencyMS: time.Since(adaptStart).Milliseconds(),
+			})
+			retryScheduled, delay, markErr := m.recordRetryOrDeadLetter(ctx, taskKey, msg, record, fmt.Errorf("context adapter: %w", adaptErr))
+			if markErr != nil {
+				return markErr
+			}
+			if retryScheduled {
+				return RetryAfter(delay, nil)
+			}
+			return nil
+		}
+		contextAdapterEvent = &AgentStepEvent{
+			Timestamp: adaptStart.UTC().Format(time.RFC3339Nano),
+			Type:      "context_adapter",
+			Message:   fmt.Sprintf("adapter=%s fields=%d", adapterRef, len(input)),
+			LatencyMS: time.Since(adaptStart).Milliseconds(),
+		}
+	}
 	input["inbox.from"] = strings.TrimSpace(msg.FromAgent)
 	input["inbox.to"] = strings.TrimSpace(msg.ToAgent)
 	input["inbox.content"] = strings.TrimSpace(msg.Payload)
@@ -508,12 +559,9 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 			ParentTaskName:  task.Metadata.Name,
 			CurrentDepth:    parseDepthLabel(task.Metadata.Labels),
 		}
-		if m.policies != nil {
-			if allPolicies, policyErr := m.policies.List(ctx); policyErr == nil {
-				matched := MatchedPolicies(task, system, allPolicies)
-				orlojCfg.MaxDepth = MinimumChildDepth(matched)
-				orlojCfg.MaxChildren = MinimumChildTasks(matched)
-			}
+		if len(matchedPolicies) > 0 {
+			orlojCfg.MaxDepth = MinimumChildDepth(matchedPolicies)
+			orlojCfg.MaxChildren = MinimumChildTasks(matchedPolicies)
 		}
 		toolRT = NewOrlojToolRuntime(toolRT, orlojStore, orlojCfg)
 		agent.Spec.Tools = append(agent.Spec.Tools, BuiltinOrlojToolNames()...)
@@ -555,6 +603,9 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 		}
 		return nil
 	}
+	if contextAdapterEvent != nil {
+		result.StepEvents = append([]AgentStepEvent{*contextAdapterEvent}, result.StepEvents...)
+	}
 	telemetry.EndSpanOK(agentSpan,
 		attribute.Int("orloj.tokens.used", result.TokensUsed),
 		attribute.Int("orloj.tokens.estimated", result.EstimatedTokens),
@@ -563,6 +614,23 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 	)
 	telemetry.RecordAgentExecution(agent.Metadata.Name, effectiveModel, result.Duration.Seconds(), result.TokensUsed, result.EstimatedTokens)
 	telemetry.RecordMessagePhase("succeeded", strings.TrimSpace(msg.ToAgent))
+	if agentBudget := AgentTokenBudget(matchedPolicies, agent.Metadata.Name); agentBudget > 0 && result.TokensUsed > agentBudget {
+		reason := fmt.Errorf(
+			"per-agent token budget exceeded for %s: used=%d budget=%d source=%s",
+			agent.Metadata.Name,
+			result.TokensUsed,
+			agentBudget,
+			strings.TrimSpace(result.TokenSource),
+		)
+		retryScheduled, delay, markErr := m.recordRetryOrDeadLetter(ctx, taskKey, msg, record, reason)
+		if markErr != nil {
+			return markErr
+		}
+		if retryScheduled {
+			return RetryAfter(delay, reason)
+		}
+		return nil
+	}
 	if tokenBudgetExceeded(task, result) {
 		reason := fmt.Errorf(
 			"token budget exceeded after agent %s: used=%d budget=%d source=%s",

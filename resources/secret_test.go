@@ -65,6 +65,61 @@ func TestParseSecretManifestForPutMergesRedactedPlaceholders(t *testing.T) {
 	}
 }
 
+func TestParseSecretManifestStringDataWithInlineComment(t *testing.T) {
+	raw := []byte(`
+apiVersion: orloj.dev/v1
+kind: Secret
+metadata:
+  name: api-key
+  namespace: team-a
+spec:
+  stringData:
+    value: "sk-ant-api03-abc123" # replace-with-your-actual-key
+`)
+	secret, err := ParseSecretManifest(raw)
+	if err != nil {
+		t.Fatalf("parse secret manifest failed: %v", err)
+	}
+	encoded, ok := secret.Spec.Data["value"]
+	if !ok {
+		t.Fatal("expected spec.data.value from stringData")
+	}
+	decoded, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		t.Fatalf("expected valid base64, got %v", err)
+	}
+	if string(decoded) != "sk-ant-api03-abc123" {
+		t.Fatalf("expected decoded value %q, got %q (inline comment leaked into value)", "sk-ant-api03-abc123", string(decoded))
+	}
+}
+
+func TestParseSecretManifestUnquotedValueWithInlineComment(t *testing.T) {
+	raw := []byte(`
+apiVersion: orloj.dev/v1
+kind: Secret
+metadata:
+  name: api-key
+spec:
+  stringData:
+    value: sk-test-123 # this is a comment
+`)
+	secret, err := ParseSecretManifest(raw)
+	if err != nil {
+		t.Fatalf("parse secret manifest failed: %v", err)
+	}
+	encoded, ok := secret.Spec.Data["value"]
+	if !ok {
+		t.Fatal("expected spec.data.value from stringData")
+	}
+	decoded, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		t.Fatalf("expected valid base64, got %v", err)
+	}
+	if string(decoded) != "sk-test-123" {
+		t.Fatalf("expected decoded value %q, got %q (inline comment leaked into value)", "sk-test-123", string(decoded))
+	}
+}
+
 func TestSecretNormalizeRejectsInvalidBase64Data(t *testing.T) {
 	secret := Secret{
 		APIVersion: "orloj.dev/v1",

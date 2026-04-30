@@ -181,6 +181,7 @@ func runApply(cmd *cobra.Command, args []string) error {
 	}
 
 	skippedRunnableTasks := 0
+	skippedNonManifest := 0
 	if isDir && !includeRunnable {
 		filtered := make([]string, 0, len(files))
 		for _, f := range files {
@@ -223,6 +224,10 @@ func runApply(cmd *cobra.Command, args []string) error {
 
 		kind, err := resources.DetectKind(raw)
 		if err != nil {
+			if isDir {
+				skippedNonManifest++
+				continue
+			}
 			applyErrs = append(applyErrs, fmt.Sprintf("%s: %v", f, err))
 			continue
 		}
@@ -2060,6 +2065,7 @@ var applyEndpoints = map[string]string{
 	"secret":         "/v1/secrets",
 	"sealedsecret":   "/v1/sealed-secrets",
 	"memory":         "/v1/memories",
+	"contextadapter": "/v1/context-adapters",
 	"agentpolicy":    "/v1/agent-policies",
 	"agentrole":      "/v1/agent-roles",
 	"toolpermission": "/v1/tool-permissions",

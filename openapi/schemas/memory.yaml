@@ -11,6 +11,7 @@ components:
         provider: { type: string }
         embedding_model: { type: string }
         endpoint: { type: string }
+        endpoint_secret_ref: { type: string }
         auth: { $ref: "#/components/schemas/MemoryAuthConfig" }
     MemoryStatus:
       type: object

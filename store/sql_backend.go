@@ -30,6 +30,7 @@ const (
 	tableToolApprovals   = "tool_approvals"
 	tableTaskApprovals   = "task_approvals"
 	tableMcpServers      = "mcp_servers"
+	tableContextAdapters = "context_adapters"
 )
 
 // EnsurePostgresSchema runs all pending database migrations. New schema changes
@@ -385,6 +386,27 @@ func upsertMemorySQL(ctx context.Context, db dbExecer, name string, item resourc
 	}
 	_, err = db.ExecContext(ctx,
 		`INSERT INTO memories(name, namespace, status_phase, payload, updated_at)
+		 VALUES($1, $2, $3, $4::jsonb, NOW())
+		 ON CONFLICT(name) DO UPDATE SET
+		     namespace = EXCLUDED.namespace,
+		     status_phase = EXCLUDED.status_phase,
+		     payload = EXCLUDED.payload,
+		     updated_at = NOW()`,
+		name,
+		resources.NormalizeNamespace(item.Metadata.Namespace),
+		strings.ToLower(strings.TrimSpace(item.Status.Phase)),
+		string(payload),
+	)
+	return err
+}
+
+func upsertContextAdapterSQL(ctx context.Context, db dbExecer, name string, item resources.ContextAdapter) error {
+	payload, err := json.Marshal(item)
+	if err != nil {
+		return err
+	}
+	_, err = db.ExecContext(ctx,
+		`INSERT INTO context_adapters(name, namespace, status_phase, payload, updated_at)
 		 VALUES($1, $2, $3, $4::jsonb, NOW())
 		 ON CONFLICT(name) DO UPDATE SET
 		     namespace = EXCLUDED.namespace,

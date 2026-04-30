@@ -13,9 +13,10 @@ A Memory resource configures a persistent memory backend that agents can read fr
   - `http`: delegates to an external HTTP service. Requires `endpoint`. See [HTTP Adapter](../../concepts/memory/providers.md#http-adapter).
   - Custom providers can be registered via the Go provider registry.
 - `embedding_model` (string): reference to a ModelEndpoint resource that provides an OpenAI-compatible `/embeddings` API. Required for vector providers like `pgvector`. The endpoint's `base_url`, `auth`, and `default_model` are used to generate embeddings. Resolved in the same namespace by default; use `namespace/name` for cross-namespace references.
-- `endpoint` (string): connection string or URL. For `pgvector`, a Postgres DSN (e.g. `postgres://user@host:5432/db`). For `http`, the adapter service URL. Not needed for `in-memory`.
+- `endpoint` (string): connection string or URL. For `pgvector`, a Postgres DSN (e.g. `postgres://user@host:5432/db`). For `http`, the adapter service URL. Not needed for `in-memory`. Mutually exclusive with `endpoint_secret_ref`.
+- `endpoint_secret_ref` (string): reference to a Secret resource whose first data value contains the full endpoint connection string or URL (including credentials when applicable). Use this instead of `endpoint` when the connection string contains sensitive information (hostnames, internal network topology, passwords). When using a full DSN with embedded password, `auth.secretRef` is not needed. Mutually exclusive with `endpoint`. The controller resolves the Secret and uses the decoded value as the endpoint.
 - `auth` (object):
-  - `secretRef` (string): reference to a Secret resource containing credentials. For `http`, used as a bearer token. For `pgvector`, injected as the Postgres password into the DSN.
+  - `secretRef` (string): reference to a Secret resource containing credentials. For `http`, used as a bearer token. For `pgvector`, injected as the Postgres password into the DSN. Not needed when `endpoint_secret_ref` points to a DSN that already includes the password.
 
 ### Built-in Memory Tools
 
@@ -34,7 +35,7 @@ These tools do not need to be listed in the agent's `spec.tools` -- they are inj
 ## Defaults and Validation
 
 - `provider` defaults to `in-memory` when omitted or empty.
-- `endpoint` is required when `provider` is `pgvector`, `http`, or any cloud-hosted built-in provider.
+- `endpoint` or `endpoint_secret_ref` is required when `provider` is `pgvector`, `http`, or any cloud-hosted built-in provider. If both are set, `endpoint_secret_ref` takes precedence.
 - `embedding_model` is required when `provider` is `pgvector`. It must reference a valid ModelEndpoint.
 - When `auth.secretRef` is set, the controller resolves the Secret and passes the token to the provider.
 - The Memory controller validates the provider, resolves auth, and performs a connectivity check (`Ping`). Unsupported providers, missing secrets, or failed connectivity moves the resource to `Error` phase.

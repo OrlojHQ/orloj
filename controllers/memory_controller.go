@@ -120,6 +120,17 @@ func (c *MemoryController) reconcileByName(ctx context.Context, name string) err
 				EmbeddingModel: item.Spec.EmbeddingModel,
 				Endpoint:       item.Spec.Endpoint,
 			}
+			if epRef := strings.TrimSpace(item.Spec.EndpointSecretRef); epRef != "" {
+				epValue, err := c.resolveAuthToken(ctx, item.Metadata.Namespace, epRef)
+				if err != nil {
+					item.Status.Phase = "Error"
+					item.Status.LastError = "endpoint secret resolution failed: " + err.Error()
+					item.Status.ObservedGeneration = item.Metadata.Generation
+					_, upsertErr := c.store.Upsert(ctx, item)
+					return upsertErr
+				}
+				cfg.Endpoint = epValue
+			}
 			if ref := strings.TrimSpace(item.Spec.Auth.SecretRef); ref != "" {
 				token, err := c.resolveAuthToken(ctx, item.Metadata.Namespace, ref)
 				if err != nil {

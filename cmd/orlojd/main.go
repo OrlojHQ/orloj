@@ -205,6 +205,7 @@ func main() {
 	taskController.SetToolApprovalStore(stores.ToolApprovals)
 	taskController.SetTaskApprovalStore(stores.TaskApprovals)
 	taskController.SetModelEndpointStore(stores.ModelEPs)
+	taskController.SetContextAdapterStore(stores.ContextAdapters)
 	taskController.SetExecutor(taskExecutor)
 	taskController.SetExtensions(extensions)
 	wasmRuntimeCfg := startup.IsolatedToolRuntimeConfig{
@@ -256,28 +257,29 @@ func main() {
 		requestAuthorizer = api.NewAPIKeyAuthorizer(*apiKey)
 	}
 	server := api.NewServerWithOptions(api.Stores{
-		Agents:        stores.Agents,
-		AgentSystems:  stores.AgentSystems,
-		ModelEPs:      stores.ModelEPs,
-		Tools:         stores.Tools,
-		Secrets:       stores.Secrets,
-		SealedSecrets: stores.SealedSecrets,
-		SealingKeys:   stores.SealingKeys,
-		Memories:      stores.Memories,
-		Policies:      stores.Policies,
-		AgentRoles:    stores.Roles,
-		ToolPerms:     stores.ToolPerms,
-		ToolApprovals: stores.ToolApprovals,
-		TaskApprovals: stores.TaskApprovals,
-		Tasks:         stores.Tasks,
-		TaskSchedules: stores.TaskSchedules,
-		TaskWebhooks:  stores.TaskWebhooks,
-		WebhookDedupe: stores.WebhookDedupe,
-		Workers:       stores.Workers,
-		McpServers:    stores.McpServers,
-		LocalAdmins:   stores.LocalAdmins,
-		APITokens:     stores.APITokens,
-		AuthSessions:  stores.AuthSessions,
+		Agents:          stores.Agents,
+		AgentSystems:    stores.AgentSystems,
+		ModelEPs:        stores.ModelEPs,
+		Tools:           stores.Tools,
+		Secrets:         stores.Secrets,
+		SealedSecrets:   stores.SealedSecrets,
+		SealingKeys:     stores.SealingKeys,
+		Memories:        stores.Memories,
+		ContextAdapters: stores.ContextAdapters,
+		Policies:        stores.Policies,
+		AgentRoles:      stores.Roles,
+		ToolPerms:       stores.ToolPerms,
+		ToolApprovals:   stores.ToolApprovals,
+		TaskApprovals:   stores.TaskApprovals,
+		Tasks:           stores.Tasks,
+		TaskSchedules:   stores.TaskSchedules,
+		TaskWebhooks:    stores.TaskWebhooks,
+		WebhookDedupe:   stores.WebhookDedupe,
+		Workers:         stores.Workers,
+		McpServers:      stores.McpServers,
+		LocalAdmins:     stores.LocalAdmins,
+		APITokens:       stores.APITokens,
+		AuthSessions:    stores.AuthSessions,
 	}, runtime, logger, api.ServerOptions{
 		Authorizer:     requestAuthorizer,
 		Extensions:     extensions,
@@ -383,6 +385,7 @@ func main() {
 						ToolApprovals:       stores.ToolApprovals,
 						TaskApprovals:       stores.TaskApprovals,
 						Policies:            stores.Policies,
+						ContextAdapters:     stores.ContextAdapters,
 					},
 				)
 				startBackground(func() { consumer.Start(ctx) })

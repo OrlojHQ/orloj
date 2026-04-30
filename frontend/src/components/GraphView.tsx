@@ -54,6 +54,7 @@ import {
   CircleDot,
   Layers,
   Map as MapIcon,
+  Shield,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -191,10 +192,11 @@ function pickRepresentativeTask(tasks: Task[]): Task | null {
 // Node kind config
 // ---------------------------------------------------------------------------
 
-type NodeKind = "system" | "agent" | "model" | "tool" | "secret" | "memory" | "role" | "task" | "schedule" | "webhook" | "worker";
+type NodeKind = "system" | "agent" | "model" | "tool" | "secret" | "memory" | "role" | "task" | "schedule" | "webhook" | "worker" | "adapter";
 
 const KIND_CONFIG: Record<NodeKind, { icon: React.ReactNode; colorVar: string }> = {
   system:  { icon: <Network   size={14} />, colorVar: "var(--accent)" },
+  adapter: { icon: <Shield     size={14} />, colorVar: "var(--yellow)" },
   agent:   { icon: <Bot        size={14} />, colorVar: "var(--green)" },
   model:   { icon: <Database   size={14} />, colorVar: "var(--blue)" },
   tool:    { icon: <Wrench     size={14} />, colorVar: "var(--yellow)" },
@@ -399,13 +401,22 @@ function buildTree(
     });
   }
 
-  // System → entry agents (if no natural entry exists, e.g. a loop, use the first agent)
+  // Context adapter node: sits between system and entry agents
+  const adapterRef = system.spec.context_adapter?.trim();
+  const adapterId = adapterRef ? nid("adapter", adapterRef) : null;
+  if (adapterRef && adapterId) {
+    regNode(adapterId, "adapter", adapterRef, "Ready", "context adapter");
+    regEdge(sysId, adapterId, true);
+  }
+
+  // System (or adapter) → entry agents
+  const entrySource = adapterId ?? sysId;
   if (entries.size > 0) {
     for (const aName of ordered) {
-      if (entries.has(aName)) regEdge(sysId, nid("agent", aName), true);
+      if (entries.has(aName)) regEdge(entrySource, nid("agent", aName), true);
     }
   } else if (ordered.length > 0) {
-    regEdge(sysId, nid("agent", ordered[0]), true);
+    regEdge(entrySource, nid("agent", ordered[0]), true);
   }
 
   // Agent → Agent routing edges (pipeline)
@@ -875,7 +886,7 @@ export function GraphView({ system, related, onNodeClick, animated, runningAgent
     [],
   );
 
-  const legendKinds: NodeKind[] = ["system", "agent", "model", "tool", "secret", "memory", "role", "task", "schedule", "webhook", "worker"];
+  const legendKinds: NodeKind[] = ["system", "adapter", "agent", "model", "tool", "secret", "memory", "role", "task", "schedule", "webhook", "worker"];
 
   return (
     <div className="graph-view">
