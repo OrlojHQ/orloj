@@ -59,9 +59,25 @@ spec:
 
 | Field | Description |
 |---|---|
-| `endpoint` | Full Postgres connection string (DSN). Example: `postgres://user@host:5432/dbname`. |
+| `endpoint` | Full Postgres connection string (DSN). Example: `postgres://user@host:5432/dbname`. Mutually exclusive with `endpoint_secret_ref`. |
+| `endpoint_secret_ref` | Reference to a Secret whose first data value contains the full Postgres DSN (including password). Use this instead of `endpoint` + `auth.secretRef` to keep all sensitive connection details in a single Secret. Mutually exclusive with `endpoint`. |
 | `embedding_model` | Name of a ModelEndpoint in the same namespace (or `namespace/name` for cross-namespace). The endpoint's `base_url` and `auth` are used to call the embeddings API, and `default_model` selects the model. |
-| `auth.secretRef` | Optional. Reference to a Secret containing the Postgres password. Injected into the DSN if the connection string doesn't already include one. |
+| `auth.secretRef` | Optional. Reference to a Secret containing the Postgres password. Injected into the DSN if the connection string doesn't already include one. Not needed when using `endpoint_secret_ref` with a full DSN that includes the password. |
+
+When the connection string is sensitive, use `endpoint_secret_ref` to store the entire DSN (including password) in a single Secret:
+
+```yaml
+apiVersion: orloj.dev/v1
+kind: Memory
+metadata:
+  name: team-knowledge
+  namespace: production
+spec:
+  type: vector
+  provider: pgvector
+  endpoint_secret_ref: pg-connection-string
+  embedding_model: openai-embeddings
+```
 
 ### How It Works
 

@@ -20,6 +20,8 @@ export interface AgentSystemSpec {
   agents?: string[];
   graph?: Record<string, GraphEdge>;
   completion_review?: ReviewCheckpointSpec;
+  /** References a ContextAdapter resource applied to raw task input before the first agent runs. */
+  context_adapter?: string;
 }
 
 export interface GraphEdge {
@@ -242,6 +244,7 @@ export interface MemoryConfig {
   provider?: string;
   embedding_model?: string;
   endpoint?: string;
+  endpoint_secret_ref?: string;
   auth?: MemoryAuthConfig;
 }
 
@@ -266,6 +269,24 @@ export interface MemoryEntriesResponse {
   count: number;
 }
 
+export interface ContextAdapterSpec {
+  tool_ref: string;
+  on_error?: string;
+}
+
+export interface ContextAdapterStatus {
+  phase?: string;
+  message?: string;
+}
+
+export interface ContextAdapter {
+  apiVersion: string;
+  kind: string;
+  metadata: ObjectMeta;
+  spec: ContextAdapterSpec;
+  status?: ContextAdapterStatus;
+}
+
 export interface AgentPolicy {
   apiVersion: string;
   kind: string;
@@ -281,6 +302,7 @@ export interface AgentPolicySpec {
   apply_mode?: string;
   target_systems?: string[];
   target_tasks?: string[];
+  target_agents?: string[];
 }
 
 export interface PolicyStatus {
@@ -787,6 +809,7 @@ export type ResourceKind =
   | "Secret"
   | "SealedSecret"
   | "Memory"
+  | "ContextAdapter"
   | "AgentPolicy"
   | "AgentRole"
   | "ToolPermission"
@@ -806,6 +829,7 @@ export const RESOURCE_ENDPOINTS: Record<ResourceKind, string> = {
   Secret: "secrets",
   SealedSecret: "sealed-secrets",
   Memory: "memories",
+  ContextAdapter: "context-adapters",
   AgentPolicy: "agent-policies",
   AgentRole: "agent-roles",
   ToolPermission: "tool-permissions",
@@ -827,6 +851,7 @@ export const RESOURCE_DETAIL_BASE_PATH: Record<ResourceKind, string> = {
   Secret: "/secrets",
   SealedSecret: "/sealed-secrets",
   Memory: "/memories",
+  ContextAdapter: "/context-adapters",
   AgentPolicy: "/policies",
   AgentRole: "/roles",
   ToolPermission: "/permissions",

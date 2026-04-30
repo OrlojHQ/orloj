@@ -13,6 +13,9 @@ import (
 // execution paths before the agent runs.
 func EnforcePoliciesForAgent(agent resources.Agent, effectiveModel string, policies []resources.AgentPolicy) error {
 	for _, policy := range policies {
+		if !policyAppliesToAgent(policy, agent.Metadata.Name) {
+			continue
+		}
 		if len(policy.Spec.AllowedModels) > 0 && !containsFoldSlice(policy.Spec.AllowedModels, effectiveModel) {
 			return fmt.Errorf("policy %q disallows model %q (model_ref=%q) for agent %q", policy.Metadata.Name, effectiveModel, agent.Spec.ModelRef, agent.Metadata.Name)
 		}
@@ -37,12 +40,17 @@ func MatchedPolicies(task resources.Task, system resources.AgentSystem, all []re
 	return out
 }
 
-// MinimumTokenBudget returns the smallest positive MaxTokensPerRun across the
-// given policies, or 0 when no budget is configured.
+// MinimumTokenBudget returns the smallest positive MaxTokensPerRun across
+// system-wide policies (those without target_agents), or 0 when no budget is
+// configured. Policies with target_agents are per-agent budgets and are handled
+// by AgentTokenBudget instead.
 func MinimumTokenBudget(policies []resources.AgentPolicy) int {
 	min := 0
 	for _, policy := range policies {
 		if policy.Spec.MaxTokensPerRun <= 0 {
+			continue
+		}
+		if len(policy.Spec.TargetAgents) > 0 {
 			continue
 		}
 		if min == 0 || policy.Spec.MaxTokensPerRun < min {
@@ -94,6 +102,36 @@ func MinimumChildTasks(policies []resources.AgentPolicy) int {
 		}
 		if min == 0 || policy.Spec.MaxChildTasks < min {
 			min = policy.Spec.MaxChildTasks
+		}
+	}
+	return min
+}
+
+// policyAppliesToAgent returns true when a policy should be enforced for the
+// named agent. Policies without target_agents apply to all agents. Policies
+// with target_agents only apply when the agent name is in the list.
+func policyAppliesToAgent(policy resources.AgentPolicy, agentName string) bool {
+	if len(policy.Spec.TargetAgents) == 0 {
+		return true
+	}
+	return containsFoldSlice(policy.Spec.TargetAgents, agentName)
+}
+
+// AgentTokenBudget returns the smallest positive MaxTokensPerRun across
+// policies that apply to the named agent, or 0 when no budget is configured.
+// Policies with target_agents only match the listed agents; policies without
+// target_agents apply to all agents.
+func AgentTokenBudget(policies []resources.AgentPolicy, agentName string) int {
+	min := 0
+	for _, policy := range policies {
+		if policy.Spec.MaxTokensPerRun <= 0 {
+			continue
+		}
+		if !policyAppliesToAgent(policy, agentName) {
+			continue
+		}
+		if min == 0 || policy.Spec.MaxTokensPerRun < min {
+			min = policy.Spec.MaxTokensPerRun
 		}
 	}
 	return min

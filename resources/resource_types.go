@@ -40,6 +40,7 @@ type AgentSystemSpec struct {
 	Agents           []string              `json:"agents,omitempty"`
 	Graph            map[string]GraphEdge  `json:"graph,omitempty"`
 	CompletionReview *ReviewCheckpointSpec `json:"completion_review,omitempty"`
+	ContextAdapter   string                `json:"context_adapter,omitempty"`
 }
 
 type GraphEdge struct {
@@ -254,9 +255,66 @@ func (a *AgentSystem) Normalize() error {
 		}
 	}
 
+	if a.Spec.ContextAdapter != "" {
+		a.Spec.ContextAdapter = strings.TrimSpace(a.Spec.ContextAdapter)
+	}
 	if a.Status.Phase == "" {
 		a.Status.Phase = "Pending"
 	}
+	return nil
+}
+
+// ContextAdapter configures a task-time hook that sanitizes task input via a Tool before any agent sees it.
+type ContextAdapter struct {
+	APIVersion string               `json:"apiVersion,omitempty" yaml:"apiVersion,omitempty"`
+	Kind       string               `json:"kind,omitempty" yaml:"kind,omitempty"`
+	Metadata   ObjectMeta           `json:"metadata" yaml:"metadata"`
+	Spec       ContextAdapterSpec   `json:"spec" yaml:"spec"`
+	Status     ContextAdapterStatus `json:"status,omitempty" yaml:"status,omitempty"`
+}
+
+type ContextAdapterSpec struct {
+	ToolRef string `json:"tool_ref" yaml:"tool_ref"`
+	OnError string `json:"on_error,omitempty" yaml:"on_error,omitempty"`
+}
+
+type ContextAdapterStatus struct {
+	Phase   string `json:"phase,omitempty" yaml:"phase,omitempty"`
+	Message string `json:"message,omitempty" yaml:"message,omitempty"`
+}
+
+type ContextAdapterList struct {
+	ListMeta `json:",inline" yaml:",inline"`
+	Items    []ContextAdapter `json:"items" yaml:"items"`
+}
+
+func (c *ContextAdapter) Normalize() error {
+	if c.APIVersion == "" {
+		c.APIVersion = "orloj.dev/v1"
+	}
+	if c.Kind == "" {
+		c.Kind = "ContextAdapter"
+	}
+	if !strings.EqualFold(c.Kind, "ContextAdapter") {
+		return fmt.Errorf("unsupported kind %q for ContextAdapter", c.Kind)
+	}
+	NormalizeObjectMetaNamespace(&c.Metadata)
+	if err := ValidateMetadataName(c.Metadata.Name); err != nil {
+		return err
+	}
+	c.Spec.ToolRef = strings.TrimSpace(c.Spec.ToolRef)
+	if c.Spec.ToolRef == "" {
+		return fmt.Errorf("spec.tool_ref is required")
+	}
+	if c.Spec.OnError == "" {
+		c.Spec.OnError = "reject"
+	}
+	mode := strings.ToLower(strings.TrimSpace(c.Spec.OnError))
+	if mode != "reject" && mode != "passthrough" {
+		return fmt.Errorf("invalid spec.on_error %q: expected reject or passthrough", c.Spec.OnError)
+	}
+	c.Spec.OnError = mode
+	c.Status.Phase = "Ready"
 	return nil
 }
 
@@ -698,11 +756,12 @@ type Memory struct {
 }
 
 type MemoryConfig struct {
-	Type           string           `json:"type,omitempty"`
-	Provider       string           `json:"provider,omitempty"`
-	EmbeddingModel string           `json:"embedding_model,omitempty"`
-	Endpoint       string           `json:"endpoint,omitempty"`
-	Auth           MemoryAuthConfig `json:"auth,omitempty"`
+	Type              string           `json:"type,omitempty"`
+	Provider          string           `json:"provider,omitempty"`
+	EmbeddingModel    string           `json:"embedding_model,omitempty"`
+	Endpoint          string           `json:"endpoint,omitempty"`
+	EndpointSecretRef string           `json:"endpoint_secret_ref,omitempty"`
+	Auth              MemoryAuthConfig `json:"auth,omitempty"`
 }
 
 type MemoryAuthConfig struct {
@@ -756,6 +815,7 @@ type AgentPolicySpec struct {
 	ApplyMode       string   `json:"apply_mode,omitempty"`
 	TargetSystems   []string `json:"target_systems,omitempty"`
 	TargetTasks     []string `json:"target_tasks,omitempty"`
+	TargetAgents    []string `json:"target_agents,omitempty"`
 	MaxChildDepth   int      `json:"max_child_depth,omitempty"`
 	MaxChildTasks   int      `json:"max_child_tasks,omitempty"`
 }

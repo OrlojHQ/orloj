@@ -15,6 +15,7 @@ import type {
   Secret,
   SealedSecret,
   Memory,
+  ContextAdapter,
   MemoryEntriesResponse,
   AgentPolicy,
   AgentRole,
@@ -153,6 +154,15 @@ export function useMemories() {
 export function useMemory(name: string) {
   return useResourceGet<Memory>("Memory", RESOURCE_ENDPOINTS.Memory, name);
 }
+
+export function useContextAdapters() {
+  return useResourceList<ContextAdapter>("ContextAdapter", RESOURCE_ENDPOINTS.ContextAdapter);
+}
+
+export function useContextAdapter(name: string) {
+  return useResourceGet<ContextAdapter>("ContextAdapter", RESOURCE_ENDPOINTS.ContextAdapter, name);
+}
+
 export function useMemoryEntries(
   name: string,
   params?: { prefix?: string; q?: string; limit?: number },

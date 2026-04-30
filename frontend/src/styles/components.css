@@ -1663,6 +1663,7 @@
 }
 
 .gnode--system::before   { background: var(--accent); }
+.gnode--adapter::before  { background: var(--yellow); }
 .gnode--agent::before    { background: var(--green); }
 .gnode--model::before    { background: var(--blue); }
 .gnode--tool::before     { background: var(--yellow); }
@@ -1676,6 +1677,7 @@
 
 /* Type-specific background tints (replaces left border stripe) */
 .gnode--system   { background: color-mix(in srgb, var(--accent) 8%, var(--node-bg)); }
+.gnode--adapter  { background: color-mix(in srgb, var(--yellow) 6%, var(--node-bg)); }
 .gnode--agent    { background: color-mix(in srgb, var(--green) 7%, var(--node-bg)); }
 .gnode--model    { background: color-mix(in srgb, var(--blue) 5%, var(--node-bg)); }
 .gnode--tool     { background: color-mix(in srgb, var(--yellow) 5%, var(--node-bg)); }
@@ -1733,6 +1735,7 @@
 
 /* Per-type icon ring tints */
 .gnode--system .gnode__icon-ring   { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent); }
+.gnode--adapter .gnode__icon-ring  { background: color-mix(in srgb, var(--yellow) 18%, transparent); color: var(--yellow); }
 .gnode--agent .gnode__icon-ring    { background: color-mix(in srgb, var(--green) 18%, transparent); color: var(--green); }
 .gnode--model .gnode__icon-ring    { background: color-mix(in srgb, var(--blue) 15%, transparent); color: var(--blue); }
 .gnode--tool .gnode__icon-ring     { background: color-mix(in srgb, var(--yellow) 15%, transparent); color: var(--yellow); }

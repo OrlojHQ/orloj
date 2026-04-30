@@ -181,6 +181,7 @@ func main() {
 		MaxArgvLength:   *cliToolMaxArgvLength,
 	}
 	taskController.SetCliToolRuntime(cliConfig, toolSecretResolver)
+	taskController.SetContextAdapterStore(stores.ContextAdapters)
 
 	agentMessageBus, closeAgentMessageBus := startup.NewAgentMessageBus(
 		logger, *agentMessageBusBackend, *agentMessageNATSURL,
@@ -237,6 +238,7 @@ func main() {
 					ToolApprovals:       stores.ToolApprovals,
 					TaskApprovals:       stores.TaskApprovals,
 					Policies:            stores.Policies,
+					ContextAdapters:     stores.ContextAdapters,
 				},
 			)
 			go consumer.Start(ctx)

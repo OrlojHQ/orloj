@@ -370,10 +370,11 @@ kind: Memory
 metadata:
   name: my-memory
 spec:
-  type: vector                         # vector | custom
-  provider: in-memory                  # in-memory | pinecone | weaviate | qdrant
-  embedding_model: text-embedding-3-small
-  endpoint: https://...                # provider endpoint (for remote providers)
+  type: vector                         # vector | kv | custom (informational)
+  provider: in-memory                  # in-memory | pgvector | http
+  embedding_model: text-embedding-3-small  # ModelEndpoint ref (required for pgvector)
+  endpoint: https://...                # provider endpoint (mutually exclusive with endpoint_secret_ref)
+  endpoint_secret_ref: pg-dsn-secret   # Secret ref for sensitive endpoints (mutually exclusive with endpoint)
   auth:
     secretRef: pinecone-key
 ```
@@ -394,6 +395,7 @@ spec:
   apply_mode: scoped                   # "scoped" | "global"
   target_systems: [my-system]          # for scoped mode
   target_tasks: [my-task]
+  target_agents: [agent-a, agent-b]    # optional - per-agent targeting within matched systems/tasks
   max_child_depth: 5
   max_child_tasks: 20
 ```

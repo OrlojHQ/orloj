@@ -348,6 +348,79 @@ func TestModelRouterOpenAICompatibleUsesProvidedSecretWhenPresent(t *testing.T) 
 	}
 }
 
+func TestModelRouterCacheInvalidatesOnSecretChange(t *testing.T) {
+	oldKey := "sk-old-key"
+	newKey := "sk-new-key"
+	secretName := "openai-api-key"
+	endpointKey := "team-a/openai-team-a"
+
+	secrets := &stubSecretLookup{items: map[string]resources.Secret{
+		"team-a/" + secretName: {
+			Metadata: resources.ObjectMeta{Name: secretName, Namespace: "team-a", ResourceVersion: "1"},
+			Spec:     resources.SecretSpec{Data: map[string]string{"value": base64.StdEncoding.EncodeToString([]byte(oldKey))}},
+		},
+	}}
+	lookup := &stubModelEndpointLookup{items: map[string]resources.ModelEndpoint{
+		endpointKey: {
+			Metadata: resources.ObjectMeta{Name: "openai-team-a", Namespace: "team-a", ResourceVersion: "10"},
+			Spec: resources.ModelEndpointSpec{
+				Provider:     "openai",
+				BaseURL:      "https://example.invalid/v1",
+				DefaultModel: "gpt-test",
+				Auth:         resources.ModelEndpointAuth{SecretRef: secretName},
+			},
+		},
+	}}
+
+	router := NewModelRouter(ModelRouterConfig{
+		Endpoints: lookup,
+		Secrets:   secrets,
+	})
+
+	gw1, err := router.gatewayForEndpoint(context.Background(), lookup.items[endpointKey], endpointKey)
+	if err != nil {
+		t.Fatalf("first gatewayForEndpoint failed: %v", err)
+	}
+	oaiGW1, ok := gw1.(*OpenAIModelGateway)
+	if !ok {
+		t.Fatalf("expected OpenAIModelGateway, got %T", gw1)
+	}
+	if oaiGW1.apiKey != oldKey {
+		t.Fatalf("expected apiKey=%q, got %q", oldKey, oaiGW1.apiKey)
+	}
+
+	// Call again with same endpoint and same secret -- should return cached gateway.
+	gw2, err := router.gatewayForEndpoint(context.Background(), lookup.items[endpointKey], endpointKey)
+	if err != nil {
+		t.Fatalf("second gatewayForEndpoint failed: %v", err)
+	}
+	if gw2 != gw1 {
+		t.Fatal("expected same cached gateway instance when nothing changed")
+	}
+
+	// Rotate the secret: update the value and bump its ResourceVersion.
+	// The ModelEndpoint ResourceVersion stays the same -- this is the bug scenario.
+	secrets.items["team-a/"+secretName] = resources.Secret{
+		Metadata: resources.ObjectMeta{Name: secretName, Namespace: "team-a", ResourceVersion: "2"},
+		Spec:     resources.SecretSpec{Data: map[string]string{"value": base64.StdEncoding.EncodeToString([]byte(newKey))}},
+	}
+
+	gw3, err := router.gatewayForEndpoint(context.Background(), lookup.items[endpointKey], endpointKey)
+	if err != nil {
+		t.Fatalf("third gatewayForEndpoint (after secret rotation) failed: %v", err)
+	}
+	if gw3 == gw1 {
+		t.Fatal("expected new gateway instance after secret rotation, got same cached object")
+	}
+	oaiGW3, ok := gw3.(*OpenAIModelGateway)
+	if !ok {
+		t.Fatalf("expected OpenAIModelGateway, got %T", gw3)
+	}
+	if oaiGW3.apiKey != newKey {
+		t.Fatalf("expected rotated apiKey=%q, got %q", newKey, oaiGW3.apiKey)
+	}
+}
+
 // --- Fallback routing test helpers ---
 
 type fallbackFailingGateway struct {

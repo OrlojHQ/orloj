@@ -52,6 +52,7 @@ type TaskController struct {
 	cliSecretResolver agentruntime.SecretResolver
 	mcpSessionMgr     *agentruntime.McpSessionManager
 	mcpServerStore    *store.McpServerStore
+	contextAdapterStore *store.ContextAdapterStore
 	extensions        agentruntime.Extensions
 }
 
@@ -150,6 +151,32 @@ func (c *TaskController) SetExecutor(executor *agentruntime.TaskExecutor) {
 
 func (c *TaskController) SetExtensions(ext agentruntime.Extensions) {
 	c.extensions = agentruntime.NormalizeExtensions(ext)
+}
+
+func (c *TaskController) SetContextAdapterStore(s *store.ContextAdapterStore) {
+	c.contextAdapterStore = s
+}
+
+func (c *TaskController) adaptRuntimeInput(ctx context.Context, task *resources.Task, system resources.AgentSystem, input map[string]string) (map[string]string, error) {
+	ref := strings.TrimSpace(system.Spec.ContextAdapter)
+	if ref == "" || c.contextAdapterStore == nil {
+		return input, nil
+	}
+	key := store.ScopedName(task.Metadata.Namespace, ref)
+	deps := agentruntime.ContextAdapterDeps{
+		Tools:          c.toolStore,
+		Isolated:       c.isolatedTools,
+		Wasm:           c.wasmTools,
+		SecretResolver: c.cliSecretResolver,
+		Cli:            c.cliToolConfig,
+		McpMgr:         c.mcpSessionMgr,
+		McpStore:       c.mcpServerStore,
+	}
+	out, err := agentruntime.AdaptTaskInputViaContextAdapter(ctx, task.Metadata.Namespace, key, c.contextAdapterStore, deps, input)
+	if err != nil {
+		c.appendTaskLog(taskScopedName(*task), fmt.Sprintf("context adapter failed: %s error=%v", ref, err))
+	}
+	return out, err
 }
 
 func (c *TaskController) SetMcpRuntime(sessionMgr *agentruntime.McpSessionManager, mcpServerStore *store.McpServerStore) {
@@ -609,6 +636,11 @@ func (c *TaskController) applyWaitingToolApproval(ctx context.Context, task reso
 		task.Status.ClaimedBy = c.workerID
 		task.Status.LeaseUntil = time.Now().UTC().Add(c.leaseDuration).Format(time.RFC3339Nano)
 		task.Status.LastHeartbeat = time.Now().UTC().Format(time.RFC3339Nano)
+		c.appendTaskTrace(&task, resources.TaskTraceEvent{
+			Type:    "tool_approval_approved",
+			Agent:   strings.TrimSpace(approval.Spec.Agent),
+			Message: fmt.Sprintf("tool=%s decided_by=%s", strings.TrimSpace(approval.Spec.Tool), strings.TrimSpace(approval.Status.DecidedBy)),
+		})
 		c.appendTaskHistory(&task, "running", "tool approval granted, task resumed")
 		if _, err := c.upsertTask(task); err != nil {
 			return err
@@ -619,8 +651,18 @@ func (c *TaskController) applyWaitingToolApproval(ctx context.Context, task reso
 		c.publishTaskEvent(task, "task.running", "tool approval granted, task resumed")
 		c.appendTaskLog(taskKey, "task transitioned WaitingApproval->Running (approved)")
 	case "Denied":
+		c.appendTaskTrace(&task, resources.TaskTraceEvent{
+			Type:    "tool_approval_denied",
+			Agent:   strings.TrimSpace(approval.Spec.Agent),
+			Message: fmt.Sprintf("tool=%s decided_by=%s comment=%s", strings.TrimSpace(approval.Spec.Tool), strings.TrimSpace(approval.Status.DecidedBy), strings.TrimSpace(approval.Status.Comment)),
+		})
 		return c.markFailed(task, "tool approval denied")
 	case "Expired":
+		c.appendTaskTrace(&task, resources.TaskTraceEvent{
+			Type:    "tool_approval_expired",
+			Agent:   strings.TrimSpace(approval.Spec.Agent),
+			Message: fmt.Sprintf("tool=%s", strings.TrimSpace(approval.Spec.Tool)),
+		})
 		return c.markFailed(task, "tool approval expired")
 	}
 	return nil
@@ -647,12 +689,32 @@ func (c *TaskController) reconcileWaitingTaskApproval(ctx context.Context, task 
 	}
 	switch approval.Status.Phase {
 	case "Approved":
+		c.appendTaskTrace(&task, resources.TaskTraceEvent{
+			Type:    "task_approval_approved",
+			Agent:   strings.TrimSpace(approval.Spec.Agent),
+			Message: fmt.Sprintf("checkpoint=%s decided_by=%s", strings.TrimSpace(approval.Spec.CheckpointID), strings.TrimSpace(approval.Status.DecidedBy)),
+		})
 		return c.resumeApprovedTaskApproval(ctx, task, approval)
 	case "Denied":
+		c.appendTaskTrace(&task, resources.TaskTraceEvent{
+			Type:    "task_approval_denied",
+			Agent:   strings.TrimSpace(approval.Spec.Agent),
+			Message: fmt.Sprintf("checkpoint=%s decided_by=%s comment=%s", strings.TrimSpace(approval.Spec.CheckpointID), strings.TrimSpace(approval.Status.DecidedBy), strings.TrimSpace(approval.Status.Comment)),
+		})
 		return c.markFailed(task, "task approval denied")
 	case "Expired":
+		c.appendTaskTrace(&task, resources.TaskTraceEvent{
+			Type:    "task_approval_expired",
+			Agent:   strings.TrimSpace(approval.Spec.Agent),
+			Message: fmt.Sprintf("checkpoint=%s", strings.TrimSpace(approval.Spec.CheckpointID)),
+		})
 		return c.markFailed(task, "task approval expired")
 	case "ChangesRequested":
+		c.appendTaskTrace(&task, resources.TaskTraceEvent{
+			Type:    "task_approval_changes_requested",
+			Agent:   strings.TrimSpace(approval.Spec.Agent),
+			Message: fmt.Sprintf("checkpoint=%s decided_by=%s cycle=%d comment=%s", strings.TrimSpace(approval.Spec.CheckpointID), strings.TrimSpace(approval.Status.DecidedBy), approval.Spec.ReviewCycle, strings.TrimSpace(approval.Status.Comment)),
+		})
 		return c.resumeRequestedChangesTaskApproval(ctx, task, approval)
 	default:
 		return nil
@@ -968,7 +1030,7 @@ func (c *TaskController) resumeSequentialTaskApproval(ctx context.Context, task 
 	if !ok {
 		return fmt.Errorf("agentsystem %q not found", task.Spec.System)
 	}
-	order := executionOrder(system)
+	order := resources.ExecutionAgentOrder(system)
 	if len(order) == 0 {
 		return fmt.Errorf("cannot derive execution order from agentsystem %q", system.Metadata.Name)
 	}
@@ -1058,7 +1120,7 @@ func (c *TaskController) reconcileRunningMessageDriven(ctx context.Context, task
 	if c.agentMessageBus == nil {
 		return c.handleExecutionFailure(task, "task execution mode message-driven requires configured agent message bus")
 	}
-	order := executionOrder(system)
+	order := resources.ExecutionAgentOrder(system)
 	if len(order) == 0 {
 		return c.handleExecutionFailure(task, fmt.Sprintf("cannot derive execution order from agentsystem %q", system.Metadata.Name))
 	}
@@ -1523,84 +1585,6 @@ func resolveAgentEffectiveModel(ctx context.Context, defaultNamespace string, ag
 	return resources.ResolveAgentModelRef(ctx, defaultNamespace, agent.Spec.ModelRef, modelEPStore)
 }
 
-func executionOrder(system resources.AgentSystem) []string {
-	if len(system.Spec.Agents) == 0 {
-		return nil
-	}
-
-	// If no graph is present, preserve declaration order.
-	if len(system.Spec.Graph) == 0 {
-		order := make([]string, len(system.Spec.Agents))
-		copy(order, system.Spec.Agents)
-		return order
-	}
-
-	indegree := make(map[string]int, len(system.Spec.Agents))
-	for _, agent := range system.Spec.Agents {
-		indegree[agent] = 0
-	}
-	for _, node := range system.Spec.Graph {
-		for _, to := range resources.GraphOutgoingAgents(node) {
-			if _, ok := indegree[to]; ok {
-				indegree[to]++
-			}
-		}
-	}
-
-	queue := make([]string, 0, len(system.Spec.Agents))
-	queued := make(map[string]struct{}, len(system.Spec.Agents))
-	for _, agent := range system.Spec.Agents {
-		if indegree[agent] != 0 {
-			continue
-		}
-		queue = append(queue, agent)
-		queued[agent] = struct{}{}
-	}
-	if len(queue) == 0 {
-		order := make([]string, len(system.Spec.Agents))
-		copy(order, system.Spec.Agents)
-		return order
-	}
-
-	order := make([]string, 0, len(system.Spec.Agents))
-	visited := make(map[string]struct{}, len(system.Spec.Agents))
-	for len(queue) > 0 {
-		current := queue[0]
-		queue = queue[1:]
-		if _, seen := visited[current]; seen {
-			continue
-		}
-		visited[current] = struct{}{}
-		order = append(order, current)
-
-		node, ok := system.Spec.Graph[current]
-		if !ok {
-			continue
-		}
-		for _, to := range resources.GraphOutgoingAgents(node) {
-			if _, tracked := indegree[to]; !tracked {
-				continue
-			}
-			indegree[to]--
-			if indegree[to] == 0 {
-				if _, alreadyQueued := queued[to]; alreadyQueued {
-					continue
-				}
-				queue = append(queue, to)
-				queued[to] = struct{}{}
-			}
-		}
-	}
-
-	for _, agent := range system.Spec.Agents {
-		if _, seen := visited[agent]; seen {
-			continue
-		}
-		order = append(order, agent)
-	}
-	return order
-}
-
 func entryAgentsFromSystem(system resources.AgentSystem) []string {
 	if len(system.Spec.Agents) == 0 {
 		return nil
@@ -1720,7 +1704,7 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 	if task == nil {
 		return nil, fmt.Errorf("task is required")
 	}
-	order := executionOrder(system)
+	order := resources.ExecutionAgentOrder(system)
 	if len(order) == 0 {
 		return nil, fmt.Errorf("cannot derive execution order from agentsystem %q", system.Metadata.Name)
 	}
@@ -1782,6 +1766,10 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 	}
 
 	runtimeInput := copyStringMap(task.Spec.Input)
+	runtimeInput, adaptErr := c.adaptRuntimeInput(ctx, task, system, runtimeInput)
+	if adaptErr != nil {
+		return nil, fmt.Errorf("context adapter: %w", adaptErr)
+	}
 	for idx, agentName := range order {
 		agentInputBefore := copyStringMap(runtimeInput)
 		lastAgentInputBefore = copyStringMap(agentInputBefore)
@@ -1959,6 +1947,16 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 
 		totalEstimatedTokens += result.EstimatedTokens
 		totalUsedTokens += result.TokensUsed
+		if agentBudget := agentruntime.AgentTokenBudget(policies, agentName); agentBudget > 0 && result.TokensUsed > agentBudget {
+			c.appendTaskLog(taskScopedName(*task), fmt.Sprintf("per-agent token budget exceeded for %s: used=%d source=%s budget=%d", agentName, result.TokensUsed, result.TokenSource, agentBudget))
+			c.appendTaskTrace(task, resources.TaskTraceEvent{
+				Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
+				Type:      "token_budget_exceeded",
+				Agent:     agentName,
+				Message:   fmt.Sprintf("per-agent used=%d source=%s budget=%d", result.TokensUsed, result.TokenSource, agentBudget),
+			})
+			return nil, fmt.Errorf("per-agent token budget exceeded for %q: used=%d source=%s budget=%d", agentName, result.TokensUsed, result.TokenSource, agentBudget)
+		}
 		if tokenBudget > 0 && totalUsedTokens > tokenBudget {
 			c.appendTaskLog(taskScopedName(*task), fmt.Sprintf("token budget exceeded after %s: used=%d source=%s budget=%d estimated=%d", agentName, totalUsedTokens, result.TokenSource, tokenBudget, totalEstimatedTokens))
 			c.appendTaskTrace(task, resources.TaskTraceEvent{
@@ -2163,7 +2161,7 @@ func (c *TaskController) executeTaskFromResume(
 		return nil, fmt.Errorf("task is required")
 	}
 	if len(order) == 0 {
-		order = executionOrder(system)
+		order = resources.ExecutionAgentOrder(system)
 	}
 	if len(order) == 0 {
 		return nil, fmt.Errorf("cannot derive execution order from agentsystem %q", system.Metadata.Name)
@@ -2219,6 +2217,13 @@ func (c *TaskController) executeTaskFromResume(
 		Message:   fmt.Sprintf("system=%s start_index=%d", system.Metadata.Name, startIndex),
 	})
 
+	if startIndex == 0 {
+		var adaptErr error
+		runtimeInput, adaptErr = c.adaptRuntimeInput(ctx, task, system, runtimeInput)
+		if adaptErr != nil {
+			return nil, fmt.Errorf("context adapter: %w", adaptErr)
+		}
+	}
 	for idx := startIndex; idx < len(order); idx++ {
 		agentName := order[idx]
 		agentInputBefore := copyStringMap(runtimeInput)
@@ -2292,6 +2297,9 @@ func (c *TaskController) executeTaskFromResume(
 
 		totalEstimatedTokens += result.EstimatedTokens
 		totalUsedTokens += result.TokensUsed
+		if agentBudget := agentruntime.AgentTokenBudget(policies, agentName); agentBudget > 0 && result.TokensUsed > agentBudget {
+			return nil, fmt.Errorf("per-agent token budget exceeded for %q: used=%d budget=%d", agentName, result.TokensUsed, agentBudget)
+		}
 		if tokenBudget > 0 && totalUsedTokens > tokenBudget {
 			return nil, fmt.Errorf("token budget exceeded after agent %q: used=%d budget=%d", agentName, totalUsedTokens, tokenBudget)
 		}

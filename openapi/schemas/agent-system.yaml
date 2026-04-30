@@ -78,6 +78,11 @@ components:
     AgentSystemSpec:
       type: object
       properties:
+        context_adapter:
+          type: string
+          description: >
+            Optional ContextAdapter resource name. When set, raw task input is passed through the
+            referenced adapter (Tool-backed sanitization) before the first agent in execution order runs.
         agents:
           type: array
           items: { type: string }

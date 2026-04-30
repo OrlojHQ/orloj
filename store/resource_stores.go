@@ -938,6 +938,144 @@ func (s *MemoryStore) Delete(ctx context.Context, name string) error {
 	return nil
 }
 
+type ContextAdapterStore struct {
+	mu    sync.RWMutex
+	items map[string]resources.ContextAdapter
+	db    *sql.DB
+}
+
+func NewContextAdapterStore() *ContextAdapterStore {
+	return &ContextAdapterStore{items: make(map[string]resources.ContextAdapter)}
+}
+
+func NewContextAdapterStoreWithDB(db *sql.DB) *ContextAdapterStore {
+	return &ContextAdapterStore{items: make(map[string]resources.ContextAdapter), db: db}
+}
+
+func (s *ContextAdapterStore) Upsert(ctx context.Context, item resources.ContextAdapter) (resources.ContextAdapter, error) {
+	if err := item.Normalize(); err != nil {
+		return resources.ContextAdapter{}, err
+	}
+	key := scopedNameFromMeta(item.Metadata)
+	if s.db != nil {
+		tx, err := s.db.Begin()
+		if err != nil {
+			return resources.ContextAdapter{}, err
+		}
+		defer tx.Rollback()
+
+		existing, found, err := getFromTableForUpdate[resources.ContextAdapter](ctx, tx, tableContextAdapters, key)
+		if err != nil {
+			return resources.ContextAdapter{}, err
+		}
+		if !found {
+			if err := initializeCreateMetadata("ContextAdapter", &item.Metadata); err != nil {
+				return resources.ContextAdapter{}, err
+			}
+		} else {
+			specChanged := !reflect.DeepEqual(existing.Spec, item.Spec)
+			if err := initializeUpdateMetadata("ContextAdapter", &item.Metadata, existing.Metadata, specChanged); err != nil {
+				return resources.ContextAdapter{}, err
+			}
+		}
+		if err := upsertContextAdapterSQL(ctx, tx, key, item); err != nil {
+			return resources.ContextAdapter{}, err
+		}
+		if err := tx.Commit(); err != nil {
+			return resources.ContextAdapter{}, err
+		}
+		return item, nil
+	}
+	s.mu.Lock()
+	existing, found := s.items[key]
+	if !found {
+		if err := initializeCreateMetadata("ContextAdapter", &item.Metadata); err != nil {
+			s.mu.Unlock()
+			return resources.ContextAdapter{}, err
+		}
+	} else {
+		specChanged := !reflect.DeepEqual(existing.Spec, item.Spec)
+		if err := initializeUpdateMetadata("ContextAdapter", &item.Metadata, existing.Metadata, specChanged); err != nil {
+			s.mu.Unlock()
+			return resources.ContextAdapter{}, err
+		}
+	}
+	s.items[key] = item
+	s.mu.Unlock()
+	return item, nil
+}
+
+func (s *ContextAdapterStore) Get(ctx context.Context, name string) (resources.ContextAdapter, bool, error) {
+	key := normalizeLookupName(name)
+	if s.db != nil {
+		return getFromTable[resources.ContextAdapter](ctx, s.db, tableContextAdapters, key)
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	item, ok := s.items[key]
+	return item, ok, nil
+}
+
+func (s *ContextAdapterStore) List(ctx context.Context) ([]resources.ContextAdapter, error) {
+	if s.db != nil {
+		return listFromTable[resources.ContextAdapter](ctx, s.db, tableContextAdapters)
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]resources.ContextAdapter, 0, len(s.items))
+	for _, item := range s.items {
+		out = append(out, item)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Metadata.Name < out[j].Metadata.Name
+	})
+	return out, nil
+}
+
+func (s *ContextAdapterStore) ListCursor(ctx context.Context, limit int, after, namespace string) ([]resources.ContextAdapter, error) {
+	if s.db != nil {
+		return listFromTableCursor[resources.ContextAdapter](ctx, s.db, tableContextAdapters, limit, after, namespace)
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]resources.ContextAdapter, 0, len(s.items))
+	for _, item := range s.items {
+		out = append(out, item)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Metadata.Name < out[j].Metadata.Name
+	})
+	return cursorFilter(out,
+		func(a resources.ContextAdapter) string { return a.Metadata.Name },
+		func(a resources.ContextAdapter) string { return resources.NormalizeNamespace(a.Metadata.Namespace) },
+		limit, after, namespace,
+	), nil
+}
+
+func (s *ContextAdapterStore) Delete(ctx context.Context, name string) error {
+	key := normalizeLookupName(name)
+	if s.db != nil {
+		deleted, err := deleteFromTable(ctx, s.db, tableContextAdapters, key)
+		if err != nil {
+			return err
+		}
+		if !deleted {
+			return fmt.Errorf("contextadapter %q not found", name)
+		}
+		return nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.items[key]; !ok {
+		return fmt.Errorf("contextadapter %q not found", name)
+	}
+	delete(s.items, key)
+	return nil
+}
+
 type AgentPolicyStore struct {
 	mu    sync.RWMutex
 	items map[string]resources.AgentPolicy

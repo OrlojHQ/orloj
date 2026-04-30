@@ -593,3 +593,106 @@ func TestAnthropicModelGatewayOmitsOutputConfigWhenNoSchema(t *testing.T) {
 		t.Fatal("output_config should be omitted when no output schema is set")
 	}
 }
+
+func TestEnsureAdditionalPropertiesFalse(t *testing.T) {
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"name": map[string]any{"type": "string"},
+			"address": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"city": map[string]any{"type": "string"},
+				},
+			},
+			"tags": map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"key": map[string]any{"type": "string"},
+					},
+				},
+			},
+		},
+		"required": []string{"name"},
+	}
+
+	patched := ensureAdditionalPropertiesFalse(schema)
+
+	if patched["additionalProperties"] != false {
+		t.Fatal("top-level object missing additionalProperties: false")
+	}
+	addr := patched["properties"].(map[string]any)["address"].(map[string]any)
+	if addr["additionalProperties"] != false {
+		t.Fatal("nested object 'address' missing additionalProperties: false")
+	}
+	tagItem := patched["properties"].(map[string]any)["tags"].(map[string]any)["items"].(map[string]any)
+	if tagItem["additionalProperties"] != false {
+		t.Fatal("array item object missing additionalProperties: false")
+	}
+	name := patched["properties"].(map[string]any)["name"].(map[string]any)
+	if _, exists := name["additionalProperties"]; exists {
+		t.Fatal("string-typed property should not have additionalProperties")
+	}
+	if _, exists := schema["additionalProperties"]; exists {
+		t.Fatal("original schema was mutated")
+	}
+}
+
+func TestEnsureAdditionalPropertiesFalseStripsUnsupportedKeys(t *testing.T) {
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"score": map[string]any{
+				"type":    "integer",
+				"minimum": 0,
+				"maximum": 100,
+			},
+			"name": map[string]any{
+				"type":      "string",
+				"minLength": 1,
+				"maxLength": 255,
+				"pattern":   "^[a-z]+$",
+			},
+			"items": map[string]any{
+				"type":        "array",
+				"minItems":    1,
+				"maxItems":    10,
+				"uniqueItems": true,
+				"items":       map[string]any{"type": "string"},
+			},
+		},
+		"required": []string{"score"},
+	}
+
+	patched := ensureAdditionalPropertiesFalse(schema)
+
+	score := patched["properties"].(map[string]any)["score"].(map[string]any)
+	for _, key := range []string{"minimum", "maximum"} {
+		if _, exists := score[key]; exists {
+			t.Fatalf("expected %q to be stripped from integer property", key)
+		}
+	}
+	if score["type"] != "integer" {
+		t.Fatal("type should be preserved")
+	}
+
+	name := patched["properties"].(map[string]any)["name"].(map[string]any)
+	for _, key := range []string{"minLength", "maxLength", "pattern"} {
+		if _, exists := name[key]; exists {
+			t.Fatalf("expected %q to be stripped from string property", key)
+		}
+	}
+
+	items := patched["properties"].(map[string]any)["items"].(map[string]any)
+	for _, key := range []string{"minItems", "maxItems", "uniqueItems"} {
+		if _, exists := items[key]; exists {
+			t.Fatalf("expected %q to be stripped from array property", key)
+		}
+	}
+
+	if _, exists := schema["properties"].(map[string]any)["score"].(map[string]any)["minimum"]; !exists {
+		t.Fatal("original schema was mutated")
+	}
+}

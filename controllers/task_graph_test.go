@@ -24,7 +24,7 @@ func TestExecutionOrderTopologicalWithFanOut(t *testing.T) {
 		},
 	}
 
-	got := executionOrder(system)
+	got := resources.ExecutionAgentOrder(system)
 	want := []string{"planner", "researcher", "reviewer", "writer"}
 	if len(got) != len(want) {
 		t.Fatalf("unexpected order length: got=%v want=%v", got, want)

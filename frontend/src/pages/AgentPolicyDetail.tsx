@@ -131,6 +131,12 @@ export function AgentPolicyDetail() {
                 {policy.spec.target_tasks?.length ? policy.spec.target_tasks.join(", ") : "all"}
               </span>
             </div>
+            <div className="detail-field">
+              <span className="detail-field__label">Target Agents</span>
+              <span className="detail-field__value mono">
+                {policy.spec.target_agents?.length ? policy.spec.target_agents.join(", ") : "all"}
+              </span>
+            </div>
             {policy.status?.lastError && (
               <div className="detail-field detail-field--full">
                 <span className="detail-field__label">Last Error</span>

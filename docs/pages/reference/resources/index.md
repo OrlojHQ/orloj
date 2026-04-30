@@ -27,6 +27,7 @@ Each kind has a dedicated page; see [Resource reference pages](#resource-referen
 - [ModelEndpoint](./model-endpoint.md)
 - [McpServer](./mcp-server.md)
 - [Memory](./memory.md)
+- [ContextAdapter](./context-adapter.md)
 - [Secret](./secret.md)
 - [SealedSecret](./sealed-secret.md)
 - [AgentPolicy](./agent-policy.md)

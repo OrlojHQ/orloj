@@ -145,7 +145,7 @@ func (g *BedrockModelGateway) Complete(ctx context.Context, req ModelRequest) (M
 	}
 
 	if len(req.OutputSchema) > 0 {
-		schemaJSON, err := json.Marshal(req.OutputSchema)
+		schemaJSON, err := json.Marshal(ensureAdditionalPropertiesFalse(req.OutputSchema))
 		if err == nil {
 			input.OutputConfig = &types.OutputConfig{
 				TextFormat: &types.OutputFormat{

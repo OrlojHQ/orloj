@@ -136,10 +136,11 @@ func (g *AnthropicModelGateway) Complete(ctx context.Context, req ModelRequest) 
 		body.Tools, toolAliases = buildAnthropicTools(req.Tools, req.ToolSchemas)
 	}
 	if len(req.OutputSchema) > 0 {
+		schema := ensureAdditionalPropertiesFalse(req.OutputSchema)
 		body.OutputConfig = &anthropicOutputConfig{
 			Format: &anthropicOutputFormat{
 				Type:   "json_schema",
-				Schema: req.OutputSchema,
+				Schema: schema,
 			},
 		}
 	}
@@ -445,6 +446,67 @@ func parseJSONLoose(s string) map[string]interface{} {
 		return nil
 	}
 	return m
+}
+
+// anthropicUnsupportedSchemaKeys lists JSON Schema validation keywords that
+// Anthropic's structured output API rejects. They are silently stripped so
+// users can write standard JSON Schemas without provider-specific workarounds.
+var anthropicUnsupportedSchemaKeys = map[string]bool{
+	"minimum":          true,
+	"maximum":          true,
+	"exclusiveMinimum": true,
+	"exclusiveMaximum": true,
+	"multipleOf":       true,
+	"minLength":        true,
+	"maxLength":        true,
+	"pattern":          true,
+	"minItems":         true,
+	"maxItems":         true,
+	"uniqueItems":      true,
+	"minProperties":    true,
+	"maxProperties":    true,
+}
+
+// ensureAdditionalPropertiesFalse recursively normalizes a JSON Schema for
+// Anthropic's structured output API: sets "additionalProperties": false on
+// every object-typed node (required by Anthropic) and strips validation
+// keywords that Anthropic does not support (minimum, maximum, pattern, etc.).
+func ensureAdditionalPropertiesFalse(schema map[string]any) map[string]any {
+	if schema == nil {
+		return schema
+	}
+	out := make(map[string]any, len(schema))
+	for k, v := range schema {
+		if anthropicUnsupportedSchemaKeys[k] {
+			continue
+		}
+		out[k] = v
+	}
+
+	typ, _ := out["type"].(string)
+	if typ == "object" {
+		if _, exists := out["additionalProperties"]; !exists {
+			out["additionalProperties"] = false
+		}
+	}
+
+	if props, ok := out["properties"].(map[string]any); ok {
+		patched := make(map[string]any, len(props))
+		for k, v := range props {
+			if sub, ok := v.(map[string]any); ok {
+				patched[k] = ensureAdditionalPropertiesFalse(sub)
+			} else {
+				patched[k] = v
+			}
+		}
+		out["properties"] = patched
+	}
+
+	if items, ok := out["items"].(map[string]any); ok {
+		out["items"] = ensureAdditionalPropertiesFalse(items)
+	}
+
+	return out
 }
 
 func parseAnthropicUsage(raw *anthropicMessagesUsage) ModelUsage {

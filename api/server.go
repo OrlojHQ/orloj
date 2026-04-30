@@ -33,15 +33,16 @@ type Stores struct {
 	Secrets       *store.SecretStore
 	SealedSecrets *store.SealedSecretStore
 	SealingKeys   *store.SealingKeyStore
-	Memories      *store.MemoryStore
-	Policies      *store.AgentPolicyStore
-	AgentRoles    *store.AgentRoleStore
-	ToolPerms     *store.ToolPermissionStore
-	ToolApprovals *store.ToolApprovalStore
-	TaskApprovals *store.TaskApprovalStore
-	Tasks         *store.TaskStore
-	TaskSchedules *store.TaskScheduleStore
-	TaskWebhooks  *store.TaskWebhookStore
+	Memories        *store.MemoryStore
+	ContextAdapters *store.ContextAdapterStore
+	Policies        *store.AgentPolicyStore
+	AgentRoles      *store.AgentRoleStore
+	ToolPerms       *store.ToolPermissionStore
+	ToolApprovals   *store.ToolApprovalStore
+	TaskApprovals   *store.TaskApprovalStore
+	Tasks           *store.TaskStore
+	TaskSchedules   *store.TaskScheduleStore
+	TaskWebhooks    *store.TaskWebhookStore
 	WebhookDedupe *store.WebhookDedupeStore
 	Workers       *store.WorkerStore
 	McpServers    *store.McpServerStore
@@ -117,6 +118,9 @@ func NewServerWithOptions(stores Stores, runtime *agentruntime.Manager, logger *
 	}
 	if stores.WebhookDedupe == nil {
 		stores.WebhookDedupe = store.NewWebhookDedupeStore()
+	}
+	if stores.ContextAdapters == nil {
+		stores.ContextAdapters = store.NewContextAdapterStore()
 	}
 	if stores.McpServers == nil {
 		stores.McpServers = store.NewMcpServerStore()
@@ -329,6 +333,9 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/v1/memories", s.handleMemories)
 	s.mux.HandleFunc("/v1/memories/", s.handleMemoryByName)
 
+	s.mux.HandleFunc("/v1/context-adapters", s.handleContextAdapters)
+	s.mux.HandleFunc("/v1/context-adapters/", s.handleContextAdapterByName)
+
 	s.mux.HandleFunc("/v1/agent-policies", s.handlePolicies)
 	s.mux.HandleFunc("/v1/agent-policies/", s.handlePolicyByName)
 
@@ -438,6 +445,13 @@ func (s *Server) handleNamespaces(w http.ResponseWriter, r *http.Request) {
 		return
 	} else {
 		for _, item := range memories {
+			collect(item.Metadata.Namespace)
+		}
+	}
+	if contextAdapters, err := s.stores.ContextAdapters.List(r.Context()); writeStoreFetchError(w, err) {
+		return
+	} else {
+		for _, item := range contextAdapters {
 			collect(item.Metadata.Namespace)
 		}
 	}

@@ -9,19 +9,19 @@ const DefaultNamespace = "default"
 
 // TypeMeta mirrors Kubernetes-style resource identity fields.
 type TypeMeta struct {
-	APIVersion string `json:"apiVersion"`
-	Kind       string `json:"kind"`
+	APIVersion string `json:"apiVersion" yaml:"apiVersion"`
+	Kind       string `json:"kind" yaml:"kind"`
 }
 
 // ObjectMeta stores metadata for a resource.
 type ObjectMeta struct {
-	Name            string            `json:"name"`
-	Namespace       string            `json:"namespace,omitempty"`
-	Labels          map[string]string `json:"labels,omitempty"`
-	Annotations     map[string]string `json:"annotations,omitempty"`
-	ResourceVersion string            `json:"resourceVersion,omitempty"`
-	Generation      int64             `json:"generation,omitempty"`
-	CreatedAt       string            `json:"createdAt,omitempty"`
+	Name            string            `json:"name" yaml:"name"`
+	Namespace       string            `json:"namespace,omitempty" yaml:"namespace,omitempty"`
+	Labels          map[string]string `json:"labels,omitempty" yaml:"labels,omitempty"`
+	Annotations     map[string]string `json:"annotations,omitempty" yaml:"annotations,omitempty"`
+	ResourceVersion string            `json:"resourceVersion,omitempty" yaml:"resourceVersion,omitempty"`
+	Generation      int64             `json:"generation,omitempty" yaml:"generation,omitempty"`
+	CreatedAt       string            `json:"createdAt,omitempty" yaml:"createdAt,omitempty"`
 }
 
 func NormalizeNamespace(namespace string) string {
@@ -68,7 +68,7 @@ func ValidateMetadataName(name string) error {
 // ListMeta carries pagination metadata in list responses. Continue holds the
 // cursor (last item's name) for the next page; empty means no more results.
 type ListMeta struct {
-	Continue string `json:"continue,omitempty"`
+	Continue string `json:"continue,omitempty" yaml:"continue,omitempty"`
 }
 
 // Agent represents the desired and observed state for a single agent runtime.

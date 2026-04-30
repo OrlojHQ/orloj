@@ -305,9 +305,22 @@ func parseKeyValue(line string) (key, value string, ok bool) {
 func stripQuotes(s string) string {
 	s = strings.TrimSpace(s)
 	if len(s) >= 2 {
-		if (s[0] == '"' && s[len(s)-1] == '"') || (s[0] == '\'' && s[len(s)-1] == '\'') {
-			return s[1 : len(s)-1]
+		quote := s[0]
+		if quote == '"' || quote == '\'' {
+			end := strings.LastIndexByte(s, quote)
+			if end > 0 {
+				return s[1:end]
+			}
 		}
+	}
+	return stripInlineComment(s)
+}
+
+// stripInlineComment removes a trailing ` # ...` YAML inline comment from an
+// unquoted scalar value.
+func stripInlineComment(s string) string {
+	if idx := strings.Index(s, " #"); idx >= 0 {
+		return strings.TrimSpace(s[:idx])
 	}
 	return s
 }

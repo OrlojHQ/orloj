@@ -33,6 +33,8 @@ import { Tools } from "./pages/Tools";
 import { ToolDetail } from "./pages/ToolDetail";
 import { Memories } from "./pages/Memories";
 import { MemoryDetail } from "./pages/MemoryDetail";
+import { ContextAdapters } from "./pages/ContextAdapters";
+import { ContextAdapterDetail } from "./pages/ContextAdapterDetail";
 import { Secrets } from "./pages/Secrets";
 import { SecretDetail } from "./pages/SecretDetail";
 import { SealedSecrets } from "./pages/SealedSecrets";
@@ -168,6 +170,8 @@ function AppLayout({
               <Route path="/capabilities" element={<Capabilities />} />
               <Route path="/memories" element={<Memories />} />
               <Route path="/memories/:name" element={<MemoryDetail />} />
+              <Route path="/context-adapters" element={<ContextAdapters />} />
+              <Route path="/context-adapters/:name" element={<ContextAdapterDetail />} />
               <Route path="/secrets" element={<Secrets />} />
               <Route path="/secrets/:name" element={<SecretDetail />} />
               <Route path="/sealed-secrets" element={<SealedSecrets />} />

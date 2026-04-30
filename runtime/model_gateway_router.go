@@ -22,13 +22,15 @@ type ModelRouterConfig struct {
 }
 
 type cachedModelGateway struct {
-	ResourceVersion string
-	Gateway         ModelGateway
+	ResourceVersion       string
+	SecretResourceVersion string
+	Gateway               ModelGateway
 }
 
 // ModelRouter routes model requests to ModelEndpoint-backed gateways by ModelRequest.ModelRef.
 type ModelRouter struct {
 	endpoints      ModelEndpointLookup
+	secrets        SecretResourceLookup
 	secretResolver SecretResolver
 
 	mu    sync.RWMutex
@@ -46,6 +48,7 @@ func NewModelRouter(cfg ModelRouterConfig) *ModelRouter {
 
 	return &ModelRouter{
 		endpoints:      cfg.Endpoints,
+		secrets:        cfg.Secrets,
 		secretResolver: resolver,
 		cache:          make(map[string]cachedModelGateway),
 	}
@@ -128,10 +131,13 @@ func (r *ModelRouter) resolveEndpoint(ctx context.Context, namespace string, mod
 }
 
 func (r *ModelRouter) gatewayForEndpoint(ctx context.Context, endpoint resources.ModelEndpoint, endpointKey string) (ModelGateway, error) {
+	secretRV := r.resolveSecretResourceVersion(ctx, endpoint)
+
 	r.mu.RLock()
 	cached, ok := r.cache[endpointKey]
 	r.mu.RUnlock()
-	if ok && cached.Gateway != nil && strings.TrimSpace(cached.ResourceVersion) == strings.TrimSpace(endpoint.Metadata.ResourceVersion) {
+	epRV := strings.TrimSpace(endpoint.Metadata.ResourceVersion)
+	if ok && cached.Gateway != nil && cached.ResourceVersion == epRV && cached.SecretResourceVersion == secretRV {
 		return cached.Gateway, nil
 	}
 
@@ -163,9 +169,6 @@ func (r *ModelRouter) gatewayForEndpoint(ctx context.Context, endpoint resources
 	if endpoint.Spec.AllowPrivate != nil {
 		cfg.AllowPrivate = *endpoint.Spec.AllowPrivate
 	} else if provider == "ollama" {
-		// Back-compat: pre-normalized ModelEndpoints that reach the router
-		// without going through Normalize (e.g. constructed directly in
-		// tests) should still default Ollama to allowPrivate=true.
 		cfg.AllowPrivate = true
 	}
 
@@ -176,8 +179,9 @@ func (r *ModelRouter) gatewayForEndpoint(ctx context.Context, endpoint resources
 
 	r.mu.Lock()
 	r.cache[endpointKey] = cachedModelGateway{
-		ResourceVersion: strings.TrimSpace(endpoint.Metadata.ResourceVersion),
-		Gateway:         gateway,
+		ResourceVersion:       epRV,
+		SecretResourceVersion: secretRV,
+		Gateway:               gateway,
 	}
 	r.mu.Unlock()
 	return gateway, nil
@@ -200,6 +204,24 @@ func (r *ModelRouter) resolveEndpointAPIKey(ctx context.Context, endpoint resour
 		return "", fmt.Errorf("resolve model endpoint secret failed endpoint=%s secretRef=%s: %w", endpoint.Metadata.Name, secretRef, err)
 	}
 	return value, nil
+}
+
+// resolveSecretResourceVersion returns the ResourceVersion of the secret
+// referenced by the endpoint's auth.secretRef, or "" if unavailable. Used to
+// detect secret changes so the gateway cache is invalidated when a key is
+// rotated without changing the ModelEndpoint itself.
+func (r *ModelRouter) resolveSecretResourceVersion(ctx context.Context, endpoint resources.ModelEndpoint) string {
+	ref := strings.TrimSpace(endpoint.Spec.Auth.SecretRef)
+	if ref == "" || r.secrets == nil {
+		return ""
+	}
+	ns := resources.NormalizeNamespace(endpoint.Metadata.Namespace)
+	key := ns + "/" + ref
+	secret, ok, err := r.secrets.Get(ctx, key)
+	if err != nil || !ok {
+		return ""
+	}
+	return strings.TrimSpace(secret.Metadata.ResourceVersion)
 }
 
 func parseModelEndpointRef(namespace string, ref string) (string, string) {
