@@ -382,18 +382,28 @@ type ToolWasmSpec struct {
 	ImagePullSecret string `json:"image_pull_secret,omitempty"`
 }
 
+// ContainerResources defines per-tool or per-McpServer container resource
+// overrides. When set, these take precedence over the global
+// --tool-container-{memory,cpus,pids-limit} flags.
+type ContainerResources struct {
+	Memory    string `json:"memory,omitempty"`
+	CPUs      string `json:"cpus,omitempty"`
+	PidsLimit int    `json:"pids_limit,omitempty"`
+}
+
 // ToolCliSpec defines the configuration for CLI tool invocations.
 type ToolCliSpec struct {
-	Command        string            `json:"command,omitempty"`
-	Args           []string          `json:"args,omitempty"`
-	Image          string            `json:"image,omitempty"`
-	ImagePullSecret string           `json:"image_pull_secret,omitempty"`
-	Network        string            `json:"network,omitempty"`
-	StdinFromInput bool              `json:"stdin_from_input,omitempty"`
-	Output         string            `json:"output,omitempty"`
-	WorkingDir     string            `json:"working_dir,omitempty"`
-	Env            map[string]string `json:"env,omitempty"`
-	EnvFrom        []ToolCliEnvRef   `json:"env_from,omitempty"`
+	Command         string             `json:"command,omitempty"`
+	Args            []string           `json:"args,omitempty"`
+	Image           string             `json:"image,omitempty"`
+	ImagePullSecret string             `json:"image_pull_secret,omitempty"`
+	Network         string             `json:"network,omitempty"`
+	StdinFromInput  bool               `json:"stdin_from_input,omitempty"`
+	Output          string             `json:"output,omitempty"`
+	WorkingDir      string             `json:"working_dir,omitempty"`
+	Env             map[string]string  `json:"env,omitempty"`
+	EnvFrom         []ToolCliEnvRef    `json:"env_from,omitempty"`
+	Resources       ContainerResources `json:"resources,omitempty"`
 }
 
 // ToolCliEnvRef maps an Orloj secret to a process environment variable.
@@ -2214,6 +2224,7 @@ type McpServerSpec struct {
 	Auth            ToolAuth           `json:"auth,omitempty"`
 	ToolFilter      McpToolFilter      `json:"tool_filter,omitempty"`
 	Reconnect       McpReconnectPolicy `json:"reconnect,omitempty"`
+	Resources       ContainerResources `json:"resources,omitempty"`
 }
 
 type McpServerEnvVar struct {

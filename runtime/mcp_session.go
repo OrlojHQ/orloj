@@ -283,14 +283,26 @@ func (m *McpSessionManager) buildContainerStdioTransport(server resources.McpSer
 	} else {
 		dockerArgs = append(dockerArgs, "--network", "bridge")
 	}
-	if cfg != nil && strings.TrimSpace(cfg.Memory) != "" {
-		dockerArgs = append(dockerArgs, "--memory", strings.TrimSpace(cfg.Memory))
+	memory := strings.TrimSpace(server.Spec.Resources.Memory)
+	if memory == "" && cfg != nil {
+		memory = strings.TrimSpace(cfg.Memory)
 	}
-	if cfg != nil && strings.TrimSpace(cfg.CPUs) != "" {
-		dockerArgs = append(dockerArgs, "--cpus", strings.TrimSpace(cfg.CPUs))
+	if memory != "" {
+		dockerArgs = append(dockerArgs, "--memory", memory)
 	}
-	if cfg != nil && cfg.PidsLimit > 0 {
-		dockerArgs = append(dockerArgs, "--pids-limit", fmt.Sprintf("%d", cfg.PidsLimit))
+	cpus := strings.TrimSpace(server.Spec.Resources.CPUs)
+	if cpus == "" && cfg != nil {
+		cpus = strings.TrimSpace(cfg.CPUs)
+	}
+	if cpus != "" {
+		dockerArgs = append(dockerArgs, "--cpus", cpus)
+	}
+	pidsLimit := server.Spec.Resources.PidsLimit
+	if pidsLimit <= 0 && cfg != nil {
+		pidsLimit = cfg.PidsLimit
+	}
+	if pidsLimit > 0 {
+		dockerArgs = append(dockerArgs, "--pids-limit", fmt.Sprintf("%d", pidsLimit))
 	}
 
 	var cleanupDir string

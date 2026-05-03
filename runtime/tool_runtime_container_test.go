@@ -427,6 +427,74 @@ func TestContainerToolRuntimeWithNamespaceRebindsAuthSecretResolver(t *testing.T
 	}
 }
 
+func TestContainerCLIRunArgsPerToolResourcesOverrideGlobalConfig(t *testing.T) {
+	globalCfg := ContainerToolRuntimeConfig{
+		RuntimeBinary: "docker",
+		Image:         "default:latest",
+		Network:       "none",
+		Memory:        "128m",
+		CPUs:          "0.50",
+		PidsLimit:     64,
+		User:          "65532:65532",
+	}
+	crt := NewContainerToolRuntimeWithRunner(nil, globalCfg, &captureContainerRunner{stdout: "ok"})
+
+	cli := resources.ToolCliSpec{
+		Command: "screenshot",
+		Image:   "my-chromium:latest",
+		Network: "bridge",
+		Resources: resources.ContainerResources{
+			Memory:    "1g",
+			CPUs:      "2.0",
+			PidsLimit: 256,
+		},
+	}
+	args := crt.containerCLIRunArgs(cli, cli.Image, cli.Command, nil, nil)
+
+	assertArgsContain(t, args, []string{
+		"--memory", "1g",
+		"--cpus", "2.0",
+		"--pids-limit", "256",
+		"--network", "bridge",
+	})
+	for i, arg := range args {
+		if arg == "--memory" && i+1 < len(args) && args[i+1] == "128m" {
+			t.Fatal("per-tool memory should override global 128m")
+		}
+		if arg == "--cpus" && i+1 < len(args) && args[i+1] == "0.50" {
+			t.Fatal("per-tool cpus should override global 0.50")
+		}
+		if arg == "--pids-limit" && i+1 < len(args) && args[i+1] == "64" {
+			t.Fatal("per-tool pids_limit should override global 64")
+		}
+	}
+}
+
+func TestContainerCLIRunArgsFallsBackToGlobalConfig(t *testing.T) {
+	globalCfg := ContainerToolRuntimeConfig{
+		RuntimeBinary: "docker",
+		Image:         "default:latest",
+		Network:       "none",
+		Memory:        "128m",
+		CPUs:          "0.50",
+		PidsLimit:     64,
+		User:          "65532:65532",
+	}
+	crt := NewContainerToolRuntimeWithRunner(nil, globalCfg, &captureContainerRunner{stdout: "ok"})
+
+	cli := resources.ToolCliSpec{
+		Command: "curl",
+		Image:   "curlimages/curl:latest",
+	}
+	args := crt.containerCLIRunArgs(cli, cli.Image, cli.Command, nil, nil)
+
+	assertArgsContain(t, args, []string{
+		"--memory", "128m",
+		"--cpus", "0.50",
+		"--pids-limit", "64",
+	})
+}
+
 func assertArgsContain(t *testing.T, args []string, expected []string) {
 	t.Helper()
 	for i := 0; i < len(expected); i++ {

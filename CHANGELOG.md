@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Per-tool and per-McpServer container resource limits**: Tool manifests now support `spec.cli.resources` and McpServer manifests support `spec.resources` with `memory`, `cpus`, and `pids_limit` fields that override the global `--tool-container-{memory,cpus,pids-limit}` defaults. This allows resource-intensive tools (e.g. Chromium-based MCP servers) to declare their own container limits without raising the global defaults for all tools. Operator-level ceilings (`--tool-container-max-memory`, `--tool-container-max-cpus`, `--tool-container-max-pids-limit`) can optionally cap per-tool overrides; manifests exceeding the ceiling are rejected at apply time.
+
 ## [0.12.1] - 2026-05-03
 
 ### Added

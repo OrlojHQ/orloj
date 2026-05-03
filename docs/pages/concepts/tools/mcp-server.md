@@ -83,6 +83,7 @@ spec:
 | `auth`                | http: authentication configuration (`secretRef` + `profile`).                                             |
 | `tool_filter.include` | Optional allowlist of MCP tool names. When set, only listed tools are generated.                          |
 | `reconnect`           | Reconnection policy: `max_attempts` (default 3) and `backoff` (default 2s).                               |
+| `resources`           | Container resource overrides: `memory`, `cpus`, `pids_limit`. Overrides global `--tool-container-*` flags. Only applies when `image` is set. |
 
 ## How It Works
 
@@ -94,6 +95,26 @@ When an McpServer resource is applied:
 4. The `description` and `input_schema` from the MCP server are propagated to the generated Tool, giving the LLM rich tool definitions.
 
 At invocation time, the `MCPToolRuntime` resolves the server reference, obtains a session from the `McpSessionManager`, and sends a `tools/call` JSON-RPC 2.0 request through the appropriate transport.
+
+## Container Resources
+
+Container-backed MCP servers inherit the global `--tool-container-memory`, `--tool-container-cpus`, and `--tool-container-pids-limit` defaults. For servers that need more resources (e.g. Chromium-based tools like Playwright), override per-server:
+
+```yaml
+apiVersion: orloj.dev/v1
+kind: McpServer
+metadata:
+  name: playwright-mcp
+spec:
+  transport: stdio
+  image: playwright-mcp:latest
+  resources:
+    memory: 1g
+    cpus: "1.0"
+    pids_limit: 512
+```
+
+Operators can enforce an upper bound with `--tool-container-max-memory`, `--tool-container-max-cpus`, and `--tool-container-max-pids-limit` on `orlojd`. Manifests exceeding the ceiling are rejected at apply time.
 
 ## Idle Timeout and Session Lifecycle
 

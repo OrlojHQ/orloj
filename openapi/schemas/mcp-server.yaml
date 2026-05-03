@@ -38,6 +38,7 @@ components:
         auth: { $ref: "tool.yaml#/components/schemas/ToolAuth" }
         tool_filter: { $ref: "#/components/schemas/McpToolFilter" }
         reconnect: { $ref: "#/components/schemas/McpReconnectPolicy" }
+        resources: { $ref: "tool.yaml#/components/schemas/ContainerResources" }
     McpServerStatus:
       type: object
       properties:

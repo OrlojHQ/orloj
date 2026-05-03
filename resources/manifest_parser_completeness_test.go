@@ -299,6 +299,10 @@ spec:
       - name: API_KEY
         secretRef: my-secret
         key: api-key
+    resources:
+      memory: 512m
+      cpus: "1.0"
+      pids_limit: 256
 `)
 
 // Tool HTTP fixture — exercises auth and wasm fields.
@@ -413,6 +417,10 @@ spec:
   reconnect:
     max_attempts: 5
     backoff: 2s
+  resources:
+    memory: 1g
+    cpus: "2.0"
+    pids_limit: 512
 `)
 
 var agentPolicyMaximalYAML = []byte(`apiVersion: orloj.dev/v1

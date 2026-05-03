@@ -443,14 +443,26 @@ func (r *ContainerToolRuntime) containerCLIRunArgs(cli resources.ToolCliSpec, im
 	if strings.TrimSpace(r.config.User) != "" {
 		dockerArgs = append(dockerArgs, "--user", strings.TrimSpace(r.config.User))
 	}
-	if strings.TrimSpace(r.config.Memory) != "" {
-		dockerArgs = append(dockerArgs, "--memory", strings.TrimSpace(r.config.Memory))
+	memory := strings.TrimSpace(cli.Resources.Memory)
+	if memory == "" {
+		memory = strings.TrimSpace(r.config.Memory)
 	}
-	if strings.TrimSpace(r.config.CPUs) != "" {
-		dockerArgs = append(dockerArgs, "--cpus", strings.TrimSpace(r.config.CPUs))
+	if memory != "" {
+		dockerArgs = append(dockerArgs, "--memory", memory)
 	}
-	if r.config.PidsLimit > 0 {
-		dockerArgs = append(dockerArgs, "--pids-limit", strconv.Itoa(r.config.PidsLimit))
+	cpus := strings.TrimSpace(cli.Resources.CPUs)
+	if cpus == "" {
+		cpus = strings.TrimSpace(r.config.CPUs)
+	}
+	if cpus != "" {
+		dockerArgs = append(dockerArgs, "--cpus", cpus)
+	}
+	pidsLimit := cli.Resources.PidsLimit
+	if pidsLimit <= 0 {
+		pidsLimit = r.config.PidsLimit
+	}
+	if pidsLimit > 0 {
+		dockerArgs = append(dockerArgs, "--pids-limit", strconv.Itoa(pidsLimit))
 	}
 	if strings.TrimSpace(cli.WorkingDir) != "" {
 		dockerArgs = append(dockerArgs, "--workdir", strings.TrimSpace(cli.WorkingDir))
