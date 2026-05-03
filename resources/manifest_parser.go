@@ -119,11 +119,19 @@ func ParseAgentManifest(data []byte) (Agent, error) {
 				if section == "metadata" {
 					subsection = "labels"
 				}
-			case "tools":
-				if section == "spec" {
-					subsection = "tools"
-				}
-			case "roles":
+		case "tools":
+			if section == "spec" {
+				subsection = "tools"
+			}
+		case "allowed_tools", "allowedTools":
+			if section == "spec" {
+				subsection = "allowed_tools"
+			}
+		case "fallback_model_refs", "fallbackModelRefs":
+			if section == "spec" {
+				subsection = "fallback_model_refs"
+			}
+		case "roles":
 				if section == "spec" {
 					subsection = "roles"
 				}
@@ -157,6 +165,14 @@ func ParseAgentManifest(data []byte) (Agent, error) {
 
 		if section == "spec" && subsection == "tools" && strings.HasPrefix(trimmed, "- ") {
 			agent.Spec.Tools = append(agent.Spec.Tools, stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))))
+			continue
+		}
+		if section == "spec" && subsection == "allowed_tools" && strings.HasPrefix(trimmed, "- ") {
+			agent.Spec.AllowedTools = append(agent.Spec.AllowedTools, stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))))
+			continue
+		}
+		if section == "spec" && subsection == "fallback_model_refs" && strings.HasPrefix(trimmed, "- ") {
+			agent.Spec.FallbackModelRefs = append(agent.Spec.FallbackModelRefs, stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))))
 			continue
 		}
 		if section == "spec" && subsection == "roles" && strings.HasPrefix(trimmed, "- ") {

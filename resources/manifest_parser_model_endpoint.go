@@ -92,6 +92,9 @@ func ParseModelEndpointManifest(data []byte) (ModelEndpoint, error) {
 			out.Spec.Options[strings.ToLower(strings.TrimSpace(key))] = value
 		case section == "spec" && subsection == "auth" && (key == "secretRef" || key == "secret_ref"):
 			out.Spec.Auth.SecretRef = value
+		case section == "spec" && subsection == "" && (key == "allowPrivate" || key == "allow_private"):
+			parsed := strings.EqualFold(value, "true") || value == "1"
+			out.Spec.AllowPrivate = &parsed
 		}
 	}
 
