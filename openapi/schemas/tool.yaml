@@ -30,6 +30,13 @@ components:
         name: { type: string }
         secretRef: { type: string }
         key: { type: string }
+    ContainerResources:
+      type: object
+      description: "Per-tool or per-McpServer container resource overrides. When set, these take precedence over global --tool-container-{memory,cpus,pids-limit} flags."
+      properties:
+        memory: { type: string, description: "Container memory limit (e.g. 128m, 1g). Overrides --tool-container-memory." }
+        cpus: { type: string, description: "Container CPU limit (e.g. 0.50, 1.0). Overrides --tool-container-cpus." }
+        pids_limit: { type: integer, description: "Container PIDs limit. Overrides --tool-container-pids-limit." }
     ToolCliSpec:
       type: object
       properties:
@@ -49,6 +56,7 @@ components:
         env_from:
           type: array
           items: { $ref: "#/components/schemas/ToolCliEnvRef" }
+        resources: { $ref: "#/components/schemas/ContainerResources" }
     ToolWasmSpec:
       type: object
       properties:

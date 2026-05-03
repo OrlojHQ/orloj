@@ -60,6 +60,9 @@ func main() {
 	toolContainerCPUs := flag.String("tool-container-cpus", env("ORLOJ_TOOL_CONTAINER_CPUS", "0.50"), "container CPU limit for isolated tools")
 	toolContainerPidsLimit := flag.Int("tool-container-pids-limit", 64, "container pids limit for isolated tools")
 	toolContainerUser := flag.String("tool-container-user", env("ORLOJ_TOOL_CONTAINER_USER", "65532:65532"), "container user for isolated tools")
+	toolContainerMaxMemory := flag.String("tool-container-max-memory", env("ORLOJ_TOOL_CONTAINER_MAX_MEMORY", ""), "operator ceiling for per-tool/McpServer resources.memory (empty = unbounded)")
+	toolContainerMaxCPUs := flag.String("tool-container-max-cpus", env("ORLOJ_TOOL_CONTAINER_MAX_CPUS", ""), "operator ceiling for per-tool/McpServer resources.cpus (empty = unbounded)")
+	toolContainerMaxPidsLimit := flag.Int("tool-container-max-pids-limit", envInt("ORLOJ_TOOL_CONTAINER_MAX_PIDS_LIMIT", 0), "operator ceiling for per-tool/McpServer resources.pids_limit (0 = unbounded)")
 	toolSecretEnvPrefix := flag.String("tool-secret-env-prefix", env("ORLOJ_TOOL_SECRET_ENV_PREFIX", "ORLOJ_SECRET_"), "environment variable prefix used to resolve Tool.spec.auth.secretRef")
 	toolWASMModule := flag.String("tool-wasm-module", env("ORLOJ_TOOL_WASM_MODULE", ""), "default wasm module path (per-tool spec.wasm.module takes precedence)")
 	toolWASMEntrypoint := flag.String("tool-wasm-entrypoint", env("ORLOJ_TOOL_WASM_ENTRYPOINT", "run"), "default wasm entrypoint function")
@@ -287,6 +290,11 @@ func main() {
 		SessionTTL:     *authSessionTTL,
 		UIBasePath:     *uiPath,
 		TrustedProxies: *trustedProxies,
+		ContainerResourceCeiling: resources.ContainerResourceCeiling{
+			MaxMemory:    *toolContainerMaxMemory,
+			MaxCPUs:      *toolContainerMaxCPUs,
+			MaxPidsLimit: *toolContainerMaxPidsLimit,
+		},
 	})
 	bus, closeBus := newEventBus(logger, *eventBusBackend, *natsURL, *natsSubjectPrefix)
 	if closeBus != nil {

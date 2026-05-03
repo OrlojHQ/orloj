@@ -79,10 +79,13 @@ Model routing (provider, base URL, default model, API key, timeout) is configure
 | `--tool-container-runtime` | `docker` | Container runtime binary. | Container backend; env `ORLOJ_TOOL_CONTAINER_RUNTIME`. |
 | `--tool-container-image` | `curlimages/curl:8.8.0` | Container image for isolated tool calls. | Container backend; env `ORLOJ_TOOL_CONTAINER_IMAGE`. |
 | `--tool-container-network` | `none` | Container network mode. | Container backend; env `ORLOJ_TOOL_CONTAINER_NETWORK`. |
-| `--tool-container-memory` | `128m` | Container memory limit. | Container backend; env `ORLOJ_TOOL_CONTAINER_MEMORY`. |
-| `--tool-container-cpus` | `0.50` | Container CPU limit. | Container backend; env `ORLOJ_TOOL_CONTAINER_CPUS`. |
-| `--tool-container-pids-limit` | `64` | Container PID limit. | Container backend. |
+| `--tool-container-memory` | `128m` | Default container memory limit. Per-tool `spec.cli.resources.memory` and per-McpServer `spec.resources.memory` take precedence when set. | Container backend; env `ORLOJ_TOOL_CONTAINER_MEMORY`. |
+| `--tool-container-cpus` | `0.50` | Default container CPU limit. Per-tool `spec.cli.resources.cpus` and per-McpServer `spec.resources.cpus` take precedence when set. | Container backend; env `ORLOJ_TOOL_CONTAINER_CPUS`. |
+| `--tool-container-pids-limit` | `64` | Default container PID limit. Per-tool `spec.cli.resources.pids_limit` and per-McpServer `spec.resources.pids_limit` take precedence when set. | Container backend; env `ORLOJ_TOOL_CONTAINER_PIDS_LIMIT`. |
 | `--tool-container-user` | `65532:65532` | Container user. | Container backend; env `ORLOJ_TOOL_CONTAINER_USER`. |
+| `--tool-container-max-memory` | empty | Operator ceiling for per-tool/McpServer `resources.memory`. Empty means unbounded. Manifests exceeding this are rejected at apply time. | `orlojd` only; env `ORLOJ_TOOL_CONTAINER_MAX_MEMORY`. |
+| `--tool-container-max-cpus` | empty | Operator ceiling for per-tool/McpServer `resources.cpus`. Empty means unbounded. | `orlojd` only; env `ORLOJ_TOOL_CONTAINER_MAX_CPUS`. |
+| `--tool-container-max-pids-limit` | `0` | Operator ceiling for per-tool/McpServer `resources.pids_limit`. 0 means unbounded. | `orlojd` only; env `ORLOJ_TOOL_CONTAINER_MAX_PIDS_LIMIT`. |
 | `--tool-secret-env-prefix` | `ORLOJ_SECRET_` | Env prefix for tool `secretRef` resolution. | Env fallback: `ORLOJ_TOOL_SECRET_ENV_PREFIX`. |
 | `--tool-wasm-module` | empty | Default WASM module path (per-tool `spec.wasm.module` takes precedence). | Always available; env `ORLOJ_TOOL_WASM_MODULE`. |
 | `--tool-wasm-entrypoint` | `run` | Default WASM entrypoint function. | Always available; env `ORLOJ_TOOL_WASM_ENTRYPOINT`. |
@@ -155,9 +158,9 @@ Model routing (provider, base URL, default model, API key, timeout) is configure
 | `--tool-container-runtime` | `docker` | Container runtime binary. | Container backend; env `ORLOJ_TOOL_CONTAINER_RUNTIME`. |
 | `--tool-container-image` | `curlimages/curl:8.8.0` | Container image for isolated tool calls. | Container backend; env `ORLOJ_TOOL_CONTAINER_IMAGE`. |
 | `--tool-container-network` | `none` | Container network mode. | Container backend; env `ORLOJ_TOOL_CONTAINER_NETWORK`. |
-| `--tool-container-memory` | `128m` | Container memory limit. | Container backend; env `ORLOJ_TOOL_CONTAINER_MEMORY`. |
-| `--tool-container-cpus` | `0.50` | Container CPU limit. | Container backend; env `ORLOJ_TOOL_CONTAINER_CPUS`. |
-| `--tool-container-pids-limit` | `64` | Container PID limit. | Container backend; env `ORLOJ_TOOL_CONTAINER_PIDS_LIMIT`. |
+| `--tool-container-memory` | `128m` | Default container memory limit. Per-tool `spec.cli.resources.memory` takes precedence when set. | Container backend; env `ORLOJ_TOOL_CONTAINER_MEMORY`. |
+| `--tool-container-cpus` | `0.50` | Default container CPU limit. Per-tool `spec.cli.resources.cpus` takes precedence when set. | Container backend; env `ORLOJ_TOOL_CONTAINER_CPUS`. |
+| `--tool-container-pids-limit` | `64` | Default container PID limit. Per-tool `spec.cli.resources.pids_limit` takes precedence when set. | Container backend; env `ORLOJ_TOOL_CONTAINER_PIDS_LIMIT`. |
 | `--tool-container-user` | `65532:65532` | Container user. | Container backend; env `ORLOJ_TOOL_CONTAINER_USER`. |
 | `--tool-secret-env-prefix` | `ORLOJ_SECRET_` | Env prefix for tool `secretRef` resolution. | Env fallback: `ORLOJ_TOOL_SECRET_ENV_PREFIX`. |
 | `--tool-wasm-module` | empty | Default WASM module path (per-tool `spec.wasm.module` takes precedence). | Always available; env `ORLOJ_TOOL_WASM_MODULE`. |

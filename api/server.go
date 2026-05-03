@@ -60,6 +60,7 @@ type ServerOptions struct {
 	SessionTTL         time.Duration
 	UIBasePath         string // URL path prefix for the web console (default "/")
 	TrustedProxies     string // comma-separated CIDRs whose forwarding headers are trusted
+	ContainerResourceCeiling resources.ContainerResourceCeiling
 }
 
 // Server exposes CRUD endpoints for control plane resources.
@@ -79,6 +80,7 @@ type Server struct {
 	requestRateLimiter *rate.Limiter // per-server; avoids test suites sharing one process-global bucket
 	trustedProxies     []*net.IPNet
 	uiBasePath         string
+	containerResourceCeiling resources.ContainerResourceCeiling
 }
 
 func NewServer(stores Stores, runtime *agentruntime.Manager, logger *log.Logger) *Server {
@@ -171,8 +173,9 @@ func NewServerWithOptions(stores Stores, runtime *agentruntime.Manager, logger *
 		// 500 r/s sustained, burst 100 — same as previous package-global limiter, but per Server instance
 		// so concurrent httptest servers in tests do not share one token bucket.
 		requestRateLimiter: rate.NewLimiter(rate.Limit(500), 100),
-		trustedProxies:     trustedProxies,
-		uiBasePath:         uiBase,
+		trustedProxies:             trustedProxies,
+		uiBasePath:                 uiBase,
+		containerResourceCeiling:   opts.ContainerResourceCeiling,
 	}
 	s.routes()
 	return s
@@ -193,6 +196,22 @@ func (s *Server) EventBus() eventbus.Bus {
 // SetMemoryBackends configures the registry used to serve memory entry queries.
 func (s *Server) SetMemoryBackends(registry *agentruntime.PersistentMemoryBackendRegistry) {
 	s.memoryBackends = registry
+}
+
+func (s *Server) validateToolContainerResources(tool resources.Tool) error {
+	res := tool.Spec.Cli.Resources
+	if err := resources.ValidateContainerResources(res, "spec.cli.resources"); err != nil {
+		return err
+	}
+	return resources.EnforceContainerResourceCeiling(res, s.containerResourceCeiling, "tool", tool.Metadata.Name)
+}
+
+func (s *Server) validateMcpServerContainerResources(server resources.McpServer) error {
+	res := server.Spec.Resources
+	if err := resources.ValidateContainerResources(res, "spec.resources"); err != nil {
+		return err
+	}
+	return resources.EnforceContainerResourceCeiling(res, s.containerResourceCeiling, "McpServer", server.Metadata.Name)
 }
 
 // maxRequestBodyBytes is the hard cap on incoming request bodies for all
@@ -1039,6 +1058,10 @@ func (s *Server) handleTools(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		if err := s.validateToolContainerResources(obj); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		if err := applyRequestNamespace(r, &obj.Metadata); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -1105,6 +1128,10 @@ func (s *Server) handleToolByName(w http.ResponseWriter, r *http.Request) {
 		}
 		obj, err := resources.ParseToolManifest(body)
 		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if err := s.validateToolContainerResources(obj); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -2953,6 +2980,10 @@ func (s *Server) handleMcpServers(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		if err := s.validateMcpServerContainerResources(obj); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		if err := applyRequestNamespace(r, &obj.Metadata); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -3003,6 +3034,10 @@ func (s *Server) handleMcpServerByName(w http.ResponseWriter, r *http.Request) {
 		}
 		obj, err := resources.ParseMcpServerManifest(body)
 		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if err := s.validateMcpServerContainerResources(obj); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}

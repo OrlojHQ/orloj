@@ -125,7 +125,7 @@ CLI tools default to `container` isolation. The operator provides a container im
 - `--cap-drop=ALL`
 - `--security-opt no-new-privileges`
 - `--network bridge` (configurable via `cli.network`)
-- Resource limits from worker config (`--tool-container-memory`, `--tool-container-cpus`, etc.)
+- Resource limits from `cli.resources` (per-tool) or the global worker config (`--tool-container-memory`, `--tool-container-cpus`, `--tool-container-pids-limit`)
 
 Set `cli.network: none` for tools that do not need outbound network access:
 
@@ -135,6 +135,29 @@ cli:
   image: ghcr.io/jqlang/jq:1.7
   network: none
 ```
+
+### Per-tool container resources
+
+Tools that need more resources than the global defaults (e.g. Chromium-based tools) can declare per-tool overrides via `cli.resources`. When set, these take precedence over the global `--tool-container-*` flags:
+
+```yaml
+cli:
+  command: screenshot
+  image: my-chromium:latest
+  network: bridge
+  resources:
+    memory: 1g
+    cpus: "1.0"
+    pids_limit: 256
+```
+
+| Field | Format | Description |
+|-------|--------|-------------|
+| `memory` | Docker memory string (`128m`, `1g`) | Container memory limit. |
+| `cpus` | Decimal string (`0.50`, `1.0`) | Container CPU limit. |
+| `pids_limit` | Integer | Container PID limit. |
+
+Operators can set a ceiling with `--tool-container-max-memory`, `--tool-container-max-cpus`, and `--tool-container-max-pids-limit` on `orlojd`. Manifests exceeding the ceiling are rejected at apply time.
 
 ## Direct execution (no container)
 

@@ -571,6 +571,10 @@ func ParseToolManifest(data []byte) (Tool, error) {
 				if section == "spec" && subsection == "cli" {
 					runtimeSubsection = "env_from"
 				}
+			case "resources":
+				if section == "spec" && subsection == "cli" {
+					runtimeSubsection = "resources"
+				}
 			}
 			continue
 		}
@@ -693,6 +697,16 @@ func ParseToolManifest(data []byte) (Tool, error) {
 			out.Spec.Cli.ImagePullSecret = value
 		case section == "spec" && subsection == "cli" && runtimeSubsection == "" && (key == "stdin_from_input" || key == "stdinFromInput"):
 			out.Spec.Cli.StdinFromInput = strings.EqualFold(value, "true")
+		case section == "spec" && subsection == "cli" && runtimeSubsection == "resources" && key == "memory":
+			out.Spec.Cli.Resources.Memory = value
+		case section == "spec" && subsection == "cli" && runtimeSubsection == "resources" && key == "cpus":
+			out.Spec.Cli.Resources.CPUs = value
+		case section == "spec" && subsection == "cli" && runtimeSubsection == "resources" && (key == "pids_limit" || key == "pidsLimit"):
+			v, err := strconv.Atoi(value)
+			if err != nil {
+				return Tool{}, fmt.Errorf("invalid spec.cli.resources.pids_limit value %q", value)
+			}
+			out.Spec.Cli.Resources.PidsLimit = v
 		case section == "spec" && subsection == "wasm" && key == "module":
 			out.Spec.Wasm.Module = value
 		case section == "spec" && subsection == "wasm" && key == "entrypoint":
@@ -2274,6 +2288,10 @@ func ParseMcpServerManifest(data []byte) (McpServer, error) {
 				if section == "spec" {
 					subsection = "reconnect"
 				}
+			case "resources":
+				if section == "spec" {
+					subsection = "resources"
+				}
 			}
 			continue
 		}
@@ -2350,6 +2368,16 @@ func ParseMcpServerManifest(data []byte) (McpServer, error) {
 			out.Spec.Reconnect.MaxAttempts = v
 		case section == "spec" && subsection == "reconnect" && key == "backoff":
 			out.Spec.Reconnect.Backoff = value
+		case section == "spec" && subsection == "resources" && key == "memory":
+			out.Spec.Resources.Memory = value
+		case section == "spec" && subsection == "resources" && key == "cpus":
+			out.Spec.Resources.CPUs = value
+		case section == "spec" && subsection == "resources" && (key == "pids_limit" || key == "pidsLimit"):
+			v, err := strconv.Atoi(value)
+			if err != nil {
+				return McpServer{}, fmt.Errorf("invalid spec.resources.pids_limit value %q", value)
+			}
+			out.Spec.Resources.PidsLimit = v
 		case section == "spec" && subsection == "env" && indent >= 6:
 			if len(out.Spec.Env) > 0 {
 				last := &out.Spec.Env[len(out.Spec.Env)-1]
