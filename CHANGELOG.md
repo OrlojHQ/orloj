@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **TaskSchedule `spec.task_template`**: Schedules now support inline task specs via `task_template`, matching the existing TaskWebhook capability. This eliminates the need for a separate template Task resource when only the schedule references it. `task_ref` and `task_template` are mutually exclusive; existing schedules using `task_ref` continue to work unchanged.
+
+### Fixed
+
+- **YAML manifest parser silently drops fields**: the constrained-YAML parser ignored several documented spec fields, causing them to be silently discarded on `apply`. Fixed: `image_pull_secret` on Tool CLI and McpServer, `fallback_model_refs` and `allowed_tools` on Agent, `allowPrivate` on ModelEndpoint, `max_child_depth` and `max_child_tasks` on AgentPolicy, `headerName`/`tokenURL`/`scopes` on McpServer auth, `algorithm`/`payload_format`/`payload_prefix`/`payload_separator`/`signature_encoding`/`header_format`/`signature_key`/`timestamp_key` on TaskWebhook auth, and `task_template.mode` on TaskSchedule and TaskWebhook. JSON manifests were unaffected.
+
 ## [0.12.0] - 2026-04-30
 
 ### Added

@@ -229,24 +229,33 @@ func evaluateDueSlot(item resources.TaskSchedule, expr cronexpr.Expression, loc 
 }
 
 func (c *TaskScheduleController) ensureRunTask(ctx context.Context, item resources.TaskSchedule, slot time.Time) (string, error) {
-	templateNS, templateName, err := resolveTaskRef(item.Metadata.Namespace, item.Spec.TaskRef)
-	if err != nil {
-		return "", err
-	}
-	templateKey := store.ScopedName(templateNS, templateName)
-	template, ok, err := c.taskStore.Get(ctx, templateKey)
-	if err != nil {
-		return "", fmt.Errorf("task template %q lookup failed: %w", item.Spec.TaskRef, err)
-	}
-	if !ok {
-		return "", fmt.Errorf("task template %q not found", item.Spec.TaskRef)
-	}
-	if !strings.EqualFold(strings.TrimSpace(template.Spec.Mode), "template") {
-		return "", fmt.Errorf("task template %q must set spec.mode=template", item.Spec.TaskRef)
+	var templateSpec resources.TaskSpec
+	var runNamespace string
+
+	if item.Spec.TaskTemplate != nil {
+		templateSpec = cloneTaskSpec(*item.Spec.TaskTemplate)
+		runNamespace = resources.NormalizeNamespace(item.Metadata.Namespace)
+	} else {
+		templateNS, templateName, err := resolveTaskRef(item.Metadata.Namespace, item.Spec.TaskRef)
+		if err != nil {
+			return "", err
+		}
+		templateKey := store.ScopedName(templateNS, templateName)
+		template, ok, err := c.taskStore.Get(ctx, templateKey)
+		if err != nil {
+			return "", fmt.Errorf("task template %q lookup failed: %w", item.Spec.TaskRef, err)
+		}
+		if !ok {
+			return "", fmt.Errorf("task template %q not found", item.Spec.TaskRef)
+		}
+		if !strings.EqualFold(strings.TrimSpace(template.Spec.Mode), "template") {
+			return "", fmt.Errorf("task template %q must set spec.mode=template", item.Spec.TaskRef)
+		}
+		templateSpec = cloneTaskSpec(template.Spec)
+		runNamespace = template.Metadata.Namespace
 	}
 
 	runName := scheduledTaskName(item.Metadata.Name, slot)
-	runNamespace := template.Metadata.Namespace
 	runKey := store.ScopedName(runNamespace, runName)
 
 	if existing, ok, _ := c.taskStore.Get(ctx, runKey); ok {
@@ -260,16 +269,12 @@ func (c *TaskScheduleController) ensureRunTask(ctx context.Context, item resourc
 		return "", fmt.Errorf("scheduled run task name conflict for %q", runKey)
 	}
 
-	labels := copyStringMap(template.Metadata.Labels)
-	if labels == nil {
-		labels = make(map[string]string)
-	}
+	labels := make(map[string]string)
 	labels[taskScheduleNameLabel] = item.Metadata.Name
 	labels[taskScheduleNamespaceLabel] = resources.NormalizeNamespace(item.Metadata.Namespace)
 	labels[taskScheduleSlotLabel] = slot.UTC().Format(time.RFC3339Nano)
 
-	spec := cloneTaskSpec(template.Spec)
-	spec.Mode = "run"
+	templateSpec.Mode = "run"
 	runTask := resources.Task{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Task",
@@ -278,7 +283,7 @@ func (c *TaskScheduleController) ensureRunTask(ctx context.Context, item resourc
 			Namespace: runNamespace,
 			Labels:    labels,
 		},
-		Spec: spec,
+		Spec: templateSpec,
 	}
 	if _, err := c.taskStore.Upsert(ctx, runTask); err != nil {
 		return "", err

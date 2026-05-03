@@ -128,6 +128,142 @@ spec:
 	}
 }
 
+func TestTaskScheduleNormalizeInlineTemplate(t *testing.T) {
+	s := TaskSchedule{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "TaskSchedule",
+		Metadata:   ObjectMeta{Name: "inline-sched"},
+		Spec: TaskScheduleSpec{
+			TaskTemplate: &TaskSpec{
+				System: "my-system",
+			},
+			Schedule: "*/5 * * * *",
+			TimeZone: "UTC",
+		},
+	}
+	if err := s.Normalize(); err != nil {
+		t.Fatalf("normalize failed: %v", err)
+	}
+	if s.Spec.TaskTemplate.Priority != "normal" {
+		t.Fatalf("expected default priority normal, got %q", s.Spec.TaskTemplate.Priority)
+	}
+	if s.Spec.TaskTemplate.Retry.MaxAttempts != 1 {
+		t.Fatalf("expected default retry.max_attempts 1, got %d", s.Spec.TaskTemplate.Retry.MaxAttempts)
+	}
+	if s.Spec.TaskTemplate.Input == nil {
+		t.Fatal("expected input map to be initialized")
+	}
+	if s.Spec.TaskRef != "" {
+		t.Fatalf("expected empty task_ref, got %q", s.Spec.TaskRef)
+	}
+}
+
+func TestTaskScheduleNormalizeMutualExclusivity(t *testing.T) {
+	both := TaskSchedule{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "TaskSchedule",
+		Metadata:   ObjectMeta{Name: "both-set"},
+		Spec: TaskScheduleSpec{
+			TaskRef:      "some-template",
+			TaskTemplate: &TaskSpec{System: "sys"},
+			Schedule:     "* * * * *",
+			TimeZone:     "UTC",
+		},
+	}
+	if err := both.Normalize(); err == nil {
+		t.Fatal("expected error when both task_ref and task_template are set")
+	}
+
+	neither := TaskSchedule{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "TaskSchedule",
+		Metadata:   ObjectMeta{Name: "neither-set"},
+		Spec: TaskScheduleSpec{
+			Schedule: "* * * * *",
+			TimeZone: "UTC",
+		},
+	}
+	if err := neither.Normalize(); err == nil {
+		t.Fatal("expected error when neither task_ref nor task_template is set")
+	}
+}
+
+func TestTaskScheduleNormalizeInlineTemplateMissingSystem(t *testing.T) {
+	s := TaskSchedule{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "TaskSchedule",
+		Metadata:   ObjectMeta{Name: "no-system"},
+		Spec: TaskScheduleSpec{
+			TaskTemplate: &TaskSpec{},
+			Schedule:     "* * * * *",
+			TimeZone:     "UTC",
+		},
+	}
+	if err := s.Normalize(); err == nil {
+		t.Fatal("expected error for inline template missing system")
+	}
+}
+
+func TestParseTaskScheduleManifestYAMLInlineTemplate(t *testing.T) {
+	raw := []byte(`
+apiVersion: orloj.dev/v1
+kind: TaskSchedule
+metadata:
+  name: inline-sched
+spec:
+  task_template:
+    system: report-pipeline
+    priority: high
+    input:
+      topic: weekly
+    retry:
+      max_attempts: 3
+      backoff: 5s
+    message_retry:
+      max_attempts: 2
+      backoff: 1s
+      max_backoff: 10s
+      jitter: full
+  schedule: "0 9 * * 1"
+  time_zone: America/Chicago
+  concurrency_policy: forbid
+`)
+	item, err := ParseTaskScheduleManifest(raw)
+	if err != nil {
+		t.Fatalf("parse failed: %v", err)
+	}
+	if item.Spec.TaskRef != "" {
+		t.Fatalf("expected empty task_ref, got %q", item.Spec.TaskRef)
+	}
+	if item.Spec.TaskTemplate == nil {
+		t.Fatal("expected task_template to be set")
+	}
+	if item.Spec.TaskTemplate.System != "report-pipeline" {
+		t.Fatalf("expected system report-pipeline, got %q", item.Spec.TaskTemplate.System)
+	}
+	if item.Spec.TaskTemplate.Priority != "high" {
+		t.Fatalf("expected priority high, got %q", item.Spec.TaskTemplate.Priority)
+	}
+	if item.Spec.TaskTemplate.Input["topic"] != "weekly" {
+		t.Fatalf("expected input topic=weekly, got %q", item.Spec.TaskTemplate.Input["topic"])
+	}
+	if item.Spec.TaskTemplate.Retry.MaxAttempts != 3 {
+		t.Fatalf("expected retry.max_attempts=3, got %d", item.Spec.TaskTemplate.Retry.MaxAttempts)
+	}
+	if item.Spec.TaskTemplate.Retry.Backoff != "5s" {
+		t.Fatalf("expected retry.backoff=5s, got %q", item.Spec.TaskTemplate.Retry.Backoff)
+	}
+	if item.Spec.TaskTemplate.MessageRetry.MaxAttempts != 2 {
+		t.Fatalf("expected message_retry.max_attempts=2, got %d", item.Spec.TaskTemplate.MessageRetry.MaxAttempts)
+	}
+	if item.Spec.TaskTemplate.MessageRetry.MaxBackoff != "10s" {
+		t.Fatalf("expected message_retry.max_backoff=10s, got %q", item.Spec.TaskTemplate.MessageRetry.MaxBackoff)
+	}
+	if item.Spec.Schedule != "0 9 * * 1" {
+		t.Fatalf("expected schedule 0 9 * * 1, got %q", item.Spec.Schedule)
+	}
+}
+
 func TestTaskWebhookNormalizeDefaultsAndValidation(t *testing.T) {
 	hook := TaskWebhook{
 		APIVersion: "orloj.dev/v1",

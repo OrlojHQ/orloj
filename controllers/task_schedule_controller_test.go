@@ -377,3 +377,64 @@ func TestScheduledTaskNameSanitizes(t *testing.T) {
 		t.Fatalf("unexpected task name %q", name)
 	}
 }
+
+func TestTaskScheduleControllerInlineTemplateCreatesRun(t *testing.T) {
+	taskStore := store.NewTaskStore()
+	taskScheduleStore := store.NewTaskScheduleStore()
+	logger := log.New(io.Discard, "", 0)
+
+	schedule := resources.TaskSchedule{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "TaskSchedule",
+		Metadata:   resources.ObjectMeta{Name: "inline-sched", Namespace: "team-a"},
+		Spec: resources.TaskScheduleSpec{
+			TaskTemplate: &resources.TaskSpec{
+				System:   "inline-system",
+				Priority: "high",
+				Input:    map[string]string{"topic": "inline"},
+			},
+			Schedule:          "* * * * *",
+			TimeZone:          "UTC",
+			Suspend:           false,
+			ConcurrencyPolicy: "forbid",
+		},
+		Status: resources.TaskScheduleStatus{
+			LastScheduleTime: time.Now().UTC().Add(-2 * time.Minute).Format(time.RFC3339Nano),
+		},
+	}
+	if _, err := taskScheduleStore.Upsert(context.Background(), schedule); err != nil {
+		t.Fatalf("upsert schedule failed: %v", err)
+	}
+
+	controller := NewTaskScheduleController(taskScheduleStore, taskStore, logger, 5*time.Millisecond)
+	if err := controller.ReconcileOnce(context.Background()); err != nil {
+		t.Fatalf("reconcile failed: %v", err)
+	}
+
+	tasks, err := taskStore.List(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	generated := 0
+	for _, task := range tasks {
+		if task.Metadata.Labels[taskScheduleNameLabel] != "inline-sched" {
+			continue
+		}
+		generated++
+		if task.Spec.Mode != "run" {
+			t.Fatalf("expected generated task mode=run, got %q", task.Spec.Mode)
+		}
+		if task.Spec.System != "inline-system" {
+			t.Fatalf("expected generated task system=inline-system, got %q", task.Spec.System)
+		}
+		if task.Spec.Priority != "high" {
+			t.Fatalf("expected generated task priority=high, got %q", task.Spec.Priority)
+		}
+		if task.Spec.Input["topic"] != "inline" {
+			t.Fatalf("expected generated task input topic=inline, got %q", task.Spec.Input["topic"])
+		}
+	}
+	if generated != 1 {
+		t.Fatalf("expected exactly one generated task, got %d", generated)
+	}
+}

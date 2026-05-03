@@ -1653,14 +1653,15 @@ type TaskSchedule struct {
 }
 
 type TaskScheduleSpec struct {
-	TaskRef                 string `json:"task_ref,omitempty"`
-	Schedule                string `json:"schedule,omitempty"`
-	TimeZone                string `json:"time_zone,omitempty"`
-	Suspend                 bool   `json:"suspend,omitempty"`
-	StartingDeadlineSeconds int    `json:"starting_deadline_seconds,omitempty"`
-	ConcurrencyPolicy       string `json:"concurrency_policy,omitempty"`
-	SuccessfulHistoryLimit  int    `json:"successful_history_limit,omitempty"`
-	FailedHistoryLimit      int    `json:"failed_history_limit,omitempty"`
+	TaskRef                 string    `json:"task_ref,omitempty"`
+	TaskTemplate            *TaskSpec `json:"task_template,omitempty"`
+	Schedule                string    `json:"schedule,omitempty"`
+	TimeZone                string    `json:"time_zone,omitempty"`
+	Suspend                 bool      `json:"suspend,omitempty"`
+	StartingDeadlineSeconds int       `json:"starting_deadline_seconds,omitempty"`
+	ConcurrencyPolicy       string    `json:"concurrency_policy,omitempty"`
+	SuccessfulHistoryLimit  int       `json:"successful_history_limit,omitempty"`
+	FailedHistoryLimit      int       `json:"failed_history_limit,omitempty"`
 }
 
 type TaskScheduleStatus struct {
@@ -1695,13 +1696,65 @@ func (t *TaskSchedule) Normalize() error {
 	}
 
 	t.Spec.TaskRef = strings.TrimSpace(t.Spec.TaskRef)
-	if t.Spec.TaskRef == "" {
-		return fmt.Errorf("spec.task_ref is required")
+	hasRef := t.Spec.TaskRef != ""
+	hasInline := t.Spec.TaskTemplate != nil
+	if hasRef && hasInline {
+		return fmt.Errorf("spec.task_ref and spec.task_template are mutually exclusive")
 	}
-	if strings.Contains(t.Spec.TaskRef, "/") {
+	if !hasRef && !hasInline {
+		return fmt.Errorf("one of spec.task_ref or spec.task_template is required")
+	}
+	if hasRef && strings.Contains(t.Spec.TaskRef, "/") {
 		parts := strings.SplitN(t.Spec.TaskRef, "/", 2)
 		if strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
 			return fmt.Errorf("invalid spec.task_ref %q: expected name or namespace/name", t.Spec.TaskRef)
+		}
+	}
+	if hasInline {
+		tmpl := t.Spec.TaskTemplate
+		tmpl.System = strings.TrimSpace(tmpl.System)
+		if tmpl.System == "" {
+			return fmt.Errorf("spec.task_template.system is required")
+		}
+		if tmpl.Input == nil {
+			tmpl.Input = make(map[string]string)
+		}
+		if strings.TrimSpace(tmpl.Priority) == "" {
+			tmpl.Priority = "normal"
+		}
+		if tmpl.Retry.MaxAttempts <= 0 {
+			tmpl.Retry.MaxAttempts = 1
+		}
+		if tmpl.Retry.Backoff == "" {
+			tmpl.Retry.Backoff = "0s"
+		}
+		if _, err := time.ParseDuration(tmpl.Retry.Backoff); err != nil {
+			return fmt.Errorf("invalid spec.task_template.retry.backoff %q: %w", tmpl.Retry.Backoff, err)
+		}
+		if tmpl.MessageRetry.MaxAttempts <= 0 {
+			tmpl.MessageRetry.MaxAttempts = tmpl.Retry.MaxAttempts
+		}
+		if strings.TrimSpace(tmpl.MessageRetry.Backoff) == "" {
+			tmpl.MessageRetry.Backoff = tmpl.Retry.Backoff
+		}
+		if _, err := time.ParseDuration(tmpl.MessageRetry.Backoff); err != nil {
+			return fmt.Errorf("invalid spec.task_template.message_retry.backoff %q: %w", tmpl.MessageRetry.Backoff, err)
+		}
+		if strings.TrimSpace(tmpl.MessageRetry.MaxBackoff) == "" {
+			tmpl.MessageRetry.MaxBackoff = "24h"
+		}
+		if _, err := time.ParseDuration(tmpl.MessageRetry.MaxBackoff); err != nil {
+			return fmt.Errorf("invalid spec.task_template.message_retry.max_backoff %q: %w", tmpl.MessageRetry.MaxBackoff, err)
+		}
+		jitter := strings.ToLower(strings.TrimSpace(tmpl.MessageRetry.Jitter))
+		if jitter == "" {
+			jitter = "full"
+		}
+		switch jitter {
+		case "none", "full", "equal":
+			tmpl.MessageRetry.Jitter = jitter
+		default:
+			return fmt.Errorf("invalid spec.task_template.message_retry.jitter %q: expected none, full, or equal", tmpl.MessageRetry.Jitter)
 		}
 	}
 

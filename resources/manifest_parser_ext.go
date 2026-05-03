@@ -689,6 +689,8 @@ func ParseToolManifest(data []byte) (Tool, error) {
 			out.Spec.Cli.Output = value
 		case section == "spec" && subsection == "cli" && runtimeSubsection == "" && (key == "working_dir" || key == "workingDir"):
 			out.Spec.Cli.WorkingDir = value
+		case section == "spec" && subsection == "cli" && runtimeSubsection == "" && (key == "image_pull_secret" || key == "imagePullSecret"):
+			out.Spec.Cli.ImagePullSecret = value
 		case section == "spec" && subsection == "cli" && runtimeSubsection == "" && (key == "stdin_from_input" || key == "stdinFromInput"):
 			out.Spec.Cli.StdinFromInput = strings.EqualFold(value, "true")
 		case section == "spec" && subsection == "wasm" && key == "module":
@@ -1119,6 +1121,18 @@ func ParseAgentPolicyManifest(data []byte) (AgentPolicy, error) {
 			out.Spec.MaxTokensPerRun = v
 		case section == "spec" && key == "apply_mode":
 			out.Spec.ApplyMode = value
+		case section == "spec" && (key == "max_child_depth" || key == "maxChildDepth"):
+			v, err := strconv.Atoi(value)
+			if err != nil {
+				return AgentPolicy{}, fmt.Errorf("invalid spec.max_child_depth value %q", value)
+			}
+			out.Spec.MaxChildDepth = v
+		case section == "spec" && (key == "max_child_tasks" || key == "maxChildTasks"):
+			v, err := strconv.Atoi(value)
+			if err != nil {
+				return AgentPolicy{}, fmt.Errorf("invalid spec.max_child_tasks value %q", value)
+			}
+			out.Spec.MaxChildTasks = v
 		}
 	}
 
@@ -1773,6 +1787,9 @@ func ParseTaskScheduleManifest(data []byte) (TaskSchedule, error) {
 		if section == "metadata" && indent <= 2 && !strings.HasSuffix(trimmed, ":") && !strings.HasPrefix(trimmed, "- ") {
 			subsection = ""
 		}
+		if section == "spec" && strings.HasPrefix(subsection, "task_template_") && indent <= 4 && !strings.HasSuffix(trimmed, ":") {
+			subsection = "task_template"
+		}
 
 		if strings.HasSuffix(trimmed, ":") {
 			switch strings.TrimSuffix(trimmed, ":") {
@@ -1785,6 +1802,25 @@ func ParseTaskScheduleManifest(data []byte) (TaskSchedule, error) {
 			case "labels":
 				if section == "metadata" {
 					subsection = "labels"
+				}
+			case "task_template":
+				if section == "spec" {
+					subsection = "task_template"
+					if out.Spec.TaskTemplate == nil {
+						out.Spec.TaskTemplate = &TaskSpec{}
+					}
+				}
+			case "input":
+				if section == "spec" && strings.HasPrefix(subsection, "task_template") {
+					subsection = "task_template_input"
+				}
+			case "retry":
+				if section == "spec" && strings.HasPrefix(subsection, "task_template") {
+					subsection = "task_template_retry"
+				}
+			case "message_retry":
+				if section == "spec" && strings.HasPrefix(subsection, "task_template") {
+					subsection = "task_template_message_retry"
 				}
 			}
 			continue
@@ -1838,6 +1874,43 @@ func ParseTaskScheduleManifest(data []byte) (TaskSchedule, error) {
 				return TaskSchedule{}, fmt.Errorf("invalid spec.failed_history_limit value %q", value)
 			}
 			out.Spec.FailedHistoryLimit = v
+		case section == "spec" && subsection == "task_template" && key == "system":
+			out.Spec.TaskTemplate.System = value
+		case section == "spec" && subsection == "task_template" && key == "mode":
+			out.Spec.TaskTemplate.Mode = value
+		case section == "spec" && subsection == "task_template" && key == "priority":
+			out.Spec.TaskTemplate.Priority = value
+		case section == "spec" && subsection == "task_template" && (key == "max_turns" || key == "maxTurns"):
+			v, err := strconv.Atoi(value)
+			if err != nil {
+				return TaskSchedule{}, fmt.Errorf("invalid spec.task_template.max_turns value %q", value)
+			}
+			out.Spec.TaskTemplate.MaxTurns = v
+		case section == "spec" && subsection == "task_template_input":
+			if out.Spec.TaskTemplate.Input == nil {
+				out.Spec.TaskTemplate.Input = make(map[string]string)
+			}
+			out.Spec.TaskTemplate.Input[key] = value
+		case section == "spec" && subsection == "task_template_retry" && (key == "max_attempts" || key == "maxAttempts"):
+			v, err := strconv.Atoi(value)
+			if err != nil {
+				return TaskSchedule{}, fmt.Errorf("invalid spec.task_template.retry.max_attempts value %q", value)
+			}
+			out.Spec.TaskTemplate.Retry.MaxAttempts = v
+		case section == "spec" && subsection == "task_template_retry" && key == "backoff":
+			out.Spec.TaskTemplate.Retry.Backoff = value
+		case section == "spec" && subsection == "task_template_message_retry" && (key == "max_attempts" || key == "maxAttempts"):
+			v, err := strconv.Atoi(value)
+			if err != nil {
+				return TaskSchedule{}, fmt.Errorf("invalid spec.task_template.message_retry.max_attempts value %q", value)
+			}
+			out.Spec.TaskTemplate.MessageRetry.MaxAttempts = v
+		case section == "spec" && subsection == "task_template_message_retry" && key == "backoff":
+			out.Spec.TaskTemplate.MessageRetry.Backoff = value
+		case section == "spec" && subsection == "task_template_message_retry" && (key == "max_backoff" || key == "maxBackoff"):
+			out.Spec.TaskTemplate.MessageRetry.MaxBackoff = value
+		case section == "spec" && subsection == "task_template_message_retry" && key == "jitter":
+			out.Spec.TaskTemplate.MessageRetry.Jitter = value
 		}
 	}
 
@@ -1944,6 +2017,8 @@ func ParseTaskWebhookManifest(data []byte) (TaskWebhook, error) {
 			out.Spec.Suspend = strings.EqualFold(value, "true") || value == "1"
 		case section == "spec" && subsection == "task_template" && key == "system":
 			out.Spec.TaskTemplate.System = value
+		case section == "spec" && subsection == "task_template" && key == "mode":
+			out.Spec.TaskTemplate.Mode = value
 		case section == "spec" && subsection == "task_template" && key == "priority":
 			out.Spec.TaskTemplate.Priority = value
 		case section == "spec" && subsection == "task_template" && (key == "max_turns" || key == "maxTurns"):
@@ -1993,6 +2068,22 @@ func ParseTaskWebhookManifest(data []byte) (TaskWebhook, error) {
 				return TaskWebhook{}, fmt.Errorf("invalid spec.auth.max_skew_seconds value %q", value)
 			}
 			out.Spec.Auth.MaxSkewSeconds = v
+		case section == "spec" && subsection == "auth" && key == "algorithm":
+			out.Spec.Auth.Algorithm = value
+		case section == "spec" && subsection == "auth" && (key == "payload_format" || key == "payloadFormat"):
+			out.Spec.Auth.PayloadFormat = value
+		case section == "spec" && subsection == "auth" && (key == "payload_prefix" || key == "payloadPrefix"):
+			out.Spec.Auth.PayloadPrefix = value
+		case section == "spec" && subsection == "auth" && (key == "payload_separator" || key == "payloadSeparator"):
+			out.Spec.Auth.PayloadSeparator = value
+		case section == "spec" && subsection == "auth" && (key == "signature_encoding" || key == "signatureEncoding"):
+			out.Spec.Auth.SignatureEncoding = value
+		case section == "spec" && subsection == "auth" && (key == "header_format" || key == "headerFormat"):
+			out.Spec.Auth.HeaderFormat = value
+		case section == "spec" && subsection == "auth" && (key == "signature_key" || key == "signatureKey"):
+			out.Spec.Auth.SignatureKey = value
+		case section == "spec" && subsection == "auth" && (key == "timestamp_key" || key == "timestampKey"):
+			out.Spec.Auth.TimestampKey = value
 		case section == "spec" && subsection == "idempotency" && (key == "event_id_header" || key == "eventIdHeader"):
 			out.Spec.Idempotency.EventIDHeader = value
 		case section == "spec" && subsection == "idempotency" && (key == "event_id_from_body" || key == "eventIdFromBody"):
@@ -2159,11 +2250,15 @@ func ParseMcpServerManifest(data []byte) (McpServer, error) {
 				if section == "spec" {
 					subsection = "env"
 				}
-			case "auth":
-				if section == "spec" {
-					subsection = "auth"
-				}
-			case "tool_filter", "toolFilter":
+		case "auth":
+			if section == "spec" {
+				subsection = "auth"
+			}
+		case "scopes":
+			if section == "spec" && subsection == "auth" {
+				subsection = "auth_scopes"
+			}
+		case "tool_filter", "toolFilter":
 				if section == "spec" {
 					subsection = "tool_filter"
 				}
@@ -2185,6 +2280,10 @@ func ParseMcpServerManifest(data []byte) (McpServer, error) {
 
 		if section == "spec" && subsection == "args" && strings.HasPrefix(trimmed, "- ") {
 			out.Spec.Args = append(out.Spec.Args, stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))))
+			continue
+		}
+		if section == "spec" && subsection == "auth_scopes" && strings.HasPrefix(trimmed, "- ") {
+			out.Spec.Auth.Scopes = append(out.Spec.Auth.Scopes, stripQuotes(strings.TrimSpace(strings.TrimPrefix(trimmed, "- "))))
 			continue
 		}
 		if section == "spec" && subsection == "tool_filter_include" && strings.HasPrefix(trimmed, "- ") {
@@ -2231,12 +2330,18 @@ func ParseMcpServerManifest(data []byte) (McpServer, error) {
 			out.Spec.Endpoint = value
 		case section == "spec" && subsection == "" && key == "image":
 			out.Spec.Image = value
+		case section == "spec" && subsection == "" && (key == "image_pull_secret" || key == "imagePullSecret"):
+			out.Spec.ImagePullSecret = value
 		case section == "spec" && subsection == "" && (key == "idle_timeout" || key == "idleTimeout"):
 			out.Spec.IdleTimeout = value
 		case section == "spec" && subsection == "auth" && (key == "secretRef" || key == "secret_ref"):
 			out.Spec.Auth.SecretRef = value
 		case section == "spec" && subsection == "auth" && key == "profile":
 			out.Spec.Auth.Profile = value
+		case section == "spec" && subsection == "auth" && (key == "headerName" || key == "header_name"):
+			out.Spec.Auth.HeaderName = value
+		case section == "spec" && subsection == "auth" && (key == "tokenURL" || key == "token_url"):
+			out.Spec.Auth.TokenURL = value
 		case section == "spec" && subsection == "reconnect" && (key == "max_attempts" || key == "maxAttempts"):
 			v, err := strconv.Atoi(value)
 			if err != nil {
