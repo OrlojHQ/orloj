@@ -783,12 +783,16 @@ func runGet(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("failed to decode response: %w", err)
 		}
 		tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
-		fmt.Fprintln(tw, "NAME\tTASK\tTOOL\tOPERATION\tAGENT\tPHASE\tEXPIRES_AT\tDECIDED_BY")
+		fmt.Fprintln(tw, "NAME\tTASK\tTOOL\tINPUT\tOPERATION\tAGENT\tPHASE\tEXPIRES_AT\tDECIDED_BY")
 		for _, item := range list.Items {
-			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+			inputPreview := item.Spec.Input
+			if len(inputPreview) > 40 {
+				inputPreview = inputPreview[:37] + "..."
+			}
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 				item.Metadata.Name, item.Spec.TaskRef, item.Spec.Tool,
-				item.Spec.OperationClass, item.Spec.Agent, item.Status.Phase,
-				item.Status.ExpiresAt, item.Status.DecidedBy)
+				inputPreview, item.Spec.OperationClass, item.Spec.Agent,
+				item.Status.Phase, item.Status.ExpiresAt, item.Status.DecidedBy)
 		}
 		_ = tw.Flush()
 	case "task-approvals":

@@ -2213,18 +2213,19 @@ type McpServer struct {
 }
 
 type McpServerSpec struct {
-	Transport       string             `json:"transport"`
-	Command         string             `json:"command,omitempty"`
-	Args            []string           `json:"args,omitempty"`
-	Env             []McpServerEnvVar  `json:"env,omitempty"`
-	Endpoint        string             `json:"endpoint,omitempty"`
-	Image           string             `json:"image,omitempty"`
-	ImagePullSecret string             `json:"image_pull_secret,omitempty"`
-	IdleTimeout     string             `json:"idle_timeout,omitempty"`
-	Auth            ToolAuth           `json:"auth,omitempty"`
-	ToolFilter      McpToolFilter      `json:"tool_filter,omitempty"`
-	Reconnect       McpReconnectPolicy `json:"reconnect,omitempty"`
-	Resources       ContainerResources `json:"resources,omitempty"`
+	Transport          string             `json:"transport"`
+	Command            string             `json:"command,omitempty"`
+	Args               []string           `json:"args,omitempty"`
+	Env                []McpServerEnvVar  `json:"env,omitempty"`
+	Endpoint           string             `json:"endpoint,omitempty"`
+	Image              string             `json:"image,omitempty"`
+	ImagePullSecret    string             `json:"image_pull_secret,omitempty"`
+	IdleTimeout        string             `json:"idle_timeout,omitempty"`
+	Auth               ToolAuth           `json:"auth,omitempty"`
+	ToolFilter         McpToolFilter      `json:"tool_filter,omitempty"`
+	Reconnect          McpReconnectPolicy `json:"reconnect,omitempty"`
+	Resources          ContainerResources `json:"resources,omitempty"`
+	DefaultToolRuntime *ToolRuntimePolicy `json:"default_tool_runtime,omitempty"`
 }
 
 type McpServerEnvVar struct {
@@ -2334,6 +2335,14 @@ func (m *McpServer) Normalize() error {
 	}
 	if strings.TrimSpace(m.Spec.Reconnect.Backoff) == "" {
 		m.Spec.Reconnect.Backoff = "2s"
+	}
+	if r := m.Spec.DefaultToolRuntime; r != nil {
+		if t := strings.TrimSpace(r.Timeout); t != "" {
+			if _, err := time.ParseDuration(t); err != nil {
+				return fmt.Errorf("invalid spec.default_tool_runtime.timeout %q: %w", t, err)
+			}
+			r.Timeout = t
+		}
 	}
 	if m.Status.Phase == "" {
 		m.Status.Phase = "Pending"

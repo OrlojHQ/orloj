@@ -33,7 +33,7 @@ function createReconnectingSource(
       backoff = INITIAL_BACKOFF;
     };
 
-    es.onmessage = (e) => {
+    const handleSSE = (e: MessageEvent) => {
       try {
         const data = JSON.parse(e.data) as WatchEvent;
         onEvent(data);
@@ -41,6 +41,10 @@ function createReconnectingSource(
         // ignore parse errors
       }
     };
+
+    es.addEventListener("resource", handleSSE);
+    es.addEventListener("event", handleSSE);
+    es.onmessage = handleSSE;
 
     es.onerror = () => {
       es.close();

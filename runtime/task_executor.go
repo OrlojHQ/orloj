@@ -81,6 +81,7 @@ type TaskExecutor struct {
 	newMemoryStore func() MemoryStore
 	stepEvery      time.Duration
 	logger         *log.Logger
+	OnStepEvent    func(AgentStepEvent)
 }
 
 func NewTaskExecutor(logger *log.Logger) *TaskExecutor {
@@ -126,7 +127,11 @@ func (e *TaskExecutor) ExecuteAgentWithRuntime(
 ) (AgentExecutionResult, error) {
 	engine := e.engine
 	if override != nil {
-		engine = NewReActExecutionEngine(override, e.modelGateway, e.newMemoryStore, e.stepEvery)
+		re := NewReActExecutionEngine(override, e.modelGateway, e.newMemoryStore, e.stepEvery)
+		re.OnStepEvent = e.OnStepEvent
+		engine = re
+	} else if re, ok := engine.(*ReActExecutionEngine); ok && e.OnStepEvent != nil {
+		re.OnStepEvent = e.OnStepEvent
 	}
 	result, err := engine.Execute(ctx, agent, input)
 	if err != nil {

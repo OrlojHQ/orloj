@@ -39,6 +39,7 @@ components:
         tool_filter: { $ref: "#/components/schemas/McpToolFilter" }
         reconnect: { $ref: "#/components/schemas/McpReconnectPolicy" }
         resources: { $ref: "tool.yaml#/components/schemas/ContainerResources" }
+        default_tool_runtime: { $ref: "tool.yaml#/components/schemas/ToolRuntimePolicy" }
     McpServerStatus:
       type: object
       properties:

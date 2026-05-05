@@ -209,6 +209,9 @@ func (c *McpServerController) syncTools(ctx context.Context, server resources.Mc
 				InputSchema:  mcpTool.InputSchema,
 			},
 		}
+		if server.Spec.DefaultToolRuntime != nil {
+			tool.Spec.Runtime = *server.Spec.DefaultToolRuntime
+		}
 
 		if _, err := c.toolStore.Upsert(ctx, tool); err != nil {
 			return generated, fmt.Errorf("upsert generated tool %s: %w", toolName, err)

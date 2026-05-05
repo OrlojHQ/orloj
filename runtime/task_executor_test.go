@@ -1073,3 +1073,80 @@ func TestParseAgentStepEventsCapturesLatencyFields(t *testing.T) {
 		t.Fatalf("expected tool_call latency_ms=14, got %d", parsed[1].LatencyMS)
 	}
 }
+
+func TestOnStepEventCallbackFiringDuringExecution(t *testing.T) {
+	engine := NewReActExecutionEngine(&staticToolRuntime{}, &MockModelGateway{}, nil, 0)
+	var received []AgentStepEvent
+	engine.OnStepEvent = func(evt AgentStepEvent) {
+		received = append(received, evt)
+	}
+
+	agent := resources.Agent{
+		Metadata: resources.ObjectMeta{Name: "streamer"},
+		Spec: resources.AgentSpec{
+			Model:    "gpt-4o",
+			ModelRef: "test-endpoint",
+			Prompt:   "test",
+			Tools:    []string{"web_search"},
+			Limits:   resources.AgentLimits{MaxSteps: 2},
+		},
+	}
+
+	result, err := engine.Execute(context.Background(), agent, map[string]string{"topic": "test"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(received) == 0 {
+		t.Fatal("OnStepEvent callback was never invoked")
+	}
+	if len(received) != len(result.StepEvents) {
+		t.Fatalf("callback received %d events but result has %d step events", len(received), len(result.StepEvents))
+	}
+	for i, evt := range received {
+		if evt.Type != result.StepEvents[i].Type {
+			t.Fatalf("event %d: callback type=%q != result type=%q", i, evt.Type, result.StepEvents[i].Type)
+		}
+	}
+}
+
+func TestTaskExecutorOnStepEventPropagatedToEngine(t *testing.T) {
+	executor := NewTaskExecutorWithRuntime(nil, &staticToolRuntime{}, &MockModelGateway{}, nil)
+	var received []AgentStepEvent
+	executor.OnStepEvent = func(evt AgentStepEvent) {
+		received = append(received, evt)
+	}
+
+	agent := resources.Agent{
+		Metadata: resources.ObjectMeta{Name: "delegator"},
+		Spec: resources.AgentSpec{
+			Model:    "gpt-4o",
+			ModelRef: "test-endpoint",
+			Prompt:   "test",
+			Tools:    []string{"web_search"},
+			Limits:   resources.AgentLimits{MaxSteps: 1},
+		},
+	}
+
+	_, err := executor.ExecuteAgentWithRuntime(context.Background(), agent, map[string]string{"topic": "x"}, &staticToolRuntime{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(received) == 0 {
+		t.Fatal("OnStepEvent was not propagated through TaskExecutor to engine")
+	}
+	var hasModelCall, hasToolCall bool
+	for _, evt := range received {
+		if evt.Type == "model_call" {
+			hasModelCall = true
+		}
+		if evt.Type == "tool_call" {
+			hasToolCall = true
+		}
+	}
+	if !hasModelCall {
+		t.Fatal("expected at least one model_call event via OnStepEvent")
+	}
+	if !hasToolCall {
+		t.Fatal("expected at least one tool_call event via OnStepEvent")
+	}
+}

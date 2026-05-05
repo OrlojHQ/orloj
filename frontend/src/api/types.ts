@@ -607,7 +607,7 @@ export interface ToolApprovalSpec {
   tool?: string;
   operation_class?: string;
   agent?: string;
-  input?: Record<string, string>;
+  input?: string;
   reason?: string;
   ttl?: string;
 }

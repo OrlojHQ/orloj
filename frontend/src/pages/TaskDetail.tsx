@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useDetailReturnNav } from "../hooks/useDetailReturnNav";
@@ -15,8 +15,70 @@ import { TraceView } from "../components/TraceView";
 import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
 import { ArrowLeft, Clock, Activity, Hash, Zap } from "lucide-react";
 import clsx from "clsx";
-import type { Task } from "../api/types";
+import type { Task, TaskTraceEvent } from "../api/types";
 import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
+
+function traceKey(e: TaskTraceEvent): string {
+  return `${e.timestamp}|${e.type}|${e.step ?? ""}|${e.tool ?? ""}`;
+}
+
+function mergeTrace(persisted: TaskTraceEvent[], streamed: TaskTraceEvent[]): TaskTraceEvent[] {
+  if (streamed.length === 0) return persisted;
+  const seen = new Set(persisted.map(traceKey));
+  const extras = streamed.filter((e) => !seen.has(traceKey(e)));
+  if (extras.length === 0) return persisted;
+  return [...persisted, ...extras];
+}
+
+function useTaskTraceStream(taskName: string, namespace: string, apiBase: string): TaskTraceEvent[] {
+  const [streamed, setStreamed] = useState<TaskTraceEvent[]>([]);
+  const seenRef = useRef(new Set<string>());
+
+  useEffect(() => {
+    if (!taskName) return;
+    setStreamed([]);
+    seenRef.current = new Set();
+
+    const base = apiBase.replace(/\/$/, "");
+    const url = new URL("/v1/events/watch", base);
+    url.searchParams.set("type", "task.trace");
+    url.searchParams.set("name", taskName);
+    url.searchParams.set("namespace", namespace);
+
+    const es = new EventSource(url.toString());
+    const handle = (e: MessageEvent) => {
+      try {
+        const payload = JSON.parse(e.data);
+        const d = payload.data;
+        if (!d) return;
+        const evt: TaskTraceEvent = {
+          timestamp: d.Timestamp,
+          type: d.Type,
+          step: d.Step,
+          tool: d.Tool,
+          message: d.Message,
+          error_code: d.ErrorCode,
+          error_reason: d.ErrorReason,
+          retryable: d.Retryable ?? undefined,
+          latency_ms: d.LatencyMS,
+          tokens: d.Tokens,
+          input_tokens: d.InputTokens,
+          output_tokens: d.OutputTokens,
+          token_usage_source: d.UsageSource,
+        };
+        const key = `${evt.timestamp}|${evt.type}|${evt.step}|${evt.tool}`;
+        if (seenRef.current.has(key)) return;
+        seenRef.current.add(key);
+        setStreamed((prev) => [...prev, evt]);
+      } catch { /* ignore */ }
+    };
+    es.addEventListener("event", handle);
+    es.onmessage = handle;
+    return () => { es.close(); };
+  }, [taskName, namespace, apiBase]);
+
+  return streamed;
+}
 
 type Tab = "overview" | "messages" | "metrics" | "trace" | "logs" | "graph" | "yaml";
 
@@ -34,6 +96,8 @@ export function TaskDetail() {
   const { data: task, isLoading, isError, error } = useTask(routeName);
   const queryClient = useQueryClient();
   const namespace = useAppStore((s) => s.namespace);
+  const apiBase = useAppStore((s) => s.apiBase);
+  const streamedTrace = useTaskTraceStream(routeName, namespace, apiBase);
   const [msgPhase, setMsgPhase] = useState("");
   const [msgFrom, setMsgFrom] = useState("");
   const [msgTo, setMsgTo] = useState("");
@@ -89,7 +153,8 @@ export function TaskDetail() {
     return <div className="page"><div className="loading-placeholder">Loading task...</div></div>;
   }
 
-  const traceEvents = task.status?.trace ?? [];
+  const persistedTrace = task.status?.trace ?? [];
+  const traceEvents = mergeTrace(persistedTrace, streamedTrace);
 
   const tabs: { id: Tab; label: string }[] = [
     { id: "overview", label: "Overview" },

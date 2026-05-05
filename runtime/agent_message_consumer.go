@@ -80,6 +80,7 @@ type AgentMessageConsumerOptions struct {
 	TaskApprovals       TaskApprovalUpserter
 	Policies            AgentPolicyLookup
 	ContextAdapters     ContextAdapterGetter
+	OnStepEvent         func(taskName, namespace string, evt AgentStepEvent)
 }
 
 // ToolApprovalUpserter persists ToolApproval resources when a governed tool requires approval.
@@ -124,6 +125,7 @@ type AgentMessageConsumerManager struct {
 	taskApprovals  TaskApprovalUpserter
 	policies       AgentPolicyLookup
 	contextAdapters ContextAdapterGetter
+	onStepEvent    func(taskName, namespace string, evt AgentStepEvent)
 	mu             sync.Mutex
 	consumers      map[string]context.CancelFunc
 	seenMessage    map[string]time.Time
@@ -188,6 +190,7 @@ func NewAgentMessageConsumerManager(
 		taskApprovals:  opts.TaskApprovals,
 		policies:       opts.Policies,
 		contextAdapters: opts.ContextAdapters,
+		onStepEvent:    opts.OnStepEvent,
 		extensions:     NormalizeExtensions(opts.Extensions),
 		consumers:      make(map[string]context.CancelFunc),
 		seenMessage:    make(map[string]time.Time),
@@ -581,6 +584,12 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 		agent.Spec.Tools = dedupeStrings(agent.Spec.Tools)
 	}
 	agentCtx, agentSpan := telemetry.StartAgentSpan(ctx, agent.Metadata.Name, msg.MessageID, msg.Attempt)
+	if m.onStepEvent != nil {
+		ns, taskName := splitTaskKey(taskKey)
+		m.executor.OnStepEvent = func(evt AgentStepEvent) {
+			m.onStepEvent(taskName, ns, evt)
+		}
+	}
 	result, err := m.executor.ExecuteAgentWithRuntime(agentCtx, agent, input, toolRT)
 	if err != nil {
 		telemetry.EndSpanError(agentSpan, err)
@@ -2894,6 +2903,12 @@ func (m *AgentMessageConsumerManager) pauseTaskForToolApproval(ctx context.Conte
 		reason = reason[:500]
 	}
 
+	const maxInputLen = 4096
+	toolInput := RedactSensitive(ParseInputFromApprovalError(execErr))
+	if len(toolInput) > maxInputLen {
+		toolInput = toolInput[:maxInputLen]
+	}
+
 	approval := resources.ToolApproval{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "ToolApproval",
@@ -2907,6 +2922,7 @@ func (m *AgentMessageConsumerManager) pauseTaskForToolApproval(ctx context.Conte
 			Agent:          agent.Metadata.Name,
 			Reason:         reason,
 			OperationClass: "write",
+			Input:          toolInput,
 		},
 		Status: resources.ToolApprovalStatus{
 			Phase: "Pending",

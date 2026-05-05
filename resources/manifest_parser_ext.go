@@ -2292,7 +2292,18 @@ func ParseMcpServerManifest(data []byte) (McpServer, error) {
 				if section == "spec" {
 					subsection = "resources"
 				}
+		case "default_tool_runtime", "defaultToolRuntime":
+			if section == "spec" {
+				subsection = "default_tool_runtime"
+				if out.Spec.DefaultToolRuntime == nil {
+					out.Spec.DefaultToolRuntime = &ToolRuntimePolicy{}
+				}
 			}
+		case "retry":
+			if section == "spec" && subsection == "default_tool_runtime" {
+				subsection = "default_tool_runtime_retry"
+			}
+		}
 			continue
 		}
 
@@ -2392,7 +2403,32 @@ func ParseMcpServerManifest(data []byte) (McpServer, error) {
 					last.MountPath = value
 				}
 			}
+	case section == "spec" && subsection == "default_tool_runtime":
+		if out.Spec.DefaultToolRuntime == nil {
+			out.Spec.DefaultToolRuntime = &ToolRuntimePolicy{}
 		}
+		switch key {
+		case "timeout":
+			out.Spec.DefaultToolRuntime.Timeout = value
+		case "isolation_mode", "isolationMode":
+			out.Spec.DefaultToolRuntime.IsolationMode = value
+		}
+	case section == "spec" && subsection == "default_tool_runtime_retry":
+		if out.Spec.DefaultToolRuntime == nil {
+			out.Spec.DefaultToolRuntime = &ToolRuntimePolicy{}
+		}
+		switch key {
+		case "max_attempts", "maxAttempts":
+			v, _ := strconv.Atoi(value)
+			out.Spec.DefaultToolRuntime.Retry.MaxAttempts = v
+		case "backoff":
+			out.Spec.DefaultToolRuntime.Retry.Backoff = value
+		case "max_backoff", "maxBackoff":
+			out.Spec.DefaultToolRuntime.Retry.MaxBackoff = value
+		case "jitter":
+			out.Spec.DefaultToolRuntime.Retry.Jitter = value
+		}
+	}
 	}
 
 	if err := out.Normalize(); err != nil {
