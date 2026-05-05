@@ -70,12 +70,15 @@ func TestBedrockModelGatewayCompleteBasicText(t *testing.T) {
 	if aws.ToString(capturedInput.ModelId) != "anthropic.claude-3-5-sonnet-20241022-v2:0" {
 		t.Fatalf("unexpected model: %q", aws.ToString(capturedInput.ModelId))
 	}
-	if len(capturedInput.System) != 1 {
-		t.Fatalf("expected 1 system block, got %d", len(capturedInput.System))
+	if len(capturedInput.System) != 2 {
+		t.Fatalf("expected 2 system blocks (text + cache point), got %d", len(capturedInput.System))
 	}
 	sysBlock, ok := capturedInput.System[0].(*types.SystemContentBlockMemberText)
 	if !ok || sysBlock.Value != "You are a planner." {
 		t.Fatalf("unexpected system block: %+v", capturedInput.System[0])
+	}
+	if _, ok := capturedInput.System[1].(*types.SystemContentBlockMemberCachePoint); !ok {
+		t.Fatalf("expected cache point as last system block, got %T", capturedInput.System[1])
 	}
 }
 
@@ -139,8 +142,8 @@ func TestBedrockModelGatewayCompleteMultiTurn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("complete failed: %v", err)
 	}
-	if len(capturedInput.System) != 1 {
-		t.Fatalf("expected 1 system block, got %d", len(capturedInput.System))
+	if len(capturedInput.System) != 2 {
+		t.Fatalf("expected 2 system blocks (text + cache point), got %d", len(capturedInput.System))
 	}
 	if len(capturedInput.Messages) != 3 {
 		t.Fatalf("expected 3 messages (user, assistant, user), got %d", len(capturedInput.Messages))
@@ -184,8 +187,8 @@ func TestBedrockModelGatewayCompleteSystemPromptExtraction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("complete failed: %v", err)
 	}
-	if len(capturedInput.System) != 2 {
-		t.Fatalf("expected 2 system blocks, got %d", len(capturedInput.System))
+	if len(capturedInput.System) != 3 {
+		t.Fatalf("expected 3 system blocks (2 text + cache point), got %d", len(capturedInput.System))
 	}
 	sys0, ok := capturedInput.System[0].(*types.SystemContentBlockMemberText)
 	if !ok || sys0.Value != "first system" {
@@ -194,6 +197,9 @@ func TestBedrockModelGatewayCompleteSystemPromptExtraction(t *testing.T) {
 	sys1, ok := capturedInput.System[1].(*types.SystemContentBlockMemberText)
 	if !ok || sys1.Value != "second system" {
 		t.Fatalf("unexpected second system block")
+	}
+	if _, ok := capturedInput.System[2].(*types.SystemContentBlockMemberCachePoint); !ok {
+		t.Fatalf("expected cache point as last system block, got %T", capturedInput.System[2])
 	}
 	if len(capturedInput.Messages) != 1 {
 		t.Fatalf("expected 1 message (system stripped), got %d", len(capturedInput.Messages))
@@ -239,8 +245,11 @@ func TestBedrockModelGatewayCompleteToolUseResponse(t *testing.T) {
 	if capturedInput.ToolConfig == nil {
 		t.Fatal("expected tool config in request")
 	}
-	if len(capturedInput.ToolConfig.Tools) != 1 {
-		t.Fatalf("expected 1 tool, got %d", len(capturedInput.ToolConfig.Tools))
+	if len(capturedInput.ToolConfig.Tools) != 2 {
+		t.Fatalf("expected 2 tools (spec + cache point), got %d", len(capturedInput.ToolConfig.Tools))
+	}
+	if _, ok := capturedInput.ToolConfig.Tools[1].(*types.ToolMemberCachePoint); !ok {
+		t.Fatalf("expected cache point as last tool, got %T", capturedInput.ToolConfig.Tools[1])
 	}
 	if len(resp.ToolCalls) != 1 {
 		t.Fatalf("expected 1 tool call, got %d", len(resp.ToolCalls))
@@ -262,9 +271,9 @@ func TestBedrockModelGatewayCompleteToolUseResponse(t *testing.T) {
 func TestBedrockModelGatewayCompleteMapsToolAliases(t *testing.T) {
 	mock := &mockBedrockClient{
 		converseFunc: func(_ context.Context, params *bedrockruntime.ConverseInput, _ ...func(*bedrockruntime.Options)) (*bedrockruntime.ConverseOutput, error) {
-			// Verify the tool was sent with the sanitized name
-			if params.ToolConfig == nil || len(params.ToolConfig.Tools) != 1 {
-				return nil, fmt.Errorf("expected 1 tool")
+			// Verify the tool was sent with the sanitized name (first entry before cache point)
+			if params.ToolConfig == nil || len(params.ToolConfig.Tools) < 1 {
+				return nil, fmt.Errorf("expected at least 1 tool")
 			}
 			spec, ok := params.ToolConfig.Tools[0].(*types.ToolMemberToolSpec)
 			if !ok {
