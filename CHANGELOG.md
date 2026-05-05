@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-05-05
+
 ### Added
 
 - **Tool approval input visibility**: ToolApproval resources now capture the full tool call arguments in `spec.input` so reviewers can see exactly what they are approving. The frontend detail page renders the input as formatted JSON, and `orlojctl get tool-approvals` includes a truncated INPUT column.
@@ -371,7 +373,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Homebrew tap distribution (`OrlojHQ/orloj`)
 - Blueprint scaffolding via `orlojctl init`
 
-[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.13.0...HEAD
+[0.13.0]: https://github.com/OrlojHQ/orloj/compare/v0.12.1...v0.13.0
 [0.12.1]: https://github.com/OrlojHQ/orloj/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/OrlojHQ/orloj/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/OrlojHQ/orloj/compare/v0.10.2...v0.11.0
