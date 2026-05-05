@@ -421,6 +421,14 @@ spec:
     memory: 1g
     cpus: "2.0"
     pids_limit: 512
+  default_tool_runtime:
+    timeout: 30s
+    isolation_mode: container
+    retry:
+      max_attempts: 3
+      backoff: 1s
+      max_backoff: 30s
+      jitter: "0.1"
 `)
 
 var agentPolicyMaximalYAML = []byte(`apiVersion: orloj.dev/v1

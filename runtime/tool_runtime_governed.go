@@ -418,7 +418,7 @@ func (r *GovernedToolRuntime) Call(ctx context.Context, tool string, input strin
 			return "", err
 		}
 		if result != nil && result.Verdict == AuthorizeVerdictApprovalRequired {
-			return "", fmt.Errorf("%w: tool=%s reason=%s", ErrToolApprovalRequired, tool, result.Reason)
+			return "", &ToolApprovalRequiredError{Tool: tool, Input: input, Reason: result.Reason}
 		}
 	}
 	return r.callWithPolicy(ctx, tool, input, spec)

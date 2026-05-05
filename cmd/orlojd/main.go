@@ -394,6 +394,18 @@ func main() {
 						TaskApprovals:       stores.TaskApprovals,
 						Policies:            stores.Policies,
 						ContextAdapters:     stores.ContextAdapters,
+						OnStepEvent: func(taskName, namespace string, evt agentruntime.AgentStepEvent) {
+							if bus != nil {
+								bus.Publish(eventbus.Event{
+									Source:    "task-controller",
+									Type:      "task.trace",
+									Kind:      "Task",
+									Name:      taskName,
+									Namespace: namespace,
+									Data:      evt,
+								})
+							}
+						},
 					},
 				)
 				startBackground(func() { consumer.Start(ctx) })

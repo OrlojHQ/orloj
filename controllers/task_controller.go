@@ -1770,6 +1770,19 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 	if adaptErr != nil {
 		return nil, fmt.Errorf("context adapter: %w", adaptErr)
 	}
+	if c.eventBus != nil {
+		c.executor.OnStepEvent = func(evt agentruntime.AgentStepEvent) {
+			c.eventBus.Publish(eventbus.Event{
+				Source:    "task-controller",
+				Type:      "task.trace",
+				Kind:      "Task",
+				Name:      task.Metadata.Name,
+				Namespace: resources.NormalizeNamespace(task.Metadata.Namespace),
+				Data:      evt,
+			})
+		}
+	}
+	defer func() { c.executor.OnStepEvent = nil }()
 	for idx, agentName := range order {
 		agentInputBefore := copyStringMap(runtimeInput)
 		lastAgentInputBefore = copyStringMap(agentInputBefore)
@@ -2080,6 +2093,11 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 			c.appendTaskLog(taskScopedName(*task), fmt.Sprintf("agent message: %s -> %s content=%s", result.Agent, plannedMessage.ToAgent, plannedMessage.Content))
 		}
 
+		if idx+1 < len(order) {
+			if _, uErr := c.upsertTask(*task); uErr != nil {
+				c.appendTaskLog(taskScopedName(*task), fmt.Sprintf("intermediate upsert after agent %s failed: %v", agentName, uErr))
+			}
+		}
 		runtimeInput = nextRuntimeInput
 	}
 
@@ -2224,6 +2242,19 @@ func (c *TaskController) executeTaskFromResume(
 			return nil, fmt.Errorf("context adapter: %w", adaptErr)
 		}
 	}
+	if c.eventBus != nil {
+		c.executor.OnStepEvent = func(evt agentruntime.AgentStepEvent) {
+			c.eventBus.Publish(eventbus.Event{
+				Source:    "task-controller",
+				Type:      "task.trace",
+				Kind:      "Task",
+				Name:      task.Metadata.Name,
+				Namespace: resources.NormalizeNamespace(task.Metadata.Namespace),
+				Data:      evt,
+			})
+		}
+	}
+	defer func() { c.executor.OnStepEvent = nil }()
 	for idx := startIndex; idx < len(order); idx++ {
 		agentName := order[idx]
 		agentInputBefore := copyStringMap(runtimeInput)
@@ -2432,6 +2463,11 @@ func (c *TaskController) executeTaskFromResume(
 			}
 		}
 
+		if idx+1 < len(order) {
+			if _, uErr := c.upsertTask(*task); uErr != nil {
+				c.appendTaskLog(taskScopedName(*task), fmt.Sprintf("intermediate upsert after agent %s failed: %v", agentName, uErr))
+			}
+		}
 		runtimeInput = nextRuntimeInput
 	}
 

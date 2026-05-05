@@ -181,6 +181,30 @@ func IsApprovalRequiredError(err error) bool {
 	return errors.Is(err, ErrToolApprovalRequired)
 }
 
+// ToolApprovalRequiredError is a structured error carrying the tool name,
+// input arguments, and policy reason when approval is required.
+type ToolApprovalRequiredError struct {
+	Tool   string
+	Input  string
+	Reason string
+}
+
+func (e *ToolApprovalRequiredError) Error() string {
+	return fmt.Sprintf("%s: tool=%s reason=%s", ErrToolApprovalRequired.Error(), e.Tool, e.Reason)
+}
+
+func (e *ToolApprovalRequiredError) Unwrap() error { return ErrToolApprovalRequired }
+
+// ParseInputFromApprovalError extracts the tool input from a structured
+// ToolApprovalRequiredError in the error chain. Returns empty string if not found.
+func ParseInputFromApprovalError(err error) string {
+	var approvalErr *ToolApprovalRequiredError
+	if errors.As(err, &approvalErr) {
+		return approvalErr.Input
+	}
+	return ""
+}
+
 func ToolErrorMeta(err error) (code string, reason string, retryable bool, ok bool) {
 	toolErr, ok := AsToolError(err)
 	if !ok {

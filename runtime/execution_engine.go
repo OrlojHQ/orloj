@@ -21,6 +21,7 @@ type ReActExecutionEngine struct {
 	modelGateway   ModelGateway
 	newMemoryStore func() MemoryStore
 	stepEvery      time.Duration
+	OnStepEvent    func(AgentStepEvent)
 }
 
 func NewReActExecutionEngine(
@@ -73,10 +74,16 @@ func (e *ReActExecutionEngine) Execute(ctx context.Context, agent resources.Agen
 		if len(observed) >= 300 {
 			return
 		}
-		observed = append(observed, observedAgentEvent{
+		evt := observedAgentEvent{
 			Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
 			Message:   msg,
-		})
+		}
+		observed = append(observed, evt)
+		if e.OnStepEvent != nil {
+			if parsed := parseAgentStepEvents([]observedAgentEvent{evt}); len(parsed) > 0 {
+				e.OnStepEvent(parsed[0])
+			}
+		}
 	}
 
 	if from := strings.TrimSpace(input["inbox.from"]); from != "" {

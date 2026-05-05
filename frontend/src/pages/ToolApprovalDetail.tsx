@@ -19,6 +19,15 @@ function formatDateTime(value?: string): string {
   return value ? new Date(value).toLocaleString() : "—";
 }
 
+function formatInput(raw?: string): string {
+  if (!raw) return "";
+  try {
+    return JSON.stringify(JSON.parse(raw), null, 2);
+  } catch {
+    return raw;
+  }
+}
+
 export function ToolApprovalDetail() {
   const { name: nameParam } = useParams<{ name: string }>();
   const navigate = useNavigate();
@@ -181,6 +190,14 @@ export function ToolApprovalDetail() {
               <span className="detail-field__label">TTL</span>
               <span className="detail-field__value">{approval.spec.ttl ?? "10m"}</span>
             </div>
+            {approval.spec.input && (
+              <div className="detail-field detail-field--full">
+                <span className="detail-field__label">Tool Input</span>
+                <pre className="yaml-editor" style={{ margin: 0, padding: 12, whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: 320, overflow: "auto" }}>
+                  {formatInput(approval.spec.input)}
+                </pre>
+              </div>
+            )}
             {approval.spec.reason && (
               <div className="detail-field detail-field--full">
                 <span className="detail-field__label">Reason</span>

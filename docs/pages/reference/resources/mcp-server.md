@@ -26,6 +26,10 @@ Represents a connection to an external MCP (Model Context Protocol) server. The 
 - `reconnect` (object): reconnection policy.
   - `max_attempts` (int): max reconnection attempts. Defaults to 3.
   - `backoff` (duration string): backoff between attempts. Defaults to `2s`.
+- `default_tool_runtime` (object): default runtime policy inherited by all generated Tool resources. When set, each tool synced from this server receives this policy as its `spec.runtime`.
+  - `timeout` (duration string): max tool call execution time (e.g. `30s`, `2m`).
+  - `isolation_mode` (string): isolation mode for tool execution.
+  - `retry` (object): retry policy (see [Tool resource](./tool.md)).
 
 ## Defaults and Validation
 
