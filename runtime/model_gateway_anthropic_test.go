@@ -14,8 +14,14 @@ import (
 func TestAnthropicModelGatewayCompleteSuccess(t *testing.T) {
 	type capturedRequest struct {
 		Model     string `json:"model"`
-		System    string `json:"system"`
-		MaxTokens int    `json:"max_tokens"`
+		System    []struct {
+			Type         string `json:"type"`
+			Text         string `json:"text"`
+			CacheControl *struct {
+				Type string `json:"type"`
+			} `json:"cache_control,omitempty"`
+		} `json:"system"`
+		MaxTokens int `json:"max_tokens"`
 		Messages  []struct {
 			Role    string `json:"role"`
 			Content string `json:"content"`
@@ -93,8 +99,11 @@ func TestAnthropicModelGatewayCompleteSuccess(t *testing.T) {
 	if captured.Model != "claude-test" {
 		t.Fatalf("expected model claude-test, got %q", captured.Model)
 	}
-	if captured.System != "You are a planner." {
-		t.Fatalf("expected system prompt, got %q", captured.System)
+	if len(captured.System) != 1 || captured.System[0].Text != "You are a planner." {
+		t.Fatalf("expected system block with text 'You are a planner.', got %+v", captured.System)
+	}
+	if captured.System[0].CacheControl == nil || captured.System[0].CacheControl.Type != "ephemeral" {
+		t.Fatal("expected cache_control ephemeral on system block")
 	}
 	if captured.MaxTokens != 2048 {
 		t.Fatalf("expected max_tokens 2048, got %d", captured.MaxTokens)
@@ -211,7 +220,10 @@ func TestAnthropicModelGatewayCompleteRequestFailure(t *testing.T) {
 func TestAnthropicModelGatewayCompleteToolCallResponse(t *testing.T) {
 	type capturedRequest struct {
 		Tools []struct {
-			Name string `json:"name"`
+			Name         string `json:"name"`
+			CacheControl *struct {
+				Type string `json:"type"`
+			} `json:"cache_control,omitempty"`
 		} `json:"tools"`
 	}
 
@@ -257,6 +269,9 @@ func TestAnthropicModelGatewayCompleteToolCallResponse(t *testing.T) {
 	if len(captured.Tools) != 1 || captured.Tools[0].Name != "web_search" {
 		t.Fatalf("expected request tools payload, got %+v", captured.Tools)
 	}
+	if captured.Tools[0].CacheControl == nil || captured.Tools[0].CacheControl.Type != "ephemeral" {
+		t.Fatal("expected cache_control ephemeral on last tool")
+	}
 	if len(resp.ToolCalls) != 1 {
 		t.Fatalf("expected one tool call, got %d", len(resp.ToolCalls))
 	}
@@ -271,7 +286,10 @@ func TestAnthropicModelGatewayCompleteToolCallResponse(t *testing.T) {
 func TestAnthropicModelGatewayCompleteMapsToolAliasesBackToRuntimeNames(t *testing.T) {
 	type capturedRequest struct {
 		Tools []struct {
-			Name string `json:"name"`
+			Name         string `json:"name"`
+			CacheControl *struct {
+				Type string `json:"type"`
+			} `json:"cache_control,omitempty"`
 		} `json:"tools"`
 	}
 
@@ -336,9 +354,12 @@ func TestChatMessagesToAnthropicStructuredToolMessages(t *testing.T) {
 		{Role: "user", Content: "step=2"},
 	}
 
-	system, anthropicMsgs := chatMessagesToAnthropic(msgs)
-	if system != "be helpful" {
-		t.Fatalf("expected system=be helpful, got %q", system)
+	systemBlocks, anthropicMsgs := chatMessagesToAnthropic(msgs)
+	if len(systemBlocks) != 1 || systemBlocks[0].Text != "be helpful" {
+		t.Fatalf("expected single system block with text 'be helpful', got %+v", systemBlocks)
+	}
+	if systemBlocks[0].CacheControl == nil || systemBlocks[0].CacheControl.Type != "ephemeral" {
+		t.Fatal("expected cache_control ephemeral on last system block")
 	}
 	if len(anthropicMsgs) != 4 {
 		t.Fatalf("expected 4 messages (user, assistant, user-tool-result, user), got %d", len(anthropicMsgs))
@@ -397,8 +418,8 @@ func TestChatMessagesToAnthropicErrorToolResult(t *testing.T) {
 	}
 
 	system, anthropicMsgs := chatMessagesToAnthropic(msgs)
-	if system != "" {
-		t.Fatalf("expected empty system, got %q", system)
+	if len(system) != 0 {
+		t.Fatalf("expected empty system blocks, got %+v", system)
 	}
 	if len(anthropicMsgs) != 5 {
 		t.Fatalf("expected 5 messages (user, assistant, tool-result, tool-error-result, user), got %d", len(anthropicMsgs))

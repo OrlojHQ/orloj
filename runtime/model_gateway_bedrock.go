@@ -134,13 +134,18 @@ func (g *BedrockModelGateway) Complete(ctx context.Context, req ModelRequest) (M
 		},
 	}
 	if len(system) > 0 {
-		input.System = system
+		input.System = append(system, &types.SystemContentBlockMemberCachePoint{
+			Value: types.CachePointBlock{Type: types.CachePointTypeDefault},
+		})
 	}
 
 	toolAliases := make(map[string]string, len(req.Tools))
 	if len(req.Tools) > 0 {
 		tools, aliases := buildBedrockTools(req.Tools, req.ToolSchemas)
 		toolAliases = aliases
+		tools = append(tools, &types.ToolMemberCachePoint{
+			Value: types.CachePointBlock{Type: types.CachePointTypeDefault},
+		})
 		input.ToolConfig = &types.ToolConfiguration{Tools: tools}
 	}
 

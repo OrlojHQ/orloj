@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Per-tool and per-McpServer container resource limits**: Tool manifests now support `spec.cli.resources` and McpServer manifests support `spec.resources` with `memory`, `cpus`, and `pids_limit` fields that override the global `--tool-container-{memory,cpus,pids-limit}` defaults. This allows resource-intensive tools (e.g. Chromium-based MCP servers) to declare their own container limits without raising the global defaults for all tools. Operator-level ceilings (`--tool-container-max-memory`, `--tool-container-max-cpus`, `--tool-container-max-pids-limit`) can optionally cap per-tool overrides; manifests exceeding the ceiling are rejected at apply time.
+- **Provider-level prompt caching for Anthropic and Bedrock**: The Anthropic gateway now sends `cache_control` markers on system messages and tool definitions, enabling Anthropic's server-side prompt caching (up to 90% input token cost reduction on cached prefixes). The Bedrock gateway appends `cachePoint` blocks to system content and tool configurations for equivalent savings when using Claude models via AWS Bedrock. No configuration required — caching hints are sent automatically on all requests.
 
 ## [0.12.1] - 2026-05-03
 

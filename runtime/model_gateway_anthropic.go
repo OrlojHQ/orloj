@@ -127,8 +127,12 @@ func (g *AnthropicModelGateway) Complete(ctx context.Context, req ModelRequest) 
 			Role:    "user",
 			Content: buildOpenAIUserContent(req),
 		}}
-		if strings.TrimSpace(req.Prompt) != "" {
-			body.System = strings.TrimSpace(req.Prompt)
+		if prompt := strings.TrimSpace(req.Prompt); prompt != "" {
+			body.System = []anthropicSystemBlock{{
+				Type:         "text",
+				Text:         prompt,
+				CacheControl: &anthropicCacheControl{Type: "ephemeral"},
+			}}
 		}
 	}
 	toolAliases := make(map[string]string, len(req.Tools))
@@ -240,11 +244,21 @@ func parseAnthropicError(body []byte) string {
 
 type anthropicMessagesRequest struct {
 	Model        string                   `json:"model"`
-	System       string                   `json:"system,omitempty"`
+	System       []anthropicSystemBlock   `json:"system,omitempty"`
 	Messages     []anthropicMessagesInput `json:"messages"`
 	MaxTokens    int                      `json:"max_tokens"`
 	Tools        []anthropicToolSpec      `json:"tools,omitempty"`
 	OutputConfig *anthropicOutputConfig   `json:"output_config,omitempty"`
+}
+
+type anthropicSystemBlock struct {
+	Type         string                 `json:"type"`
+	Text         string                 `json:"text"`
+	CacheControl *anthropicCacheControl `json:"cache_control,omitempty"`
+}
+
+type anthropicCacheControl struct {
+	Type string `json:"type"`
 }
 
 type anthropicOutputConfig struct {
@@ -287,9 +301,10 @@ type anthropicMessagesUsage struct {
 }
 
 type anthropicToolSpec struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description,omitempty"`
-	InputSchema map[string]any `json:"input_schema,omitempty"`
+	Name         string                 `json:"name"`
+	Description  string                 `json:"description,omitempty"`
+	InputSchema  map[string]any         `json:"input_schema,omitempty"`
+	CacheControl *anthropicCacheControl `json:"cache_control,omitempty"`
 }
 
 func buildAnthropicTools(toolNames []string, schemas map[string]ToolSchemaInfo) ([]anthropicToolSpec, map[string]string) {
@@ -332,6 +347,9 @@ func buildAnthropicTools(toolNames []string, schemas map[string]ToolSchemaInfo) 
 			InputSchema: inputSchema,
 		})
 	}
+	if len(out) > 0 {
+		out[len(out)-1].CacheControl = &anthropicCacheControl{Type: "ephemeral"}
+	}
 	return out, aliases
 }
 
@@ -359,8 +377,8 @@ func parseAnthropicToolUseInput(input map[string]any) string {
 	return strings.TrimSpace(string(encoded))
 }
 
-func chatMessagesToAnthropic(msgs []ChatMessage) (string, []anthropicMessagesInput) {
-	var system string
+func chatMessagesToAnthropic(msgs []ChatMessage) ([]anthropicSystemBlock, []anthropicMessagesInput) {
+	var systemBlocks []anthropicSystemBlock
 	out := make([]anthropicMessagesInput, 0, len(msgs))
 	for _, m := range msgs {
 		role := strings.TrimSpace(m.Role)
@@ -370,11 +388,10 @@ func chatMessagesToAnthropic(msgs []ChatMessage) (string, []anthropicMessagesInp
 			if content == "" {
 				continue
 			}
-			if system == "" {
-				system = content
-			} else {
-				system += "\n" + content
-			}
+			systemBlocks = append(systemBlocks, anthropicSystemBlock{
+				Type: "text",
+				Text: content,
+			})
 			continue
 		}
 
@@ -433,7 +450,10 @@ func chatMessagesToAnthropic(msgs []ChatMessage) (string, []anthropicMessagesInp
 			Content: content,
 		})
 	}
-	return system, out
+	if len(systemBlocks) > 0 {
+		systemBlocks[len(systemBlocks)-1].CacheControl = &anthropicCacheControl{Type: "ephemeral"}
+	}
+	return systemBlocks, out
 }
 
 func parseJSONLoose(s string) map[string]interface{} {
