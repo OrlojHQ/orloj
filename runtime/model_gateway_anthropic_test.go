@@ -361,8 +361,8 @@ func TestChatMessagesToAnthropicStructuredToolMessages(t *testing.T) {
 	if systemBlocks[0].CacheControl == nil || systemBlocks[0].CacheControl.Type != "ephemeral" {
 		t.Fatal("expected cache_control ephemeral on last system block")
 	}
-	if len(anthropicMsgs) != 4 {
-		t.Fatalf("expected 4 messages (user, assistant, user-tool-result, user), got %d", len(anthropicMsgs))
+	if len(anthropicMsgs) != 3 {
+		t.Fatalf("expected 3 messages (user, assistant, merged-user-tool-result+step), got %d", len(anthropicMsgs))
 	}
 
 	assistantMsg := anthropicMsgs[1]
@@ -386,22 +386,28 @@ func TestChatMessagesToAnthropicStructuredToolMessages(t *testing.T) {
 		t.Fatal("expected tool_use content block in assistant message")
 	}
 
-	toolResultMsg := anthropicMsgs[2]
-	if toolResultMsg.Role != "user" {
-		t.Fatalf("expected user role for tool_result, got %q", toolResultMsg.Role)
+	mergedMsg := anthropicMsgs[2]
+	if mergedMsg.Role != "user" {
+		t.Fatalf("expected user role for merged message, got %q", mergedMsg.Role)
 	}
-	resultBlocks, ok := toolResultMsg.Content.([]map[string]interface{})
+	resultBlocks, ok := mergedMsg.Content.([]map[string]interface{})
 	if !ok {
-		t.Fatalf("expected structured content blocks for tool result, got %T", toolResultMsg.Content)
+		t.Fatalf("expected structured content blocks for merged message, got %T", mergedMsg.Content)
 	}
-	if len(resultBlocks) != 1 {
-		t.Fatalf("expected 1 tool_result block, got %d", len(resultBlocks))
+	if len(resultBlocks) != 2 {
+		t.Fatalf("expected 2 blocks (tool_result + text), got %d", len(resultBlocks))
 	}
 	if resultBlocks[0]["type"] != "tool_result" {
-		t.Fatalf("expected type=tool_result, got %v", resultBlocks[0]["type"])
+		t.Fatalf("expected first block type=tool_result, got %v", resultBlocks[0]["type"])
 	}
 	if resultBlocks[0]["tool_use_id"] != "toolu_01A" {
 		t.Fatalf("expected tool_use_id=toolu_01A, got %v", resultBlocks[0]["tool_use_id"])
+	}
+	if resultBlocks[1]["type"] != "text" {
+		t.Fatalf("expected second block type=text, got %v", resultBlocks[1]["type"])
+	}
+	if resultBlocks[1]["text"] != "step=2" {
+		t.Fatalf("expected second block text=step=2, got %v", resultBlocks[1]["text"])
 	}
 }
 
@@ -421,38 +427,35 @@ func TestChatMessagesToAnthropicErrorToolResult(t *testing.T) {
 	if len(system) != 0 {
 		t.Fatalf("expected empty system blocks, got %+v", system)
 	}
-	if len(anthropicMsgs) != 5 {
-		t.Fatalf("expected 5 messages (user, assistant, tool-result, tool-error-result, user), got %d", len(anthropicMsgs))
+	if len(anthropicMsgs) != 3 {
+		t.Fatalf("expected 3 messages (user, assistant, merged-user), got %d", len(anthropicMsgs))
 	}
 
-	successResult := anthropicMsgs[2]
-	successBlocks, ok := successResult.Content.([]map[string]interface{})
-	if !ok || len(successBlocks) != 1 {
-		t.Fatalf("expected 1 tool_result block for success, got %v", successResult.Content)
+	mergedResult := anthropicMsgs[2]
+	if mergedResult.Role != "user" {
+		t.Fatalf("expected user role for merged message, got %q", mergedResult.Role)
 	}
-	if successBlocks[0]["tool_use_id"] != "toolu_01A" {
-		t.Fatalf("expected tool_use_id=toolu_01A, got %v", successBlocks[0]["tool_use_id"])
+	mergedBlocks, ok := mergedResult.Content.([]map[string]interface{})
+	if !ok || len(mergedBlocks) != 3 {
+		t.Fatalf("expected 3 blocks (tool_result + tool_result_error + text), got %v", mergedResult.Content)
 	}
-	if _, hasIsError := successBlocks[0]["is_error"]; hasIsError {
+	if mergedBlocks[0]["tool_use_id"] != "toolu_01A" {
+		t.Fatalf("expected first block tool_use_id=toolu_01A, got %v", mergedBlocks[0]["tool_use_id"])
+	}
+	if _, hasIsError := mergedBlocks[0]["is_error"]; hasIsError {
 		t.Fatal("successful tool_result should not have is_error field")
 	}
-
-	errorResult := anthropicMsgs[3]
-	if errorResult.Role != "user" {
-		t.Fatalf("expected user role for error tool_result, got %q", errorResult.Role)
+	if mergedBlocks[1]["type"] != "tool_result" {
+		t.Fatalf("expected second block type=tool_result, got %v", mergedBlocks[1]["type"])
 	}
-	errorBlocks, ok := errorResult.Content.([]map[string]interface{})
-	if !ok || len(errorBlocks) != 1 {
-		t.Fatalf("expected 1 tool_result block for error, got %v", errorResult.Content)
+	if mergedBlocks[1]["tool_use_id"] != "toolu_01B" {
+		t.Fatalf("expected second block tool_use_id=toolu_01B, got %v", mergedBlocks[1]["tool_use_id"])
 	}
-	if errorBlocks[0]["type"] != "tool_result" {
-		t.Fatalf("expected type=tool_result, got %v", errorBlocks[0]["type"])
+	if mergedBlocks[1]["is_error"] != true {
+		t.Fatalf("expected is_error=true on error tool_result, got %v", mergedBlocks[1]["is_error"])
 	}
-	if errorBlocks[0]["tool_use_id"] != "toolu_01B" {
-		t.Fatalf("expected tool_use_id=toolu_01B, got %v", errorBlocks[0]["tool_use_id"])
-	}
-	if errorBlocks[0]["is_error"] != true {
-		t.Fatalf("expected is_error=true on error tool_result, got %v", errorBlocks[0]["is_error"])
+	if mergedBlocks[2]["type"] != "text" {
+		t.Fatalf("expected third block type=text, got %v", mergedBlocks[2]["type"])
 	}
 }
 

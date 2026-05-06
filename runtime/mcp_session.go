@@ -272,10 +272,6 @@ func (m *McpSessionManager) buildContainerStdioTransport(server resources.McpSer
 	image := strings.TrimSpace(server.Spec.Image)
 	dockerArgs := []string{
 		"run", "--rm", "-i",
-		"--read-only",
-		"--tmpfs", "/tmp:rw,noexec,nosuid",
-		"--cap-drop=ALL",
-		"--security-opt", "no-new-privileges",
 	}
 
 	if cfg != nil && strings.TrimSpace(cfg.Network) != "" {

@@ -28,7 +28,7 @@ func DefaultAnthropicModelGatewayConfig() AnthropicModelGatewayConfig {
 		BaseURL:          "https://api.anthropic.com/v1",
 		AnthropicVersion: "2023-06-01",
 		MaxTokens:        1024,
-		Timeout:          30 * time.Second,
+		Timeout:          120 * time.Second,
 	}
 }
 
@@ -221,7 +221,11 @@ func (g *AnthropicModelGateway) Complete(ctx context.Context, req ModelRequest) 
 	}
 	content := strings.TrimSpace(strings.Join(texts, "\n"))
 	if content == "" && len(toolCalls) == 0 {
-		return ModelResponse{}, fmt.Errorf("model response missing message content")
+		return ModelResponse{
+			Content: "",
+			Done:    true,
+			Usage:   parseAnthropicUsage(parsed.Usage),
+		}, nil
 	}
 	return ModelResponse{
 		Content:   content,
@@ -431,10 +435,14 @@ func chatMessagesToAnthropic(msgs []ChatMessage) ([]anthropicSystemBlock, []anth
 			if m.IsError {
 				block["is_error"] = true
 			}
-			out = append(out, anthropicMessagesInput{
-				Role:    "user",
-				Content: []map[string]interface{}{block},
-			})
+			if len(out) > 0 && out[len(out)-1].Role == "user" {
+				out[len(out)-1].Content = mergeAnthropicUserContent(out[len(out)-1].Content, block)
+			} else {
+				out = append(out, anthropicMessagesInput{
+					Role:    "user",
+					Content: []map[string]interface{}{block},
+				})
+			}
 			continue
 		}
 
@@ -445,15 +453,48 @@ func chatMessagesToAnthropic(msgs []ChatMessage) ([]anthropicSystemBlock, []anth
 		if apiRole != "user" && apiRole != "assistant" {
 			apiRole = "user"
 		}
-		out = append(out, anthropicMessagesInput{
-			Role:    apiRole,
-			Content: content,
-		})
+		if apiRole == "user" && len(out) > 0 && out[len(out)-1].Role == "user" {
+			out[len(out)-1].Content = mergeAnthropicUserContent(out[len(out)-1].Content, content)
+		} else {
+			out = append(out, anthropicMessagesInput{
+				Role:    apiRole,
+				Content: content,
+			})
+		}
 	}
 	if len(systemBlocks) > 0 {
 		systemBlocks[len(systemBlocks)-1].CacheControl = &anthropicCacheControl{Type: "ephemeral"}
 	}
 	return systemBlocks, out
+}
+
+// mergeAnthropicUserContent appends new content into an existing user
+// message, converting to the array-of-blocks form when needed. The added
+// content can be a plain string (converted to a text block) or a
+// map[string]interface{} block (e.g. tool_result). This ensures
+// consecutive user messages are collapsed into one, which the Anthropic
+// Messages API requires (roles must alternate).
+func mergeAnthropicUserContent(existing interface{}, added interface{}) interface{} {
+	var newBlock map[string]interface{}
+	switch a := added.(type) {
+	case string:
+		newBlock = map[string]interface{}{"type": "text", "text": a}
+	case map[string]interface{}:
+		newBlock = a
+	default:
+		newBlock = map[string]interface{}{"type": "text", "text": fmt.Sprintf("%v", added)}
+	}
+	switch v := existing.(type) {
+	case []map[string]interface{}:
+		return append(v, newBlock)
+	case string:
+		return []map[string]interface{}{
+			{"type": "text", "text": v},
+			newBlock,
+		}
+	default:
+		return []map[string]interface{}{newBlock}
+	}
 }
 
 func parseJSONLoose(s string) map[string]interface{} {

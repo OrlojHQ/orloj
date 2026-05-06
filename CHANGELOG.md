@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Relaxed container isolation defaults**: MCP server and tool runtime containers no longer apply `--read-only`, `--cap-drop=ALL`, or `--security-opt no-new-privileges`. The container boundary, resource limits, and network controls remain the primary isolation mechanism. This improves compatibility with images that require writable filesystems or Linux capabilities (e.g. Chromium-based MCP servers).
+- **Anthropic API timeout increased**: HTTP timeout for Anthropic API calls raised from 30s to 120s to prevent timeouts on large contexts.
+
+### Fixed
+
+- **Anthropic consecutive user messages**: Tool result and text messages with the same `user` role are now merged into a single message, fixing `400` errors from the Anthropic Messages API.
+- **Empty Anthropic content handling**: When Anthropic returns 200 OK with an empty content array, the agent worker now completes gracefully instead of erroring with "model response missing message content" and retrying indefinitely.
+- **Agent worker termination on empty output**: The agent loop now stops when no tools are available and the model produces no output, preventing infinite loops.
+
 ## [0.13.0] - 2026-05-05
 
 ### Added

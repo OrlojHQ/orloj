@@ -97,9 +97,6 @@ func TestContainerToolRuntimeExecutesHTTPInContainer(t *testing.T) {
 	assertArgsContain(t, runner.args, []string{
 		"run", "--rm", "-i",
 		"--network", "none",
-		"--read-only",
-		"--cap-drop=ALL",
-		"--security-opt", "no-new-privileges",
 		"--memory", "64m",
 		"--cpus", "0.25",
 		"--pids-limit", "32",
@@ -333,9 +330,6 @@ func TestSandboxedContainerDefaultsAreSecure(t *testing.T) {
 	}
 
 	assertArgsContain(t, runner.args, []string{
-		"--read-only",
-		"--cap-drop=ALL",
-		"--security-opt", "no-new-privileges",
 		"--network", "none",
 		"--memory", "128m",
 		"--cpus", "0.50",
