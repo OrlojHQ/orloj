@@ -203,15 +203,22 @@ func (w *AgentWorker) Run(ctx context.Context) {
 				Messages:     append([]ChatMessage(nil), w.history...),
 				OutputSchema: w.agent.Spec.Execution.OutputSchema,
 			})
-			modelLatencyMS := time.Since(modelStart).Milliseconds()
-			if modelErr != nil {
-				if w.onEvent != nil {
-					w.onEvent(fmt.Sprintf("step=%d model_error=%v latency_ms=%d", step, modelErr, modelLatencyMS))
-				}
-				w.history = w.history[:len(w.history)-1]
-				continue
+		modelLatencyMS := time.Since(modelStart).Milliseconds()
+		if modelErr != nil {
+			if w.onEvent != nil {
+				w.onEvent(fmt.Sprintf("step=%d model_error=%v latency_ms=%d", step, modelErr, modelLatencyMS))
 			}
-			modelOutput := strings.TrimSpace(modelResp.Content)
+			w.history = w.history[:len(w.history)-1]
+			continue
+		}
+		if modelResp.Done && modelResp.Content == "" && len(modelResp.ToolCalls) == 0 {
+			if w.onEvent != nil {
+				w.onEvent(fmt.Sprintf("step=%d model signaled done with no output", step))
+				w.onEvent("worker completed")
+			}
+			return
+		}
+		modelOutput := strings.TrimSpace(modelResp.Content)
 			modelUsage := normalizeModelUsageWithFallback(modelResp.Usage, w.agent, modelResp, step)
 			if w.onEvent != nil {
 				w.onEvent(fmt.Sprintf(
@@ -267,7 +274,11 @@ func (w *AgentWorker) Run(ctx context.Context) {
 					}
 					return
 				}
-				continue
+				if w.onEvent != nil {
+					w.onEvent(fmt.Sprintf("step=%d no tools and no output, completing", step))
+					w.onEvent("worker completed")
+				}
+				return
 			}
 
 			requestedCalls, selectErr := selectAuthorizedToolCalls(modelResp, w.agent.Spec.Tools)

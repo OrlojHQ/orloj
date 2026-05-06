@@ -91,9 +91,6 @@ func DefaultContainerToolRuntimeConfig() ContainerToolRuntimeConfig {
 //   - cpus=0.50 (half a core)
 //   - pids_limit=64 (process limit)
 //   - user=65532:65532 (non-root nobody user)
-//   - read-only filesystem (via containerRunArgs --read-only)
-//   - no Linux capabilities (via --cap-drop=ALL)
-//   - no privilege escalation (via --security-opt no-new-privileges)
 //
 // These defaults match DefaultContainerToolRuntimeConfig but are preserved
 // as an explicit contract so callers can distinguish between default and
@@ -436,9 +433,6 @@ func (r *ContainerToolRuntime) containerCLIRunArgs(cli resources.ToolCliSpec, im
 	dockerArgs := []string{
 		"run", "--rm", "-i",
 		"--network", network,
-		"--read-only",
-		"--cap-drop=ALL",
-		"--security-opt", "no-new-privileges",
 	}
 	if strings.TrimSpace(r.config.User) != "" {
 		dockerArgs = append(dockerArgs, "--user", strings.TrimSpace(r.config.User))
@@ -524,13 +518,9 @@ func mapContainerContextError(tool string, err error) error {
 }
 
 func (r *ContainerToolRuntime) containerRunArgs(endpoint string, includeAuth bool) []string {
-	// Keep the container constrained: read-only fs, no extra Linux capabilities, no privilege escalation.
 	args := []string{
 		"run", "--rm", "-i",
 		"--network", strings.TrimSpace(r.config.Network),
-		"--read-only",
-		"--cap-drop=ALL",
-		"--security-opt", "no-new-privileges",
 	}
 	if strings.TrimSpace(r.config.User) != "" {
 		args = append(args, "--user", strings.TrimSpace(r.config.User))
