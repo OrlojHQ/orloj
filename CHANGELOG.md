@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Global log level for daemons**: `orlojd` and `orlojworker` accept `--log-level`, `--debug`, and `ORLOJ_LOG_LEVEL` so operators can raise or lower verbosity without rebuilding. Operations docs, the server flags reference, and the Helm chart README include examples (including `runtimeConfig.ORLOJ_LOG_LEVEL` for clusters). Telemetry records the effective parsed log level, forwards debug bridge logs when enabled, and routes configured error-level fatals through the error logger so shutdown paths stay consistent with the chosen level.
+- **Targeted debug instrumentation**: additional debug logging around startup/runtime configuration, tool runtime setup, task scheduling and claim/heartbeat loops, worker capacity, and the agent message consumer (receive, skip, retry, ack, and routing decisions) to trace message-driven execution without enabling full trace spam.
+
 ### Changed
 
 - **Relaxed container isolation defaults**: MCP server and tool runtime containers no longer apply `--read-only`, `--cap-drop=ALL`, or `--security-opt no-new-privileges`. The container boundary, resource limits, and network controls remain the primary isolation mechanism. This improves compatibility with images that require writable filesystems or Linux capabilities (e.g. Chromium-based MCP servers).

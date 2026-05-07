@@ -20,6 +20,8 @@ runtimeSecret:
   modelGatewayApiKey: ""
   apiToken: ""
 
+# Shared non-secret runtime environment variables for orlojd and orlojworker.
+# Example: set ORLOJ_LOG_LEVEL: debug while investigating scheduling/runtime behavior.
 runtimeConfig: {}
 
 postgres:

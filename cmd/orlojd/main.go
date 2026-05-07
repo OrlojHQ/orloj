@@ -34,6 +34,8 @@ func main() {
 	envUint64 := startup.EnvUint64OrDefault
 
 	showVersion := flag.Bool("version", false, "print version and exit")
+	logLevelRaw := flag.String("log-level", env("ORLOJ_LOG_LEVEL", "info"), "minimum log level: debug|info|warn|error (env: ORLOJ_LOG_LEVEL)")
+	debugLogs := flag.Bool("debug", false, "enable debug logging (equivalent to --log-level=debug)")
 	addr := flag.String("addr", ":8080", "server listen address")
 	uiPath := flag.String("ui-path", env("ORLOJ_UI_PATH", "/"), "base URL path for the web console (env: ORLOJ_UI_PATH)")
 	apiKey := flag.String("api-key", env("ORLOJ_API_TOKEN", ""), "API key for bearer token auth (empty disables auth; env fallback: ORLOJ_API_TOKEN or ORLOJ_API_TOKENS)")
@@ -95,14 +97,49 @@ func main() {
 		os.Exit(0)
 	}
 
-	authMode, authModeErr := parseAuthMode(*authModeRaw)
-	if authModeErr != nil {
-		logger := telemetry.NewBridgeLogger(telemetry.NewLogger("orlojd"))
-		logger.Fatalf("%v", authModeErr)
+	resolvedLogLevel := *logLevelRaw
+	if *debugLogs {
+		resolvedLogLevel = "debug"
+	}
+	parsedLogLevel, logLevelErr := telemetry.ResolveLogLevel(*logLevelRaw, *debugLogs)
+	if logLevelErr != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", logLevelErr)
+		os.Exit(2)
 	}
 
-	slogger := telemetry.NewLogger("orlojd")
+	slogger := telemetry.NewLoggerWithLevel("orlojd", parsedLogLevel)
 	logger := telemetry.NewBridgeLogger(slogger)
+	debugLogger := telemetry.NewDebugBridgeLogger(slogger)
+	fatalLogger := telemetry.NewErrorBridgeLogger(slogger)
+	resolvedLogLevelLabel := strings.ToLower(strings.TrimSpace(resolvedLogLevel))
+	if resolvedLogLevelLabel == "" {
+		resolvedLogLevelLabel = "info"
+	}
+
+	authMode, authModeErr := parseAuthMode(*authModeRaw)
+	if authModeErr != nil {
+		fatalLogger.Fatalf("%v", authModeErr)
+	}
+
+	debugLogger.Printf(
+		"startup config addr=%s ui_path=%s log_level=%s auth_mode=%s api_token_configured=%t trusted_proxies_configured=%t storage_backend=%s postgres_dsn_configured=%t task_execution_mode=%s embedded_worker=%t event_bus_backend=%s agent_message_bus_backend=%s tool_isolation_backend=%s tool_container_runtime=%s tool_container_network=%s wasm_module_configured=%t",
+		*addr,
+		*uiPath,
+		resolvedLogLevelLabel,
+		*authModeRaw,
+		strings.TrimSpace(*apiKey) != "",
+		strings.TrimSpace(*trustedProxies) != "",
+		*storageBackend,
+		strings.TrimSpace(*postgresDSN) != "",
+		*taskExecutionMode,
+		*runTaskWorker || *embeddedWorker,
+		*eventBusBackend,
+		*agentMessageBusBackend,
+		*toolIsolationBackend,
+		*toolContainerRuntime,
+		*toolContainerNetwork,
+		strings.TrimSpace(*toolWASMModule) != "",
+	)
 
 	if authMode == api.AuthModeNative && strings.TrimSpace(os.Getenv("ORLOJ_SETUP_TOKEN")) == "" {
 		logger.Printf("WARNING: auth mode is native but ORLOJ_SETUP_TOKEN is not set; the first POST to /v1/auth/setup will create the admin account without a setup secret")
@@ -123,7 +160,7 @@ func main() {
 
 	secretEncryptionKey, err := startup.ParseSecretEncryptionKey(*secretEncryptionKeyRaw)
 	if err != nil {
-		logger.Fatalf("%v", err)
+		fatalLogger.Fatalf("%v", err)
 	}
 	startup.LogSecretEncryption(logger, secretEncryptionKey)
 
@@ -138,7 +175,7 @@ func main() {
 		IncludeScheduleStores: true,
 	}, logger)
 	if err != nil {
-		logger.Fatalf("%v", err)
+		fatalLogger.Fatalf("%v", err)
 	}
 	defer stores.Close()
 	if len(secretEncryptionKey) > 0 {
@@ -153,7 +190,7 @@ func main() {
 	}
 	if strings.TrimSpace(*authResetAdminPassword) != "" {
 		if err := runLocalAdminPasswordReset(stores, strings.TrimSpace(*authResetAdminUsername), strings.TrimSpace(*authResetAdminPassword)); err != nil {
-			logger.Fatalf("admin password reset failed: %v", err)
+			fatalLogger.Fatalf("admin password reset failed: %v", err)
 		}
 		logger.Printf("admin password reset completed")
 		return
@@ -196,6 +233,7 @@ func main() {
 		stores.Tasks, stores.AgentSystems, stores.Agents, stores.Tools,
 		stores.Memories, stores.Policies, stores.Workers, logger, *reconcile,
 	)
+	taskController.SetDebugLogger(debugLogger)
 	taskSchedulerController := controllers.NewTaskSchedulerController(stores.Tasks, stores.Workers, logger, *reconcile, 20*time.Second)
 	taskScheduleController := controllers.NewTaskScheduleController(stores.TaskSchedules, stores.Tasks, logger, *reconcile)
 	workerController := controllers.NewWorkerController(stores.Workers, logger, *reconcile, 20*time.Second)
@@ -231,11 +269,11 @@ func main() {
 		Secrets:          stores.Secrets,
 	}, logger)
 	if err != nil {
-		logger.Fatalf("failed to configure isolated tool runtime: %v", err)
+		fatalLogger.Fatalf("failed to configure isolated tool runtime: %v", err)
 	}
 	wasmToolRuntime, closeWasm, err := startup.NewWASMToolRuntime(wasmRuntimeCfg, logger)
 	if err != nil {
-		logger.Fatalf("failed to configure wasm tool runtime: %v", err)
+		fatalLogger.Fatalf("failed to configure wasm tool runtime: %v", err)
 	}
 	if closeWasm != nil {
 		defer closeWasm()
@@ -251,6 +289,25 @@ func main() {
 		AllowedCommands: startup.ParseCSV(*cliToolAllowedCommands),
 		MaxArgvLength:   *cliToolMaxArgvLength,
 	}, cliSecretResolver)
+	debugLogger.Printf(
+		"tool runtime config isolation_backend=%s container_runtime=%s container_image=%s container_network=%s container_memory=%s container_cpus=%s container_pids_limit=%d container_user=%s cli_allowed_commands=%d cli_max_argv_length=%d wasm_entrypoint=%s wasm_memory_bytes=%d wasm_fuel=%d wasm_wasi=%t wasm_cache_configured=%t mcp_container_network=%s",
+		*toolIsolationBackend,
+		*toolContainerRuntime,
+		*toolContainerImage,
+		*toolContainerNetwork,
+		*toolContainerMemory,
+		*toolContainerCPUs,
+		*toolContainerPidsLimit,
+		*toolContainerUser,
+		len(startup.ParseCSV(*cliToolAllowedCommands)),
+		*cliToolMaxArgvLength,
+		*toolWASMEntrypoint,
+		*toolWASMMemoryBytes,
+		*toolWASMFuel,
+		*toolWASMWASI,
+		strings.TrimSpace(*toolWASMCacheDir) != "",
+		"bridge",
+	)
 
 	var requestAuthorizer api.RequestAuthorizer
 	if strings.TrimSpace(*apiKey) != "" {
@@ -293,7 +350,7 @@ func main() {
 			MaxPidsLimit: *toolContainerMaxPidsLimit,
 		},
 	})
-	bus, closeBus := newEventBus(logger, *eventBusBackend, *natsURL, *natsSubjectPrefix)
+	bus, closeBus := newEventBus(logger, fatalLogger, *eventBusBackend, *natsURL, *natsSubjectPrefix)
 	if closeBus != nil {
 		defer closeBus()
 	}
@@ -301,6 +358,7 @@ func main() {
 		logger, *agentMessageBusBackend, *agentMessageNATSURL,
 		*agentMessageSubjectPrefix, *agentMessageStreamName,
 		*agentMessageHistoryMax, *agentMessageDedupeWindow,
+		fatalLogger,
 	)
 	if closeAgentMessageBus != nil {
 		defer closeAgentMessageBus()
@@ -391,6 +449,7 @@ func main() {
 						TaskApprovals:       stores.TaskApprovals,
 						Policies:            stores.Policies,
 						ContextAdapters:     stores.ContextAdapters,
+						DebugLogger:         debugLogger,
 						OnStepEvent: func(taskName, namespace string, evt agentruntime.AgentStepEvent) {
 							if bus != nil {
 								bus.Publish(eventbus.Event{
@@ -433,7 +492,7 @@ func main() {
 
 	logger.Printf("API server listening on %s", *addr)
 	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		logger.Fatalf("server error: %v", err)
+		fatalLogger.Fatalf("server error: %v", err)
 	}
 	wg.Wait()
 }
@@ -504,7 +563,7 @@ func parseAuthMode(raw string) (api.AuthMode, error) {
 	}
 }
 
-func newEventBus(logger *log.Logger, backend, natsURL, subjectPrefix string) (eventbus.Bus, func()) {
+func newEventBus(logger *log.Logger, fatalLogger *log.Logger, backend, natsURL, subjectPrefix string) (eventbus.Bus, func()) {
 	mode := strings.ToLower(strings.TrimSpace(backend))
 	switch mode {
 	case "", "memory":
@@ -515,14 +574,14 @@ func newEventBus(logger *log.Logger, backend, natsURL, subjectPrefix string) (ev
 	case "nats":
 		bus, err := eventbus.NewNATSBus(natsURL, subjectPrefix, 8192, logger)
 		if err != nil {
-			if logger != nil {
-				logger.Fatalf("failed to initialize nats event bus: %v", err)
+			if fatalLogger != nil {
+				fatalLogger.Fatalf("failed to initialize nats event bus: %v", err)
 			}
 		}
 		return bus, func() { _ = bus.Close() }
 	default:
-		if logger != nil {
-			logger.Fatalf("unsupported event bus backend %q; expected memory or nats", backend)
+		if fatalLogger != nil {
+			fatalLogger.Fatalf("unsupported event bus backend %q; expected memory or nats", backend)
 		}
 		return eventbus.NewMemoryBus(8192), nil
 	}

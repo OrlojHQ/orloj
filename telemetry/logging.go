@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"log"
 	"log/slog"
@@ -20,17 +21,59 @@ const requestIDKey contextKey = "request_id"
 
 // NewLogger creates a *slog.Logger with a JSON handler for production
 // or a text handler for development. The environment variable ORLOJ_LOG_FORMAT
-// controls the output: "json" (default) or "text".
+// controls the output: "json" (default) or "text". ORLOJ_LOG_LEVEL controls
+// filtering: "debug", "info" (default), "warn", or "error".
 func NewLogger(serviceName string) *slog.Logger {
+	level, err := LogLevelFromEnv()
+	if err != nil {
+		level = slog.LevelInfo
+	}
+	return NewLoggerWithLevel(serviceName, level)
+}
+
+// NewLoggerWithLevel creates a *slog.Logger with the supplied minimum level.
+func NewLoggerWithLevel(serviceName string, level slog.Level) *slog.Logger {
+	return slog.New(newLogHandler(os.Stdout, level)).With("service", serviceName)
+}
+
+// ParseLogLevel parses an Orloj log level.
+func ParseLogLevel(raw string) (slog.Level, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "info":
+		return slog.LevelInfo, nil
+	case "debug":
+		return slog.LevelDebug, nil
+	case "warn", "warning":
+		return slog.LevelWarn, nil
+	case "error":
+		return slog.LevelError, nil
+	default:
+		return slog.LevelInfo, fmt.Errorf("invalid log level %q; expected debug, info, warn, or error", raw)
+	}
+}
+
+// ResolveLogLevel applies the process-wide debug shortcut before parsing raw.
+func ResolveLogLevel(raw string, debug bool) (slog.Level, error) {
+	if debug {
+		return slog.LevelDebug, nil
+	}
+	return ParseLogLevel(raw)
+}
+
+// LogLevelFromEnv parses ORLOJ_LOG_LEVEL, defaulting to info when unset.
+func LogLevelFromEnv() (slog.Level, error) {
+	return ParseLogLevel(os.Getenv("ORLOJ_LOG_LEVEL"))
+}
+
+func newLogHandler(w io.Writer, level slog.Level) slog.Handler {
 	format := strings.ToLower(strings.TrimSpace(os.Getenv("ORLOJ_LOG_FORMAT")))
-	var handler slog.Handler
+	opts := &slog.HandlerOptions{Level: level}
 	switch format {
 	case "text":
-		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})
+		return slog.NewTextHandler(w, opts)
 	default:
-		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})
+		return slog.NewJSONHandler(w, opts)
 	}
-	return slog.New(handler).With("service", serviceName)
 }
 
 // NewBridgeLogger creates a *log.Logger that writes through slog.
@@ -38,16 +81,32 @@ func NewLogger(serviceName string) *slog.Logger {
 // log entries. Use this to maintain backward compatibility with code
 // that expects *log.Logger while gaining structured output.
 func NewBridgeLogger(sl *slog.Logger) *log.Logger {
-	return log.New(&slogWriter{sl: sl}, "", 0)
+	return NewBridgeLoggerAtLevel(sl, slog.LevelInfo)
+}
+
+// NewDebugBridgeLogger creates a *log.Logger that writes debug-level records.
+func NewDebugBridgeLogger(sl *slog.Logger) *log.Logger {
+	return NewBridgeLoggerAtLevel(sl, slog.LevelDebug)
+}
+
+// NewErrorBridgeLogger creates a *log.Logger that writes error-level records.
+func NewErrorBridgeLogger(sl *slog.Logger) *log.Logger {
+	return NewBridgeLoggerAtLevel(sl, slog.LevelError)
+}
+
+// NewBridgeLoggerAtLevel creates a *log.Logger that writes at the supplied slog level.
+func NewBridgeLoggerAtLevel(sl *slog.Logger, level slog.Level) *log.Logger {
+	return log.New(&slogWriter{sl: sl, level: level}, "", 0)
 }
 
 type slogWriter struct {
-	sl *slog.Logger
+	sl    *slog.Logger
+	level slog.Level
 }
 
 func (w *slogWriter) Write(p []byte) (int, error) {
 	msg := strings.TrimRight(string(p), "\n")
-	w.sl.Info(msg)
+	w.sl.Log(context.Background(), w.level, msg)
 	return len(p), nil
 }
 

@@ -37,6 +37,14 @@ helm uninstall orloj --namespace orloj
 - `runtimeSecret.apiToken`
 - `runtimeConfig.*` (Orloj runtime env vars)
 
+Enable process-wide debug logs during troubleshooting:
+
+```bash
+helm upgrade --install orloj ./charts/orloj \
+  --namespace orloj \
+  --set runtimeConfig.ORLOJ_LOG_LEVEL=debug
+```
+
 ## Notes
 
 - By default, this chart deploys a single Postgres replica with a PVC and a single NATS replica.

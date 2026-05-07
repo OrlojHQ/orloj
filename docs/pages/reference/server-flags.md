@@ -19,6 +19,8 @@ go run ./cmd/orlojd -h
 | Flag | Default | Description | Condition / Notes |
 |---|---|---|---|
 | `--version` | `false` | Print version and exit. | n/a |
+| `--log-level` | `info` | Minimum log level. | `debug|info|warn|error`; env `ORLOJ_LOG_LEVEL`. |
+| `--debug` | `false` | Enable debug logging. | Equivalent to `--log-level=debug`; takes precedence over `--log-level`. |
 | `--addr` | `:8080` | Server listen address. | n/a |
 | `--ui-path` | `/` | Base URL path for the web console. | Env fallback: `ORLOJ_UI_PATH`. Set to a subpath (e.g. `/console/`) when sharing a hostname via reverse proxy. |
 | `--api-key` | empty | Bearer token auth key. | Env fallback: `ORLOJ_API_TOKEN`; see also `ORLOJ_API_TOKENS`. |
@@ -109,6 +111,8 @@ go run ./cmd/orlojworker -h
 | Flag | Default | Description | Condition / Notes |
 |---|---|---|---|
 | `--version` | `false` | Print version and exit. | n/a |
+| `--log-level` | `info` | Minimum log level. | `debug|info|warn|error`; env `ORLOJ_LOG_LEVEL`. |
+| `--debug` | `false` | Enable debug logging. | Equivalent to `--log-level=debug`; takes precedence over `--log-level`. |
 | `--worker-id` | `worker-1` | Worker identity. | n/a |
 | `--healthz-addr` | empty | Optional `/healthz` listener address. | Empty disables; env `ORLOJ_WORKER_HEALTHZ_ADDR`. |
 | `--region` | `default` | Worker region. | n/a |
