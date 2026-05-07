@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Global log level for daemons**: `orlojd` and `orlojworker` accept `--log-level`, `--debug`, and `ORLOJ_LOG_LEVEL` so operators can raise or lower verbosity without rebuilding. Operations docs, the server flags reference, and the Helm chart README include examples (including `runtimeConfig.ORLOJ_LOG_LEVEL` for clusters). Telemetry records the effective parsed log level, forwards debug bridge logs when enabled, and routes configured error-level fatals through the error logger so shutdown paths stay consistent with the chosen level.
 - **Targeted debug instrumentation**: additional debug logging around startup/runtime configuration, tool runtime setup, task scheduling and claim/heartbeat loops, worker capacity, and the agent message consumer (receive, skip, retry, ack, and routing decisions) to trace message-driven execution without enabling full trace spam.
+- **Kubernetes-style memory suffixes**: `ParseMemoryBytes` now accepts `Gi`, `Mi`, `Ki` suffixes (IEC binary, 1024-based) alongside Docker-style `g`, `m`, `k`.
+- **`Agent.ResolvedModel()` accessor**: provides a clear read path for the runtime-resolved model ID, discouraging direct field access on the `json:"-"` tagged `Spec.Model`.
 
 ### Changed
 
@@ -19,6 +21,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **DeepCopy BlockedOn pointer isolation**: `Task.DeepCopy()` now deep-copies the `BlockedOn` pointer, preventing shared mutable state across task copies during concurrent reconciliation.
+- **Regex ReDoS protection + caching**: Edge condition `output_matches` patterns are length-limited (512 chars) at normalization time and compiled regexes are cached, eliminating per-evaluation re-compilation and catastrophic backtracking vectors.
+- **Integer overflow in `ParseMemoryBytes`**: Memory values that overflow int64 when multiplied by their unit (e.g. `"9999999999g"`) now return an error instead of a negative result passed to Docker resource flags.
+- **OutputSchema validation**: Agent `output_schema` is now validated during normalization — requires a root `"type"` key, caps nesting at 10 levels, and limits serialized size to 64 KB.
+- **YAML multi-document rejection**: All manifest parsers now reject `---` document separators with a descriptive error, preventing silent field corruption from multi-document streams.
+- **NormalizeGraphJoin rejects invalid values**: Unknown `join.mode` or `join.on_failure` values now return errors instead of being silently replaced with defaults.
+- **Task.Normalize requires system for run mode**: A Task with `mode: run` and empty `spec.system` is now rejected at normalization time rather than failing at runtime.
+- **EncodeTaskApprovalResumeContext error propagation**: The function now returns errors instead of silently returning empty maps on marshal/unmarshal failure.
+- **Memory ingest content size limit**: `memory.ingest` now rejects payloads exceeding 10 MB, preventing OOM from unbounded content ingestion.
+- **Deterministic memory search results**: `SharedMemoryStore.Search` now sorts results by key before truncating to `topK`, producing consistent results across calls.
+- **Sealed secret AAD includes algorithm version**: GCM additional authenticated data now includes `AES-256-GCM-v1` as a prefix, with backward-compatible fallback to the legacy AAD format during unseal.
+- **YAML inline array quoted commas**: The manifest parser's flow array split now respects quoted strings, so values like `["hello, world", b]` parse correctly instead of splitting on the embedded comma.
 - **Standalone `orlojworker` MCP execution parity**: standalone workers now build and own an `McpSessionManager`, configure MCP execution on the task controller, pass MCP dependencies into message-driven agent consumers, start the idle reaper, and close MCP sessions on shutdown. This brings standalone `orlojworker` behavior in line with embedded `orlojd` workers so generated `type=mcp` tools can execute in both task-controller and message-driven flows.
 - **Provider-safe tool names across model gateways**: OpenAI-compatible/OpenAI, Azure OpenAI, Anthropic, Bedrock, and Ollama now share consistent tool-name aliasing. Runtime tool names such as `memory.write` are sanitized for provider requests, parsed responses map back to runtime names, and multi-turn assistant tool-call history is re-aliased through the current request's tool alias map so history names match the provider `tools` array. This fixes follow-up turn failures for MCP-style names and built-ins with dots.
 - **Trusted local model endpoints under `allowPrivate`**: `ModelEndpoint.spec.allowPrivate: true` now permits trusted local/private model gateways, including loopback Ollama and local OpenAI-compatible servers, while still blocking cloud metadata, link-local, and unspecified addresses. Generic tool and MCP egress protections remain unchanged.

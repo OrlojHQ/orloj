@@ -2,12 +2,14 @@ package resources
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 )
 
-// ParseMemoryBytes converts a Docker-style memory string (e.g. "128m", "1g")
-// to bytes. Accepted suffixes: b, k, m, g (case-insensitive).
+// ParseMemoryBytes converts a memory string to bytes.
+// Accepted suffixes (case-insensitive): gi, mi, ki (IEC binary),
+// g, m, k (Docker-style, also 1024-based), b (bytes).
 // A bare integer is treated as bytes.
 func ParseMemoryBytes(s string) (int64, error) {
 	s = strings.TrimSpace(strings.ToLower(s))
@@ -16,6 +18,15 @@ func ParseMemoryBytes(s string) (int64, error) {
 	}
 	multiplier := int64(1)
 	switch {
+	case strings.HasSuffix(s, "gi"):
+		multiplier = 1024 * 1024 * 1024
+		s = strings.TrimSuffix(s, "gi")
+	case strings.HasSuffix(s, "mi"):
+		multiplier = 1024 * 1024
+		s = strings.TrimSuffix(s, "mi")
+	case strings.HasSuffix(s, "ki"):
+		multiplier = 1024
+		s = strings.TrimSuffix(s, "ki")
 	case strings.HasSuffix(s, "g"):
 		multiplier = 1024 * 1024 * 1024
 		s = strings.TrimSuffix(s, "g")
@@ -34,6 +45,9 @@ func ParseMemoryBytes(s string) (int64, error) {
 	}
 	if v <= 0 {
 		return 0, fmt.Errorf("memory value must be positive, got %d", v)
+	}
+	if multiplier > 1 && v > math.MaxInt64/multiplier {
+		return 0, fmt.Errorf("memory value overflows int64")
 	}
 	return v * multiplier, nil
 }

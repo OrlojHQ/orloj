@@ -45,6 +45,9 @@ func DetectKind(data []byte) (string, error) {
 
 // ParseAgentSystemManifest parses AgentSystem resources from JSON or constrained YAML.
 func ParseAgentSystemManifest(data []byte) (AgentSystem, error) {
+	if err := rejectMultiDocumentYAML(data); err != nil {
+		return AgentSystem{}, err
+	}
 	var out AgentSystem
 	if json.Valid(data) {
 		if err := json.Unmarshal(data, &out); err != nil {
@@ -462,6 +465,9 @@ func applyReviewCheckpointField(spec *ReviewCheckpointSpec, key, value string) e
 
 // ParseToolManifest parses Tool resources from JSON or constrained YAML.
 func ParseToolManifest(data []byte) (Tool, error) {
+	if err := rejectMultiDocumentYAML(data); err != nil {
+		return Tool{}, err
+	}
 	var out Tool
 	if json.Valid(data) {
 		if err := json.Unmarshal(data, &out); err != nil {
@@ -932,6 +938,9 @@ func parseSecretManifestWithoutNormalize(data []byte) (Secret, error) {
 
 // ParseSecretManifest parses Secret resources from JSON or constrained YAML.
 func ParseSecretManifest(data []byte) (Secret, error) {
+	if err := rejectMultiDocumentYAML(data); err != nil {
+		return Secret{}, err
+	}
 	out, err := parseSecretManifestWithoutNormalize(data)
 	if err != nil {
 		return Secret{}, err
@@ -944,6 +953,9 @@ func ParseSecretManifest(data []byte) (Secret, error) {
 
 // ParseMemoryManifest parses Memory resources from JSON or constrained YAML.
 func ParseMemoryManifest(data []byte) (Memory, error) {
+	if err := rejectMultiDocumentYAML(data); err != nil {
+		return Memory{}, err
+	}
 	var out Memory
 	if json.Valid(data) {
 		if err := json.Unmarshal(data, &out); err != nil {
@@ -1027,6 +1039,9 @@ func ParseMemoryManifest(data []byte) (Memory, error) {
 
 // ParseAgentPolicyManifest parses AgentPolicy resources from JSON or constrained YAML.
 func ParseAgentPolicyManifest(data []byte) (AgentPolicy, error) {
+	if err := rejectMultiDocumentYAML(data); err != nil {
+		return AgentPolicy{}, err
+	}
 	var out AgentPolicy
 	if json.Valid(data) {
 		if err := json.Unmarshal(data, &out); err != nil {
@@ -1158,6 +1173,9 @@ func ParseAgentPolicyManifest(data []byte) (AgentPolicy, error) {
 
 // ParseAgentRoleManifest parses AgentRole resources from JSON or constrained YAML.
 func ParseAgentRoleManifest(data []byte) (AgentRole, error) {
+	if err := rejectMultiDocumentYAML(data); err != nil {
+		return AgentRole{}, err
+	}
 	var out AgentRole
 	if json.Valid(data) {
 		if err := json.Unmarshal(data, &out); err != nil {
@@ -1239,6 +1257,9 @@ func ParseAgentRoleManifest(data []byte) (AgentRole, error) {
 
 // ParseToolPermissionManifest parses ToolPermission resources from JSON or constrained YAML.
 func ParseToolPermissionManifest(data []byte) (ToolPermission, error) {
+	if err := rejectMultiDocumentYAML(data); err != nil {
+		return ToolPermission{}, err
+	}
 	var out ToolPermission
 	if json.Valid(data) {
 		if err := json.Unmarshal(data, &out); err != nil {
@@ -1364,6 +1385,9 @@ func ParseToolPermissionManifest(data []byte) (ToolPermission, error) {
 
 // ParseToolApprovalManifest parses ToolApproval resources from JSON or constrained YAML.
 func ParseToolApprovalManifest(data []byte) (ToolApproval, error) {
+	if err := rejectMultiDocumentYAML(data); err != nil {
+		return ToolApproval{}, err
+	}
 	var out ToolApproval
 	if json.Valid(data) {
 		if err := json.Unmarshal(data, &out); err != nil {
@@ -1460,6 +1484,9 @@ func ParseToolApprovalManifest(data []byte) (ToolApproval, error) {
 
 // ParseTaskApprovalManifest parses TaskApproval resources from JSON or constrained YAML.
 func ParseTaskApprovalManifest(data []byte) (TaskApproval, error) {
+	if err := rejectMultiDocumentYAML(data); err != nil {
+		return TaskApproval{}, err
+	}
 	var out TaskApproval
 	if json.Valid(data) {
 		if err := json.Unmarshal(data, &out); err != nil {
@@ -1633,6 +1660,9 @@ func ParseTaskApprovalManifest(data []byte) (TaskApproval, error) {
 
 // ParseTaskManifest parses Task resources from JSON or constrained YAML.
 func ParseTaskManifest(data []byte) (Task, error) {
+	if err := rejectMultiDocumentYAML(data); err != nil {
+		return Task{}, err
+	}
 	var out Task
 	if json.Valid(data) {
 		if err := json.Unmarshal(data, &out); err != nil {
@@ -1775,6 +1805,9 @@ func ParseTaskManifest(data []byte) (Task, error) {
 
 // ParseTaskScheduleManifest parses TaskSchedule resources from JSON or constrained YAML.
 func ParseTaskScheduleManifest(data []byte) (TaskSchedule, error) {
+	if err := rejectMultiDocumentYAML(data); err != nil {
+		return TaskSchedule{}, err
+	}
 	var out TaskSchedule
 	if json.Valid(data) {
 		if err := json.Unmarshal(data, &out); err != nil {
@@ -1936,6 +1969,9 @@ func ParseTaskScheduleManifest(data []byte) (TaskSchedule, error) {
 
 // ParseTaskWebhookManifest parses TaskWebhook resources from JSON or constrained YAML.
 func ParseTaskWebhookManifest(data []byte) (TaskWebhook, error) {
+	if err := rejectMultiDocumentYAML(data); err != nil {
+		return TaskWebhook{}, err
+	}
 	var out TaskWebhook
 	if json.Valid(data) {
 		if err := json.Unmarshal(data, &out); err != nil {
@@ -2123,6 +2159,9 @@ func ParseTaskWebhookManifest(data []byte) (TaskWebhook, error) {
 
 // ParseWorkerManifest parses Worker resources from JSON or constrained YAML.
 func ParseWorkerManifest(data []byte) (Worker, error) {
+	if err := rejectMultiDocumentYAML(data); err != nil {
+		return Worker{}, err
+	}
 	var out Worker
 	if json.Valid(data) {
 		if err := json.Unmarshal(data, &out); err != nil {
@@ -2220,6 +2259,9 @@ func ParseWorkerManifest(data []byte) (Worker, error) {
 
 // ParseMcpServerManifest parses McpServer resources from JSON or constrained YAML.
 func ParseMcpServerManifest(data []byte) (McpServer, error) {
+	if err := rejectMultiDocumentYAML(data); err != nil {
+		return McpServer{}, err
+	}
 	var out McpServer
 	if json.Valid(data) {
 		if err := json.Unmarshal(data, &out); err != nil {

@@ -112,9 +112,13 @@ func edgeConditionMatches(c *EdgeCondition, output, outputLower string) bool {
 		}
 	}
 	if c.OutputMatches != "" {
-		re, err := regexp.Compile(c.OutputMatches)
-		if err != nil {
-			return false
+		re := c.CompiledOutputMatches
+		if re == nil {
+			var err error
+			re, err = regexp.Compile(c.OutputMatches)
+			if err != nil {
+				return false
+			}
 		}
 		if !re.MatchString(output) {
 			return false
@@ -261,8 +265,8 @@ func jsonValueContains(val any, target string) bool {
 	}
 }
 
-// NormalizeGraphJoin applies defaults and clamps unsupported values.
-func NormalizeGraphJoin(join GraphJoin) GraphJoin {
+// NormalizeGraphJoin applies defaults and validates join configuration.
+func NormalizeGraphJoin(join GraphJoin) (GraphJoin, error) {
 	mode := strings.ToLower(strings.TrimSpace(join.Mode))
 	switch mode {
 	case "", "wait_for_all":
@@ -270,7 +274,7 @@ func NormalizeGraphJoin(join GraphJoin) GraphJoin {
 	case "quorum":
 		join.Mode = "quorum"
 	default:
-		join.Mode = "wait_for_all"
+		return join, fmt.Errorf("invalid join.mode %q: expected wait_for_all or quorum", join.Mode)
 	}
 
 	if join.QuorumCount < 0 {
@@ -292,7 +296,7 @@ func NormalizeGraphJoin(join GraphJoin) GraphJoin {
 	case "continue_partial":
 		join.OnFailure = "continue_partial"
 	default:
-		join.OnFailure = "deadletter"
+		return join, fmt.Errorf("invalid join.on_failure %q: expected deadletter, skip, or continue_partial", join.OnFailure)
 	}
-	return join
+	return join, nil
 }

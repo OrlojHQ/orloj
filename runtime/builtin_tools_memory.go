@@ -87,6 +87,7 @@ func (s *SharedMemoryStore) Search(query string, topK int) []memoryEntry {
 			results = append(results, memoryEntry{Key: k, Value: v})
 		}
 	}
+	sort.Slice(results, func(i, j int) bool { return results[i].Key < results[j].Key })
 	if len(results) > topK {
 		results = results[:topK]
 	}
@@ -273,6 +274,10 @@ func (r *MemoryToolRuntime) handleIngest(ctx context.Context, input string) (str
 	}
 	if strings.TrimSpace(req.Content) == "" {
 		return "", fmt.Errorf("memory.ingest: content is required")
+	}
+	const maxIngestContentBytes = 10 * 1024 * 1024 // 10 MB
+	if len(req.Content) > maxIngestContentBytes {
+		return "", fmt.Errorf("memory.ingest: content exceeds %d byte limit", maxIngestContentBytes)
 	}
 
 	chunks := ChunkText(req.Content, req.ChunkSize, req.Overlap)

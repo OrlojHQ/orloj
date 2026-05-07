@@ -1,6 +1,7 @@
 package resources
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -73,32 +74,39 @@ type ListMeta struct {
 
 // Agent represents the desired and observed state for a single agent runtime.
 type Agent struct {
-	APIVersion string      `json:"apiVersion"`
-	Kind       string      `json:"kind"`
-	Metadata   ObjectMeta  `json:"metadata"`
-	Spec       AgentSpec   `json:"spec"`
-	Status     AgentStatus `json:"status,omitempty"`
+	APIVersion string      `json:"apiVersion" yaml:"apiVersion"`
+	Kind       string      `json:"kind" yaml:"kind"`
+	Metadata   ObjectMeta  `json:"metadata" yaml:"metadata"`
+	Spec       AgentSpec   `json:"spec" yaml:"spec"`
+	Status     AgentStatus `json:"status,omitempty" yaml:"status,omitempty"`
 }
+
+// ResolvedModel returns the runtime-resolved model ID. This is populated
+// after model ref resolution and should be used instead of reading Spec.Model directly.
+func (a *Agent) ResolvedModel() string { return a.Spec.Model }
 
 // AgentList is returned by list API calls.
 type AgentList struct {
-	ListMeta `json:",inline"`
-	Items    []Agent `json:"items"`
+	ListMeta `json:",inline" yaml:",inline"`
+	Items    []Agent `json:"items" yaml:"items"`
 }
 
 // AgentSpec defines desired runtime behavior.
 type AgentSpec struct {
-	// Model stores the resolved model id for runtime execution and is not part of the external Agent API.
-	Model             string             `json:"-"`
-	ModelRef          string             `json:"model_ref,omitempty"`
-	FallbackModelRefs []string           `json:"fallback_model_refs,omitempty"`
-	Prompt            string             `json:"prompt"`
-	Tools        []string           `json:"tools,omitempty"`
-	AllowedTools []string           `json:"allowed_tools,omitempty"`
-	Roles        []string           `json:"roles,omitempty"`
-	Memory       MemorySpec         `json:"memory,omitempty"`
-	Execution    AgentExecutionSpec `json:"execution,omitempty"`
-	Limits       AgentLimits        `json:"limits,omitempty"`
+	// Model stores the resolved model id for runtime execution.
+	// WARNING: This field is NOT part of the external Agent API (tagged json:"-").
+	// It is populated at runtime from ModelRef resolution. Do not set directly
+	// in struct literals — use ModelRef instead. Read via Agent.ResolvedModel().
+	Model             string             `json:"-" yaml:"-"`
+	ModelRef          string             `json:"model_ref,omitempty" yaml:"model_ref,omitempty"`
+	FallbackModelRefs []string           `json:"fallback_model_refs,omitempty" yaml:"fallback_model_refs,omitempty"`
+	Prompt            string             `json:"prompt" yaml:"prompt"`
+	Tools        []string           `json:"tools,omitempty" yaml:"tools,omitempty"`
+	AllowedTools []string           `json:"allowed_tools,omitempty" yaml:"allowed_tools,omitempty"`
+	Roles        []string           `json:"roles,omitempty" yaml:"roles,omitempty"`
+	Memory       MemorySpec         `json:"memory,omitempty" yaml:"memory,omitempty"`
+	Execution    AgentExecutionSpec `json:"execution,omitempty" yaml:"execution,omitempty"`
+	Limits       AgentLimits        `json:"limits,omitempty" yaml:"limits,omitempty"`
 }
 
 const (
@@ -117,34 +125,34 @@ const (
 
 // AgentExecutionSpec configures optional per-agent execution contracts.
 type AgentExecutionSpec struct {
-	Profile                 string         `json:"profile,omitempty"`
-	ToolSequence            []string       `json:"tool_sequence,omitempty"`
-	RequiredOutputMarkers   []string       `json:"required_output_markers,omitempty"`
-	DuplicateToolCallPolicy string         `json:"duplicate_tool_call_policy,omitempty"`
-	OnContractViolation     string         `json:"on_contract_violation,omitempty"`
-	ToolUseBehavior         string         `json:"tool_use_behavior,omitempty"`
-	OutputSchema            map[string]any `json:"output_schema,omitempty"`
+	Profile                 string         `json:"profile,omitempty" yaml:"profile,omitempty"`
+	ToolSequence            []string       `json:"tool_sequence,omitempty" yaml:"tool_sequence,omitempty"`
+	RequiredOutputMarkers   []string       `json:"required_output_markers,omitempty" yaml:"required_output_markers,omitempty"`
+	DuplicateToolCallPolicy string         `json:"duplicate_tool_call_policy,omitempty" yaml:"duplicate_tool_call_policy,omitempty"`
+	OnContractViolation     string         `json:"on_contract_violation,omitempty" yaml:"on_contract_violation,omitempty"`
+	ToolUseBehavior         string         `json:"tool_use_behavior,omitempty" yaml:"tool_use_behavior,omitempty"`
+	OutputSchema            map[string]any `json:"output_schema,omitempty" yaml:"output_schema,omitempty"`
 }
 
 // MemorySpec configures runtime memory backend.
 type MemorySpec struct {
-	Ref      string   `json:"ref,omitempty"`
-	Type     string   `json:"type,omitempty"`
-	Provider string   `json:"provider,omitempty"`
-	Allow    []string `json:"allow,omitempty"`
+	Ref      string   `json:"ref,omitempty" yaml:"ref,omitempty"`
+	Type     string   `json:"type,omitempty" yaml:"type,omitempty"`
+	Provider string   `json:"provider,omitempty" yaml:"provider,omitempty"`
+	Allow    []string `json:"allow,omitempty" yaml:"allow,omitempty"`
 }
 
 // AgentLimits configures execution safety bounds.
 type AgentLimits struct {
-	MaxSteps int    `json:"max_steps,omitempty"`
-	Timeout  string `json:"timeout,omitempty"`
+	MaxSteps int    `json:"max_steps,omitempty" yaml:"max_steps,omitempty"`
+	Timeout  string `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 }
 
 // AgentStatus represents current runtime state.
 type AgentStatus struct {
-	Phase              string `json:"phase,omitempty"`
-	LastError          string `json:"lastError,omitempty"`
-	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
+	Phase              string `json:"phase,omitempty" yaml:"phase,omitempty"`
+	LastError          string `json:"lastError,omitempty" yaml:"lastError,omitempty"`
+	ObservedGeneration int64  `json:"observedGeneration,omitempty" yaml:"observedGeneration,omitempty"`
 }
 
 // Normalize applies defaults and validates the resource.
@@ -295,6 +303,9 @@ func (a *Agent) Normalize() error {
 	if a.Spec.Execution.Profile == AgentExecutionProfileContract && len(a.Spec.Execution.ToolSequence) == 0 {
 		return fmt.Errorf("spec.execution.tool_sequence is required when spec.execution.profile=contract")
 	}
+	if err := validateOutputSchema(a.Spec.Execution.OutputSchema); err != nil {
+		return fmt.Errorf("spec.execution.output_schema: %w", err)
+	}
 	if a.Spec.Limits.MaxSteps <= 0 {
 		a.Spec.Limits.MaxSteps = 10
 	}
@@ -302,4 +313,42 @@ func (a *Agent) Normalize() error {
 		a.Status.Phase = "Pending"
 	}
 	return nil
+}
+
+const (
+	maxOutputSchemaDepth = 10
+	maxOutputSchemaSize  = 64 * 1024
+)
+
+func validateOutputSchema(schema map[string]any) error {
+	if len(schema) == 0 {
+		return nil
+	}
+	if _, ok := schema["type"]; !ok {
+		return fmt.Errorf("root level must contain a \"type\" key")
+	}
+	raw, err := json.Marshal(schema)
+	if err != nil {
+		return fmt.Errorf("cannot serialize: %w", err)
+	}
+	if len(raw) > maxOutputSchemaSize {
+		return fmt.Errorf("serialized size %d exceeds limit of %d bytes", len(raw), maxOutputSchemaSize)
+	}
+	if depth := mapDepth(schema, 0); depth > maxOutputSchemaDepth {
+		return fmt.Errorf("nesting depth %d exceeds limit of %d", depth, maxOutputSchemaDepth)
+	}
+	return nil
+}
+
+func mapDepth(m map[string]any, current int) int {
+	max := current + 1
+	for _, v := range m {
+		switch child := v.(type) {
+		case map[string]any:
+			if d := mapDepth(child, current+1); d > max {
+				max = d
+			}
+		}
+	}
+	return max
 }

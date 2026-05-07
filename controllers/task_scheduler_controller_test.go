@@ -73,6 +73,7 @@ func TestTaskSchedulerAssignsTasksByRequirementsAndCapacity(t *testing.T) {
 			Kind:       "Task",
 			Metadata:   resources.ObjectMeta{Name: "task-west-gpu-1"},
 			Spec: resources.TaskSpec{
+				System:       "test-system",
 				Requirements: resources.TaskRequirements{Region: "us-west", GPU: true, Model: "gpt-4o"},
 			},
 		},
@@ -81,6 +82,7 @@ func TestTaskSchedulerAssignsTasksByRequirementsAndCapacity(t *testing.T) {
 			Kind:       "Task",
 			Metadata:   resources.ObjectMeta{Name: "task-east"},
 			Spec: resources.TaskSpec{
+				System:       "test-system",
 				Requirements: resources.TaskRequirements{Region: "us-east", Model: "gpt-4o"},
 			},
 		},
@@ -89,6 +91,7 @@ func TestTaskSchedulerAssignsTasksByRequirementsAndCapacity(t *testing.T) {
 			Kind:       "Task",
 			Metadata:   resources.ObjectMeta{Name: "task-west-gpu-2"},
 			Spec: resources.TaskSpec{
+				System:       "test-system",
 				Requirements: resources.TaskRequirements{Region: "us-west", GPU: true, Model: "gpt-4o"},
 			},
 		},
@@ -97,6 +100,7 @@ func TestTaskSchedulerAssignsTasksByRequirementsAndCapacity(t *testing.T) {
 			Kind:       "Task",
 			Metadata:   resources.ObjectMeta{Name: "task-no-match"},
 			Spec: resources.TaskSpec{
+				System:       "test-system",
 				Requirements: resources.TaskRequirements{Region: "eu-central", GPU: true, Model: "gpt-4o"},
 			},
 		},
@@ -172,6 +176,7 @@ func TestTaskSchedulerClearsAndReassignsInvalidAssignment(t *testing.T) {
 		Kind:       "Task",
 		Metadata:   resources.ObjectMeta{Name: "task-1"},
 		Spec: resources.TaskSpec{
+			System:       "test-system",
 			Requirements: resources.TaskRequirements{Model: "gpt-4o"},
 		},
 		Status: resources.TaskStatus{AssignedWorker: "worker-stale"},

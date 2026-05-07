@@ -33,6 +33,10 @@ func copyTaskStatus(status TaskStatus) TaskStatus {
 	copy.MessageIdempotency = append([]TaskMessageIdempotency(nil), status.MessageIdempotency...)
 	copy.JoinStates = copyTaskJoinStates(status.JoinStates)
 	copy.DelegationStates = copyTaskDelegationStates(status.DelegationStates)
+	if status.BlockedOn != nil {
+		blockedOn := *status.BlockedOn
+		copy.BlockedOn = &blockedOn
+	}
 	return copy
 }
 
