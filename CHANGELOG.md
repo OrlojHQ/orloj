@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-05-07
+
 ### Added
 
 - **Global log level for daemons**: `orlojd` and `orlojworker` accept `--log-level`, `--debug`, and `ORLOJ_LOG_LEVEL` so operators can raise or lower verbosity without rebuilding. Operations docs, the server flags reference, and the Helm chart README include examples (including `runtimeConfig.ORLOJ_LOG_LEVEL` for clusters). Telemetry records the effective parsed log level, forwards debug bridge logs when enabled, and routes configured error-level fatals through the error logger so shutdown paths stay consistent with the chosen level.
@@ -406,7 +408,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Homebrew tap distribution (`OrlojHQ/orloj`)
 - Blueprint scaffolding via `orlojctl init`
 
-[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/OrlojHQ/orloj/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/OrlojHQ/orloj/compare/v0.12.1...v0.13.0
 [0.12.1]: https://github.com/OrlojHQ/orloj/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/OrlojHQ/orloj/compare/v0.11.0...v0.12.0
