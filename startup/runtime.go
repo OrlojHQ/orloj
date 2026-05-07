@@ -152,7 +152,12 @@ func NewAgentMessageBus(
 	streamName string,
 	historyMax int,
 	dedupeWindow time.Duration,
+	fatalLoggers ...*log.Logger,
 ) (agentruntime.AgentMessageBus, func()) {
+	fatalLogger := logger
+	if len(fatalLoggers) > 0 && fatalLoggers[0] != nil {
+		fatalLogger = fatalLoggers[0]
+	}
 	mode := strings.ToLower(strings.TrimSpace(backend))
 	switch mode {
 	case "", "none":
@@ -169,13 +174,13 @@ func NewAgentMessageBus(
 		return bus, func() { _ = bus.Close() }
 	case "nats", "nats-jetstream":
 		bus, err := agentruntime.NewNATSJetStreamAgentMessageBus(natsURL, subjectPrefix, streamName, logger)
-		if err != nil && logger != nil {
-			logger.Fatalf("failed to initialize runtime agent message bus: %v", err)
+		if err != nil && fatalLogger != nil {
+			fatalLogger.Fatalf("failed to initialize runtime agent message bus: %v", err)
 		}
 		return bus, func() { _ = bus.Close() }
 	default:
-		if logger != nil {
-			logger.Fatalf("unsupported runtime agent message bus backend %q; expected none, memory, or nats-jetstream", backend)
+		if fatalLogger != nil {
+			fatalLogger.Fatalf("unsupported runtime agent message bus backend %q; expected none, memory, or nats-jetstream", backend)
 		}
 		return nil, nil
 	}

@@ -145,13 +145,27 @@ histogram_quantile(0.95, sum by (le, agent) (rate(orloj_agent_step_duration_seco
 
 ## Structured Logging
 
-Both `orlojd` and `orlojworker` emit structured JSON logs by default. Log output can be configured via the `ORLOJ_LOG_FORMAT` environment variable.
+Both `orlojd` and `orlojworker` emit structured JSON logs by default. Log output can be configured via the `ORLOJ_LOG_FORMAT` environment variable, and log verbosity can be configured with `ORLOJ_LOG_LEVEL`, `--log-level`, or the `--debug` shortcut.
 
 ### Configuration
 
 | Variable | Values | Default | Description |
 |---|---|---|---|
+| `ORLOJ_LOG_LEVEL` | `debug`, `info`, `warn`, `error` | `info` | Minimum log level. Use `debug` when investigating scheduling, worker, message bus, and runtime decisions. |
 | `ORLOJ_LOG_FORMAT` | `json`, `text` | `json` | Log output format. Use `text` for local development. |
+
+Local debugging example:
+
+```bash
+ORLOJ_LOG_FORMAT=text go run ./cmd/orlojd --debug --storage-backend=memory --embedded-worker
+```
+
+Kubernetes/Helm deployments should usually set the environment variable instead:
+
+```yaml
+runtimeConfig:
+  ORLOJ_LOG_LEVEL: debug
+```
 
 ### Log Fields
 

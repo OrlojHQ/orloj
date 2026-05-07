@@ -81,6 +81,7 @@ type AgentMessageConsumerOptions struct {
 	Policies            AgentPolicyLookup
 	ContextAdapters     ContextAdapterGetter
 	OnStepEvent         func(taskName, namespace string, evt AgentStepEvent)
+	DebugLogger         *log.Logger
 }
 
 // ToolApprovalUpserter persists ToolApproval resources when a governed tool requires approval.
@@ -96,41 +97,42 @@ type TaskApprovalUpserter interface {
 
 // AgentMessageConsumerManager watches agents and consumes runtime inbox messages per agent.
 type AgentMessageConsumerManager struct {
-	bus            AgentMessageBus
-	agents         AgentRegistry
-	systems        AgentSystemRegistry
-	tasks          TaskStateStore
-	tools          ToolResourceLookup
-	roles          AgentRoleLookup
-	toolPerms      ToolPermissionLookup
-	isolated       ToolRuntime
-	wasmRT         ToolRuntime
-	cliConfig      CLIToolRuntimeConfig
-	secretResolver SecretResolver
-	mcpSessionMgr  *McpSessionManager
-	mcpServerStore McpServerLookup
-	executor       *TaskExecutor
-	logger         *log.Logger
-	workerID       string
-	namespace      string
-	refresh        time.Duration
-	dedupeTTL      time.Duration
-	retryDelay     time.Duration
-	leaseExtend    time.Duration
-	extensions     Extensions
-	memories       MemoryResourceLookup
-	memBackends    *PersistentMemoryBackendRegistry
-	modelEPs       resources.ModelEndpointLookup
-	toolApprovals  ToolApprovalUpserter
-	taskApprovals  TaskApprovalUpserter
-	policies       AgentPolicyLookup
+	bus             AgentMessageBus
+	agents          AgentRegistry
+	systems         AgentSystemRegistry
+	tasks           TaskStateStore
+	tools           ToolResourceLookup
+	roles           AgentRoleLookup
+	toolPerms       ToolPermissionLookup
+	isolated        ToolRuntime
+	wasmRT          ToolRuntime
+	cliConfig       CLIToolRuntimeConfig
+	secretResolver  SecretResolver
+	mcpSessionMgr   *McpSessionManager
+	mcpServerStore  McpServerLookup
+	executor        *TaskExecutor
+	logger          *log.Logger
+	debugLogger     *log.Logger
+	workerID        string
+	namespace       string
+	refresh         time.Duration
+	dedupeTTL       time.Duration
+	retryDelay      time.Duration
+	leaseExtend     time.Duration
+	extensions      Extensions
+	memories        MemoryResourceLookup
+	memBackends     *PersistentMemoryBackendRegistry
+	modelEPs        resources.ModelEndpointLookup
+	toolApprovals   ToolApprovalUpserter
+	taskApprovals   TaskApprovalUpserter
+	policies        AgentPolicyLookup
 	contextAdapters ContextAdapterGetter
-	onStepEvent    func(taskName, namespace string, evt AgentStepEvent)
-	mu             sync.Mutex
-	consumers      map[string]context.CancelFunc
-	seenMessage    map[string]time.Time
-	taskMemory     map[string]*SharedMemoryStore
-	taskMemoryMu   sync.Mutex
+	onStepEvent     func(taskName, namespace string, evt AgentStepEvent)
+	mu              sync.Mutex
+	consumers       map[string]context.CancelFunc
+	seenMessage     map[string]time.Time
+	taskMemory      map[string]*SharedMemoryStore
+	taskMemoryMu    sync.Mutex
 }
 
 func NewAgentMessageConsumerManager(
@@ -162,39 +164,46 @@ func NewAgentMessageConsumerManager(
 		executor = NewTaskExecutor(logger)
 	}
 	return &AgentMessageConsumerManager{
-		bus:            bus,
-		agents:         agents,
-		systems:        systems,
-		tasks:          tasks,
-		tools:          opts.Tools,
-		roles:          opts.Roles,
-		toolPerms:      opts.ToolPermissions,
-		isolated:       opts.IsolatedToolRuntime,
-		wasmRT:         opts.WasmToolRuntime,
-		cliConfig:      opts.CliToolConfig,
-		secretResolver: opts.SecretResolver,
-		mcpSessionMgr:  opts.McpSessionManager,
-		mcpServerStore: opts.McpServerStore,
-		executor:       executor,
-		logger:         logger,
-		workerID:       strings.TrimSpace(opts.WorkerID),
-		namespace:      strings.TrimSpace(opts.Namespace),
-		refresh:        refresh,
-		dedupeTTL:      dedupe,
-		retryDelay:     retry,
-		leaseExtend:    lease,
-		memories:       opts.Memories,
-		memBackends:    opts.MemoryBackends,
-		modelEPs:       opts.ModelEndpoints,
-		toolApprovals:  opts.ToolApprovals,
-		taskApprovals:  opts.TaskApprovals,
-		policies:       opts.Policies,
+		bus:             bus,
+		agents:          agents,
+		systems:         systems,
+		tasks:           tasks,
+		tools:           opts.Tools,
+		roles:           opts.Roles,
+		toolPerms:       opts.ToolPermissions,
+		isolated:        opts.IsolatedToolRuntime,
+		wasmRT:          opts.WasmToolRuntime,
+		cliConfig:       opts.CliToolConfig,
+		secretResolver:  opts.SecretResolver,
+		mcpSessionMgr:   opts.McpSessionManager,
+		mcpServerStore:  opts.McpServerStore,
+		executor:        executor,
+		logger:          logger,
+		debugLogger:     opts.DebugLogger,
+		workerID:        strings.TrimSpace(opts.WorkerID),
+		namespace:       strings.TrimSpace(opts.Namespace),
+		refresh:         refresh,
+		dedupeTTL:       dedupe,
+		retryDelay:      retry,
+		leaseExtend:     lease,
+		memories:        opts.Memories,
+		memBackends:     opts.MemoryBackends,
+		modelEPs:        opts.ModelEndpoints,
+		toolApprovals:   opts.ToolApprovals,
+		taskApprovals:   opts.TaskApprovals,
+		policies:        opts.Policies,
 		contextAdapters: opts.ContextAdapters,
-		onStepEvent:    opts.OnStepEvent,
-		extensions:     NormalizeExtensions(opts.Extensions),
-		consumers:      make(map[string]context.CancelFunc),
-		seenMessage:    make(map[string]time.Time),
-		taskMemory:     make(map[string]*SharedMemoryStore),
+		onStepEvent:     opts.OnStepEvent,
+		extensions:      NormalizeExtensions(opts.Extensions),
+		consumers:       make(map[string]context.CancelFunc),
+		seenMessage:     make(map[string]time.Time),
+		taskMemory:      make(map[string]*SharedMemoryStore),
+	}
+}
+
+func (m *AgentMessageConsumerManager) debugf(format string, args ...any) {
+	if m != nil && m.debugLogger != nil {
+		m.debugLogger.Printf(format, args...)
 	}
 }
 
@@ -203,6 +212,7 @@ func (m *AgentMessageConsumerManager) Start(ctx context.Context) {
 		return
 	}
 
+	m.debugf("agent message consumer manager starting worker=%s namespace=%q refresh=%s dedupe_window=%s retry_delay=%s lease_extend=%s", m.workerID, m.namespace, m.refresh, m.dedupeTTL, m.retryDelay, m.leaseExtend)
 	m.reconcileConsumers(ctx)
 	ticker := time.NewTicker(m.refresh)
 	defer ticker.Stop()
@@ -243,6 +253,7 @@ func (m *AgentMessageConsumerManager) reconcileConsumers(ctx context.Context) {
 			Durable:   durableName(m.workerID, namespace, name),
 		}
 	}
+	m.debugf("agent message consumer reconcile worker=%s desired=%d namespace_filter=%q", m.workerID, len(desired), m.namespace)
 
 	type pendingStart struct {
 		key string
@@ -295,7 +306,18 @@ func (m *AgentMessageConsumerManager) stopAllConsumers() {
 func (m *AgentMessageConsumerManager) consumeLoop(ctx context.Context, key string, sub AgentMessageSubscription) {
 	for {
 		err := m.bus.Consume(ctx, sub, func(ctx context.Context, delivery AgentMessageDelivery) error {
-			return m.handleDelivery(ctx, key, delivery)
+			msg := delivery.Message()
+			err := m.handleDelivery(ctx, key, delivery)
+			if err != nil {
+				if delay, ok := retryDelayFromError(err); ok {
+					m.debugf("agent message delivery retry requested agent=%s message_id=%s task_id=%s delay=%s error=%v", key, msg.MessageID, msg.TaskID, delay, err)
+				} else {
+					m.debugf("agent message delivery nack requested agent=%s message_id=%s task_id=%s error=%v", key, msg.MessageID, msg.TaskID, err)
+				}
+			} else {
+				m.debugf("agent message delivery acked agent=%s message_id=%s task_id=%s", key, msg.MessageID, msg.TaskID)
+			}
+			return err
 		})
 		if err != nil && ctx.Err() == nil && m.logger != nil {
 			m.logger.Printf("agent message consumer error agent=%s: %v", key, err)
@@ -318,6 +340,7 @@ func (m *AgentMessageConsumerManager) handleDelivery(ctx context.Context, _ stri
 		}
 		return nil
 	}
+	m.debugf("agent message received task=%s message_id=%s from=%s to=%s type=%s attempt=%d branch_id=%s", taskKey, msg.MessageID, msg.FromAgent, msg.ToAgent, msg.Type, msg.Attempt, msg.BranchID)
 
 	task, ok, err := m.tasks.Get(ctx, taskKey)
 	if err != nil {
@@ -330,12 +353,15 @@ func (m *AgentMessageConsumerManager) handleDelivery(ctx context.Context, _ stri
 		return nil
 	}
 	if isTerminalTaskPhase(task.Status.Phase) {
+		m.debugf("agent message skipped task=%s message_id=%s reason=terminal_task_phase phase=%s", taskKey, msg.MessageID, task.Status.Phase)
 		return nil
 	}
 	if strings.EqualFold(strings.TrimSpace(task.Status.Phase), "waitingapproval") {
+		m.debugf("agent message retry deferred task=%s message_id=%s reason=task_waiting_approval", taskKey, msg.MessageID)
 		return RetryAfter(2*time.Second, nil)
 	}
 	if isMessageProcessed(task.Status.Trace, msg.MessageID) {
+		m.debugf("agent message skipped task=%s message_id=%s reason=trace_already_processed", taskKey, msg.MessageID)
 		return nil
 	}
 
@@ -358,9 +384,11 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 		return err
 	}
 	if skip {
+		m.debugf("agent message skipped task=%s message_id=%s reason=begin_attempt_skip", taskKey, msg.MessageID)
 		return nil
 	}
 	if retryAfter > 0 {
+		m.debugf("agent message attempt deferred task=%s message_id=%s delay=%s", taskKey, msg.MessageID, retryAfter.String())
 		return RetryAfter(retryAfter, nil)
 	}
 
@@ -380,12 +408,14 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 		}
 		return nil
 	}
+	m.debugf("agent message processing task=%s message_id=%s system=%s to_agent=%s", taskKey, msg.MessageID, system.Metadata.Name, msg.ToAgent)
 
 	joinDecision, err := m.applyJoinGate(ctx, taskKey, msg, system)
 	if err != nil {
 		return err
 	}
 	if joinDecision.SkipExecution {
+		m.debugf("agent message skipped task=%s message_id=%s reason=join_gate_waiting mode=%s required=%d received=%d", taskKey, msg.MessageID, joinDecision.JoinMode, joinDecision.Required, len(joinDecision.Sources))
 		return nil
 	}
 
@@ -394,6 +424,7 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 		return err
 	}
 	if delegationDecision.SkipExecution {
+		m.debugf("agent message skipped task=%s message_id=%s reason=delegation_gate_waiting mode=%s required=%d received=%d", taskKey, msg.MessageID, delegationDecision.DelegationMode, delegationDecision.Required, len(delegationDecision.Sources))
 		return nil
 	}
 
@@ -424,6 +455,7 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 		return nil
 	}
 	agent.Spec.Model = effectiveModel
+	m.debugf("agent message resolved agent task=%s message_id=%s agent=%s model=%s", taskKey, msg.MessageID, agent.Metadata.Name, effectiveModel)
 
 	var matchedPolicies []resources.AgentPolicy
 	if m.policies != nil {
@@ -524,6 +556,7 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 		input["inbox.delegation.sources"] = delegationDecision.SourceAgents()
 		input["inbox.delegation.payloads"] = delegationDecision.SourcePayloads()
 	}
+	m.debugf("agent message execution input prepared task=%s message_id=%s agent=%s join_mode=%s delegation_mode=%s memory_ref_configured=%t tools=%d", taskKey, msg.MessageID, agent.Metadata.Name, joinDecision.JoinMode, delegationDecision.DelegationMode, strings.TrimSpace(agent.Spec.Memory.Ref) != "", len(agent.Spec.Tools))
 
 	var approvalCtx *GovernedToolApprovalContext
 	if m.toolApprovals != nil {
@@ -757,6 +790,7 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 			}
 			return nil
 		}
+		m.debugf("agent message published downstream task=%s from=%s to=%s message_id=%s parent_message_id=%s branch_id=%s kind=%s", taskKey, result.Agent, nextMessage.ToAgent, nextMessage.MessageID, msg.MessageID, nextMessage.BranchID, downstreamLogKind)
 	}
 	if err := m.recordForward(ctx, taskKey, msg, record, result, downstreamMessages); err != nil {
 		return err
@@ -1441,24 +1475,30 @@ func (m *AgentMessageConsumerManager) beginMessageAttempt(ctx context.Context, t
 			continue
 		}
 		if !ok {
+			m.debugf("agent message begin skipped task=%s message_id=%s reason=task_not_found", taskKey, msg.MessageID)
 			return resources.Task{}, resources.TaskMessage{}, true, 0, nil
 		}
 		if isTerminalTaskPhase(task.Status.Phase) {
+			m.debugf("agent message begin skipped task=%s message_id=%s reason=terminal_task_phase phase=%s", taskKey, msg.MessageID, task.Status.Phase)
 			return task, resources.TaskMessage{}, true, 0, nil
 		}
 		index := ensureTaskMessageRecord(&task, msg)
 		record := task.Status.Messages[index]
 		if isMessageIdempotent(task.Status.MessageIdempotency, messageIdempotencyKey(msg)) {
+			m.debugf("agent message begin skipped task=%s message_id=%s reason=idempotency_seen key=%s", taskKey, msg.MessageID, messageIdempotencyKey(msg))
 			return task, record, true, 0, nil
 		}
 		if isTerminalMessagePhase(record.Phase) {
+			m.debugf("agent message begin skipped task=%s message_id=%s reason=terminal_message_phase phase=%s", taskKey, msg.MessageID, record.Phase)
 			return task, record, true, 0, nil
 		}
 		if isMessageProcessed(task.Status.Trace, msg.MessageID) {
+			m.debugf("agent message begin skipped task=%s message_id=%s reason=trace_processed", taskKey, msg.MessageID)
 			return task, record, true, 0, nil
 		}
 		owned, ownershipRetryAfter, ownershipChanged, takeover := m.acquireMessageOwnership(&task, msg)
 		if !owned {
+			m.debugf("agent message ownership deferred task=%s message_id=%s worker=%s delay=%s ownership_changed=%t", taskKey, msg.MessageID, m.workerID, ownershipRetryAfter.String(), ownershipChanged)
 			return task, record, false, ownershipRetryAfter, nil
 		}
 		if strings.EqualFold(strings.TrimSpace(record.Phase), "retrypending") {
@@ -1477,6 +1517,7 @@ func (m *AgentMessageConsumerManager) beginMessageAttempt(ctx context.Context, t
 						_ = m.tasks.AppendLog(ctx, taskKey, fmt.Sprintf("agent message lease takeover: message_id=%s worker=%s", msg.MessageID, m.workerID))
 					}
 				}
+				m.debugf("agent message retry wait active task=%s message_id=%s worker=%s delay=%s takeover=%t", taskKey, msg.MessageID, m.workerID, wait.String(), takeover)
 				return task, record, false, wait, nil
 			}
 		}
@@ -1504,6 +1545,7 @@ func (m *AgentMessageConsumerManager) beginMessageAttempt(ctx context.Context, t
 			_ = m.tasks.AppendLog(ctx, taskKey, fmt.Sprintf("agent message lease takeover: message_id=%s worker=%s", msg.MessageID, m.workerID))
 		}
 		_ = m.tasks.AppendLog(ctx, taskKey, fmt.Sprintf("agent message attempt started: id=%s attempt=%d/%d", msg.MessageID, record.Attempts, record.MaxAttempts))
+		m.debugf("agent message attempt started task=%s message_id=%s worker=%s attempt=%d max_attempts=%d takeover=%t", taskKey, msg.MessageID, m.workerID, record.Attempts, record.MaxAttempts, takeover)
 		namespace, taskName := splitTaskKey(taskKey)
 		m.emitMetering(ctx, MeteringEvent{
 			Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
@@ -1609,6 +1651,7 @@ func (m *AgentMessageConsumerManager) recordRetryOrDeadLetter(ctx context.Contex
 				continue
 			}
 			_ = m.tasks.AppendLog(ctx, taskKey, fmt.Sprintf("agent message retry scheduled: id=%s attempt=%d/%d delay=%s error=%s", msg.MessageID, current.Attempts, current.MaxAttempts, delay.String(), current.LastError))
+			m.debugf("agent message retry scheduled task=%s message_id=%s worker=%s attempt=%d max_attempts=%d delay=%s retry_reason=%s", taskKey, msg.MessageID, m.workerID, current.Attempts, current.MaxAttempts, delay.String(), retryClass.Reason)
 			telemetry.RecordRetry(strings.TrimSpace(msg.ToAgent))
 			telemetry.RecordMessagePhase("retrypending", strings.TrimSpace(msg.ToAgent))
 			namespace, taskName := splitTaskKey(taskKey)
@@ -1687,6 +1730,7 @@ func (m *AgentMessageConsumerManager) recordRetryOrDeadLetter(ctx context.Contex
 		}
 		m.deleteTaskSharedMemory(taskKey)
 		_ = m.tasks.AppendLog(ctx, taskKey, fmt.Sprintf("agent message dead-lettered: id=%s attempts=%d error=%s", msg.MessageID, current.Attempts, current.LastError))
+		m.debugf("agent message dead-lettered task=%s message_id=%s worker=%s attempts=%d retryable=%t reason=%s", taskKey, msg.MessageID, m.workerID, current.Attempts, retryClass.Retryable, retryClass.Reason)
 		telemetry.RecordDeadLetter(strings.TrimSpace(msg.ToAgent))
 		telemetry.RecordMessagePhase("deadletter", strings.TrimSpace(msg.ToAgent))
 		namespace, taskName := splitTaskKey(taskKey)
@@ -1724,7 +1768,6 @@ func (m *AgentMessageConsumerManager) recordRetryOrDeadLetter(ctx context.Contex
 	}
 	return false, 0, lastErr
 }
-
 
 func ensureTaskMessageRecord(task *resources.Task, msg AgentMessage) int {
 	if task == nil {
@@ -2005,7 +2048,6 @@ func extendWorkerLease(task *resources.Task, workerID string, duration time.Dura
 	task.Status.LastHeartbeat = now.Format(time.RFC3339Nano)
 	task.Status.LeaseUntil = now.Add(duration).Format(time.RFC3339Nano)
 }
-
 
 func hasTraceMarker(trace []resources.TaskTraceEvent, eventType, messageID string) bool {
 	messageID = strings.TrimSpace(messageID)

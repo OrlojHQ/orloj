@@ -64,6 +64,7 @@ Example:
 | `ORLOJCTL_API_TOKEN` | `orlojctl` | `--api-token` | Bearer token for CLI API calls. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `orlojd`, `orlojworker` | none | OTLP gRPC endpoint for OpenTelemetry traces. Empty disables export. |
 | `OTEL_EXPORTER_OTLP_INSECURE` | `orlojd`, `orlojworker` | none | Set `true` for non-TLS OTLP in development. |
+| `ORLOJ_LOG_LEVEL` | `orlojd`, `orlojworker` | `--log-level`, `--debug` | Minimum log level: `debug`, `info` (default), `warn`, or `error`. `--debug` is equivalent to `--log-level=debug` and takes precedence. |
 | `ORLOJ_LOG_FORMAT` | `orlojd`, `orlojworker` | none | Log format: `json` (default) or `text`. |
 
 ## Server and Worker Flags

@@ -28,6 +28,8 @@ func main() {
 	envUint64 := startup.EnvUint64OrDefault
 
 	showVersion := flag.Bool("version", false, "print version and exit")
+	logLevelRaw := flag.String("log-level", env("ORLOJ_LOG_LEVEL", "info"), "minimum log level: debug|info|warn|error (env: ORLOJ_LOG_LEVEL)")
+	debugLogs := flag.Bool("debug", false, "enable debug logging (equivalent to --log-level=debug)")
 	workerID := flag.String("worker-id", "worker-1", "task worker identity")
 	healthzAddr := flag.String("healthz-addr", env("ORLOJ_WORKER_HEALTHZ_ADDR", ""), "optional address for the /healthz liveness probe endpoint (e.g. :8081); empty disables it")
 	reconcile := flag.Duration("reconcile-interval", 1*time.Second, "claim/reconcile interval")
@@ -80,8 +82,45 @@ func main() {
 		os.Exit(0)
 	}
 
-	slogger := telemetry.NewLogger("orlojworker")
+	resolvedLogLevel := *logLevelRaw
+	if *debugLogs {
+		resolvedLogLevel = "debug"
+	}
+	parsedLogLevel, logLevelErr := telemetry.ResolveLogLevel(*logLevelRaw, *debugLogs)
+	if logLevelErr != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", logLevelErr)
+		os.Exit(2)
+	}
+
+	slogger := telemetry.NewLoggerWithLevel("orlojworker", parsedLogLevel)
 	logger := telemetry.NewBridgeLogger(slogger)
+	debugLogger := telemetry.NewDebugBridgeLogger(slogger)
+	fatalLogger := telemetry.NewErrorBridgeLogger(slogger)
+	resolvedLogLevelLabel := strings.ToLower(strings.TrimSpace(resolvedLogLevel))
+	if resolvedLogLevelLabel == "" {
+		resolvedLogLevelLabel = "info"
+	}
+
+	debugLogger.Printf(
+		"startup config worker_id=%s log_level=%s healthz_enabled=%t region=%s gpu=%t supported_models=%d max_concurrent_tasks=%d storage_backend=%s postgres_dsn_configured=%t task_execution_mode=%s agent_message_consume=%t agent_message_bus_backend=%s agent_message_consumer_namespace=%q tool_isolation_backend=%s tool_container_runtime=%s tool_container_network=%s wasm_module_configured=%t",
+		*workerID,
+		resolvedLogLevelLabel,
+		strings.TrimSpace(*healthzAddr) != "",
+		*region,
+		*gpu,
+		len(startup.ParseCSV(*supportedModels)),
+		*maxConcurrentTasks,
+		*storageBackend,
+		strings.TrimSpace(*postgresDSN) != "",
+		*taskExecutionMode,
+		*agentMessageConsume,
+		*agentMessageBusBackend,
+		strings.TrimSpace(*agentMessageConsumerNamespace),
+		*toolIsolationBackend,
+		*toolContainerRuntime,
+		*toolContainerNetwork,
+		strings.TrimSpace(*toolWASMModule) != "",
+	)
 
 	otelShutdown, otelErr := telemetry.Init(context.Background(), telemetry.Config{
 		ServiceName: "orlojworker",
@@ -98,7 +137,7 @@ func main() {
 
 	secretEncryptionKey, err := startup.ParseSecretEncryptionKey(*secretEncryptionKeyRaw)
 	if err != nil {
-		logger.Fatalf("%v", err)
+		fatalLogger.Fatalf("%v", err)
 	}
 	startup.LogSecretEncryption(logger, secretEncryptionKey)
 
@@ -113,7 +152,7 @@ func main() {
 		IncludeScheduleStores: false,
 	}, logger)
 	if err != nil {
-		logger.Fatalf("%v", err)
+		fatalLogger.Fatalf("%v", err)
 	}
 	defer stores.Close()
 
@@ -130,6 +169,7 @@ func main() {
 		stores.Tasks, stores.AgentSystems, stores.Agents, stores.Tools,
 		stores.Memories, stores.Policies, stores.Workers, logger, *reconcile,
 	)
+	taskController.SetDebugLogger(debugLogger)
 	taskController.ConfigureWorker(*workerID, *leaseDuration, *heartbeatInterval)
 	taskController.SetExecutionMode(*taskExecutionMode)
 	taskController.SetGovernanceStores(stores.Roles, stores.ToolPerms)
@@ -161,11 +201,11 @@ func main() {
 		Secrets:          stores.Secrets,
 	}, logger)
 	if err != nil {
-		logger.Fatalf("failed to configure isolated tool runtime: %v", err)
+		fatalLogger.Fatalf("failed to configure isolated tool runtime: %v", err)
 	}
 	wasmToolRuntime, closeWasm, err := startup.NewWASMToolRuntime(wasmRuntimeCfg, logger)
 	if err != nil {
-		logger.Fatalf("failed to configure wasm tool runtime: %v", err)
+		fatalLogger.Fatalf("failed to configure wasm tool runtime: %v", err)
 	}
 	if closeWasm != nil {
 		defer closeWasm()
@@ -193,11 +233,31 @@ func main() {
 	}
 	taskController.SetCliToolRuntime(cliConfig, toolSecretResolver)
 	taskController.SetContextAdapterStore(stores.ContextAdapters)
+	debugLogger.Printf(
+		"tool runtime config isolation_backend=%s container_runtime=%s container_image=%s container_network=%s container_memory=%s container_cpus=%s container_pids_limit=%d container_user=%s cli_allowed_commands=%d cli_max_argv_length=%d wasm_entrypoint=%s wasm_memory_bytes=%d wasm_fuel=%d wasm_wasi=%t wasm_cache_configured=%t mcp_container_network=%s",
+		*toolIsolationBackend,
+		*toolContainerRuntime,
+		*toolContainerImage,
+		*toolContainerNetwork,
+		*toolContainerMemory,
+		*toolContainerCPUs,
+		*toolContainerPidsLimit,
+		*toolContainerUser,
+		len(cliConfig.AllowedCommands),
+		cliConfig.MaxArgvLength,
+		*toolWASMEntrypoint,
+		*toolWASMMemoryBytes,
+		*toolWASMFuel,
+		*toolWASMWASI,
+		strings.TrimSpace(*toolWASMCacheDir) != "",
+		"bridge",
+	)
 
 	agentMessageBus, closeAgentMessageBus := startup.NewAgentMessageBus(
 		logger, *agentMessageBusBackend, *agentMessageNATSURL,
 		*agentMessageSubjectPrefix, *agentMessageStreamName,
 		*agentMessageHistoryMax, *agentMessageDedupeWindow,
+		fatalLogger,
 	)
 	if closeAgentMessageBus != nil {
 		defer closeAgentMessageBus()
@@ -254,6 +314,7 @@ func main() {
 					TaskApprovals:       stores.TaskApprovals,
 					Policies:            stores.Policies,
 					ContextAdapters:     stores.ContextAdapters,
+					DebugLogger:         debugLogger,
 				},
 			)
 			go consumer.Start(ctx)

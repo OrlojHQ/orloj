@@ -25,35 +25,36 @@ var traceStepIDPattern = regexp.MustCompile(`^a([0-9]+)\.s([0-9]+)$`) //nolint:g
 
 // TaskController reconciles Task resources.
 type TaskController struct {
-	taskStore         *store.TaskStore
-	agentSystemStore  *store.AgentSystemStore
-	agentStore        *store.AgentStore
-	toolStore         *store.ToolStore
-	memoryStore       *store.MemoryStore
-	policyStore       *store.AgentPolicyStore
-	modelEPStore      *store.ModelEndpointStore
-	roleStore         *store.AgentRoleStore
-	toolPermStore     *store.ToolPermissionStore
-	toolApprovalStore *store.ToolApprovalStore
-	taskApprovalStore *store.TaskApprovalStore
-	workerStore       *store.WorkerStore
-	executor          *agentruntime.TaskExecutor
-	reconcileEvery    time.Duration
-	leaseDuration     time.Duration
-	heartbeatEvery    time.Duration
-	workerID          string
-	logger            *log.Logger
-	eventBus          eventbus.Bus
-	agentMessageBus   agentruntime.AgentMessageBus
-	executionMode     string
-	isolatedTools     agentruntime.ToolRuntime
-	wasmTools         agentruntime.ToolRuntime
-	cliToolConfig     agentruntime.CLIToolRuntimeConfig
-	cliSecretResolver agentruntime.SecretResolver
-	mcpSessionMgr     *agentruntime.McpSessionManager
-	mcpServerStore    *store.McpServerStore
+	taskStore           *store.TaskStore
+	agentSystemStore    *store.AgentSystemStore
+	agentStore          *store.AgentStore
+	toolStore           *store.ToolStore
+	memoryStore         *store.MemoryStore
+	policyStore         *store.AgentPolicyStore
+	modelEPStore        *store.ModelEndpointStore
+	roleStore           *store.AgentRoleStore
+	toolPermStore       *store.ToolPermissionStore
+	toolApprovalStore   *store.ToolApprovalStore
+	taskApprovalStore   *store.TaskApprovalStore
+	workerStore         *store.WorkerStore
+	executor            *agentruntime.TaskExecutor
+	reconcileEvery      time.Duration
+	leaseDuration       time.Duration
+	heartbeatEvery      time.Duration
+	workerID            string
+	logger              *log.Logger
+	debugLogger         *log.Logger
+	eventBus            eventbus.Bus
+	agentMessageBus     agentruntime.AgentMessageBus
+	executionMode       string
+	isolatedTools       agentruntime.ToolRuntime
+	wasmTools           agentruntime.ToolRuntime
+	cliToolConfig       agentruntime.CLIToolRuntimeConfig
+	cliSecretResolver   agentruntime.SecretResolver
+	mcpSessionMgr       *agentruntime.McpSessionManager
+	mcpServerStore      *store.McpServerStore
 	contextAdapterStore *store.ContextAdapterStore
-	extensions        agentruntime.Extensions
+	extensions          agentruntime.Extensions
 }
 
 func NewTaskController(
@@ -86,6 +87,16 @@ func NewTaskController(
 		logger:           logger,
 		executionMode:    "sequential",
 		extensions:       agentruntime.DefaultExtensions(),
+	}
+}
+
+func (c *TaskController) SetDebugLogger(logger *log.Logger) {
+	c.debugLogger = logger
+}
+
+func (c *TaskController) debugf(format string, args ...any) {
+	if c != nil && c.debugLogger != nil {
+		c.debugLogger.Printf(format, args...)
 	}
 }
 
@@ -228,6 +239,7 @@ func (c *TaskController) ReconcileOnce(ctx context.Context) error {
 				return err
 			}
 			if !acquired {
+				c.debugf("task scheduler idle worker=%s reason=worker_slot_unavailable", c.workerID)
 				return nil
 			}
 			slotAcquired = true
@@ -242,11 +254,14 @@ func (c *TaskController) ReconcileOnce(ctx context.Context) error {
 		if !claimed {
 			if slotAcquired {
 				_ = c.workerStore.ReleaseSlot(ctx, c.workerID)
+				c.debugf("worker=%s released empty claim slot", c.workerID)
 			}
+			c.debugf("task scheduler idle worker=%s reason=no_due_matching_task", c.workerID)
 			return nil
 		}
 
 		taskKey := taskScopedName(task)
+		c.debugf("task claimed task=%s worker=%s phase=%s attempt=%d lease=%s execution_mode=%s", taskKey, c.workerID, task.Status.Phase, task.Status.Attempts, c.leaseDuration.String(), c.executionMode)
 		stopHeartbeat := c.startHeartbeat(ctx, taskKey)
 		c.appendTaskLog(taskKey, fmt.Sprintf("task claimed by worker=%s lease=%s", c.workerID, c.leaseDuration))
 		c.appendTaskHistory(&task, "claim", fmt.Sprintf("task claimed by worker=%s lease=%s", c.workerID, c.leaseDuration))
@@ -276,8 +291,12 @@ func (c *TaskController) ReconcileOnce(ctx context.Context) error {
 		reconcileErr := c.reconcileTask(ctx, task)
 		stopHeartbeat()
 		if slotAcquired {
-			if err := c.workerStore.ReleaseSlot(ctx, c.workerID); err != nil && c.logger != nil {
-				c.logger.Printf("worker=%s release slot failed: %v", c.workerID, err)
+			if err := c.workerStore.ReleaseSlot(ctx, c.workerID); err != nil {
+				if c.logger != nil {
+					c.logger.Printf("worker=%s release slot failed: %v", c.workerID, err)
+				}
+			} else {
+				c.debugf("worker=%s released task slot task=%s", c.workerID, taskKey)
 			}
 		}
 		if reconcileErr != nil {
@@ -2636,42 +2655,53 @@ func taskScopedName(task resources.Task) string {
 }
 
 func (c *TaskController) taskMatchesWorker(task resources.Task) bool {
+	taskKey := taskScopedName(task)
 	if strings.EqualFold(strings.TrimSpace(task.Spec.Mode), "template") {
+		c.debugf("task scheduling skipped task=%s worker=%s reason=template_mode", taskKey, c.workerID)
 		return false
 	}
 	phase := strings.ToLower(strings.TrimSpace(task.Status.Phase))
 	assigned := strings.TrimSpace(task.Status.AssignedWorker)
 	// Assignment is a pending-task placement hint. Running tasks may fail over on lease expiry.
 	if phase != "running" && assigned != "" && !strings.EqualFold(assigned, c.workerID) {
+		c.debugf("task scheduling skipped task=%s worker=%s reason=assigned_to_other assigned_worker=%s phase=%s", taskKey, c.workerID, assigned, phase)
 		return false
 	}
 	if c.workerStore == nil {
+		c.debugf("task scheduling matched task=%s worker=%s reason=no_worker_store", taskKey, c.workerID)
 		return true
 	}
 	worker, ok, err := c.workerStore.Get(context.Background(), c.workerID)
 	if err != nil {
+		c.debugf("task scheduling skipped task=%s worker=%s reason=worker_lookup_error error=%v", taskKey, c.workerID, err)
 		return false
 	}
 	if !ok {
 		// Allow scheduling when worker registration is not present (for embedded/single-process use).
+		c.debugf("task scheduling matched task=%s worker=%s reason=worker_registration_missing", taskKey, c.workerID)
 		return true
 	}
 	if !strings.EqualFold(strings.TrimSpace(worker.Status.Phase), "ready") &&
 		!strings.EqualFold(strings.TrimSpace(worker.Status.Phase), "pending") {
+		c.debugf("task scheduling skipped task=%s worker=%s reason=worker_not_ready worker_phase=%s", taskKey, c.workerID, worker.Status.Phase)
 		return false
 	}
 
 	req := task.Spec.Requirements
 	if strings.TrimSpace(req.Region) != "" && !strings.EqualFold(strings.TrimSpace(req.Region), strings.TrimSpace(worker.Spec.Region)) {
+		c.debugf("task scheduling skipped task=%s worker=%s reason=region_mismatch required_region=%s worker_region=%s", taskKey, c.workerID, req.Region, worker.Spec.Region)
 		return false
 	}
 	if req.GPU && !worker.Spec.Capabilities.GPU {
+		c.debugf("task scheduling skipped task=%s worker=%s reason=gpu_required", taskKey, c.workerID)
 		return false
 	}
 	if strings.TrimSpace(req.Model) != "" && len(worker.Spec.Capabilities.SupportedModels) > 0 &&
 		!containsFold(worker.Spec.Capabilities.SupportedModels, req.Model) {
+		c.debugf("task scheduling skipped task=%s worker=%s reason=model_unsupported required_model=%s supported_models=%s", taskKey, c.workerID, req.Model, strings.Join(worker.Spec.Capabilities.SupportedModels, ","))
 		return false
 	}
+	c.debugf("task scheduling matched task=%s worker=%s worker_region=%s worker_phase=%s", taskKey, c.workerID, worker.Spec.Region, worker.Status.Phase)
 	return true
 }
 
@@ -2681,11 +2711,14 @@ func (c *TaskController) workerClaimHints() store.WorkerClaimHints {
 	}
 	worker, ok, err := c.workerStore.Get(context.Background(), c.workerID)
 	if err != nil {
+		c.debugf("worker claim hints unavailable worker=%s reason=lookup_error error=%v", c.workerID, err)
 		return store.WorkerClaimHints{}
 	}
 	if !ok {
+		c.debugf("worker claim hints unavailable worker=%s reason=worker_registration_missing", c.workerID)
 		return store.WorkerClaimHints{}
 	}
+	c.debugf("worker claim hints worker=%s region=%s supported_models=%s", c.workerID, worker.Spec.Region, strings.Join(worker.Spec.Capabilities.SupportedModels, ","))
 	return store.WorkerClaimHints{
 		AssignedWorker:  c.workerID,
 		Region:          strings.TrimSpace(worker.Spec.Region),
@@ -2700,6 +2733,7 @@ func (c *TaskController) tryAcquireWorkerSlot(ctx context.Context) (bool, error)
 	}
 	if !acquired && worker.Metadata.Name == "" {
 		// Embedded/single-process worker can run without explicit Worker registration.
+		c.debugf("worker=%s slot acquired reason=worker_registration_missing", c.workerID)
 		return true, nil
 	}
 	if !acquired {
@@ -2710,8 +2744,10 @@ func (c *TaskController) tryAcquireWorkerSlot(ctx context.Context) (bool, error)
 			}
 			c.logger.Printf("worker=%s at capacity current=%d max=%d", c.workerID, worker.Status.CurrentTasks, maxConcurrent)
 		}
+		c.debugf("worker=%s slot unavailable current=%d max=%d worker_phase=%s", c.workerID, worker.Status.CurrentTasks, worker.Spec.MaxConcurrentTasks, worker.Status.Phase)
 		return false, nil
 	}
+	c.debugf("worker=%s slot acquired current=%d max=%d worker_phase=%s", c.workerID, worker.Status.CurrentTasks, worker.Spec.MaxConcurrentTasks, worker.Status.Phase)
 	return true, nil
 }
 
@@ -3056,6 +3092,7 @@ func (c *TaskController) startHeartbeat(ctx context.Context, taskName string) fu
 					}
 					return
 				}
+				c.debugf("task=%s lease heartbeat renewed worker=%s lease=%s", taskName, c.workerID, c.leaseDuration.String())
 			}
 		}
 	}()
