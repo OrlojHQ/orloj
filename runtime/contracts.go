@@ -28,9 +28,10 @@ type ChatMessage struct {
 
 // ChatToolCall captures one tool invocation from an assistant message.
 type ChatToolCall struct {
-	ID    string
-	Name  string
-	Input string
+	ID           string
+	Name         string
+	Input        string
+	ProviderName string
 }
 
 // ToolSchemaInfo carries optional description and JSON Schema for a tool.
@@ -46,14 +47,14 @@ type ModelRequest struct {
 	ModelRef          string
 	FallbackModelRefs []string
 	Namespace         string
-	Agent        string
-	Prompt       string
-	Step         int
-	Tools        []string
-	ToolSchemas  map[string]ToolSchemaInfo
-	Context      map[string]string
-	Messages     []ChatMessage
-	OutputSchema map[string]any
+	Agent             string
+	Prompt            string
+	Step              int
+	Tools             []string
+	ToolSchemas       map[string]ToolSchemaInfo
+	Context           map[string]string
+	Messages          []ChatMessage
+	OutputSchema      map[string]any
 }
 
 // ModelResponse captures model output used by the runtime loop.
@@ -74,9 +75,10 @@ type ModelUsage struct {
 
 // ModelToolCall is one model-selected tool invocation request.
 type ModelToolCall struct {
-	ID    string
-	Name  string
-	Input string
+	ID           string
+	Name         string
+	Input        string
+	ProviderName string
 }
 
 // ToolSchemaResolver resolves rich tool schemas for model gateway formatting.

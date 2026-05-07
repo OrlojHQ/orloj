@@ -81,7 +81,16 @@ func ValidateEndpointURL(rawURL string, allowPrivate bool) error {
 	return nil
 }
 
+type safeNetworkPolicy struct {
+	allowPrivate  bool
+	allowLoopback bool
+}
+
 func checkIP(ip net.IP, allowPrivate bool) error {
+	return checkIPWithPolicy(ip, safeNetworkPolicy{allowPrivate: allowPrivate})
+}
+
+func checkIPWithPolicy(ip net.IP, policy safeNetworkPolicy) error {
 	if ip == nil {
 		return fmt.Errorf("nil IP address")
 	}
@@ -93,7 +102,10 @@ func checkIP(ip net.IP, allowPrivate bool) error {
 		ip = v4
 	}
 	if ip.IsLoopback() {
-		return fmt.Errorf("loopback address %s is not allowed", ip)
+		if !policy.allowLoopback {
+			return fmt.Errorf("loopback address %s is not allowed", ip)
+		}
+		return nil
 	}
 	// Cloud metadata check before link-local: 169.254.169.254 is in the
 	// link-local range but deserves the more specific error message.
@@ -106,7 +118,7 @@ func checkIP(ip net.IP, allowPrivate bool) error {
 	if ip.IsUnspecified() {
 		return fmt.Errorf("unspecified address %s is not allowed", ip)
 	}
-	if !allowPrivate {
+	if !policy.allowPrivate {
 		if ip.IsPrivate() {
 			return fmt.Errorf("private address %s is not allowed", ip)
 		}
@@ -158,6 +170,10 @@ func isCarrierGradeNAT(ip net.IP) bool {
 // Loopback, link-local, cloud metadata, and unspecified addresses are
 // always blocked regardless of allowPrivate.
 func SafeDialer(allowPrivate bool) *net.Dialer {
+	return safeDialerWithPolicy(safeNetworkPolicy{allowPrivate: allowPrivate})
+}
+
+func safeDialerWithPolicy(policy safeNetworkPolicy) *net.Dialer {
 	return &net.Dialer{
 		Timeout:   30 * time.Second,
 		KeepAlive: 30 * time.Second,
@@ -173,7 +189,7 @@ func SafeDialer(allowPrivate bool) *net.Dialer {
 			if ip == nil {
 				return fmt.Errorf("dial address %q did not resolve to an IP", host)
 			}
-			if err := checkIP(ip, allowPrivate); err != nil {
+			if err := checkIPWithPolicy(ip, policy); err != nil {
 				return fmt.Errorf("blocked outbound connection to %s: %w", address, err)
 			}
 			return nil
@@ -203,10 +219,25 @@ func DefaultSafeHTTPClient(allowPrivate bool) *http.Client {
 // SafeDialer, enforcing SSRF policy on every outbound connection. Pass
 // timeout<=0 to use the default 30-second timeout.
 func SafeHTTPClient(allowPrivate bool, timeout time.Duration) *http.Client {
+	return safeHTTPClientWithPolicy(safeNetworkPolicy{allowPrivate: allowPrivate}, timeout)
+}
+
+// SafeModelGatewayHTTPClient returns a safe HTTP client for trusted model
+// endpoints. With allowPrivate=true it permits loopback and private model
+// servers, but still blocks cloud metadata, link-local, and unspecified
+// addresses.
+func SafeModelGatewayHTTPClient(allowPrivate bool, timeout time.Duration) *http.Client {
+	return safeHTTPClientWithPolicy(safeNetworkPolicy{
+		allowPrivate:  allowPrivate,
+		allowLoopback: allowPrivate,
+	}, timeout)
+}
+
+func safeHTTPClientWithPolicy(policy safeNetworkPolicy, timeout time.Duration) *http.Client {
 	if timeout <= 0 {
 		timeout = 30 * time.Second
 	}
-	dialer := SafeDialer(allowPrivate)
+	dialer := safeDialerWithPolicy(policy)
 	transport := &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {

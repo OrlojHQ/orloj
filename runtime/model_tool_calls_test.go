@@ -8,7 +8,7 @@ import (
 func TestSelectAuthorizedToolCallsFromStructuredResponse(t *testing.T) {
 	calls, err := selectAuthorizedToolCalls(ModelResponse{
 		ToolCalls: []ModelToolCall{
-			{Name: "web_search", Input: "latest ai news"},
+			{Name: "web_search", Input: "latest ai news", ProviderName: "web_search"},
 		},
 	}, []string{"web_search", "vector_db"})
 	if err != nil {
@@ -22,6 +22,9 @@ func TestSelectAuthorizedToolCallsFromStructuredResponse(t *testing.T) {
 	}
 	if calls[0].Input != "latest ai news" {
 		t.Fatalf("unexpected tool input %q", calls[0].Input)
+	}
+	if calls[0].ProviderName != "web_search" {
+		t.Fatalf("unexpected provider tool name %q", calls[0].ProviderName)
 	}
 }
 

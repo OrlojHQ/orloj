@@ -120,8 +120,12 @@ func (g *AnthropicModelGateway) Complete(ctx context.Context, req ModelRequest) 
 		Model:     model,
 		MaxTokens: g.maxTokens,
 	}
+	var toolAliases providerToolAliases
+	if len(req.Tools) > 0 {
+		body.Tools, toolAliases = buildAnthropicToolsWithAliases(req.Tools, req.ToolSchemas)
+	}
 	if len(req.Messages) > 0 {
-		body.System, body.Messages = chatMessagesToAnthropic(req.Messages)
+		body.System, body.Messages = chatMessagesToAnthropicWithAliases(req.Messages, toolAliases.RuntimeToProvider)
 	} else {
 		body.Messages = []anthropicMessagesInput{{
 			Role:    "user",
@@ -134,10 +138,6 @@ func (g *AnthropicModelGateway) Complete(ctx context.Context, req ModelRequest) 
 				CacheControl: &anthropicCacheControl{Type: "ephemeral"},
 			}}
 		}
-	}
-	toolAliases := make(map[string]string, len(req.Tools))
-	if len(req.Tools) > 0 {
-		body.Tools, toolAliases = buildAnthropicTools(req.Tools, req.ToolSchemas)
 	}
 	if len(req.OutputSchema) > 0 {
 		schema := ensureAdditionalPropertiesFalse(req.OutputSchema)
@@ -209,13 +209,14 @@ func (g *AnthropicModelGateway) Complete(ctx context.Context, req ModelRequest) 
 				continue
 			}
 			originalName := name
-			if mapped, ok := toolAliases[name]; ok && strings.TrimSpace(mapped) != "" {
+			if mapped, ok := toolAliases.ProviderToRuntime[name]; ok && strings.TrimSpace(mapped) != "" {
 				originalName = strings.TrimSpace(mapped)
 			}
 			toolCalls = append(toolCalls, ModelToolCall{
-				ID:    strings.TrimSpace(part.ID),
-				Name:  originalName,
-				Input: parseAnthropicToolUseInput(part.Input),
+				ID:           strings.TrimSpace(part.ID),
+				Name:         originalName,
+				Input:        parseAnthropicToolUseInput(part.Input),
+				ProviderName: name,
 			})
 		}
 	}
@@ -312,17 +313,20 @@ type anthropicToolSpec struct {
 }
 
 func buildAnthropicTools(toolNames []string, schemas map[string]ToolSchemaInfo) ([]anthropicToolSpec, map[string]string) {
+	tools, aliases := buildAnthropicToolsWithAliases(toolNames, schemas)
+	return tools, aliases.ProviderToRuntime
+}
+
+func buildAnthropicToolsWithAliases(toolNames []string, schemas map[string]ToolSchemaInfo) ([]anthropicToolSpec, providerToolAliases) {
 	deduped := dedupeStrings(toolNames)
 	out := make([]anthropicToolSpec, 0, len(deduped))
-	aliases := make(map[string]string, len(deduped))
-	used := make(map[string]struct{}, len(deduped))
+	aliases := buildProviderToolAliases(deduped)
 	for _, name := range deduped {
 		name = strings.TrimSpace(name)
 		if name == "" {
 			continue
 		}
-		providerName := anthropicToolName(name, used)
-		aliases[providerName] = name
+		providerName := aliases.RuntimeToProvider[name]
 		description := "Invoke tool " + name
 		inputSchema := map[string]any{
 			"type": "object",
@@ -382,6 +386,10 @@ func parseAnthropicToolUseInput(input map[string]any) string {
 }
 
 func chatMessagesToAnthropic(msgs []ChatMessage) ([]anthropicSystemBlock, []anthropicMessagesInput) {
+	return chatMessagesToAnthropicWithAliases(msgs, nil)
+}
+
+func chatMessagesToAnthropicWithAliases(msgs []ChatMessage, aliases map[string]string) ([]anthropicSystemBlock, []anthropicMessagesInput) {
 	var systemBlocks []anthropicSystemBlock
 	out := make([]anthropicMessagesInput, 0, len(msgs))
 	for _, m := range msgs {
@@ -415,7 +423,7 @@ func chatMessagesToAnthropic(msgs []ChatMessage) ([]anthropicSystemBlock, []anth
 				blocks = append(blocks, map[string]interface{}{
 					"type":  "tool_use",
 					"id":    tc.ID,
-					"name":  tc.Name,
+					"name":  providerToolNameForHistory(tc.Name, tc.ProviderName, aliases),
 					"input": inputMap,
 				})
 			}

@@ -170,8 +170,19 @@ func main() {
 	if closeWasm != nil {
 		defer closeWasm()
 	}
+	mcpSessionManager := startup.NewMcpSessionManager(startup.McpRuntimeConfig{
+		ContainerRuntime: *toolContainerRuntime,
+		ContainerNetwork: "bridge",
+		ContainerMemory:  *toolContainerMemory,
+		ContainerCPUs:    *toolContainerCPUs,
+		ContainerPids:    *toolContainerPidsLimit,
+		SecretEnvPrefix:  "ORLOJ_SECRET_",
+		Secrets:          stores.Secrets,
+	})
+	defer mcpSessionManager.Close()
 	taskController.SetIsolatedToolRuntime(isolatedToolRuntime)
 	taskController.SetWasmToolRuntime(wasmToolRuntime)
+	taskController.SetMcpRuntime(mcpSessionManager, stores.McpServers)
 
 	toolStoreResolver := agentruntime.NewStoreSecretResolver(stores.Secrets, "value")
 	toolEnvResolver := agentruntime.NewEnvSecretResolver(strings.TrimSpace(*toolSecretEnvPrefix))
@@ -195,6 +206,8 @@ func main() {
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
+
+	go mcpSessionManager.StartReaper(ctx, 30*time.Second)
 
 	specModels := startup.ParseCSV(*supportedModels)
 	go startup.HeartbeatWorkerRegistration(ctx, stores.Workers, logger, *workerID, resources.WorkerSpec{
@@ -229,6 +242,8 @@ func main() {
 					ToolPermissions:     stores.ToolPerms,
 					IsolatedToolRuntime: isolatedToolRuntime,
 					WasmToolRuntime:     wasmToolRuntime,
+					McpSessionManager:   mcpSessionManager,
+					McpServerStore:      stores.McpServers,
 					CliToolConfig:       cliConfig,
 					SecretResolver:      toolSecretResolver,
 					Extensions:          extensions,

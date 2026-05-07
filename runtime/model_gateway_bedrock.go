@@ -23,15 +23,15 @@ type bedrockConverser interface {
 
 // BedrockModelGatewayConfig defines AWS Bedrock Converse API settings.
 type BedrockModelGatewayConfig struct {
-	Region         string
-	AccessKeyID    string
+	Region          string
+	AccessKeyID     string
 	SecretAccessKey string
-	SessionToken   string
-	Profile        string
-	BaseURL        string
-	DefaultModel   string
-	MaxTokens      int
-	Timeout        time.Duration
+	SessionToken    string
+	Profile         string
+	BaseURL         string
+	DefaultModel    string
+	MaxTokens       int
+	Timeout         time.Duration
 }
 
 // DefaultBedrockModelGatewayConfig returns Bedrock gateway defaults.
@@ -124,7 +124,12 @@ func (g *BedrockModelGateway) Complete(ctx context.Context, req ModelRequest) (M
 		return ModelResponse{}, fmt.Errorf("model is required")
 	}
 
-	system, messages := chatMessagesToBedrock(req)
+	var toolAliases providerToolAliases
+	var tools []types.Tool
+	if len(req.Tools) > 0 {
+		tools, toolAliases = buildBedrockToolsWithAliases(req.Tools, req.ToolSchemas)
+	}
+	system, messages := chatMessagesToBedrockWithAliases(req, toolAliases.RuntimeToProvider)
 
 	input := &bedrockruntime.ConverseInput{
 		ModelId:  aws.String(model),
@@ -139,10 +144,7 @@ func (g *BedrockModelGateway) Complete(ctx context.Context, req ModelRequest) (M
 		})
 	}
 
-	toolAliases := make(map[string]string, len(req.Tools))
 	if len(req.Tools) > 0 {
-		tools, aliases := buildBedrockTools(req.Tools, req.ToolSchemas)
-		toolAliases = aliases
 		tools = append(tools, &types.ToolMemberCachePoint{
 			Value: types.CachePointBlock{Type: types.CachePointTypeDefault},
 		})
@@ -171,10 +173,14 @@ func (g *BedrockModelGateway) Complete(ctx context.Context, req ModelRequest) (M
 		return ModelResponse{}, mapBedrockError(err)
 	}
 
-	return parseBedrockResponse(output, toolAliases)
+	return parseBedrockResponse(output, toolAliases.ProviderToRuntime)
 }
 
 func chatMessagesToBedrock(req ModelRequest) ([]types.SystemContentBlock, []types.Message) {
+	return chatMessagesToBedrockWithAliases(req, nil)
+}
+
+func chatMessagesToBedrockWithAliases(req ModelRequest, aliases map[string]string) ([]types.SystemContentBlock, []types.Message) {
 	if len(req.Messages) == 0 {
 		userContent := buildOpenAIUserContent(req)
 		var system []types.SystemContentBlock
@@ -212,7 +218,7 @@ func chatMessagesToBedrock(req ModelRequest) ([]types.SystemContentBlock, []type
 				blocks = append(blocks, &types.ContentBlockMemberToolUse{
 					Value: types.ToolUseBlock{
 						ToolUseId: aws.String(tc.ID),
-						Name:      aws.String(tc.Name),
+						Name:      aws.String(providerToolNameForHistory(tc.Name, tc.ProviderName, aliases)),
 						Input:     inputDoc,
 					},
 				})
@@ -277,18 +283,21 @@ func parseToolCallInput(raw string) interface{} {
 }
 
 func buildBedrockTools(toolNames []string, schemas map[string]ToolSchemaInfo) ([]types.Tool, map[string]string) {
+	tools, aliases := buildBedrockToolsWithAliases(toolNames, schemas)
+	return tools, aliases.ProviderToRuntime
+}
+
+func buildBedrockToolsWithAliases(toolNames []string, schemas map[string]ToolSchemaInfo) ([]types.Tool, providerToolAliases) {
 	deduped := dedupeStrings(toolNames)
 	out := make([]types.Tool, 0, len(deduped))
-	aliases := make(map[string]string, len(deduped))
-	used := make(map[string]struct{}, len(deduped))
+	aliases := buildProviderToolAliases(deduped)
 
 	for _, name := range deduped {
 		name = strings.TrimSpace(name)
 		if name == "" {
 			continue
 		}
-		providerName := sanitizeToolName(name, used)
-		aliases[providerName] = name
+		providerName := aliases.RuntimeToProvider[name]
 
 		description := "Invoke tool " + name
 		inputSchema := map[string]interface{}{
@@ -350,9 +359,10 @@ func parseBedrockResponse(output *bedrockruntime.ConverseOutput, toolAliases map
 				originalName = strings.TrimSpace(mapped)
 			}
 			toolCalls = append(toolCalls, ModelToolCall{
-				ID:    aws.ToString(v.Value.ToolUseId),
-				Name:  originalName,
-				Input: marshalToolUseInput(v.Value.Input),
+				ID:           aws.ToString(v.Value.ToolUseId),
+				Name:         originalName,
+				Input:        marshalToolUseInput(v.Value.Input),
+				ProviderName: name,
 			})
 		}
 	}

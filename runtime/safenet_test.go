@@ -108,6 +108,32 @@ func TestSafeDialerControlAllowsPrivateWhenFlagged(t *testing.T) {
 	}
 }
 
+func TestModelGatewaySafeDialerAllowsLoopbackOnlyWhenPrivate(t *testing.T) {
+	publicPolicy := safeNetworkPolicy{}
+	publicDialer := safeDialerWithPolicy(publicPolicy)
+	if err := publicDialer.Control("tcp", "127.0.0.1:11434", fakeRawConn{}); err == nil {
+		t.Fatal("expected model gateway public policy to block loopback")
+	}
+
+	privatePolicy := safeNetworkPolicy{allowPrivate: true, allowLoopback: true}
+	privateDialer := safeDialerWithPolicy(privatePolicy)
+	if err := privateDialer.Control("tcp", "127.0.0.1:11434", fakeRawConn{}); err != nil {
+		t.Fatalf("expected trusted model gateway policy to allow loopback: %v", err)
+	}
+	if err := privateDialer.Control("tcp", "10.0.0.5:8000", fakeRawConn{}); err != nil {
+		t.Fatalf("expected trusted model gateway policy to allow RFC1918: %v", err)
+	}
+	if err := privateDialer.Control("tcp", "169.254.169.254:80", fakeRawConn{}); err == nil {
+		t.Fatal("expected trusted model gateway policy to block metadata")
+	}
+	if err := privateDialer.Control("tcp", "169.254.1.2:80", fakeRawConn{}); err == nil {
+		t.Fatal("expected trusted model gateway policy to block link-local")
+	}
+	if err := privateDialer.Control("tcp", "0.0.0.0:80", fakeRawConn{}); err == nil {
+		t.Fatal("expected trusted model gateway policy to block unspecified")
+	}
+}
+
 func TestSafeHTTPClientUsesSafeDialer(t *testing.T) {
 	client := SafeHTTPClient(false, 0)
 	if client == nil {
@@ -138,8 +164,8 @@ func TestDefaultSafeHTTPClientIsShared(t *testing.T) {
 // value of the interface type.
 type fakeRawConn struct{}
 
-func (fakeRawConn) Control(func(fd uintptr)) error            { return nil }
-func (fakeRawConn) Read(func(fd uintptr) (done bool)) error   { return nil }
-func (fakeRawConn) Write(func(fd uintptr) (done bool)) error  { return nil }
+func (fakeRawConn) Control(func(fd uintptr)) error           { return nil }
+func (fakeRawConn) Read(func(fd uintptr) (done bool)) error  { return nil }
+func (fakeRawConn) Write(func(fd uintptr) (done bool)) error { return nil }
 
 var _ syscall.RawConn = fakeRawConn{}

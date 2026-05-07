@@ -9,6 +9,7 @@
 - `default_model` (string, required): the model identifier sent in API requests.
 - `options` (map[string]string): provider-specific options.
 - `auth.secretRef` (string): namespaced reference to a `Secret`.
+- `allowPrivate` (boolean): for model gateways only, permits trusted local/private model endpoints, including loopback and RFC 1918 / ULA / CGNAT addresses. Cloud metadata, link-local, and unspecified addresses remain blocked.
 
 ## Defaults and Validation
 
@@ -20,6 +21,7 @@
   - `ollama` -> `http://127.0.0.1:11434`
   - `openai-compatible` -> (no default; must be set explicitly)
 - `options` keys are normalized to lowercase; keys/values are trimmed.
+- `allowPrivate` defaults to `true` for `ollama` and `false` for all other providers. Set it to `true` for local/private `openai-compatible` servers such as vLLM, LM Studio, LocalAI, LiteLLM, or Ollama's `/v1` endpoint.
 - auth behavior by provider:
   - `openai`, `anthropic`, `azure-openai`: `auth.secretRef` is required.
   - `openai-compatible`: `auth.secretRef` is optional.

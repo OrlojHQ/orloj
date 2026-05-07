@@ -174,17 +174,14 @@ func main() {
 	modelEndpointController := controllers.NewModelEndpointController(stores.ModelEPs, logger, 5*time.Second)
 	toolController := controllers.NewToolController(stores.Tools, logger, 5*time.Second)
 	mcpServerController := controllers.NewMcpServerController(stores.McpServers, stores.Tools, logger, 10*time.Second)
-	mcpSecretResolver := agentruntime.NewChainSecretResolver(
-		agentruntime.NewStoreSecretResolver(stores.Secrets, "value"),
-		agentruntime.NewEnvSecretResolver("ORLOJ_SECRET_"),
-	)
-	mcpSessionManager := agentruntime.NewMcpSessionManager(mcpSecretResolver)
-	mcpSessionManager.SetContainerConfig(agentruntime.ContainerToolRuntimeConfig{
-		RuntimeBinary: *toolContainerRuntime,
-		Network:       "bridge",
-		Memory:        *toolContainerMemory,
-		CPUs:          *toolContainerCPUs,
-		PidsLimit:     *toolContainerPidsLimit,
+	mcpSessionManager := startup.NewMcpSessionManager(startup.McpRuntimeConfig{
+		ContainerRuntime: *toolContainerRuntime,
+		ContainerNetwork: "bridge",
+		ContainerMemory:  *toolContainerMemory,
+		ContainerCPUs:    *toolContainerCPUs,
+		ContainerPids:    *toolContainerPidsLimit,
+		SecretEnvPrefix:  "ORLOJ_SECRET_",
+		Secrets:          stores.Secrets,
 	})
 	mcpServerController.SetSessionManager(mcpSessionManager)
 	memoryBackendRegistry := agentruntime.NewPersistentMemoryBackendRegistry()

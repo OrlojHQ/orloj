@@ -95,8 +95,15 @@ func (g *OpenAIModelGateway) Complete(ctx context.Context, req ModelRequest) (Mo
 	body := openAIChatCompletionRequest{
 		Model: model,
 	}
+	var toolAliases providerToolAliases
+	if len(req.Tools) > 0 {
+		var tools []openAIChatTool
+		tools, toolAliases = buildOpenAIChatToolsWithAliases(req.Tools, req.ToolSchemas)
+		body.Tools = tools
+		body.ToolChoice = "auto"
+	}
 	if len(req.Messages) > 0 {
-		body.Messages = chatMessagesToOpenAI(req.Messages)
+		body.Messages = chatMessagesToOpenAIWithAliases(req.Messages, toolAliases.RuntimeToProvider)
 	} else {
 		body.Messages = []openAIChatCompletionMessage{
 			{Role: "system", Content: strings.TrimSpace(req.Prompt)},
@@ -105,10 +112,6 @@ func (g *OpenAIModelGateway) Complete(ctx context.Context, req ModelRequest) (Mo
 		if strings.TrimSpace(req.Prompt) == "" {
 			body.Messages = body.Messages[1:]
 		}
-	}
-	if len(req.Tools) > 0 {
-		body.Tools = buildOpenAIChatTools(req.Tools, req.ToolSchemas)
-		body.ToolChoice = "auto"
 	}
 	if len(req.OutputSchema) > 0 {
 		body.ResponseFormat = &openAIResponseFormat{
@@ -170,7 +173,7 @@ func (g *OpenAIModelGateway) Complete(ctx context.Context, req ModelRequest) (Mo
 	}
 	choice := parsed.Choices[0]
 	content := parseOpenAIMessageContent(choice.Message.Content)
-	toolCalls := parseOpenAIModelToolCalls(choice.Message.ToolCalls)
+	toolCalls := parseOpenAIModelToolCallsWithAliases(choice.Message.ToolCalls, toolAliases.ProviderToRuntime)
 	if content == "" && len(toolCalls) == 0 {
 		return ModelResponse{}, fmt.Errorf("model response missing message content")
 	}
@@ -245,12 +248,12 @@ type openAIChatCompletionRequest struct {
 	Messages       []openAIChatCompletionMessage `json:"messages"`
 	Tools          []openAIChatTool              `json:"tools,omitempty"`
 	ToolChoice     string                        `json:"tool_choice,omitempty"`
-	ResponseFormat *openAIResponseFormat          `json:"response_format,omitempty"`
+	ResponseFormat *openAIResponseFormat         `json:"response_format,omitempty"`
 }
 
 type openAIResponseFormat struct {
-	Type       string              `json:"type"`
-	JSONSchema *openAIJSONSchema   `json:"json_schema,omitempty"`
+	Type       string            `json:"type"`
+	JSONSchema *openAIJSONSchema `json:"json_schema,omitempty"`
 }
 
 type openAIJSONSchema struct {
@@ -314,7 +317,13 @@ type openAIChatToolFunctionCall struct {
 }
 
 func buildOpenAIChatTools(toolNames []string, schemas map[string]ToolSchemaInfo) []openAIChatTool {
+	tools, _ := buildOpenAIChatToolsWithAliases(toolNames, schemas)
+	return tools
+}
+
+func buildOpenAIChatToolsWithAliases(toolNames []string, schemas map[string]ToolSchemaInfo) ([]openAIChatTool, providerToolAliases) {
 	deduped := dedupeStrings(toolNames)
+	aliases := buildProviderToolAliases(deduped)
 	out := make([]openAIChatTool, 0, len(deduped))
 	for _, name := range deduped {
 		name = strings.TrimSpace(name)
@@ -346,26 +355,37 @@ func buildOpenAIChatTools(toolNames []string, schemas map[string]ToolSchemaInfo)
 		out = append(out, openAIChatTool{
 			Type: "function",
 			Function: openAIChatToolFunction{
-				Name:        name,
+				Name:        aliases.RuntimeToProvider[name],
 				Description: description,
 				Parameters:  parameters,
 			},
 		})
 	}
-	return out
+	return out, aliases
 }
 
 func parseOpenAIModelToolCalls(raw []openAIChatToolCall) []ModelToolCall {
+	return parseOpenAIModelToolCallsWithAliases(raw, nil)
+}
+
+func parseOpenAIModelToolCallsWithAliases(raw []openAIChatToolCall, aliases map[string]string) []ModelToolCall {
 	out := make([]ModelToolCall, 0, len(raw))
 	for _, item := range raw {
-		name := strings.TrimSpace(item.Function.Name)
-		if name == "" {
+		providerName := strings.TrimSpace(item.Function.Name)
+		if providerName == "" {
 			continue
 		}
+		name := providerName
+		if aliases != nil {
+			if mapped := strings.TrimSpace(aliases[providerName]); mapped != "" {
+				name = mapped
+			}
+		}
 		out = append(out, ModelToolCall{
-			ID:    strings.TrimSpace(item.ID),
-			Name:  name,
-			Input: parseOpenAIToolCallInput(item.Function.Arguments),
+			ID:           strings.TrimSpace(item.ID),
+			Name:         name,
+			Input:        parseOpenAIToolCallInput(item.Function.Arguments),
+			ProviderName: providerName,
 		})
 	}
 	return out
@@ -397,6 +417,10 @@ func parseOpenAIToolCallInput(arguments string) string {
 }
 
 func chatMessagesToOpenAI(msgs []ChatMessage) []openAIChatCompletionMessage {
+	return chatMessagesToOpenAIWithAliases(msgs, nil)
+}
+
+func chatMessagesToOpenAIWithAliases(msgs []ChatMessage, aliases map[string]string) []openAIChatCompletionMessage {
 	out := make([]openAIChatCompletionMessage, 0, len(msgs))
 	for _, m := range msgs {
 		role := strings.TrimSpace(m.Role)
@@ -418,7 +442,7 @@ func chatMessagesToOpenAI(msgs []ChatMessage) []openAIChatCompletionMessage {
 					ID:   tc.ID,
 					Type: "function",
 					Function: openAIChatToolFunctionCall{
-						Name:      tc.Name,
+						Name:      providerToolNameForHistory(tc.Name, tc.ProviderName, aliases),
 						Arguments: tc.Input,
 					},
 				}

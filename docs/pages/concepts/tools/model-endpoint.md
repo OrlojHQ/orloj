@@ -141,8 +141,11 @@ spec:
   provider: openai-compatible
   base_url: http://localhost:8000/v1
   default_model: meta-llama/Llama-3.1-8B-Instruct
+  allowPrivate: true
 ```
 
+> **Local endpoint note:** For `provider: openai-compatible`, set `allowPrivate: true` when `base_url` points at localhost or a private network. The native `ollama` provider defaults `allowPrivate` to `true`.
+>
 > **Ollama note:** Ollama exposes both a native API (`/api/chat`, used by the `ollama` provider) and an OpenAI-compatible API (`/v1/chat/completions`). Use whichever suits your setup -- the `openai-compatible` provider works with Ollama's `/v1` endpoint.
 >
 > **Not listed here?** Any service that implements OpenAI's `/chat/completions` endpoint should work. Set `provider: openai-compatible`, point `base_url` at the service's API root, and add `auth.secretRef` if the service requires an API key.

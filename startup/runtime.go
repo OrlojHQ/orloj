@@ -31,6 +31,16 @@ type IsolatedToolRuntimeConfig struct {
 	Secrets          agentruntime.SecretResourceLookup
 }
 
+type McpRuntimeConfig struct {
+	ContainerRuntime string
+	ContainerNetwork string
+	ContainerMemory  string
+	ContainerCPUs    string
+	ContainerPids    int
+	SecretEnvPrefix  string
+	Secrets          agentruntime.SecretResourceLookup
+}
+
 func NewIsolatedToolRuntime(cfg IsolatedToolRuntimeConfig, logger *log.Logger) (agentruntime.ToolRuntime, error) {
 	mode := strings.ToLower(strings.TrimSpace(cfg.Backend))
 	if mode == "" {
@@ -67,6 +77,30 @@ func NewIsolatedToolRuntime(cfg IsolatedToolRuntimeConfig, logger *log.Logger) (
 		}
 	}
 	return runtime, nil
+}
+
+func NewMcpSessionManager(cfg McpRuntimeConfig) *agentruntime.McpSessionManager {
+	storeResolver := agentruntime.NewStoreSecretResolver(cfg.Secrets, "value")
+	envPrefix := strings.TrimSpace(cfg.SecretEnvPrefix)
+	if envPrefix == "" {
+		envPrefix = "ORLOJ_SECRET_"
+	}
+	envResolver := agentruntime.NewEnvSecretResolver(envPrefix)
+	resolver := agentruntime.NewChainSecretResolver(storeResolver, envResolver)
+
+	sessionManager := agentruntime.NewMcpSessionManager(resolver)
+	network := strings.TrimSpace(cfg.ContainerNetwork)
+	if network == "" {
+		network = "bridge"
+	}
+	sessionManager.SetContainerConfig(agentruntime.ContainerToolRuntimeConfig{
+		RuntimeBinary: strings.TrimSpace(cfg.ContainerRuntime),
+		Network:       network,
+		Memory:        strings.TrimSpace(cfg.ContainerMemory),
+		CPUs:          strings.TrimSpace(cfg.ContainerCPUs),
+		PidsLimit:     cfg.ContainerPids,
+	})
+	return sessionManager
 }
 
 // NewWASMToolRuntime creates an embedded wazero-backed WASM tool runtime.

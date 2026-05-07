@@ -129,14 +129,16 @@ gRPC tool connections require TLS (minimum TLS 1.2) by default. Plaintext gRPC i
 
 ### SSRF Protection
 
-Outbound HTTP, gRPC, and MCP connections validate the target endpoint twice: once at call time (URL parsing and scheme allowlist) and again at dial time via a `net.Dialer.Control` hook that inspects the actual IP the kernel is about to connect to. Dial-time enforcement closes the hostname-bypass and DNS-rebinding gaps that a URL-only check cannot catch. The following destinations are blocked regardless of configuration:
+Outbound HTTP, gRPC, and MCP connections validate the target endpoint twice: once at call time (URL parsing and scheme allowlist) and again at dial time via a `net.Dialer.Control` hook that inspects the actual IP the kernel is about to connect to. Dial-time enforcement closes the hostname-bypass and DNS-rebinding gaps that a URL-only check cannot catch. For generic tool and MCP egress, the following destinations are blocked regardless of configuration:
 
 - Loopback addresses (`127.0.0.0/8`, `::1`, and IPv4-mapped IPv6 equivalents like `::ffff:127.0.0.1`)
 - Link-local addresses (`169.254.0.0/16`, `fe80::/10`)
 - Cloud metadata endpoints (`169.254.169.254` for AWS/GCP/Azure IMDS, `fd00:ec2::254` for AWS IMDSv2 IPv6)
 - Unspecified addresses (`0.0.0.0`, `::`)
 
-Private network addresses (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `fc00::/7`) and RFC 6598 carrier-grade NAT (`100.64.0.0/10`) are also blocked unless the caller explicitly opts in. For `ModelEndpoint` resources, set `spec.allowPrivate: true` to permit connections to private addresses. The default is `false` for all providers except `ollama`, which defaults to `true` because Ollama is a local-first runtime.
+Private network addresses (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `fc00::/7`) and RFC 6598 carrier-grade NAT (`100.64.0.0/10`) are also blocked unless the caller explicitly opts in.
+
+`ModelEndpoint` resources use a model-gateway-specific safe client. Set `spec.allowPrivate: true` only for trusted local/private model servers; it permits loopback plus private/CGNAT addresses for model traffic while still blocking cloud metadata, link-local, and unspecified addresses. The default is `false` for all providers except `ollama`, which defaults to `true` because Ollama is a local-first runtime.
 
 **Upgrading from earlier versions:** if you run an OpenAI-compatible server (vLLM, LM Studio, LocalAI, LiteLLM proxy, TGI, etc.) on localhost or a private network under `provider: openai-compatible`, add `spec.allowPrivate: true` to those `ModelEndpoint` resources before upgrading, or the gateway will fail at dial time with an error that names the resolved IP and the exact field to change.
 
