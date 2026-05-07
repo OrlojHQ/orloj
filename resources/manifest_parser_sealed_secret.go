@@ -7,6 +7,9 @@ import (
 )
 
 func ParseSealedSecretManifest(data []byte) (SealedSecret, error) {
+	if err := rejectMultiDocumentYAML(data); err != nil {
+		return SealedSecret{}, err
+	}
 	var out SealedSecret
 	if json.Valid(data) {
 		if err := json.Unmarshal(data, &out); err != nil {

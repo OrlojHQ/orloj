@@ -7,6 +7,18 @@ import (
 	"strings"
 )
 
+// rejectMultiDocumentYAML returns an error if the input contains a YAML
+// document separator (`---` on its own line). Multi-document streams are not
+// supported; each resource must be applied individually.
+func rejectMultiDocumentYAML(data []byte) error {
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.TrimSpace(line) == "---" {
+			return fmt.Errorf("multi-document YAML is not supported; split documents and apply individually")
+		}
+	}
+	return nil
+}
+
 // yamlScalarToTyped converts a bare YAML scalar string to its natural Go type:
 // "true"/"false" → bool, integer strings → int64, float strings → float64,
 // inline arrays "[a, b, c]" → []any of typed elements,
@@ -31,7 +43,7 @@ func yamlScalarToTyped(s string) any {
 		if inner == "" {
 			return []any{}
 		}
-		parts := strings.Split(inner, ",")
+		parts := splitFlowArray(inner)
 		arr := make([]any, 0, len(parts))
 		for _, p := range parts {
 			arr = append(arr, yamlScalarToTyped(stripQuotes(strings.TrimSpace(p))))
@@ -41,8 +53,38 @@ func yamlScalarToTyped(s string) any {
 	return s
 }
 
+// splitFlowArray splits a YAML flow sequence body on commas, respecting
+// quoted strings so that commas inside quotes are not treated as separators.
+func splitFlowArray(inner string) []string {
+	var parts []string
+	var current strings.Builder
+	inSingle := false
+	inDouble := false
+	for i := 0; i < len(inner); i++ {
+		ch := inner[i]
+		switch {
+		case ch == '\'' && !inDouble:
+			inSingle = !inSingle
+			current.WriteByte(ch)
+		case ch == '"' && !inSingle:
+			inDouble = !inDouble
+			current.WriteByte(ch)
+		case ch == ',' && !inSingle && !inDouble:
+			parts = append(parts, current.String())
+			current.Reset()
+		default:
+			current.WriteByte(ch)
+		}
+	}
+	parts = append(parts, current.String())
+	return parts
+}
+
 // ParseAgentManifest accepts either JSON or a constrained YAML subset for Agent resources.
 func ParseAgentManifest(data []byte) (Agent, error) {
+	if err := rejectMultiDocumentYAML(data); err != nil {
+		return Agent{}, err
+	}
 	var agent Agent
 
 	if json.Valid(data) {

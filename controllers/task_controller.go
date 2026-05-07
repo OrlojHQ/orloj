@@ -895,7 +895,7 @@ func (c *TaskController) maybeCreateCompletionReviewFromTaskApproval(ctx context
 			ReviewCycle:         1,
 			Output:              copyStringMap(task.Status.Output),
 			OutputFormat:        "json",
-			ResumeContext:       resources.EncodeTaskApprovalResumeContext(nextResume),
+			ResumeContext:       mustEncodeTaskApprovalResumeContext(nextResume),
 		},
 		Status: resources.TaskApprovalStatus{Phase: "Pending"},
 	}
@@ -1712,7 +1712,7 @@ func (c *TaskController) createTaskApprovalForCheckpoint(
 			Supersedes:          strings.TrimSpace(supersedes),
 			Output:              outputSnapshot,
 			OutputFormat:        strings.TrimSpace(outputFormat),
-			ResumeContext:       resources.EncodeTaskApprovalResumeContext(resume),
+			ResumeContext:       mustEncodeTaskApprovalResumeContext(resume),
 		},
 		Status: resources.TaskApprovalStatus{Phase: "Pending"},
 	}
@@ -2646,6 +2646,14 @@ func copyStringMap(in map[string]string) map[string]string {
 	out := make(map[string]string, len(in))
 	for k, v := range in {
 		out[k] = v
+	}
+	return out
+}
+
+func mustEncodeTaskApprovalResumeContext(ctx resources.TaskApprovalResumeContext) map[string]any {
+	out, err := resources.EncodeTaskApprovalResumeContext(ctx)
+	if err != nil {
+		return map[string]any{}
 	}
 	return out
 }

@@ -8,6 +8,9 @@ import (
 
 // ParseModelEndpointManifest parses ModelEndpoint resources from JSON or constrained YAML.
 func ParseModelEndpointManifest(data []byte) (ModelEndpoint, error) {
+	if err := rejectMultiDocumentYAML(data); err != nil {
+		return ModelEndpoint{}, err
+	}
 	var out ModelEndpoint
 	if json.Valid(data) {
 		if err := json.Unmarshal(data, &out); err != nil {

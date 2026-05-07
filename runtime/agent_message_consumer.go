@@ -1046,7 +1046,7 @@ func (m *AgentMessageConsumerManager) applyDelegationGate(ctx context.Context, t
 		return delegationGateDecision{}, nil
 	}
 
-	join := resources.NormalizeGraphJoin(graphNode.DelegateJoin)
+	join, _ := resources.NormalizeGraphJoin(graphNode.DelegateJoin)
 	expected := len(graphNode.Delegates)
 	required := expected
 	if join.Mode == "quorum" {
@@ -2752,7 +2752,7 @@ func joinRequirements(system resources.AgentSystem, target string) (mode string,
 
 	mode = "wait_for_all"
 	if node, ok := system.Spec.Graph[target]; ok {
-		normalized := resources.NormalizeGraphJoin(node.Join)
+		normalized, _ := resources.NormalizeGraphJoin(node.Join)
 		mode = normalized.Mode
 		if mode == "" {
 			mode = "wait_for_all"
@@ -3037,6 +3037,14 @@ func copyStringMapRuntime(input map[string]string) map[string]string {
 	return out
 }
 
+func mustEncodeResumeContext(ctx resources.TaskApprovalResumeContext) map[string]any {
+	out, err := resources.EncodeTaskApprovalResumeContext(ctx)
+	if err != nil {
+		return map[string]any{}
+	}
+	return out
+}
+
 func resumeMessagesFromAgentMessages(messages []AgentMessage) []resources.TaskApprovalResumeMessage {
 	if len(messages) == 0 {
 		return nil
@@ -3126,7 +3134,7 @@ func (m *AgentMessageConsumerManager) pauseTaskForOutputReview(
 			Supersedes:          supersedes,
 			Output:              outputSnapshot,
 			OutputFormat:        "text",
-			ResumeContext:       resources.EncodeTaskApprovalResumeContext(resumeContext),
+			ResumeContext:       mustEncodeResumeContext(resumeContext),
 		},
 		Status: resources.TaskApprovalStatus{
 			Phase: "Pending",
@@ -3171,7 +3179,7 @@ func (m *AgentMessageConsumerManager) pauseTaskForOutputReview(
 		if checkpointType == "task_output" {
 			resumeContext.Output = copyStringMapRuntime(task.Status.Output)
 			approval.Spec.Output = copyStringMapRuntime(task.Status.Output)
-			approval.Spec.ResumeContext = resources.EncodeTaskApprovalResumeContext(resumeContext)
+			approval.Spec.ResumeContext = mustEncodeResumeContext(resumeContext)
 			if _, err := m.taskApprovals.Upsert(ctx, approval); err != nil {
 				return err
 			}

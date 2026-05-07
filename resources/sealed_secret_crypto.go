@@ -219,12 +219,25 @@ func unsealSecretValue(namespace, name, entryKey string, value SealedValue, priv
 	aad := sealedSecretAAD(namespace, name, entryKey)
 	plaintext, err := gcm.Open(nil, nonce, ciphertext, aad)
 	if err != nil {
-		return "", fmt.Errorf("decrypt %q: %w", entryKey, err)
+		legacyAAD := legacySealedSecretAAD(namespace, name, entryKey)
+		plaintext, err = gcm.Open(nil, nonce, ciphertext, legacyAAD)
+		if err != nil {
+			return "", fmt.Errorf("decrypt %q: %w", entryKey, err)
+		}
 	}
 	return string(plaintext), nil
 }
 
+const sealedSecretAADVersion = "AES-256-GCM-v1"
+
 func sealedSecretAAD(namespace, name, entryKey string) []byte {
+	return []byte(sealedSecretAADVersion + "\x00" +
+		NormalizeNamespace(namespace) + "\x00" +
+		strings.TrimSpace(name) + "\x00" +
+		strings.TrimSpace(entryKey))
+}
+
+func legacySealedSecretAAD(namespace, name, entryKey string) []byte {
 	return []byte(NormalizeNamespace(namespace) + "\x00" + strings.TrimSpace(name) + "\x00" + strings.TrimSpace(entryKey))
 }
 

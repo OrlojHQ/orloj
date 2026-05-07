@@ -1,6 +1,9 @@
 package resources
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestSealUnsealSealedSecretRoundTrip(t *testing.T) {
 	material, err := GenerateSealingKeyMaterial()
@@ -71,5 +74,12 @@ func TestUnsealSealedSecretRejectsAADReplay(t *testing.T) {
 	sealed.Metadata.Name = "api-key-copy"
 	if _, err := UnsealSealedSecret(sealed, material.KeyID, material.PrivateKey); err == nil {
 		t.Fatal("expected AAD mismatch to fail decryption")
+	}
+}
+
+func TestSealedSecretAADIncludesAlgorithm(t *testing.T) {
+	aad := sealedSecretAAD("team-a", "my-secret", "key1")
+	if !strings.Contains(string(aad), sealedSecretAADVersion) {
+		t.Fatalf("AAD should include algorithm version %q, got %q", sealedSecretAADVersion, string(aad))
 	}
 }

@@ -41,6 +41,49 @@ func TestParseMemoryBytes(t *testing.T) {
 	}
 }
 
+func TestParseMemoryBytes_Overflow(t *testing.T) {
+	overflowCases := []string{
+		"9999999999g",
+		"9999999999999m",
+		"9223372036854775807k",
+	}
+	for _, input := range overflowCases {
+		t.Run(input, func(t *testing.T) {
+			_, err := ParseMemoryBytes(input)
+			if err == nil {
+				t.Fatalf("expected overflow error for %q", input)
+			}
+			if !strings.Contains(err.Error(), "overflow") {
+				t.Fatalf("expected overflow in error message, got: %v", err)
+			}
+		})
+	}
+}
+
+func TestParseMemoryBytes_KubernetesStyle(t *testing.T) {
+	tests := []struct {
+		input string
+		want  int64
+	}{
+		{"1Gi", 1024 * 1024 * 1024},
+		{"128Mi", 128 * 1024 * 1024},
+		{"512Ki", 512 * 1024},
+		{"2gi", 2 * 1024 * 1024 * 1024},
+		{"256mi", 256 * 1024 * 1024},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got, err := ParseMemoryBytes(tt.input)
+			if err != nil {
+				t.Fatalf("unexpected error for %q: %v", tt.input, err)
+			}
+			if got != tt.want {
+				t.Errorf("ParseMemoryBytes(%q) = %d, want %d", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestValidateContainerResources(t *testing.T) {
 	tests := []struct {
 		name    string

@@ -29,44 +29,44 @@ func normalizeGovernanceConfigPhase(phase *string) {
 
 // AgentSystem defines a multi-agent architecture and execution graph.
 type AgentSystem struct {
-	APIVersion string            `json:"apiVersion"`
-	Kind       string            `json:"kind"`
-	Metadata   ObjectMeta        `json:"metadata"`
-	Spec       AgentSystemSpec   `json:"spec"`
-	Status     AgentSystemStatus `json:"status,omitempty"`
+	APIVersion string            `json:"apiVersion" yaml:"apiVersion"`
+	Kind       string            `json:"kind" yaml:"kind"`
+	Metadata   ObjectMeta        `json:"metadata" yaml:"metadata"`
+	Spec       AgentSystemSpec   `json:"spec" yaml:"spec"`
+	Status     AgentSystemStatus `json:"status,omitempty" yaml:"status,omitempty"`
 }
 
 type AgentSystemSpec struct {
-	Agents           []string              `json:"agents,omitempty"`
-	Graph            map[string]GraphEdge  `json:"graph,omitempty"`
-	CompletionReview *ReviewCheckpointSpec `json:"completion_review,omitempty"`
-	ContextAdapter   string                `json:"context_adapter,omitempty"`
+	Agents           []string              `json:"agents,omitempty" yaml:"agents,omitempty"`
+	Graph            map[string]GraphEdge  `json:"graph,omitempty" yaml:"graph,omitempty"`
+	CompletionReview *ReviewCheckpointSpec `json:"completion_review,omitempty" yaml:"completion_review,omitempty"`
+	ContextAdapter   string                `json:"context_adapter,omitempty" yaml:"context_adapter,omitempty"`
 }
 
 type GraphEdge struct {
 	// Legacy single-hop edge. Preserved for backward compatibility.
-	Next string `json:"next,omitempty"`
+	Next string `json:"next,omitempty" yaml:"next,omitempty"`
 	// Rich edge list for fan-out and per-edge metadata.
-	Edges []GraphRoute `json:"edges,omitempty"`
+	Edges []GraphRoute `json:"edges,omitempty" yaml:"edges,omitempty"`
 	// Join semantics for this downstream node.
-	Join GraphJoin `json:"join,omitempty"`
+	Join GraphJoin `json:"join,omitempty" yaml:"join,omitempty"`
 	// Delegates dispatched after the node's first execution. Reports
 	// flow back and trigger a review re-execution before edges fire.
-	Delegates []GraphRoute `json:"delegates,omitempty"`
+	Delegates []GraphRoute `json:"delegates,omitempty" yaml:"delegates,omitempty"`
 	// DelegateJoin controls how delegate returns are collected.
-	DelegateJoin GraphJoin `json:"delegate_join,omitempty"`
+	DelegateJoin GraphJoin `json:"delegate_join,omitempty" yaml:"delegate_join,omitempty"`
 	// Review gates this node's output behind a human approval checkpoint.
-	Review *ReviewCheckpointSpec `json:"review,omitempty"`
+	Review *ReviewCheckpointSpec `json:"review,omitempty" yaml:"review,omitempty"`
 }
 
 type GraphRoute struct {
-	To string `json:"to,omitempty"`
+	To string `json:"to,omitempty" yaml:"to,omitempty"`
 	// Optional labels used by routing/observability layers.
-	Labels map[string]string `json:"labels,omitempty"`
+	Labels map[string]string `json:"labels,omitempty" yaml:"labels,omitempty"`
 	// Optional policy key/value bag for edge-level controls.
-	Policy map[string]string `json:"policy,omitempty"`
+	Policy map[string]string `json:"policy,omitempty" yaml:"policy,omitempty"`
 	// Optional condition that must match the completing agent's output for this edge to fire.
-	Condition *EdgeCondition `json:"condition,omitempty"`
+	Condition *EdgeCondition `json:"condition,omitempty" yaml:"condition,omitempty"`
 }
 
 // EdgeCondition defines a predicate evaluated against the completing agent's output
@@ -74,59 +74,61 @@ type GraphRoute struct {
 // (logical AND). Use Default to mark a fallback edge.
 type EdgeCondition struct {
 	// OutputContains matches if the output contains this string (case-insensitive).
-	OutputContains string `json:"output_contains,omitempty"`
+	OutputContains string `json:"output_contains,omitempty" yaml:"output_contains,omitempty"`
 	// OutputNotContains matches if the output does NOT contain this string (case-insensitive).
-	OutputNotContains string `json:"output_not_contains,omitempty"`
+	OutputNotContains string `json:"output_not_contains,omitempty" yaml:"output_not_contains,omitempty"`
 	// OutputMatches matches if the output matches this regex pattern.
-	OutputMatches string `json:"output_matches,omitempty"`
+	OutputMatches string `json:"output_matches,omitempty" yaml:"output_matches,omitempty"`
+	// CompiledOutputMatches is the pre-compiled regex from OutputMatches, populated during normalization.
+	CompiledOutputMatches *regexp.Regexp `json:"-" yaml:"-"`
 	// Default marks this edge as the fallback when no conditional edge matches.
-	Default bool `json:"default,omitempty"`
+	Default bool `json:"default,omitempty" yaml:"default,omitempty"`
 
 	// OutputJSONPath extracts a value from JSON output using dot-notation (e.g. "$.route").
 	// When set, one of the comparison operators (Equals, NotEquals, Contains, GreaterThan,
 	// LessThan) must also be set.
-	OutputJSONPath string `json:"output_json_path,omitempty"`
+	OutputJSONPath string `json:"output_json_path,omitempty" yaml:"output_json_path,omitempty"`
 	// Equals matches when the extracted JSON value equals this string.
-	Equals string `json:"equals,omitempty"`
+	Equals string `json:"equals,omitempty" yaml:"equals,omitempty"`
 	// NotEquals matches when the extracted JSON value does NOT equal this string.
-	NotEquals string `json:"not_equals,omitempty"`
+	NotEquals string `json:"not_equals,omitempty" yaml:"not_equals,omitempty"`
 	// Contains matches when the extracted JSON value (string or array) contains this value.
-	Contains string `json:"contains,omitempty"`
+	Contains string `json:"contains,omitempty" yaml:"contains,omitempty"`
 	// GreaterThan matches when the extracted numeric JSON value is greater than this threshold.
-	GreaterThan string `json:"greater_than,omitempty"`
+	GreaterThan string `json:"greater_than,omitempty" yaml:"greater_than,omitempty"`
 	// LessThan matches when the extracted numeric JSON value is less than this threshold.
-	LessThan string `json:"less_than,omitempty"`
+	LessThan string `json:"less_than,omitempty" yaml:"less_than,omitempty"`
 }
 
 type GraphJoin struct {
 	// Mode: wait_for_all | quorum.
-	Mode string `json:"mode,omitempty"`
+	Mode string `json:"mode,omitempty" yaml:"mode,omitempty"`
 	// QuorumCount is an absolute minimum number of upstream branches.
-	QuorumCount int `json:"quorum_count,omitempty"`
+	QuorumCount int `json:"quorum_count,omitempty" yaml:"quorum_count,omitempty"`
 	// QuorumPercent is percentage-based minimum of expected branches (0-100).
-	QuorumPercent int `json:"quorum_percent,omitempty"`
+	QuorumPercent int `json:"quorum_percent,omitempty" yaml:"quorum_percent,omitempty"`
 	// OnFailure: deadletter | skip | continue_partial.
-	OnFailure string `json:"on_failure,omitempty"`
+	OnFailure string `json:"on_failure,omitempty" yaml:"on_failure,omitempty"`
 }
 
 type ReviewCheckpointSpec struct {
-	CheckpointID        string `json:"checkpoint_id,omitempty"`
-	DisplayName         string `json:"display_name,omitempty"`
-	Reason              string `json:"reason,omitempty"`
-	TTL                 string `json:"ttl,omitempty"`
-	AllowRequestChanges *bool  `json:"allow_request_changes,omitempty"`
-	MaxReviewCycles     int    `json:"max_review_cycles,omitempty"`
+	CheckpointID        string `json:"checkpoint_id,omitempty" yaml:"checkpoint_id,omitempty"`
+	DisplayName         string `json:"display_name,omitempty" yaml:"display_name,omitempty"`
+	Reason              string `json:"reason,omitempty" yaml:"reason,omitempty"`
+	TTL                 string `json:"ttl,omitempty" yaml:"ttl,omitempty"`
+	AllowRequestChanges *bool  `json:"allow_request_changes,omitempty" yaml:"allow_request_changes,omitempty"`
+	MaxReviewCycles     int    `json:"max_review_cycles,omitempty" yaml:"max_review_cycles,omitempty"`
 }
 
 type AgentSystemStatus struct {
-	Phase              string `json:"phase,omitempty"`
-	LastError          string `json:"lastError,omitempty"`
-	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
+	Phase              string `json:"phase,omitempty" yaml:"phase,omitempty"`
+	LastError          string `json:"lastError,omitempty" yaml:"lastError,omitempty"`
+	ObservedGeneration int64  `json:"observedGeneration,omitempty" yaml:"observedGeneration,omitempty"`
 }
 
 type AgentSystemList struct {
-	ListMeta `json:",inline"`
-	Items    []AgentSystem `json:"items"`
+	ListMeta `json:",inline" yaml:",inline"`
+	Items    []AgentSystem `json:"items" yaml:"items"`
 }
 
 func normalizeGraphRoutes(routes []GraphRoute, node, field string) ([]GraphRoute, error) {
@@ -148,9 +150,14 @@ func normalizeGraphRoutes(routes []GraphRoute, node, field string) ([]GraphRoute
 			route.Condition.GreaterThan = strings.TrimSpace(route.Condition.GreaterThan)
 			route.Condition.LessThan = strings.TrimSpace(route.Condition.LessThan)
 			if route.Condition.OutputMatches != "" {
-				if _, err := regexp.Compile(route.Condition.OutputMatches); err != nil {
+				if len(route.Condition.OutputMatches) > 512 {
+					return nil, fmt.Errorf("spec.graph.%s.%s[%s].condition.output_matches: pattern exceeds 512 chars", node, field, route.To)
+				}
+				compiled, err := regexp.Compile(route.Condition.OutputMatches)
+				if err != nil {
 					return nil, fmt.Errorf("spec.graph.%s.%s[%s].condition.output_matches: invalid regex %q: %w", node, field, route.To, route.Condition.OutputMatches, err)
 				}
+				route.Condition.CompiledOutputMatches = compiled
 			}
 			hasJSONOp := route.Condition.Equals != "" || route.Condition.NotEquals != "" ||
 				route.Condition.Contains != "" || route.Condition.GreaterThan != "" || route.Condition.LessThan != ""
@@ -235,6 +242,16 @@ func (a *AgentSystem) Normalize() error {
 			}
 			seenCheckpoints[checkpointKey] = fmt.Sprintf("spec.graph.%s.review", name)
 		}
+		normalizedJoin, err := NormalizeGraphJoin(node.Join)
+		if err != nil {
+			return fmt.Errorf("spec.graph.%s.join: %w", name, err)
+		}
+		node.Join = normalizedJoin
+		normalizedDelegateJoin, err := NormalizeGraphJoin(node.DelegateJoin)
+		if err != nil {
+			return fmt.Errorf("spec.graph.%s.delegate_join: %w", name, err)
+		}
+		node.DelegateJoin = normalizedDelegateJoin
 		a.Spec.Graph[name] = node
 	}
 	if a.Spec.CompletionReview != nil {
@@ -348,127 +365,127 @@ func normalizeReviewCheckpoint(spec *ReviewCheckpointSpec, path string) error {
 
 // Tool defines an external capability that agents can call.
 type Tool struct {
-	APIVersion string     `json:"apiVersion"`
-	Kind       string     `json:"kind"`
-	Metadata   ObjectMeta `json:"metadata"`
-	Spec       ToolSpec   `json:"spec"`
-	Status     ToolStatus `json:"status,omitempty"`
+	APIVersion string     `json:"apiVersion" yaml:"apiVersion"`
+	Kind       string     `json:"kind" yaml:"kind"`
+	Metadata   ObjectMeta `json:"metadata" yaml:"metadata"`
+	Spec       ToolSpec   `json:"spec" yaml:"spec"`
+	Status     ToolStatus `json:"status,omitempty" yaml:"status,omitempty"`
 }
 
 type ToolSpec struct {
-	Type             string            `json:"type,omitempty"`
-	Endpoint         string            `json:"endpoint,omitempty"`
-	Description      string            `json:"description,omitempty"`
-	InputSchema      map[string]any    `json:"input_schema,omitempty"`
-	McpServerRef     string            `json:"mcp_server_ref,omitempty"`
-	McpToolName      string            `json:"mcp_tool_name,omitempty"`
-	Cli              ToolCliSpec       `json:"cli,omitempty"`
-	Wasm             ToolWasmSpec      `json:"wasm,omitempty"`
-	Capabilities     []string          `json:"capabilities,omitempty"`
-	OperationClasses []string          `json:"operation_classes,omitempty"`
-	RiskLevel        string            `json:"risk_level,omitempty"`
-	Runtime          ToolRuntimePolicy `json:"runtime,omitempty"`
-	Auth             ToolAuth          `json:"auth,omitempty"`
+	Type             string            `json:"type,omitempty" yaml:"type,omitempty"`
+	Endpoint         string            `json:"endpoint,omitempty" yaml:"endpoint,omitempty"`
+	Description      string            `json:"description,omitempty" yaml:"description,omitempty"`
+	InputSchema      map[string]any    `json:"input_schema,omitempty" yaml:"input_schema,omitempty"`
+	McpServerRef     string            `json:"mcp_server_ref,omitempty" yaml:"mcp_server_ref,omitempty"`
+	McpToolName      string            `json:"mcp_tool_name,omitempty" yaml:"mcp_tool_name,omitempty"`
+	Cli              ToolCliSpec       `json:"cli,omitempty" yaml:"cli,omitempty"`
+	Wasm             ToolWasmSpec      `json:"wasm,omitempty" yaml:"wasm,omitempty"`
+	Capabilities     []string          `json:"capabilities,omitempty" yaml:"capabilities,omitempty"`
+	OperationClasses []string          `json:"operation_classes,omitempty" yaml:"operation_classes,omitempty"`
+	RiskLevel        string            `json:"risk_level,omitempty" yaml:"risk_level,omitempty"`
+	Runtime          ToolRuntimePolicy `json:"runtime,omitempty" yaml:"runtime,omitempty"`
+	Auth             ToolAuth          `json:"auth,omitempty" yaml:"auth,omitempty"`
 }
 
 // ToolWasmSpec configures per-tool WASM module execution.
 // Module may be a local path, HTTPS URL, or OCI artifact reference (oci://...).
 type ToolWasmSpec struct {
-	Module          string `json:"module,omitempty"`
-	Entrypoint      string `json:"entrypoint,omitempty"`
-	MaxMemoryBytes  int64  `json:"max_memory_bytes,omitempty"`
-	Fuel            uint64 `json:"fuel,omitempty"`
-	EnableWASI      bool   `json:"enable_wasi"`
-	ImagePullSecret string `json:"image_pull_secret,omitempty"`
+	Module          string `json:"module,omitempty" yaml:"module,omitempty"`
+	Entrypoint      string `json:"entrypoint,omitempty" yaml:"entrypoint,omitempty"`
+	MaxMemoryBytes  int64  `json:"max_memory_bytes,omitempty" yaml:"max_memory_bytes,omitempty"`
+	Fuel            uint64 `json:"fuel,omitempty" yaml:"fuel,omitempty"`
+	EnableWASI      bool   `json:"enable_wasi" yaml:"enable_wasi"`
+	ImagePullSecret string `json:"image_pull_secret,omitempty" yaml:"image_pull_secret,omitempty"`
 }
 
 // ContainerResources defines per-tool or per-McpServer container resource
 // overrides. When set, these take precedence over the global
 // --tool-container-{memory,cpus,pids-limit} flags.
 type ContainerResources struct {
-	Memory    string `json:"memory,omitempty"`
-	CPUs      string `json:"cpus,omitempty"`
-	PidsLimit int    `json:"pids_limit,omitempty"`
+	Memory    string `json:"memory,omitempty" yaml:"memory,omitempty"`
+	CPUs      string `json:"cpus,omitempty" yaml:"cpus,omitempty"`
+	PidsLimit int    `json:"pids_limit,omitempty" yaml:"pids_limit,omitempty"`
 }
 
 // ToolCliSpec defines the configuration for CLI tool invocations.
 type ToolCliSpec struct {
-	Command         string             `json:"command,omitempty"`
-	Args            []string           `json:"args,omitempty"`
-	Image           string             `json:"image,omitempty"`
-	ImagePullSecret string             `json:"image_pull_secret,omitempty"`
-	Network         string             `json:"network,omitempty"`
-	StdinFromInput  bool               `json:"stdin_from_input,omitempty"`
-	Output          string             `json:"output,omitempty"`
-	WorkingDir      string             `json:"working_dir,omitempty"`
-	Env             map[string]string  `json:"env,omitempty"`
-	EnvFrom         []ToolCliEnvRef    `json:"env_from,omitempty"`
-	Resources       ContainerResources `json:"resources,omitempty"`
+	Command         string             `json:"command,omitempty" yaml:"command,omitempty"`
+	Args            []string           `json:"args,omitempty" yaml:"args,omitempty"`
+	Image           string             `json:"image,omitempty" yaml:"image,omitempty"`
+	ImagePullSecret string             `json:"image_pull_secret,omitempty" yaml:"image_pull_secret,omitempty"`
+	Network         string             `json:"network,omitempty" yaml:"network,omitempty"`
+	StdinFromInput  bool               `json:"stdin_from_input,omitempty" yaml:"stdin_from_input,omitempty"`
+	Output          string             `json:"output,omitempty" yaml:"output,omitempty"`
+	WorkingDir      string             `json:"working_dir,omitempty" yaml:"working_dir,omitempty"`
+	Env             map[string]string  `json:"env,omitempty" yaml:"env,omitempty"`
+	EnvFrom         []ToolCliEnvRef    `json:"env_from,omitempty" yaml:"env_from,omitempty"`
+	Resources       ContainerResources `json:"resources,omitempty" yaml:"resources,omitempty"`
 }
 
 // ToolCliEnvRef maps an Orloj secret to a process environment variable.
 type ToolCliEnvRef struct {
-	Name      string `json:"name"`
-	SecretRef string `json:"secretRef"`
-	Key       string `json:"key,omitempty"`
+	Name      string `json:"name" yaml:"name"`
+	SecretRef string `json:"secretRef" yaml:"secretRef"`
+	Key       string `json:"key,omitempty" yaml:"key,omitempty"`
 }
 
 type ToolAuth struct {
-	Profile    string   `json:"profile,omitempty"`
-	SecretRef  string   `json:"secretRef,omitempty"`
-	HeaderName string   `json:"headerName,omitempty"`
-	TokenURL   string   `json:"tokenURL,omitempty"`
-	Scopes     []string `json:"scopes,omitempty"`
+	Profile    string   `json:"profile,omitempty" yaml:"profile,omitempty"`
+	SecretRef  string   `json:"secretRef,omitempty" yaml:"secretRef,omitempty"`
+	HeaderName string   `json:"headerName,omitempty" yaml:"headerName,omitempty"`
+	TokenURL   string   `json:"tokenURL,omitempty" yaml:"tokenURL,omitempty"`
+	Scopes     []string `json:"scopes,omitempty" yaml:"scopes,omitempty"`
 }
 
 // Secret stores sensitive values for runtime tool auth.
 // Data values are base64-encoded (Kubernetes style).
 type Secret struct {
-	APIVersion string       `json:"apiVersion"`
-	Kind       string       `json:"kind"`
-	Metadata   ObjectMeta   `json:"metadata"`
-	Spec       SecretSpec   `json:"spec"`
-	Status     SecretStatus `json:"status,omitempty"`
+	APIVersion string       `json:"apiVersion" yaml:"apiVersion"`
+	Kind       string       `json:"kind" yaml:"kind"`
+	Metadata   ObjectMeta   `json:"metadata" yaml:"metadata"`
+	Spec       SecretSpec   `json:"spec" yaml:"spec"`
+	Status     SecretStatus `json:"status,omitempty" yaml:"status,omitempty"`
 }
 
 type SecretSpec struct {
-	Data       map[string]string `json:"data,omitempty"`
-	StringData map[string]string `json:"stringData,omitempty"`
+	Data       map[string]string `json:"data,omitempty" yaml:"data,omitempty"`
+	StringData map[string]string `json:"stringData,omitempty" yaml:"stringData,omitempty"`
 }
 
 type SecretStatus struct {
-	Phase              string `json:"phase,omitempty"`
-	LastError          string `json:"lastError,omitempty"`
-	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
+	Phase              string `json:"phase,omitempty" yaml:"phase,omitempty"`
+	LastError          string `json:"lastError,omitempty" yaml:"lastError,omitempty"`
+	ObservedGeneration int64  `json:"observedGeneration,omitempty" yaml:"observedGeneration,omitempty"`
 }
 
 type SecretList struct {
-	ListMeta `json:",inline"`
-	Items    []Secret `json:"items"`
+	ListMeta `json:",inline" yaml:",inline"`
+	Items    []Secret `json:"items" yaml:"items"`
 }
 
 type ToolRuntimePolicy struct {
-	Timeout       string          `json:"timeout,omitempty"`
-	IsolationMode string          `json:"isolation_mode,omitempty"`
-	Retry         ToolRetryPolicy `json:"retry,omitempty"`
+	Timeout       string          `json:"timeout,omitempty" yaml:"timeout,omitempty"`
+	IsolationMode string          `json:"isolation_mode,omitempty" yaml:"isolation_mode,omitempty"`
+	Retry         ToolRetryPolicy `json:"retry,omitempty" yaml:"retry,omitempty"`
 }
 
 type ToolRetryPolicy struct {
-	MaxAttempts int    `json:"max_attempts,omitempty"`
-	Backoff     string `json:"backoff,omitempty"`
-	MaxBackoff  string `json:"max_backoff,omitempty"`
-	Jitter      string `json:"jitter,omitempty"`
+	MaxAttempts int    `json:"max_attempts,omitempty" yaml:"max_attempts,omitempty"`
+	Backoff     string `json:"backoff,omitempty" yaml:"backoff,omitempty"`
+	MaxBackoff  string `json:"max_backoff,omitempty" yaml:"max_backoff,omitempty"`
+	Jitter      string `json:"jitter,omitempty" yaml:"jitter,omitempty"`
 }
 
 type ToolStatus struct {
-	Phase              string `json:"phase,omitempty"`
-	LastError          string `json:"lastError,omitempty"`
-	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
+	Phase              string `json:"phase,omitempty" yaml:"phase,omitempty"`
+	LastError          string `json:"lastError,omitempty" yaml:"lastError,omitempty"`
+	ObservedGeneration int64  `json:"observedGeneration,omitempty" yaml:"observedGeneration,omitempty"`
 }
 
 type ToolList struct {
-	ListMeta `json:",inline"`
-	Items    []Tool `json:"items"`
+	ListMeta `json:",inline" yaml:",inline"`
+	Items    []Tool `json:"items" yaml:"items"`
 }
 
 func (t *Tool) Normalize() error {
@@ -758,35 +775,35 @@ func (s *Secret) Normalize() error {
 
 // Memory defines persistent storage configuration for agents.
 type Memory struct {
-	APIVersion string       `json:"apiVersion"`
-	Kind       string       `json:"kind"`
-	Metadata   ObjectMeta   `json:"metadata"`
-	Spec       MemoryConfig `json:"spec"`
-	Status     MemoryStatus `json:"status,omitempty"`
+	APIVersion string       `json:"apiVersion" yaml:"apiVersion"`
+	Kind       string       `json:"kind" yaml:"kind"`
+	Metadata   ObjectMeta   `json:"metadata" yaml:"metadata"`
+	Spec       MemoryConfig `json:"spec" yaml:"spec"`
+	Status     MemoryStatus `json:"status,omitempty" yaml:"status,omitempty"`
 }
 
 type MemoryConfig struct {
-	Type              string           `json:"type,omitempty"`
-	Provider          string           `json:"provider,omitempty"`
-	EmbeddingModel    string           `json:"embedding_model,omitempty"`
-	Endpoint          string           `json:"endpoint,omitempty"`
-	EndpointSecretRef string           `json:"endpoint_secret_ref,omitempty"`
-	Auth              MemoryAuthConfig `json:"auth,omitempty"`
+	Type              string           `json:"type,omitempty" yaml:"type,omitempty"`
+	Provider          string           `json:"provider,omitempty" yaml:"provider,omitempty"`
+	EmbeddingModel    string           `json:"embedding_model,omitempty" yaml:"embedding_model,omitempty"`
+	Endpoint          string           `json:"endpoint,omitempty" yaml:"endpoint,omitempty"`
+	EndpointSecretRef string           `json:"endpoint_secret_ref,omitempty" yaml:"endpoint_secret_ref,omitempty"`
+	Auth              MemoryAuthConfig `json:"auth,omitempty" yaml:"auth,omitempty"`
 }
 
 type MemoryAuthConfig struct {
-	SecretRef string `json:"secretRef,omitempty"`
+	SecretRef string `json:"secretRef,omitempty" yaml:"secretRef,omitempty"`
 }
 
 type MemoryStatus struct {
-	Phase              string `json:"phase,omitempty"`
-	LastError          string `json:"lastError,omitempty"`
-	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
+	Phase              string `json:"phase,omitempty" yaml:"phase,omitempty"`
+	LastError          string `json:"lastError,omitempty" yaml:"lastError,omitempty"`
+	ObservedGeneration int64  `json:"observedGeneration,omitempty" yaml:"observedGeneration,omitempty"`
 }
 
 type MemoryList struct {
-	ListMeta `json:",inline"`
-	Items    []Memory `json:"items"`
+	ListMeta `json:",inline" yaml:",inline"`
+	Items    []Memory `json:"items" yaml:"items"`
 }
 
 func (m *Memory) Normalize() error {
@@ -811,34 +828,34 @@ func (m *Memory) Normalize() error {
 
 // AgentPolicy defines governance limits for runtime behavior.
 type AgentPolicy struct {
-	APIVersion string          `json:"apiVersion"`
-	Kind       string          `json:"kind"`
-	Metadata   ObjectMeta      `json:"metadata"`
-	Spec       AgentPolicySpec `json:"spec"`
-	Status     PolicyStatus    `json:"status,omitempty"`
+	APIVersion string          `json:"apiVersion" yaml:"apiVersion"`
+	Kind       string          `json:"kind" yaml:"kind"`
+	Metadata   ObjectMeta      `json:"metadata" yaml:"metadata"`
+	Spec       AgentPolicySpec `json:"spec" yaml:"spec"`
+	Status     PolicyStatus    `json:"status,omitempty" yaml:"status,omitempty"`
 }
 
 type AgentPolicySpec struct {
-	MaxTokensPerRun int      `json:"max_tokens_per_run,omitempty"`
-	AllowedModels   []string `json:"allowed_models,omitempty"`
-	BlockedTools    []string `json:"blocked_tools,omitempty"`
-	ApplyMode       string   `json:"apply_mode,omitempty"`
-	TargetSystems   []string `json:"target_systems,omitempty"`
-	TargetTasks     []string `json:"target_tasks,omitempty"`
-	TargetAgents    []string `json:"target_agents,omitempty"`
-	MaxChildDepth   int      `json:"max_child_depth,omitempty"`
-	MaxChildTasks   int      `json:"max_child_tasks,omitempty"`
+	MaxTokensPerRun int      `json:"max_tokens_per_run,omitempty" yaml:"max_tokens_per_run,omitempty"`
+	AllowedModels   []string `json:"allowed_models,omitempty" yaml:"allowed_models,omitempty"`
+	BlockedTools    []string `json:"blocked_tools,omitempty" yaml:"blocked_tools,omitempty"`
+	ApplyMode       string   `json:"apply_mode,omitempty" yaml:"apply_mode,omitempty"`
+	TargetSystems   []string `json:"target_systems,omitempty" yaml:"target_systems,omitempty"`
+	TargetTasks     []string `json:"target_tasks,omitempty" yaml:"target_tasks,omitempty"`
+	TargetAgents    []string `json:"target_agents,omitempty" yaml:"target_agents,omitempty"`
+	MaxChildDepth   int      `json:"max_child_depth,omitempty" yaml:"max_child_depth,omitempty"`
+	MaxChildTasks   int      `json:"max_child_tasks,omitempty" yaml:"max_child_tasks,omitempty"`
 }
 
 type PolicyStatus struct {
-	Phase              string `json:"phase,omitempty"`
-	LastError          string `json:"lastError,omitempty"`
-	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
+	Phase              string `json:"phase,omitempty" yaml:"phase,omitempty"`
+	LastError          string `json:"lastError,omitempty" yaml:"lastError,omitempty"`
+	ObservedGeneration int64  `json:"observedGeneration,omitempty" yaml:"observedGeneration,omitempty"`
 }
 
 type AgentPolicyList struct {
-	ListMeta `json:",inline"`
-	Items    []AgentPolicy `json:"items"`
+	ListMeta `json:",inline" yaml:",inline"`
+	Items    []AgentPolicy `json:"items" yaml:"items"`
 }
 
 func (p *AgentPolicy) Normalize() error {
@@ -869,27 +886,27 @@ func (p *AgentPolicy) Normalize() error {
 
 // AgentRole defines reusable permission grants that can be bound to agents.
 type AgentRole struct {
-	APIVersion string          `json:"apiVersion"`
-	Kind       string          `json:"kind"`
-	Metadata   ObjectMeta      `json:"metadata"`
-	Spec       AgentRoleSpec   `json:"spec"`
-	Status     AgentRoleStatus `json:"status,omitempty"`
+	APIVersion string          `json:"apiVersion" yaml:"apiVersion"`
+	Kind       string          `json:"kind" yaml:"kind"`
+	Metadata   ObjectMeta      `json:"metadata" yaml:"metadata"`
+	Spec       AgentRoleSpec   `json:"spec" yaml:"spec"`
+	Status     AgentRoleStatus `json:"status,omitempty" yaml:"status,omitempty"`
 }
 
 type AgentRoleSpec struct {
-	Description string   `json:"description,omitempty"`
-	Permissions []string `json:"permissions,omitempty"`
+	Description string   `json:"description,omitempty" yaml:"description,omitempty"`
+	Permissions []string `json:"permissions,omitempty" yaml:"permissions,omitempty"`
 }
 
 type AgentRoleStatus struct {
-	Phase              string `json:"phase,omitempty"`
-	LastError          string `json:"lastError,omitempty"`
-	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
+	Phase              string `json:"phase,omitempty" yaml:"phase,omitempty"`
+	LastError          string `json:"lastError,omitempty" yaml:"lastError,omitempty"`
+	ObservedGeneration int64  `json:"observedGeneration,omitempty" yaml:"observedGeneration,omitempty"`
 }
 
 type AgentRoleList struct {
-	ListMeta `json:",inline"`
-	Items    []AgentRole `json:"items"`
+	ListMeta `json:",inline" yaml:",inline"`
+	Items    []AgentRole `json:"items" yaml:"items"`
 }
 
 func (r *AgentRole) Normalize() error {
@@ -927,37 +944,37 @@ func (r *AgentRole) Normalize() error {
 
 // ToolPermission defines required permissions for invoking a tool action.
 type ToolPermission struct {
-	APIVersion string               `json:"apiVersion"`
-	Kind       string               `json:"kind"`
-	Metadata   ObjectMeta           `json:"metadata"`
-	Spec       ToolPermissionSpec   `json:"spec"`
-	Status     ToolPermissionStatus `json:"status,omitempty"`
+	APIVersion string               `json:"apiVersion" yaml:"apiVersion"`
+	Kind       string               `json:"kind" yaml:"kind"`
+	Metadata   ObjectMeta           `json:"metadata" yaml:"metadata"`
+	Spec       ToolPermissionSpec   `json:"spec" yaml:"spec"`
+	Status     ToolPermissionStatus `json:"status,omitempty" yaml:"status,omitempty"`
 }
 
 type ToolPermissionSpec struct {
-	ToolRef             string          `json:"tool_ref,omitempty"`
-	Action              string          `json:"action,omitempty"`
-	RequiredPermissions []string        `json:"required_permissions,omitempty"`
-	MatchMode           string          `json:"match_mode,omitempty"`
-	ApplyMode           string          `json:"apply_mode,omitempty"`
-	TargetAgents        []string        `json:"target_agents,omitempty"`
-	OperationRules      []OperationRule `json:"operation_rules,omitempty"`
+	ToolRef             string          `json:"tool_ref,omitempty" yaml:"tool_ref,omitempty"`
+	Action              string          `json:"action,omitempty" yaml:"action,omitempty"`
+	RequiredPermissions []string        `json:"required_permissions,omitempty" yaml:"required_permissions,omitempty"`
+	MatchMode           string          `json:"match_mode,omitempty" yaml:"match_mode,omitempty"`
+	ApplyMode           string          `json:"apply_mode,omitempty" yaml:"apply_mode,omitempty"`
+	TargetAgents        []string        `json:"target_agents,omitempty" yaml:"target_agents,omitempty"`
+	OperationRules      []OperationRule `json:"operation_rules,omitempty" yaml:"operation_rules,omitempty"`
 }
 
 type OperationRule struct {
-	OperationClass string `json:"operation_class,omitempty"`
-	Verdict        string `json:"verdict,omitempty"`
+	OperationClass string `json:"operation_class,omitempty" yaml:"operation_class,omitempty"`
+	Verdict        string `json:"verdict,omitempty" yaml:"verdict,omitempty"`
 }
 
 type ToolPermissionStatus struct {
-	Phase              string `json:"phase,omitempty"`
-	LastError          string `json:"lastError,omitempty"`
-	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
+	Phase              string `json:"phase,omitempty" yaml:"phase,omitempty"`
+	LastError          string `json:"lastError,omitempty" yaml:"lastError,omitempty"`
+	ObservedGeneration int64  `json:"observedGeneration,omitempty" yaml:"observedGeneration,omitempty"`
 }
 
 type ToolPermissionList struct {
-	ListMeta `json:",inline"`
-	Items    []ToolPermission `json:"items"`
+	ListMeta `json:",inline" yaml:",inline"`
+	Items    []ToolPermission `json:"items" yaml:"items"`
 }
 
 func (p *ToolPermission) Normalize() error {
@@ -1074,35 +1091,35 @@ func (p *ToolPermission) Normalize() error {
 
 // ToolApproval captures a pending human/system approval request for a tool invocation.
 type ToolApproval struct {
-	APIVersion string             `json:"apiVersion"`
-	Kind       string             `json:"kind"`
-	Metadata   ObjectMeta         `json:"metadata"`
-	Spec       ToolApprovalSpec   `json:"spec"`
-	Status     ToolApprovalStatus `json:"status,omitempty"`
+	APIVersion string             `json:"apiVersion" yaml:"apiVersion"`
+	Kind       string             `json:"kind" yaml:"kind"`
+	Metadata   ObjectMeta         `json:"metadata" yaml:"metadata"`
+	Spec       ToolApprovalSpec   `json:"spec" yaml:"spec"`
+	Status     ToolApprovalStatus `json:"status,omitempty" yaml:"status,omitempty"`
 }
 
 type ToolApprovalSpec struct {
-	TaskRef        string `json:"task_ref"`
-	Tool           string `json:"tool"`
-	OperationClass string `json:"operation_class,omitempty"`
-	Agent          string `json:"agent,omitempty"`
-	Input          string `json:"input,omitempty"`
-	Reason         string `json:"reason,omitempty"`
-	TTL            string `json:"ttl,omitempty"`
+	TaskRef        string `json:"task_ref" yaml:"task_ref"`
+	Tool           string `json:"tool" yaml:"tool"`
+	OperationClass string `json:"operation_class,omitempty" yaml:"operation_class,omitempty"`
+	Agent          string `json:"agent,omitempty" yaml:"agent,omitempty"`
+	Input          string `json:"input,omitempty" yaml:"input,omitempty"`
+	Reason         string `json:"reason,omitempty" yaml:"reason,omitempty"`
+	TTL            string `json:"ttl,omitempty" yaml:"ttl,omitempty"`
 }
 
 type ToolApprovalStatus struct {
-	Phase     string `json:"phase,omitempty"`
-	Decision  string `json:"decision,omitempty"`
-	DecidedBy string `json:"decided_by,omitempty"`
-	DecidedAt string `json:"decided_at,omitempty"`
-	Comment   string `json:"comment,omitempty"`
-	ExpiresAt string `json:"expires_at,omitempty"`
+	Phase     string `json:"phase,omitempty" yaml:"phase,omitempty"`
+	Decision  string `json:"decision,omitempty" yaml:"decision,omitempty"`
+	DecidedBy string `json:"decided_by,omitempty" yaml:"decided_by,omitempty"`
+	DecidedAt string `json:"decided_at,omitempty" yaml:"decided_at,omitempty"`
+	Comment   string `json:"comment,omitempty" yaml:"comment,omitempty"`
+	ExpiresAt string `json:"expires_at,omitempty" yaml:"expires_at,omitempty"`
 }
 
 type ToolApprovalList struct {
-	ListMeta `json:",inline"`
-	Items    []ToolApproval `json:"items"`
+	ListMeta `json:",inline" yaml:",inline"`
+	Items    []ToolApproval `json:"items" yaml:"items"`
 }
 
 func (a *ToolApproval) Normalize() error {
@@ -1165,82 +1182,82 @@ func (a *ToolApproval) Normalize() error {
 
 // TaskApproval captures a pending human review checkpoint for agent or task output.
 type TaskApproval struct {
-	APIVersion string             `json:"apiVersion"`
-	Kind       string             `json:"kind"`
-	Metadata   ObjectMeta         `json:"metadata"`
-	Spec       TaskApprovalSpec   `json:"spec"`
-	Status     TaskApprovalStatus `json:"status,omitempty"`
+	APIVersion string             `json:"apiVersion" yaml:"apiVersion"`
+	Kind       string             `json:"kind" yaml:"kind"`
+	Metadata   ObjectMeta         `json:"metadata" yaml:"metadata"`
+	Spec       TaskApprovalSpec   `json:"spec" yaml:"spec"`
+	Status     TaskApprovalStatus `json:"status,omitempty" yaml:"status,omitempty"`
 }
 
 type TaskApprovalSpec struct {
-	TaskRef             string         `json:"task_ref"`
-	CheckpointID        string         `json:"checkpoint_id"`
-	CheckpointType      string         `json:"checkpoint_type,omitempty"`
-	Agent               string         `json:"agent,omitempty"`
-	Reason              string         `json:"reason,omitempty"`
-	TTL                 string         `json:"ttl,omitempty"`
-	AllowRequestChanges *bool          `json:"allow_request_changes,omitempty"`
-	MaxReviewCycles     int            `json:"max_review_cycles,omitempty"`
-	ReviewCycle         int            `json:"review_cycle,omitempty"`
-	Supersedes          string         `json:"supersedes,omitempty"`
-	Output              any            `json:"output,omitempty"`
-	OutputFormat        string         `json:"output_format,omitempty"`
-	ResumeContext       map[string]any `json:"resume_context,omitempty"`
+	TaskRef             string         `json:"task_ref" yaml:"task_ref"`
+	CheckpointID        string         `json:"checkpoint_id" yaml:"checkpoint_id"`
+	CheckpointType      string         `json:"checkpoint_type,omitempty" yaml:"checkpoint_type,omitempty"`
+	Agent               string         `json:"agent,omitempty" yaml:"agent,omitempty"`
+	Reason              string         `json:"reason,omitempty" yaml:"reason,omitempty"`
+	TTL                 string         `json:"ttl,omitempty" yaml:"ttl,omitempty"`
+	AllowRequestChanges *bool          `json:"allow_request_changes,omitempty" yaml:"allow_request_changes,omitempty"`
+	MaxReviewCycles     int            `json:"max_review_cycles,omitempty" yaml:"max_review_cycles,omitempty"`
+	ReviewCycle         int            `json:"review_cycle,omitempty" yaml:"review_cycle,omitempty"`
+	Supersedes          string         `json:"supersedes,omitempty" yaml:"supersedes,omitempty"`
+	Output              any            `json:"output,omitempty" yaml:"output,omitempty"`
+	OutputFormat        string         `json:"output_format,omitempty" yaml:"output_format,omitempty"`
+	ResumeContext       map[string]any `json:"resume_context,omitempty" yaml:"resume_context,omitempty"`
 }
 
 type TaskApprovalResumeMessage struct {
-	MessageID      string `json:"message_id,omitempty"`
-	IdempotencyKey string `json:"idempotency_key,omitempty"`
-	TaskID         string `json:"task_id,omitempty"`
-	Attempt        int    `json:"attempt,omitempty"`
-	System         string `json:"system,omitempty"`
-	Namespace      string `json:"namespace,omitempty"`
-	FromAgent      string `json:"from_agent,omitempty"`
-	ToAgent        string `json:"to_agent,omitempty"`
-	BranchID       string `json:"branch_id,omitempty"`
-	ParentBranchID string `json:"parent_branch_id,omitempty"`
-	Type           string `json:"type,omitempty"`
-	Payload        string `json:"payload,omitempty"`
-	Timestamp      string `json:"timestamp,omitempty"`
-	TraceID        string `json:"trace_id,omitempty"`
-	ParentID       string `json:"parent_id,omitempty"`
-	DelegateOf     string `json:"delegate_of,omitempty"`
+	MessageID      string `json:"message_id,omitempty" yaml:"message_id,omitempty"`
+	IdempotencyKey string `json:"idempotency_key,omitempty" yaml:"idempotency_key,omitempty"`
+	TaskID         string `json:"task_id,omitempty" yaml:"task_id,omitempty"`
+	Attempt        int    `json:"attempt,omitempty" yaml:"attempt,omitempty"`
+	System         string `json:"system,omitempty" yaml:"system,omitempty"`
+	Namespace      string `json:"namespace,omitempty" yaml:"namespace,omitempty"`
+	FromAgent      string `json:"from_agent,omitempty" yaml:"from_agent,omitempty"`
+	ToAgent        string `json:"to_agent,omitempty" yaml:"to_agent,omitempty"`
+	BranchID       string `json:"branch_id,omitempty" yaml:"branch_id,omitempty"`
+	ParentBranchID string `json:"parent_branch_id,omitempty" yaml:"parent_branch_id,omitempty"`
+	Type           string `json:"type,omitempty" yaml:"type,omitempty"`
+	Payload        string `json:"payload,omitempty" yaml:"payload,omitempty"`
+	Timestamp      string `json:"timestamp,omitempty" yaml:"timestamp,omitempty"`
+	TraceID        string `json:"trace_id,omitempty" yaml:"trace_id,omitempty"`
+	ParentID       string `json:"parent_id,omitempty" yaml:"parent_id,omitempty"`
+	DelegateOf     string `json:"delegate_of,omitempty" yaml:"delegate_of,omitempty"`
 }
 
 type TaskApprovalResumeContext struct {
-	Mode              string                      `json:"mode,omitempty"`
-	Action            string                      `json:"action,omitempty"`
-	System            string                      `json:"system,omitempty"`
-	ProducingAgent    string                      `json:"producing_agent,omitempty"`
-	CurrentMessage    *TaskApprovalResumeMessage  `json:"current_message,omitempty"`
-	NextMessages      []TaskApprovalResumeMessage `json:"next_messages,omitempty"`
-	RerunMessage      *TaskApprovalResumeMessage  `json:"rerun_message,omitempty"`
-	RuntimeInput      map[string]string           `json:"runtime_input,omitempty"`
-	NextRuntimeInput  map[string]string           `json:"next_runtime_input,omitempty"`
-	Output            map[string]string           `json:"output,omitempty"`
-	CurrentAgentIndex int                         `json:"current_agent_index,omitempty"`
-	NextAgentIndex    int                         `json:"next_agent_index,omitempty"`
+	Mode              string                      `json:"mode,omitempty" yaml:"mode,omitempty"`
+	Action            string                      `json:"action,omitempty" yaml:"action,omitempty"`
+	System            string                      `json:"system,omitempty" yaml:"system,omitempty"`
+	ProducingAgent    string                      `json:"producing_agent,omitempty" yaml:"producing_agent,omitempty"`
+	CurrentMessage    *TaskApprovalResumeMessage  `json:"current_message,omitempty" yaml:"current_message,omitempty"`
+	NextMessages      []TaskApprovalResumeMessage `json:"next_messages,omitempty" yaml:"next_messages,omitempty"`
+	RerunMessage      *TaskApprovalResumeMessage  `json:"rerun_message,omitempty" yaml:"rerun_message,omitempty"`
+	RuntimeInput      map[string]string           `json:"runtime_input,omitempty" yaml:"runtime_input,omitempty"`
+	NextRuntimeInput  map[string]string           `json:"next_runtime_input,omitempty" yaml:"next_runtime_input,omitempty"`
+	Output            map[string]string           `json:"output,omitempty" yaml:"output,omitempty"`
+	CurrentAgentIndex int                         `json:"current_agent_index,omitempty" yaml:"current_agent_index,omitempty"`
+	NextAgentIndex    int                         `json:"next_agent_index,omitempty" yaml:"next_agent_index,omitempty"`
 }
 
 type TaskApprovalStatus struct {
-	Phase     string `json:"phase,omitempty"`
-	Decision  string `json:"decision,omitempty"`
-	DecidedBy string `json:"decided_by,omitempty"`
-	DecidedAt string `json:"decided_at,omitempty"`
-	Comment   string `json:"comment,omitempty"`
-	ExpiresAt string `json:"expires_at,omitempty"`
+	Phase     string `json:"phase,omitempty" yaml:"phase,omitempty"`
+	Decision  string `json:"decision,omitempty" yaml:"decision,omitempty"`
+	DecidedBy string `json:"decided_by,omitempty" yaml:"decided_by,omitempty"`
+	DecidedAt string `json:"decided_at,omitempty" yaml:"decided_at,omitempty"`
+	Comment   string `json:"comment,omitempty" yaml:"comment,omitempty"`
+	ExpiresAt string `json:"expires_at,omitempty" yaml:"expires_at,omitempty"`
 }
 
-func EncodeTaskApprovalResumeContext(ctx TaskApprovalResumeContext) map[string]any {
+func EncodeTaskApprovalResumeContext(ctx TaskApprovalResumeContext) (map[string]any, error) {
 	raw, err := json.Marshal(ctx)
 	if err != nil {
-		return map[string]any{}
+		return nil, fmt.Errorf("encode resume context: %w", err)
 	}
 	var out map[string]any
 	if err := json.Unmarshal(raw, &out); err != nil {
-		return map[string]any{}
+		return nil, fmt.Errorf("decode resume context: %w", err)
 	}
-	return out
+	return out, nil
 }
 
 func DecodeTaskApprovalResumeContext(data map[string]any) (TaskApprovalResumeContext, error) {
@@ -1259,8 +1276,8 @@ func DecodeTaskApprovalResumeContext(data map[string]any) (TaskApprovalResumeCon
 }
 
 type TaskApprovalList struct {
-	ListMeta `json:",inline"`
-	Items    []TaskApproval `json:"items"`
+	ListMeta `json:",inline" yaml:",inline"`
+	Items    []TaskApproval `json:"items" yaml:"items"`
 }
 
 func (a *TaskApproval) Normalize() error {
@@ -1378,174 +1395,174 @@ func TaskApprovalMaxReviewCycles(a TaskApproval) int {
 
 // Task defines one execution request routed to an AgentSystem.
 type Task struct {
-	APIVersion string     `json:"apiVersion"`
-	Kind       string     `json:"kind"`
-	Metadata   ObjectMeta `json:"metadata"`
-	Spec       TaskSpec   `json:"spec"`
-	Status     TaskStatus `json:"status,omitempty"`
+	APIVersion string     `json:"apiVersion" yaml:"apiVersion"`
+	Kind       string     `json:"kind" yaml:"kind"`
+	Metadata   ObjectMeta `json:"metadata" yaml:"metadata"`
+	Spec       TaskSpec   `json:"spec" yaml:"spec"`
+	Status     TaskStatus `json:"status,omitempty" yaml:"status,omitempty"`
 }
 
 type TaskSpec struct {
-	System       string                 `json:"system,omitempty"`
-	Mode         string                 `json:"mode,omitempty"`
-	Input        map[string]string      `json:"input,omitempty"`
-	Priority     string                 `json:"priority,omitempty"`
-	MaxTurns     int                    `json:"max_turns,omitempty"`
-	Retry        TaskRetryPolicy        `json:"retry,omitempty"`
-	MessageRetry TaskMessageRetryPolicy `json:"message_retry,omitempty"`
-	Requirements TaskRequirements       `json:"requirements,omitempty"`
+	System       string                 `json:"system,omitempty" yaml:"system,omitempty"`
+	Mode         string                 `json:"mode,omitempty" yaml:"mode,omitempty"`
+	Input        map[string]string      `json:"input,omitempty" yaml:"input,omitempty"`
+	Priority     string                 `json:"priority,omitempty" yaml:"priority,omitempty"`
+	MaxTurns     int                    `json:"max_turns,omitempty" yaml:"max_turns,omitempty"`
+	Retry        TaskRetryPolicy        `json:"retry,omitempty" yaml:"retry,omitempty"`
+	MessageRetry TaskMessageRetryPolicy `json:"message_retry,omitempty" yaml:"message_retry,omitempty"`
+	Requirements TaskRequirements       `json:"requirements,omitempty" yaml:"requirements,omitempty"`
 }
 
 type TaskRetryPolicy struct {
-	MaxAttempts int    `json:"max_attempts,omitempty"`
-	Backoff     string `json:"backoff,omitempty"`
+	MaxAttempts int    `json:"max_attempts,omitempty" yaml:"max_attempts,omitempty"`
+	Backoff     string `json:"backoff,omitempty" yaml:"backoff,omitempty"`
 }
 
 type TaskMessageRetryPolicy struct {
-	MaxAttempts  int      `json:"max_attempts,omitempty"`
-	Backoff      string   `json:"backoff,omitempty"`
-	MaxBackoff   string   `json:"max_backoff,omitempty"`
-	Jitter       string   `json:"jitter,omitempty"`
-	NonRetryable []string `json:"non_retryable,omitempty"`
+	MaxAttempts  int      `json:"max_attempts,omitempty" yaml:"max_attempts,omitempty"`
+	Backoff      string   `json:"backoff,omitempty" yaml:"backoff,omitempty"`
+	MaxBackoff   string   `json:"max_backoff,omitempty" yaml:"max_backoff,omitempty"`
+	Jitter       string   `json:"jitter,omitempty" yaml:"jitter,omitempty"`
+	NonRetryable []string `json:"non_retryable,omitempty" yaml:"non_retryable,omitempty"`
 }
 
 type TaskRequirements struct {
-	Region string `json:"region,omitempty"`
-	GPU    bool   `json:"gpu,omitempty"`
-	Model  string `json:"model,omitempty"`
+	Region string `json:"region,omitempty" yaml:"region,omitempty"`
+	GPU    bool   `json:"gpu,omitempty" yaml:"gpu,omitempty"`
+	Model  string `json:"model,omitempty" yaml:"model,omitempty"`
 }
 
 type TaskTraceEvent struct {
-	Timestamp           string `json:"timestamp,omitempty"`
-	StepID              string `json:"step_id,omitempty"`
-	Attempt             int    `json:"attempt,omitempty"`
-	Step                int    `json:"step,omitempty"`
-	BranchID            string `json:"branch_id,omitempty"`
-	Type                string `json:"type,omitempty"`
-	Agent               string `json:"agent,omitempty"`
-	Tool                string `json:"tool,omitempty"`
-	ToolContractVersion string `json:"tool_contract_version,omitempty"`
-	ToolRequestID       string `json:"tool_request_id,omitempty"`
-	ToolAttempt         int    `json:"tool_attempt,omitempty"`
-	ErrorCode           string `json:"error_code,omitempty"`
-	ErrorReason         string `json:"error_reason,omitempty"`
-	Retryable           *bool  `json:"retryable,omitempty"`
-	Message             string `json:"message,omitempty"`
-	LatencyMS           int64  `json:"latency_ms,omitempty"`
-	Tokens              int    `json:"tokens,omitempty"`
-	InputTokens         int    `json:"input_tokens,omitempty"`
-	OutputTokens        int    `json:"output_tokens,omitempty"`
-	TokenUsageSource    string `json:"token_usage_source,omitempty"`
-	ToolCalls           int    `json:"tool_calls,omitempty"`
-	MemoryWrites        int    `json:"memory_writes,omitempty"`
-	ToolAuthProfile     string `json:"tool_auth_profile,omitempty"`
-	ToolAuthSecretRef   string `json:"tool_auth_secret_ref,omitempty"`
+	Timestamp           string `json:"timestamp,omitempty" yaml:"timestamp,omitempty"`
+	StepID              string `json:"step_id,omitempty" yaml:"step_id,omitempty"`
+	Attempt             int    `json:"attempt,omitempty" yaml:"attempt,omitempty"`
+	Step                int    `json:"step,omitempty" yaml:"step,omitempty"`
+	BranchID            string `json:"branch_id,omitempty" yaml:"branch_id,omitempty"`
+	Type                string `json:"type,omitempty" yaml:"type,omitempty"`
+	Agent               string `json:"agent,omitempty" yaml:"agent,omitempty"`
+	Tool                string `json:"tool,omitempty" yaml:"tool,omitempty"`
+	ToolContractVersion string `json:"tool_contract_version,omitempty" yaml:"tool_contract_version,omitempty"`
+	ToolRequestID       string `json:"tool_request_id,omitempty" yaml:"tool_request_id,omitempty"`
+	ToolAttempt         int    `json:"tool_attempt,omitempty" yaml:"tool_attempt,omitempty"`
+	ErrorCode           string `json:"error_code,omitempty" yaml:"error_code,omitempty"`
+	ErrorReason         string `json:"error_reason,omitempty" yaml:"error_reason,omitempty"`
+	Retryable           *bool  `json:"retryable,omitempty" yaml:"retryable,omitempty"`
+	Message             string `json:"message,omitempty" yaml:"message,omitempty"`
+	LatencyMS           int64  `json:"latency_ms,omitempty" yaml:"latency_ms,omitempty"`
+	Tokens              int    `json:"tokens,omitempty" yaml:"tokens,omitempty"`
+	InputTokens         int    `json:"input_tokens,omitempty" yaml:"input_tokens,omitempty"`
+	OutputTokens        int    `json:"output_tokens,omitempty" yaml:"output_tokens,omitempty"`
+	TokenUsageSource    string `json:"token_usage_source,omitempty" yaml:"token_usage_source,omitempty"`
+	ToolCalls           int    `json:"tool_calls,omitempty" yaml:"tool_calls,omitempty"`
+	MemoryWrites        int    `json:"memory_writes,omitempty" yaml:"memory_writes,omitempty"`
+	ToolAuthProfile     string `json:"tool_auth_profile,omitempty" yaml:"tool_auth_profile,omitempty"`
+	ToolAuthSecretRef   string `json:"tool_auth_secret_ref,omitempty" yaml:"tool_auth_secret_ref,omitempty"`
 }
 
 type TaskHistoryEvent struct {
-	Timestamp string `json:"timestamp,omitempty"`
-	Type      string `json:"type,omitempty"`
-	Worker    string `json:"worker,omitempty"`
-	Message   string `json:"message,omitempty"`
+	Timestamp string `json:"timestamp,omitempty" yaml:"timestamp,omitempty"`
+	Type      string `json:"type,omitempty" yaml:"type,omitempty"`
+	Worker    string `json:"worker,omitempty" yaml:"worker,omitempty"`
+	Message   string `json:"message,omitempty" yaml:"message,omitempty"`
 }
 
 type TaskMessage struct {
-	Timestamp      string `json:"timestamp,omitempty"`
-	MessageID      string `json:"message_id,omitempty"`
-	IdempotencyKey string `json:"idempotency_key,omitempty"`
-	TaskID         string `json:"task_id,omitempty"`
-	Attempt        int    `json:"attempt,omitempty"`
-	System         string `json:"system,omitempty"`
-	FromAgent      string `json:"from_agent,omitempty"`
-	ToAgent        string `json:"to_agent,omitempty"`
-	BranchID       string `json:"branch_id,omitempty"`
-	ParentBranchID string `json:"parent_branch_id,omitempty"`
-	Type           string `json:"type,omitempty"`
-	Content        string `json:"content,omitempty"`
-	TraceID        string `json:"trace_id,omitempty"`
-	ParentID       string `json:"parent_id,omitempty"`
-	Phase          string `json:"phase,omitempty"`
-	Attempts       int    `json:"attempts,omitempty"`
-	MaxAttempts    int    `json:"max_attempts,omitempty"`
-	LastError      string `json:"last_error,omitempty"`
-	Worker         string `json:"worker,omitempty"`
-	ProcessedAt    string `json:"processed_at,omitempty"`
-	NextAttemptAt  string `json:"next_attempt_at,omitempty"`
-	DelegateOf     string `json:"delegate_of,omitempty"`
+	Timestamp      string `json:"timestamp,omitempty" yaml:"timestamp,omitempty"`
+	MessageID      string `json:"message_id,omitempty" yaml:"message_id,omitempty"`
+	IdempotencyKey string `json:"idempotency_key,omitempty" yaml:"idempotency_key,omitempty"`
+	TaskID         string `json:"task_id,omitempty" yaml:"task_id,omitempty"`
+	Attempt        int    `json:"attempt,omitempty" yaml:"attempt,omitempty"`
+	System         string `json:"system,omitempty" yaml:"system,omitempty"`
+	FromAgent      string `json:"from_agent,omitempty" yaml:"from_agent,omitempty"`
+	ToAgent        string `json:"to_agent,omitempty" yaml:"to_agent,omitempty"`
+	BranchID       string `json:"branch_id,omitempty" yaml:"branch_id,omitempty"`
+	ParentBranchID string `json:"parent_branch_id,omitempty" yaml:"parent_branch_id,omitempty"`
+	Type           string `json:"type,omitempty" yaml:"type,omitempty"`
+	Content        string `json:"content,omitempty" yaml:"content,omitempty"`
+	TraceID        string `json:"trace_id,omitempty" yaml:"trace_id,omitempty"`
+	ParentID       string `json:"parent_id,omitempty" yaml:"parent_id,omitempty"`
+	Phase          string `json:"phase,omitempty" yaml:"phase,omitempty"`
+	Attempts       int    `json:"attempts,omitempty" yaml:"attempts,omitempty"`
+	MaxAttempts    int    `json:"max_attempts,omitempty" yaml:"max_attempts,omitempty"`
+	LastError      string `json:"last_error,omitempty" yaml:"last_error,omitempty"`
+	Worker         string `json:"worker,omitempty" yaml:"worker,omitempty"`
+	ProcessedAt    string `json:"processed_at,omitempty" yaml:"processed_at,omitempty"`
+	NextAttemptAt  string `json:"next_attempt_at,omitempty" yaml:"next_attempt_at,omitempty"`
+	DelegateOf     string `json:"delegate_of,omitempty" yaml:"delegate_of,omitempty"`
 }
 
 type TaskMessageIdempotency struct {
-	Key       string `json:"key,omitempty"`
-	MessageID string `json:"message_id,omitempty"`
-	State     string `json:"state,omitempty"`
-	UpdatedAt string `json:"updated_at,omitempty"`
-	ExpiresAt string `json:"expires_at,omitempty"`
-	Worker    string `json:"worker,omitempty"`
+	Key       string `json:"key,omitempty" yaml:"key,omitempty"`
+	MessageID string `json:"message_id,omitempty" yaml:"message_id,omitempty"`
+	State     string `json:"state,omitempty" yaml:"state,omitempty"`
+	UpdatedAt string `json:"updated_at,omitempty" yaml:"updated_at,omitempty"`
+	ExpiresAt string `json:"expires_at,omitempty" yaml:"expires_at,omitempty"`
+	Worker    string `json:"worker,omitempty" yaml:"worker,omitempty"`
 }
 
 type TaskJoinSource struct {
-	MessageID string `json:"message_id,omitempty"`
-	FromAgent string `json:"from_agent,omitempty"`
-	BranchID  string `json:"branch_id,omitempty"`
-	Timestamp string `json:"timestamp,omitempty"`
-	Payload   string `json:"payload,omitempty"`
+	MessageID string `json:"message_id,omitempty" yaml:"message_id,omitempty"`
+	FromAgent string `json:"from_agent,omitempty" yaml:"from_agent,omitempty"`
+	BranchID  string `json:"branch_id,omitempty" yaml:"branch_id,omitempty"`
+	Timestamp string `json:"timestamp,omitempty" yaml:"timestamp,omitempty"`
+	Payload   string `json:"payload,omitempty" yaml:"payload,omitempty"`
 }
 
 type TaskJoinState struct {
-	Attempt        int              `json:"attempt,omitempty"`
-	Node           string           `json:"node,omitempty"`
-	Mode           string           `json:"mode,omitempty"`
-	Expected       int              `json:"expected,omitempty"`
-	QuorumRequired int              `json:"quorum_required,omitempty"`
-	Activated      bool             `json:"activated,omitempty"`
-	ActivatedAt    string           `json:"activated_at,omitempty"`
-	ActivatedBy    string           `json:"activated_by,omitempty"`
-	Sources        []TaskJoinSource `json:"sources,omitempty"`
+	Attempt        int              `json:"attempt,omitempty" yaml:"attempt,omitempty"`
+	Node           string           `json:"node,omitempty" yaml:"node,omitempty"`
+	Mode           string           `json:"mode,omitempty" yaml:"mode,omitempty"`
+	Expected       int              `json:"expected,omitempty" yaml:"expected,omitempty"`
+	QuorumRequired int              `json:"quorum_required,omitempty" yaml:"quorum_required,omitempty"`
+	Activated      bool             `json:"activated,omitempty" yaml:"activated,omitempty"`
+	ActivatedAt    string           `json:"activated_at,omitempty" yaml:"activated_at,omitempty"`
+	ActivatedBy    string           `json:"activated_by,omitempty" yaml:"activated_by,omitempty"`
+	Sources        []TaskJoinSource `json:"sources,omitempty" yaml:"sources,omitempty"`
 }
 
 type TaskDelegationState struct {
-	Attempt        int              `json:"attempt,omitempty"`
-	Node           string           `json:"node,omitempty"`
-	Mode           string           `json:"mode,omitempty"`
-	Expected       int              `json:"expected,omitempty"`
-	QuorumRequired int              `json:"quorum_required,omitempty"`
-	Activated      bool             `json:"activated,omitempty"`
-	ActivatedAt    string           `json:"activated_at,omitempty"`
-	ActivatedBy    string           `json:"activated_by,omitempty"`
-	Sources        []TaskJoinSource `json:"sources,omitempty"`
+	Attempt        int              `json:"attempt,omitempty" yaml:"attempt,omitempty"`
+	Node           string           `json:"node,omitempty" yaml:"node,omitempty"`
+	Mode           string           `json:"mode,omitempty" yaml:"mode,omitempty"`
+	Expected       int              `json:"expected,omitempty" yaml:"expected,omitempty"`
+	QuorumRequired int              `json:"quorum_required,omitempty" yaml:"quorum_required,omitempty"`
+	Activated      bool             `json:"activated,omitempty" yaml:"activated,omitempty"`
+	ActivatedAt    string           `json:"activated_at,omitempty" yaml:"activated_at,omitempty"`
+	ActivatedBy    string           `json:"activated_by,omitempty" yaml:"activated_by,omitempty"`
+	Sources        []TaskJoinSource `json:"sources,omitempty" yaml:"sources,omitempty"`
 }
 
 type TaskBlockedOn struct {
-	Kind   string `json:"kind,omitempty"`
-	Name   string `json:"name,omitempty"`
-	Reason string `json:"reason,omitempty"`
+	Kind   string `json:"kind,omitempty" yaml:"kind,omitempty"`
+	Name   string `json:"name,omitempty" yaml:"name,omitempty"`
+	Reason string `json:"reason,omitempty" yaml:"reason,omitempty"`
 }
 
 type TaskStatus struct {
-	Phase              string                   `json:"phase,omitempty"`
-	LastError          string                   `json:"lastError,omitempty"`
-	StartedAt          string                   `json:"startedAt,omitempty"`
-	CompletedAt        string                   `json:"completedAt,omitempty"`
-	NextAttemptAt      string                   `json:"nextAttemptAt,omitempty"`
-	Attempts           int                      `json:"attempts,omitempty"`
-	Output             map[string]string        `json:"output,omitempty"`
-	AssignedWorker     string                   `json:"assignedWorker,omitempty"`
-	ClaimedBy          string                   `json:"claimedBy,omitempty"`
-	LeaseUntil         string                   `json:"leaseUntil,omitempty"`
-	LastHeartbeat      string                   `json:"lastHeartbeat,omitempty"`
-	Trace              []TaskTraceEvent         `json:"trace,omitempty"`
-	History            []TaskHistoryEvent       `json:"history,omitempty"`
-	Messages           []TaskMessage            `json:"messages,omitempty"`
-	MessageIdempotency []TaskMessageIdempotency `json:"message_idempotency,omitempty"`
-	JoinStates         []TaskJoinState          `json:"join_states,omitempty"`
-	DelegationStates   []TaskDelegationState    `json:"delegation_states,omitempty"`
-	BlockedOn          *TaskBlockedOn           `json:"blocked_on,omitempty"`
-	ObservedGeneration int64                    `json:"observedGeneration,omitempty"`
+	Phase              string                   `json:"phase,omitempty" yaml:"phase,omitempty"`
+	LastError          string                   `json:"lastError,omitempty" yaml:"lastError,omitempty"`
+	StartedAt          string                   `json:"startedAt,omitempty" yaml:"startedAt,omitempty"`
+	CompletedAt        string                   `json:"completedAt,omitempty" yaml:"completedAt,omitempty"`
+	NextAttemptAt      string                   `json:"nextAttemptAt,omitempty" yaml:"nextAttemptAt,omitempty"`
+	Attempts           int                      `json:"attempts,omitempty" yaml:"attempts,omitempty"`
+	Output             map[string]string        `json:"output,omitempty" yaml:"output,omitempty"`
+	AssignedWorker     string                   `json:"assignedWorker,omitempty" yaml:"assignedWorker,omitempty"`
+	ClaimedBy          string                   `json:"claimedBy,omitempty" yaml:"claimedBy,omitempty"`
+	LeaseUntil         string                   `json:"leaseUntil,omitempty" yaml:"leaseUntil,omitempty"`
+	LastHeartbeat      string                   `json:"lastHeartbeat,omitempty" yaml:"lastHeartbeat,omitempty"`
+	Trace              []TaskTraceEvent         `json:"trace,omitempty" yaml:"trace,omitempty"`
+	History            []TaskHistoryEvent       `json:"history,omitempty" yaml:"history,omitempty"`
+	Messages           []TaskMessage            `json:"messages,omitempty" yaml:"messages,omitempty"`
+	MessageIdempotency []TaskMessageIdempotency `json:"message_idempotency,omitempty" yaml:"message_idempotency,omitempty"`
+	JoinStates         []TaskJoinState          `json:"join_states,omitempty" yaml:"join_states,omitempty"`
+	DelegationStates   []TaskDelegationState    `json:"delegation_states,omitempty" yaml:"delegation_states,omitempty"`
+	BlockedOn          *TaskBlockedOn           `json:"blocked_on,omitempty" yaml:"blocked_on,omitempty"`
+	ObservedGeneration int64                    `json:"observedGeneration,omitempty" yaml:"observedGeneration,omitempty"`
 }
 
 type TaskList struct {
-	ListMeta `json:",inline"`
-	Items    []Task `json:"items"`
+	ListMeta `json:",inline" yaml:",inline"`
+	Items    []Task `json:"items" yaml:"items"`
 }
 
 func (t *Task) Normalize() error {
@@ -1574,6 +1591,12 @@ func (t *Task) Normalize() error {
 		t.Spec.Mode = mode
 	default:
 		return fmt.Errorf("invalid spec.mode %q: expected run or template", t.Spec.Mode)
+	}
+	if mode == "run" {
+		t.Spec.System = strings.TrimSpace(t.Spec.System)
+		if t.Spec.System == "" {
+			return fmt.Errorf("spec.system is required when spec.mode is run")
+		}
 	}
 	if t.Spec.Priority == "" {
 		t.Spec.Priority = "normal"
@@ -1655,39 +1678,39 @@ func (t *Task) Normalize() error {
 
 // TaskSchedule defines recurring task creation from a template task.
 type TaskSchedule struct {
-	APIVersion string             `json:"apiVersion"`
-	Kind       string             `json:"kind"`
-	Metadata   ObjectMeta         `json:"metadata"`
-	Spec       TaskScheduleSpec   `json:"spec"`
-	Status     TaskScheduleStatus `json:"status,omitempty"`
+	APIVersion string             `json:"apiVersion" yaml:"apiVersion"`
+	Kind       string             `json:"kind" yaml:"kind"`
+	Metadata   ObjectMeta         `json:"metadata" yaml:"metadata"`
+	Spec       TaskScheduleSpec   `json:"spec" yaml:"spec"`
+	Status     TaskScheduleStatus `json:"status,omitempty" yaml:"status,omitempty"`
 }
 
 type TaskScheduleSpec struct {
-	TaskRef                 string    `json:"task_ref,omitempty"`
-	TaskTemplate            *TaskSpec `json:"task_template,omitempty"`
-	Schedule                string    `json:"schedule,omitempty"`
-	TimeZone                string    `json:"time_zone,omitempty"`
-	Suspend                 bool      `json:"suspend,omitempty"`
-	StartingDeadlineSeconds int       `json:"starting_deadline_seconds,omitempty"`
-	ConcurrencyPolicy       string    `json:"concurrency_policy,omitempty"`
-	SuccessfulHistoryLimit  int       `json:"successful_history_limit,omitempty"`
-	FailedHistoryLimit      int       `json:"failed_history_limit,omitempty"`
+	TaskRef                 string    `json:"task_ref,omitempty" yaml:"task_ref,omitempty"`
+	TaskTemplate            *TaskSpec `json:"task_template,omitempty" yaml:"task_template,omitempty"`
+	Schedule                string    `json:"schedule,omitempty" yaml:"schedule,omitempty"`
+	TimeZone                string    `json:"time_zone,omitempty" yaml:"time_zone,omitempty"`
+	Suspend                 bool      `json:"suspend,omitempty" yaml:"suspend,omitempty"`
+	StartingDeadlineSeconds int       `json:"starting_deadline_seconds,omitempty" yaml:"starting_deadline_seconds,omitempty"`
+	ConcurrencyPolicy       string    `json:"concurrency_policy,omitempty" yaml:"concurrency_policy,omitempty"`
+	SuccessfulHistoryLimit  int       `json:"successful_history_limit,omitempty" yaml:"successful_history_limit,omitempty"`
+	FailedHistoryLimit      int       `json:"failed_history_limit,omitempty" yaml:"failed_history_limit,omitempty"`
 }
 
 type TaskScheduleStatus struct {
-	Phase              string   `json:"phase,omitempty"`
-	LastError          string   `json:"lastError,omitempty"`
-	LastScheduleTime   string   `json:"lastScheduleTime,omitempty"`
-	LastSuccessfulTime string   `json:"lastSuccessfulTime,omitempty"`
-	NextScheduleTime   string   `json:"nextScheduleTime,omitempty"`
-	LastTriggeredTask  string   `json:"lastTriggeredTask,omitempty"`
-	ActiveRuns         []string `json:"activeRuns,omitempty"`
-	ObservedGeneration int64    `json:"observedGeneration,omitempty"`
+	Phase              string   `json:"phase,omitempty" yaml:"phase,omitempty"`
+	LastError          string   `json:"lastError,omitempty" yaml:"lastError,omitempty"`
+	LastScheduleTime   string   `json:"lastScheduleTime,omitempty" yaml:"lastScheduleTime,omitempty"`
+	LastSuccessfulTime string   `json:"lastSuccessfulTime,omitempty" yaml:"lastSuccessfulTime,omitempty"`
+	NextScheduleTime   string   `json:"nextScheduleTime,omitempty" yaml:"nextScheduleTime,omitempty"`
+	LastTriggeredTask  string   `json:"lastTriggeredTask,omitempty" yaml:"lastTriggeredTask,omitempty"`
+	ActiveRuns         []string `json:"activeRuns,omitempty" yaml:"activeRuns,omitempty"`
+	ObservedGeneration int64    `json:"observedGeneration,omitempty" yaml:"observedGeneration,omitempty"`
 }
 
 type TaskScheduleList struct {
-	ListMeta `json:",inline"`
-	Items    []TaskSchedule `json:"items"`
+	ListMeta `json:",inline" yaml:",inline"`
+	Items    []TaskSchedule `json:"items" yaml:"items"`
 }
 
 func (t *TaskSchedule) Normalize() error {
@@ -1817,67 +1840,67 @@ func (t *TaskSchedule) Normalize() error {
 
 // TaskWebhook defines event-driven task creation from inbound webhook deliveries.
 type TaskWebhook struct {
-	APIVersion string            `json:"apiVersion"`
-	Kind       string            `json:"kind"`
-	Metadata   ObjectMeta        `json:"metadata"`
-	Spec       TaskWebhookSpec   `json:"spec"`
-	Status     TaskWebhookStatus `json:"status,omitempty"`
+	APIVersion string            `json:"apiVersion" yaml:"apiVersion"`
+	Kind       string            `json:"kind" yaml:"kind"`
+	Metadata   ObjectMeta        `json:"metadata" yaml:"metadata"`
+	Spec       TaskWebhookSpec   `json:"spec" yaml:"spec"`
+	Status     TaskWebhookStatus `json:"status,omitempty" yaml:"status,omitempty"`
 }
 
 type TaskWebhookSpec struct {
-	TaskRef      string                 `json:"task_ref,omitempty"`
-	TaskTemplate *TaskSpec              `json:"task_template,omitempty"`
-	Suspend      bool                   `json:"suspend,omitempty"`
-	Auth         TaskWebhookAuthSpec    `json:"auth,omitempty"`
-	Idempotency  TaskWebhookIdempotency `json:"idempotency,omitempty"`
-	Payload      TaskWebhookPayloadSpec `json:"payload,omitempty"`
+	TaskRef      string                 `json:"task_ref,omitempty" yaml:"task_ref,omitempty"`
+	TaskTemplate *TaskSpec              `json:"task_template,omitempty" yaml:"task_template,omitempty"`
+	Suspend      bool                   `json:"suspend,omitempty" yaml:"suspend,omitempty"`
+	Auth         TaskWebhookAuthSpec    `json:"auth,omitempty" yaml:"auth,omitempty"`
+	Idempotency  TaskWebhookIdempotency `json:"idempotency,omitempty" yaml:"idempotency,omitempty"`
+	Payload      TaskWebhookPayloadSpec `json:"payload,omitempty" yaml:"payload,omitempty"`
 }
 
 type TaskWebhookAuthSpec struct {
-	Profile           string `json:"profile,omitempty"`
-	SecretRef         string `json:"secret_ref,omitempty"`
-	SignatureHeader   string `json:"signature_header,omitempty"`
-	SignaturePrefix   string `json:"signature_prefix,omitempty"`
-	TimestampHeader   string `json:"timestamp_header,omitempty"`
-	MaxSkewSeconds    int    `json:"max_skew_seconds,omitempty"`
-	Algorithm         string `json:"algorithm,omitempty"`
-	PayloadFormat     string `json:"payload_format,omitempty"`
-	PayloadPrefix     string `json:"payload_prefix,omitempty"`
-	PayloadSeparator  string `json:"payload_separator,omitempty"`
-	SignatureEncoding string `json:"signature_encoding,omitempty"`
-	HeaderFormat      string `json:"header_format,omitempty"`
-	SignatureKey      string `json:"signature_key,omitempty"`
-	TimestampKey      string `json:"timestamp_key,omitempty"`
+	Profile           string `json:"profile,omitempty" yaml:"profile,omitempty"`
+	SecretRef         string `json:"secret_ref,omitempty" yaml:"secret_ref,omitempty"`
+	SignatureHeader   string `json:"signature_header,omitempty" yaml:"signature_header,omitempty"`
+	SignaturePrefix   string `json:"signature_prefix,omitempty" yaml:"signature_prefix,omitempty"`
+	TimestampHeader   string `json:"timestamp_header,omitempty" yaml:"timestamp_header,omitempty"`
+	MaxSkewSeconds    int    `json:"max_skew_seconds,omitempty" yaml:"max_skew_seconds,omitempty"`
+	Algorithm         string `json:"algorithm,omitempty" yaml:"algorithm,omitempty"`
+	PayloadFormat     string `json:"payload_format,omitempty" yaml:"payload_format,omitempty"`
+	PayloadPrefix     string `json:"payload_prefix,omitempty" yaml:"payload_prefix,omitempty"`
+	PayloadSeparator  string `json:"payload_separator,omitempty" yaml:"payload_separator,omitempty"`
+	SignatureEncoding string `json:"signature_encoding,omitempty" yaml:"signature_encoding,omitempty"`
+	HeaderFormat      string `json:"header_format,omitempty" yaml:"header_format,omitempty"`
+	SignatureKey      string `json:"signature_key,omitempty" yaml:"signature_key,omitempty"`
+	TimestampKey      string `json:"timestamp_key,omitempty" yaml:"timestamp_key,omitempty"`
 }
 
 type TaskWebhookIdempotency struct {
-	EventIDHeader       string `json:"event_id_header,omitempty"`
-	EventIDFromBody     string `json:"event_id_from_body,omitempty"`
-	DedupeWindowSeconds int    `json:"dedupe_window_seconds,omitempty"`
+	EventIDHeader       string `json:"event_id_header,omitempty" yaml:"event_id_header,omitempty"`
+	EventIDFromBody     string `json:"event_id_from_body,omitempty" yaml:"event_id_from_body,omitempty"`
+	DedupeWindowSeconds int    `json:"dedupe_window_seconds,omitempty" yaml:"dedupe_window_seconds,omitempty"`
 }
 
 type TaskWebhookPayloadSpec struct {
-	Mode     string `json:"mode,omitempty"`
-	InputKey string `json:"input_key,omitempty"`
+	Mode     string `json:"mode,omitempty" yaml:"mode,omitempty"`
+	InputKey string `json:"input_key,omitempty" yaml:"input_key,omitempty"`
 }
 
 type TaskWebhookStatus struct {
-	Phase              string `json:"phase,omitempty"`
-	LastError          string `json:"lastError,omitempty"`
-	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
-	EndpointID         string `json:"endpointID,omitempty"`
-	EndpointPath       string `json:"endpointPath,omitempty"`
-	LastDeliveryTime   string `json:"lastDeliveryTime,omitempty"`
-	LastEventID        string `json:"lastEventID,omitempty"`
-	LastTriggeredTask  string `json:"lastTriggeredTask,omitempty"`
-	AcceptedCount      int64  `json:"acceptedCount,omitempty"`
-	DuplicateCount     int64  `json:"duplicateCount,omitempty"`
-	RejectedCount      int64  `json:"rejectedCount,omitempty"`
+	Phase              string `json:"phase,omitempty" yaml:"phase,omitempty"`
+	LastError          string `json:"lastError,omitempty" yaml:"lastError,omitempty"`
+	ObservedGeneration int64  `json:"observedGeneration,omitempty" yaml:"observedGeneration,omitempty"`
+	EndpointID         string `json:"endpointID,omitempty" yaml:"endpointID,omitempty"`
+	EndpointPath       string `json:"endpointPath,omitempty" yaml:"endpointPath,omitempty"`
+	LastDeliveryTime   string `json:"lastDeliveryTime,omitempty" yaml:"lastDeliveryTime,omitempty"`
+	LastEventID        string `json:"lastEventID,omitempty" yaml:"lastEventID,omitempty"`
+	LastTriggeredTask  string `json:"lastTriggeredTask,omitempty" yaml:"lastTriggeredTask,omitempty"`
+	AcceptedCount      int64  `json:"acceptedCount,omitempty" yaml:"acceptedCount,omitempty"`
+	DuplicateCount     int64  `json:"duplicateCount,omitempty" yaml:"duplicateCount,omitempty"`
+	RejectedCount      int64  `json:"rejectedCount,omitempty" yaml:"rejectedCount,omitempty"`
 }
 
 type TaskWebhookList struct {
-	ListMeta `json:",inline"`
-	Items    []TaskWebhook `json:"items"`
+	ListMeta `json:",inline" yaml:",inline"`
+	Items    []TaskWebhook `json:"items" yaml:"items"`
 }
 
 func (t *TaskWebhook) Normalize() error {
@@ -2147,35 +2170,35 @@ func taskWebhookEndpointID(namespace, name string) string {
 
 // Worker defines a runtime worker that executes claimed tasks.
 type Worker struct {
-	APIVersion string       `json:"apiVersion"`
-	Kind       string       `json:"kind"`
-	Metadata   ObjectMeta   `json:"metadata"`
-	Spec       WorkerSpec   `json:"spec"`
-	Status     WorkerStatus `json:"status,omitempty"`
+	APIVersion string       `json:"apiVersion" yaml:"apiVersion"`
+	Kind       string       `json:"kind" yaml:"kind"`
+	Metadata   ObjectMeta   `json:"metadata" yaml:"metadata"`
+	Spec       WorkerSpec   `json:"spec" yaml:"spec"`
+	Status     WorkerStatus `json:"status,omitempty" yaml:"status,omitempty"`
 }
 
 type WorkerSpec struct {
-	Region             string             `json:"region,omitempty"`
-	Capabilities       WorkerCapabilities `json:"capabilities,omitempty"`
-	MaxConcurrentTasks int                `json:"max_concurrent_tasks,omitempty"`
+	Region             string             `json:"region,omitempty" yaml:"region,omitempty"`
+	Capabilities       WorkerCapabilities `json:"capabilities,omitempty" yaml:"capabilities,omitempty"`
+	MaxConcurrentTasks int                `json:"max_concurrent_tasks,omitempty" yaml:"max_concurrent_tasks,omitempty"`
 }
 
 type WorkerCapabilities struct {
-	GPU             bool     `json:"gpu,omitempty"`
-	SupportedModels []string `json:"supported_models,omitempty"`
+	GPU             bool     `json:"gpu,omitempty" yaml:"gpu,omitempty"`
+	SupportedModels []string `json:"supported_models,omitempty" yaml:"supported_models,omitempty"`
 }
 
 type WorkerStatus struct {
-	Phase              string `json:"phase,omitempty"`
-	LastError          string `json:"lastError,omitempty"`
-	LastHeartbeat      string `json:"lastHeartbeat,omitempty"`
-	ObservedGeneration int64  `json:"observedGeneration,omitempty"`
-	CurrentTasks       int    `json:"currentTasks,omitempty"`
+	Phase              string `json:"phase,omitempty" yaml:"phase,omitempty"`
+	LastError          string `json:"lastError,omitempty" yaml:"lastError,omitempty"`
+	LastHeartbeat      string `json:"lastHeartbeat,omitempty" yaml:"lastHeartbeat,omitempty"`
+	ObservedGeneration int64  `json:"observedGeneration,omitempty" yaml:"observedGeneration,omitempty"`
+	CurrentTasks       int    `json:"currentTasks,omitempty" yaml:"currentTasks,omitempty"`
 }
 
 type WorkerList struct {
-	ListMeta `json:",inline"`
-	Items    []Worker `json:"items"`
+	ListMeta `json:",inline" yaml:",inline"`
+	Items    []Worker `json:"items" yaml:"items"`
 }
 
 func (w *Worker) Normalize() error {
@@ -2205,57 +2228,57 @@ func (w *Worker) Normalize() error {
 // The controller connects to the server, discovers tools via tools/list,
 // and auto-generates Tool resources for each discovered tool.
 type McpServer struct {
-	APIVersion string          `json:"apiVersion"`
-	Kind       string          `json:"kind"`
-	Metadata   ObjectMeta      `json:"metadata"`
-	Spec       McpServerSpec   `json:"spec"`
-	Status     McpServerStatus `json:"status,omitempty"`
+	APIVersion string          `json:"apiVersion" yaml:"apiVersion"`
+	Kind       string          `json:"kind" yaml:"kind"`
+	Metadata   ObjectMeta      `json:"metadata" yaml:"metadata"`
+	Spec       McpServerSpec   `json:"spec" yaml:"spec"`
+	Status     McpServerStatus `json:"status,omitempty" yaml:"status,omitempty"`
 }
 
 type McpServerSpec struct {
-	Transport          string             `json:"transport"`
-	Command            string             `json:"command,omitempty"`
-	Args               []string           `json:"args,omitempty"`
-	Env                []McpServerEnvVar  `json:"env,omitempty"`
-	Endpoint           string             `json:"endpoint,omitempty"`
-	Image              string             `json:"image,omitempty"`
-	ImagePullSecret    string             `json:"image_pull_secret,omitempty"`
-	IdleTimeout        string             `json:"idle_timeout,omitempty"`
-	Auth               ToolAuth           `json:"auth,omitempty"`
-	ToolFilter         McpToolFilter      `json:"tool_filter,omitempty"`
-	Reconnect          McpReconnectPolicy `json:"reconnect,omitempty"`
-	Resources          ContainerResources `json:"resources,omitempty"`
-	DefaultToolRuntime *ToolRuntimePolicy `json:"default_tool_runtime,omitempty"`
+	Transport          string             `json:"transport" yaml:"transport"`
+	Command            string             `json:"command,omitempty" yaml:"command,omitempty"`
+	Args               []string           `json:"args,omitempty" yaml:"args,omitempty"`
+	Env                []McpServerEnvVar  `json:"env,omitempty" yaml:"env,omitempty"`
+	Endpoint           string             `json:"endpoint,omitempty" yaml:"endpoint,omitempty"`
+	Image              string             `json:"image,omitempty" yaml:"image,omitempty"`
+	ImagePullSecret    string             `json:"image_pull_secret,omitempty" yaml:"image_pull_secret,omitempty"`
+	IdleTimeout        string             `json:"idle_timeout,omitempty" yaml:"idle_timeout,omitempty"`
+	Auth               ToolAuth           `json:"auth,omitempty" yaml:"auth,omitempty"`
+	ToolFilter         McpToolFilter      `json:"tool_filter,omitempty" yaml:"tool_filter,omitempty"`
+	Reconnect          McpReconnectPolicy `json:"reconnect,omitempty" yaml:"reconnect,omitempty"`
+	Resources          ContainerResources `json:"resources,omitempty" yaml:"resources,omitempty"`
+	DefaultToolRuntime *ToolRuntimePolicy `json:"default_tool_runtime,omitempty" yaml:"default_tool_runtime,omitempty"`
 }
 
 type McpServerEnvVar struct {
-	Name      string `json:"name"`
-	Value     string `json:"value,omitempty"`
-	SecretRef string `json:"secretRef,omitempty"`
-	MountPath string `json:"mountPath,omitempty"`
+	Name      string `json:"name" yaml:"name"`
+	Value     string `json:"value,omitempty" yaml:"value,omitempty"`
+	SecretRef string `json:"secretRef,omitempty" yaml:"secretRef,omitempty"`
+	MountPath string `json:"mountPath,omitempty" yaml:"mountPath,omitempty"`
 }
 
 type McpToolFilter struct {
-	Include []string `json:"include,omitempty"`
+	Include []string `json:"include,omitempty" yaml:"include,omitempty"`
 }
 
 type McpReconnectPolicy struct {
-	MaxAttempts int    `json:"max_attempts,omitempty"`
-	Backoff     string `json:"backoff,omitempty"`
+	MaxAttempts int    `json:"max_attempts,omitempty" yaml:"max_attempts,omitempty"`
+	Backoff     string `json:"backoff,omitempty" yaml:"backoff,omitempty"`
 }
 
 type McpServerStatus struct {
-	Phase              string   `json:"phase,omitempty"`
-	DiscoveredTools    []string `json:"discoveredTools,omitempty"`
-	GeneratedTools     []string `json:"generatedTools,omitempty"`
-	LastSyncedAt       string   `json:"lastSyncedAt,omitempty"`
-	LastError          string   `json:"lastError,omitempty"`
-	ObservedGeneration int64    `json:"observedGeneration,omitempty"`
+	Phase              string   `json:"phase,omitempty" yaml:"phase,omitempty"`
+	DiscoveredTools    []string `json:"discoveredTools,omitempty" yaml:"discoveredTools,omitempty"`
+	GeneratedTools     []string `json:"generatedTools,omitempty" yaml:"generatedTools,omitempty"`
+	LastSyncedAt       string   `json:"lastSyncedAt,omitempty" yaml:"lastSyncedAt,omitempty"`
+	LastError          string   `json:"lastError,omitempty" yaml:"lastError,omitempty"`
+	ObservedGeneration int64    `json:"observedGeneration,omitempty" yaml:"observedGeneration,omitempty"`
 }
 
 type McpServerList struct {
-	ListMeta `json:",inline"`
-	Items    []McpServer `json:"items"`
+	ListMeta `json:",inline" yaml:",inline"`
+	Items    []McpServer `json:"items" yaml:"items"`
 }
 
 func (m *McpServer) Normalize() error {

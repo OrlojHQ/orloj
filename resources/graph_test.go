@@ -954,7 +954,7 @@ spec:
 	if len(mgr.Delegates) != 3 {
 		t.Fatalf("expected 3 delegates, got %d", len(mgr.Delegates))
 	}
-	join := NormalizeGraphJoin(mgr.DelegateJoin)
+	join, _ := NormalizeGraphJoin(mgr.DelegateJoin)
 	if join.Mode != "quorum" {
 		t.Fatalf("expected quorum mode, got %q", join.Mode)
 	}
@@ -969,4 +969,48 @@ func routeNames(routes []GraphRoute) []string {
 		names[i] = r.To
 	}
 	return names
+}
+
+func TestNormalizeGraphJoin_InvalidMode(t *testing.T) {
+	_, err := NormalizeGraphJoin(GraphJoin{Mode: "quorom"})
+	if err == nil {
+		t.Fatal("expected error for invalid mode 'quorom'")
+	}
+}
+
+func TestNormalizeGraphJoin_InvalidOnFailure(t *testing.T) {
+	_, err := NormalizeGraphJoin(GraphJoin{Mode: "wait_for_all", OnFailure: "bogus"})
+	if err == nil {
+		t.Fatal("expected error for invalid on_failure 'bogus'")
+	}
+}
+
+func TestNormalizeGraphJoin_ValidModes(t *testing.T) {
+	join, err := NormalizeGraphJoin(GraphJoin{Mode: "quorum", OnFailure: "skip"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if join.Mode != "quorum" {
+		t.Fatalf("expected quorum, got %q", join.Mode)
+	}
+	if join.OnFailure != "skip" {
+		t.Fatalf("expected skip, got %q", join.OnFailure)
+	}
+}
+
+func TestEdgeConditionRegexLengthLimit(t *testing.T) {
+	longPattern := make([]byte, 600)
+	for i := range longPattern {
+		longPattern[i] = 'a'
+	}
+	routes := []GraphRoute{{
+		To: "next",
+		Condition: &EdgeCondition{
+			OutputMatches: string(longPattern),
+		},
+	}}
+	_, err := normalizeGraphRoutes(routes, "test", "edges")
+	if err == nil {
+		t.Fatal("expected error for regex exceeding 512 chars")
+	}
 }

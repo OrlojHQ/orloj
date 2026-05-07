@@ -9,6 +9,9 @@ import (
 
 // ParseContextAdapterManifest parses ContextAdapter resources from JSON or YAML (Kubernetes-style).
 func ParseContextAdapterManifest(data []byte) (ContextAdapter, error) {
+	if err := rejectMultiDocumentYAML(data); err != nil {
+		return ContextAdapter{}, err
+	}
 	var out ContextAdapter
 	if json.Valid(data) {
 		if err := json.Unmarshal(data, &out); err != nil {

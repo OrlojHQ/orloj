@@ -10,6 +10,11 @@ import (
 	"github.com/OrlojHQ/orloj/store"
 )
 
+func testEncodeResumeContext(ctx resources.TaskApprovalResumeContext) map[string]any {
+	out, _ := resources.EncodeTaskApprovalResumeContext(ctx)
+	return out
+}
+
 func TestReconcileWaitingTaskApprovalSequentialRequestChangesCreatesNextReviewCycle(t *testing.T) {
 	controller, stores := newTaskControllerHarness()
 	approvals := store.NewTaskApprovalStore()
@@ -620,7 +625,7 @@ func TestReconcileWaitingTaskApprovalMessageDrivenRequestChangesPublishesReviewM
 			ReviewCycle:         1,
 			Output:              "draft v1",
 			OutputFormat:        "text",
-			ResumeContext:       resources.EncodeTaskApprovalResumeContext(resumeContext),
+			ResumeContext:       testEncodeResumeContext(resumeContext),
 		},
 		Status: resources.TaskApprovalStatus{
 			Phase:     "ChangesRequested",
@@ -779,7 +784,7 @@ func TestReconcileWaitingTaskApprovalMessageDrivenApproveUsesFrozenResumeContext
 			ReviewCycle:    1,
 			Output:         "draft v1",
 			OutputFormat:   "text",
-			ResumeContext: resources.EncodeTaskApprovalResumeContext(resources.TaskApprovalResumeContext{
+			ResumeContext: testEncodeResumeContext(resources.TaskApprovalResumeContext{
 				Mode:           "message-driven",
 				Action:         "message_forward",
 				System:         "frozen-message-system",
@@ -898,7 +903,7 @@ func TestReconcileWaitingTaskApprovalMessageDrivenCompletionReviewApproveSucceed
 				"final_report": "approved final output",
 			},
 			OutputFormat: "json",
-			ResumeContext: resources.EncodeTaskApprovalResumeContext(resources.TaskApprovalResumeContext{
+			ResumeContext: testEncodeResumeContext(resources.TaskApprovalResumeContext{
 				Mode:           "message-driven",
 				Action:         "message_complete",
 				System:         "message-review-system",
@@ -1004,7 +1009,7 @@ func TestReconcileWaitingTaskApprovalMessageDrivenChangesRequestedDisabledFailsC
 			ReviewCycle:         1,
 			Output:              "draft v1",
 			OutputFormat:        "text",
-			ResumeContext: resources.EncodeTaskApprovalResumeContext(resources.TaskApprovalResumeContext{
+			ResumeContext: testEncodeResumeContext(resources.TaskApprovalResumeContext{
 				Mode:           "message-driven",
 				Action:         "message_complete",
 				System:         "message-review-system",
