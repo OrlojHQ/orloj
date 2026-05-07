@@ -87,8 +87,14 @@ func (g *OllamaModelGateway) Complete(ctx context.Context, req ModelRequest) (Mo
 		Model:  model,
 		Stream: false,
 	}
+	var toolAliases providerToolAliases
+	if len(req.Tools) > 0 {
+		var tools []openAIChatTool
+		tools, toolAliases = buildOpenAIChatToolsWithAliases(req.Tools, req.ToolSchemas)
+		body.Tools = tools
+	}
 	if len(req.Messages) > 0 {
-		body.Messages = chatMessagesToOllama(req.Messages)
+		body.Messages = chatMessagesToOllamaWithAliases(req.Messages, toolAliases.RuntimeToProvider)
 	} else {
 		body.Messages = []ollamaChatMessage{
 			{Role: "system", Content: strings.TrimSpace(req.Prompt)},
@@ -97,9 +103,6 @@ func (g *OllamaModelGateway) Complete(ctx context.Context, req ModelRequest) (Mo
 		if strings.TrimSpace(req.Prompt) == "" {
 			body.Messages = body.Messages[1:]
 		}
-	}
-	if len(req.Tools) > 0 {
-		body.Tools = buildOpenAIChatTools(req.Tools, req.ToolSchemas)
 	}
 	if len(req.OutputSchema) > 0 {
 		schemaJSON, schemaErr := json.Marshal(req.OutputSchema)
@@ -150,7 +153,7 @@ func (g *OllamaModelGateway) Complete(ctx context.Context, req ModelRequest) (Mo
 		return ModelResponse{}, fmt.Errorf("model provider error: %s", strings.TrimSpace(parsed.Error))
 	}
 	content := strings.TrimSpace(parsed.Message.Content)
-	toolCalls := parseOllamaModelToolCalls(parsed.Message.ToolCalls)
+	toolCalls := parseOllamaModelToolCallsWithAliases(parsed.Message.ToolCalls, toolAliases.ProviderToRuntime)
 	if content == "" && len(toolCalls) == 0 {
 		return ModelResponse{}, fmt.Errorf("model response missing message content")
 	}
@@ -168,6 +171,10 @@ func (g *OllamaModelGateway) Complete(ctx context.Context, req ModelRequest) (Mo
 }
 
 func chatMessagesToOllama(msgs []ChatMessage) []ollamaChatMessage {
+	return chatMessagesToOllamaWithAliases(msgs, nil)
+}
+
+func chatMessagesToOllamaWithAliases(msgs []ChatMessage, aliases map[string]string) []ollamaChatMessage {
 	out := make([]ollamaChatMessage, 0, len(msgs))
 	for _, m := range msgs {
 		role := strings.TrimSpace(m.Role)
@@ -184,7 +191,7 @@ func chatMessagesToOllama(msgs []ChatMessage) []ollamaChatMessage {
 				args, _ := json.Marshal(map[string]string{"input": tc.Input})
 				calls[i] = ollamaToolCall{
 					Function: ollamaToolCallFunction{
-						Name:      tc.Name,
+						Name:      providerToolNameForHistory(tc.Name, tc.ProviderName, aliases),
 						Arguments: args,
 					},
 				}
@@ -244,15 +251,26 @@ type ollamaToolCallFunction struct {
 }
 
 func parseOllamaModelToolCalls(raw []ollamaToolCall) []ModelToolCall {
+	return parseOllamaModelToolCallsWithAliases(raw, nil)
+}
+
+func parseOllamaModelToolCallsWithAliases(raw []ollamaToolCall, aliases map[string]string) []ModelToolCall {
 	out := make([]ModelToolCall, 0, len(raw))
 	for _, item := range raw {
-		name := strings.TrimSpace(item.Function.Name)
-		if name == "" {
+		providerName := strings.TrimSpace(item.Function.Name)
+		if providerName == "" {
 			continue
 		}
+		name := providerName
+		if aliases != nil {
+			if mapped := strings.TrimSpace(aliases[providerName]); mapped != "" {
+				name = mapped
+			}
+		}
 		out = append(out, ModelToolCall{
-			Name:  name,
-			Input: parseOllamaToolCallArguments(item.Function.Arguments),
+			Name:         name,
+			Input:        parseOllamaToolCallArguments(item.Function.Arguments),
+			ProviderName: providerName,
 		})
 	}
 	return out

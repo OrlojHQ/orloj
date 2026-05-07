@@ -21,10 +21,10 @@ type ModelEndpointSpec struct {
 	Options      map[string]string `json:"options,omitempty"`
 	Auth         ModelEndpointAuth `json:"auth,omitempty"`
 	// AllowPrivate permits outbound connections from this endpoint's
-	// gateway to RFC 1918 / ULA / carrier-grade NAT addresses (e.g. a
-	// self-hosted Ollama, vLLM, LM Studio, or LiteLLM proxy running on
-	// a private network). Loopback, link-local, cloud metadata, and
-	// unspecified addresses remain blocked regardless.
+	// model gateway to trusted local/private model servers, including
+	// loopback, RFC 1918 / ULA, and carrier-grade NAT addresses (e.g.
+	// Ollama, vLLM, LM Studio, or LiteLLM). Link-local, cloud metadata,
+	// and unspecified addresses remain blocked regardless.
 	//
 	// Pointer so that the schema can distinguish "unset" (defaulted by
 	// provider) from explicit true/false. Defaults: ollama -> true,

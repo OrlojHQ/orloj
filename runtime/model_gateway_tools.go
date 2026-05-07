@@ -6,6 +6,47 @@ import (
 	"unicode"
 )
 
+type providerToolAliases struct {
+	RuntimeToProvider map[string]string
+	ProviderToRuntime map[string]string
+}
+
+func buildProviderToolAliases(toolNames []string) providerToolAliases {
+	deduped := dedupeStrings(toolNames)
+	aliases := providerToolAliases{
+		RuntimeToProvider: make(map[string]string, len(deduped)),
+		ProviderToRuntime: make(map[string]string, len(deduped)),
+	}
+	used := make(map[string]struct{}, len(deduped))
+	for _, name := range deduped {
+		runtimeName := strings.TrimSpace(name)
+		if runtimeName == "" {
+			continue
+		}
+		providerName := sanitizeToolName(runtimeName, used)
+		aliases.RuntimeToProvider[runtimeName] = providerName
+		aliases.ProviderToRuntime[providerName] = runtimeName
+	}
+	return aliases
+}
+
+func providerToolNameForHistory(runtimeName, providerName string, aliases map[string]string) string {
+	runtimeName = strings.TrimSpace(runtimeName)
+	if runtimeName != "" && aliases != nil {
+		if mapped := strings.TrimSpace(aliases[runtimeName]); mapped != "" {
+			return mapped
+		}
+	}
+	if providerName = strings.TrimSpace(providerName); providerName != "" {
+		return providerName
+	}
+	if runtimeName == "" {
+		return ""
+	}
+	used := map[string]struct{}{}
+	return sanitizeToolName(runtimeName, used)
+}
+
 // sanitizeToolName maps an arbitrary tool name to one that is safe for
 // providers with strict tool-name constraints (letters, digits, underscore,
 // hyphen; max 128 chars). Collisions are resolved by appending _2, _3, …

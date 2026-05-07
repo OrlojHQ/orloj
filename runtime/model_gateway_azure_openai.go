@@ -99,8 +99,15 @@ func (g *AzureOpenAIModelGateway) Complete(ctx context.Context, req ModelRequest
 	body := openAIChatCompletionRequest{
 		Model: deployment,
 	}
+	var toolAliases providerToolAliases
+	if len(req.Tools) > 0 {
+		var tools []openAIChatTool
+		tools, toolAliases = buildOpenAIChatToolsWithAliases(req.Tools, req.ToolSchemas)
+		body.Tools = tools
+		body.ToolChoice = "auto"
+	}
 	if len(req.Messages) > 0 {
-		body.Messages = chatMessagesToOpenAI(req.Messages)
+		body.Messages = chatMessagesToOpenAIWithAliases(req.Messages, toolAliases.RuntimeToProvider)
 	} else {
 		body.Messages = []openAIChatCompletionMessage{
 			{Role: "system", Content: strings.TrimSpace(req.Prompt)},
@@ -109,10 +116,6 @@ func (g *AzureOpenAIModelGateway) Complete(ctx context.Context, req ModelRequest
 		if strings.TrimSpace(req.Prompt) == "" {
 			body.Messages = body.Messages[1:]
 		}
-	}
-	if len(req.Tools) > 0 {
-		body.Tools = buildOpenAIChatTools(req.Tools, req.ToolSchemas)
-		body.ToolChoice = "auto"
 	}
 	if len(req.OutputSchema) > 0 {
 		body.ResponseFormat = &openAIResponseFormat{
@@ -178,7 +181,7 @@ func (g *AzureOpenAIModelGateway) Complete(ctx context.Context, req ModelRequest
 	}
 	choice := parsed.Choices[0]
 	content := parseOpenAIMessageContent(choice.Message.Content)
-	toolCalls := parseOpenAIModelToolCalls(choice.Message.ToolCalls)
+	toolCalls := parseOpenAIModelToolCallsWithAliases(choice.Message.ToolCalls, toolAliases.ProviderToRuntime)
 	if content == "" && len(toolCalls) == 0 {
 		return ModelResponse{}, fmt.Errorf("model response missing message content")
 	}

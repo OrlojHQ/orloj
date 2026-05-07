@@ -21,9 +21,10 @@ type ModelGatewayConfig struct {
 	Options      map[string]string
 	Timeout      time.Duration
 	HTTPClient   *http.Client
-	// AllowPrivate permits outbound gateway requests to RFC 1918 / ULA /
-	// CGNAT addresses. Only honoured when HTTPClient is nil (otherwise the
-	// caller is responsible for the supplied client's egress policy).
+	// AllowPrivate permits outbound gateway requests to trusted local/private
+	// model endpoints, including loopback, RFC 1918 / ULA, and CGNAT
+	// addresses. Only honored when HTTPClient is nil (otherwise the caller is
+	// responsible for the supplied client's egress policy).
 	AllowPrivate bool
 }
 
@@ -238,7 +239,9 @@ type bedrockModelProviderPlugin struct{}
 
 func (p *bedrockModelProviderPlugin) Name() string { return "bedrock" }
 
-func (p *bedrockModelProviderPlugin) Aliases() []string { return []string{"aws-bedrock", "aws_bedrock"} }
+func (p *bedrockModelProviderPlugin) Aliases() []string {
+	return []string{"aws-bedrock", "aws_bedrock"}
+}
 
 func (p *bedrockModelProviderPlugin) RequiresAPIKey() bool { return false }
 
@@ -286,13 +289,13 @@ func (p *bedrockModelProviderPlugin) BuildGateway(cfg ModelGatewayConfig) (Model
 }
 
 // resolveGatewayHTTPClient returns cfg.HTTPClient if non-nil, otherwise a
-// SafeHTTPClient with dial-time SSRF enforcement configured from
-// cfg.AllowPrivate and cfg.Timeout.
+// model-gateway safe HTTP client with dial-time SSRF enforcement configured
+// from cfg.AllowPrivate and cfg.Timeout.
 func resolveGatewayHTTPClient(cfg ModelGatewayConfig) *http.Client {
 	if cfg.HTTPClient != nil {
 		return cfg.HTTPClient
 	}
-	return SafeHTTPClient(cfg.AllowPrivate, cfg.Timeout)
+	return SafeModelGatewayHTTPClient(cfg.AllowPrivate, cfg.Timeout)
 }
 
 func normalizeModelProviderOptions(options map[string]string) map[string]string {

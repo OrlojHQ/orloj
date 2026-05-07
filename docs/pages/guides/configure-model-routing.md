@@ -269,6 +269,7 @@ spec:
   provider: openai-compatible
   base_url: http://127.0.0.1:11434/v1
   default_model: llama3.1
+  allowPrivate: true
 ```
 
 ## Agent Requirement

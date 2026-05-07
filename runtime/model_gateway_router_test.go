@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -345,6 +347,96 @@ func TestModelRouterOpenAICompatibleUsesProvidedSecretWhenPresent(t *testing.T) 
 	}
 	if gw.apiKey != secretValue {
 		t.Fatalf("expected resolved api key %q, got %q", secretValue, gw.apiKey)
+	}
+}
+
+func TestModelRouterOllamaDefaultAllowsLoopbackEndpoint(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/chat" {
+			t.Fatalf("unexpected request path %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"message":{"role":"assistant","content":"local ollama ok"},"done":true}`))
+	}))
+	defer server.Close()
+
+	lookup := &stubModelEndpointLookup{items: map[string]resources.ModelEndpoint{
+		"team-a/ollama-local": {
+			Metadata: resources.ObjectMeta{Name: "ollama-local", Namespace: "team-a", ResourceVersion: "12"},
+			Spec: resources.ModelEndpointSpec{
+				Provider:     "ollama",
+				BaseURL:      server.URL,
+				DefaultModel: "llama3.2",
+			},
+		},
+	}}
+	router := NewModelRouter(ModelRouterConfig{Endpoints: lookup})
+
+	resp, err := router.Complete(context.Background(), ModelRequest{
+		Namespace: "team-a",
+		ModelRef:  "ollama-local",
+		Step:      1,
+	})
+	if err != nil {
+		t.Fatalf("expected ollama loopback endpoint to work by default, got %v", err)
+	}
+	if resp.Content != "local ollama ok" {
+		t.Fatalf("unexpected response content %q", resp.Content)
+	}
+}
+
+func TestModelRouterOpenAICompatibleLoopbackRequiresAllowPrivate(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/chat/completions" {
+			t.Fatalf("unexpected request path %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"local compatible ok"}}]}`))
+	}))
+	defer server.Close()
+
+	baseEndpoint := resources.ModelEndpoint{
+		Metadata: resources.ObjectMeta{Name: "compatible-local", Namespace: "team-a", ResourceVersion: "13"},
+		Spec: resources.ModelEndpointSpec{
+			Provider:     "openai-compatible",
+			BaseURL:      server.URL,
+			DefaultModel: "llama3.2",
+		},
+	}
+	lookup := &stubModelEndpointLookup{items: map[string]resources.ModelEndpoint{
+		"team-a/compatible-local": baseEndpoint,
+	}}
+	router := NewModelRouter(ModelRouterConfig{Endpoints: lookup})
+	_, err := router.Complete(context.Background(), ModelRequest{
+		Namespace: "team-a",
+		ModelRef:  "compatible-local",
+		Step:      1,
+	})
+	if err == nil {
+		t.Fatal("expected openai-compatible loopback endpoint to fail without allowPrivate=true")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "loopback") {
+		t.Fatalf("expected loopback block error, got %v", err)
+	}
+
+	allowPrivate := true
+	allowedEndpoint := baseEndpoint
+	allowedEndpoint.Metadata.ResourceVersion = "14"
+	allowedEndpoint.Spec.AllowPrivate = &allowPrivate
+	allowedLookup := &stubModelEndpointLookup{items: map[string]resources.ModelEndpoint{
+		"team-a/compatible-local": allowedEndpoint,
+	}}
+	allowedRouter := NewModelRouter(ModelRouterConfig{Endpoints: allowedLookup})
+	resp, err := allowedRouter.Complete(context.Background(), ModelRequest{
+		Namespace: "team-a",
+		ModelRef:  "compatible-local",
+		Step:      1,
+	})
+	if err != nil {
+		t.Fatalf("expected openai-compatible loopback endpoint with allowPrivate=true to work, got %v", err)
+	}
+	if resp.Content != "local compatible ok" {
+		t.Fatalf("unexpected response content %q", resp.Content)
 	}
 }
 

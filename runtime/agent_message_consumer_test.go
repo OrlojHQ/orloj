@@ -157,6 +157,142 @@ func TestAgentMessageConsumerExecutesGraphAndCompletesTask(t *testing.T) {
 	}
 }
 
+func TestAgentMessageConsumerExecutesMcpToolRuntime(t *testing.T) {
+	bus := NewMemoryAgentMessageBus("orloj.agentmsg", 256, time.Minute)
+	defer func() { _ = bus.Close() }()
+
+	agentStore := store.NewAgentStore()
+	systemStore := store.NewAgentSystemStore()
+	taskStore := store.NewTaskStore()
+	toolStore := store.NewToolStore()
+	mcpServerStore := store.NewMcpServerStore()
+
+	if _, err := agentStore.Upsert(context.Background(), resources.Agent{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Agent",
+		Metadata:   resources.ObjectMeta{Name: "mcp-agent"},
+		Spec: resources.AgentSpec{
+			ModelRef: "openai-default",
+			Prompt:   "use the MCP tool",
+			Tools:    []string{"test-mcp--search"},
+			Limits:   resources.AgentLimits{MaxSteps: 2, Timeout: "2s"},
+		},
+	}); err != nil {
+		t.Fatalf("upsert agent failed: %v", err)
+	}
+	if _, err := systemStore.Upsert(context.Background(), resources.AgentSystem{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "AgentSystem",
+		Metadata:   resources.ObjectMeta{Name: "mcp-system"},
+		Spec:       resources.AgentSystemSpec{Agents: []string{"mcp-agent"}},
+	}); err != nil {
+		t.Fatalf("upsert system failed: %v", err)
+	}
+	if _, err := toolStore.Upsert(context.Background(), resources.Tool{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Tool",
+		Metadata:   resources.ObjectMeta{Name: "test-mcp--search", Namespace: "default"},
+		Spec: resources.ToolSpec{
+			Type:         "mcp",
+			McpServerRef: "test-mcp",
+			McpToolName:  "search",
+		},
+	}); err != nil {
+		t.Fatalf("upsert tool failed: %v", err)
+	}
+	server, err := mcpServerStore.Upsert(context.Background(), resources.McpServer{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "McpServer",
+		Metadata:   resources.ObjectMeta{Name: "test-mcp", Namespace: "default"},
+		Spec:       resources.McpServerSpec{Transport: "stdio", Command: "echo"},
+	})
+	if err != nil {
+		t.Fatalf("upsert mcp server failed: %v", err)
+	}
+
+	mcpTransport := &mockMcpTransport{
+		tools: []McpToolDefinition{{Name: "search"}},
+		callResults: map[string]*McpToolResult{
+			"search": {Content: []McpContent{{Type: "text", Text: "mcp search result"}}},
+		},
+	}
+	sessionMgr := NewMcpSessionManager(nil)
+	defer sessionMgr.Close()
+	sessionMgr.sessions["default/test-mcp"] = &McpSession{
+		Transport:  mcpTransport,
+		InitResult: &McpInitResult{},
+		ServerName: "test-mcp",
+		generation: server.Metadata.Generation,
+		lastUsedAt: time.Now(),
+	}
+
+	if _, err := taskStore.Upsert(context.Background(), resources.Task{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Task",
+		Metadata:   resources.ObjectMeta{Name: "mcp-task"},
+		Spec: resources.TaskSpec{
+			System: "mcp-system",
+			Input:  map[string]string{"topic": "search"},
+		},
+		Status: resources.TaskStatus{
+			Phase:     "Running",
+			ClaimedBy: "worker-a",
+			Attempts:  1,
+		},
+	}); err != nil {
+		t.Fatalf("upsert task failed: %v", err)
+	}
+
+	manager := NewAgentMessageConsumerManager(
+		bus,
+		agentStore,
+		systemStore,
+		taskStore,
+		nil,
+		AgentMessageConsumerOptions{
+			ModelEndpoints:      newTestModelEndpointStore(t),
+			Tools:               toolStore,
+			McpSessionManager:   sessionMgr,
+			McpServerStore:      mcpServerStore,
+			WorkerID:            "worker-a",
+			RefreshEvery:        20 * time.Millisecond,
+			DedupeWindow:        time.Minute,
+			LeaseExtendDuration: 30 * time.Second,
+		},
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go manager.Start(ctx)
+	waitForConsumerSubscriptions(t, manager, bus, 2*time.Second)
+
+	if _, err := bus.Publish(context.Background(), AgentMessage{
+		MessageID: "msg-mcp",
+		TaskID:    "default/mcp-task",
+		Namespace: "default",
+		FromAgent: "system",
+		ToAgent:   "mcp-agent",
+		Type:      "task_start",
+		Payload:   "search",
+		Attempt:   1,
+	}); err != nil {
+		t.Fatalf("publish failed: %v", err)
+	}
+
+	waitForConsumer(t, 3*time.Second, func() bool {
+		task, ok, _ := taskStore.Get(context.Background(), "mcp-task")
+		return ok && strings.EqualFold(task.Status.Phase, "succeeded")
+	})
+
+	task, _, _ := taskStore.Get(context.Background(), "mcp-task")
+	if task.Status.Phase != "Succeeded" {
+		t.Fatalf("expected task succeeded, got %q error=%s", task.Status.Phase, task.Status.LastError)
+	}
+	if task.Status.Output["last_tool_calls"] != "1" {
+		t.Fatalf("expected one MCP tool call, got output=%+v", task.Status.Output)
+	}
+}
+
 func TestAgentMessageConsumerWaitsForLeaseThenTakesOver(t *testing.T) {
 	bus := NewMemoryAgentMessageBus("orloj.agentmsg", 256, time.Minute)
 	defer func() { _ = bus.Close() }()
