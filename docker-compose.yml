@@ -4,6 +4,8 @@ services:
     command: ["-js"]
     ports:
       - "${NATS_PORT:-4222}:4222"
+    networks:
+      - orloj
     restart: unless-stopped
 
   postgres:
@@ -16,8 +18,14 @@ services:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - orloj
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-orloj} -d ${POSTGRES_DB:-orloj}"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-orloj} -d ${POSTGRES_DB:-orloj}",
+        ]
       interval: 5s
       timeout: 3s
       retries: 12
@@ -30,6 +38,13 @@ services:
       target: orlojd
     environment:
       ORLOJ_POSTGRES_DSN: ${ORLOJ_POSTGRES_DSN:-postgres://orloj:orloj@postgres:5432/orloj?sslmode=disable}
+      ORLOJ_AUTH_MODE: ${ORLOJ_AUTH_MODE:-off}
+      ORLOJ_API_TOKEN: ${ORLOJ_API_TOKEN:-}
+      ORLOJ_SETUP_TOKEN: ${ORLOJ_SETUP_TOKEN:-}
+      ORLOJ_SECRET_ENCRYPTION_KEY: ${ORLOJ_SECRET_ENCRYPTION_KEY:-}
+      ORLOJ_LOG_LEVEL: ${ORLOJ_LOG_LEVEL:-info}
+      ORLOJ_LOG_FORMAT: ${ORLOJ_LOG_FORMAT:-json}
+      ORLOJ_TOOL_ISOLATION_BACKEND: ${ORLOJ_TOOL_ISOLATION_BACKEND:-none}
     command:
       - --addr=:8080
       - --storage-backend=postgres
@@ -49,8 +64,14 @@ services:
         condition: service_healthy
       nats:
         condition: service_started
+    networks:
+      - orloj
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080/healthz >/dev/null 2>&1"]
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -O - http://127.0.0.1:8080/healthz >/dev/null 2>&1",
+        ]
       interval: 5s
       timeout: 3s
       retries: 12
@@ -63,6 +84,8 @@ services:
       target: orlojworker
     environment:
       ORLOJ_POSTGRES_DSN: ${ORLOJ_POSTGRES_DSN:-postgres://orloj:orloj@postgres:5432/orloj?sslmode=disable}
+      ORLOJ_LOG_LEVEL: ${ORLOJ_LOG_LEVEL:-info}
+      ORLOJ_LOG_FORMAT: ${ORLOJ_LOG_FORMAT:-json}
     command:
       - --storage-backend=postgres
       - --worker-id=worker-a
@@ -70,6 +93,7 @@ services:
       - --lease-duration=30s
       - --heartbeat-interval=10s
       - --region=default
+      - --max-concurrent-tasks=1
       - --task-execution-mode=message-driven
       - --agent-message-bus-backend=nats-jetstream
       - --agent-message-nats-url=nats://nats:4222
@@ -86,8 +110,14 @@ services:
         condition: service_healthy
       nats:
         condition: service_started
+    networks:
+      - orloj
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8081/healthz >/dev/null 2>&1"]
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -O - http://127.0.0.1:8081/healthz >/dev/null 2>&1",
+        ]
       interval: 5s
       timeout: 3s
       retries: 12
@@ -100,6 +130,8 @@ services:
       target: orlojworker
     environment:
       ORLOJ_POSTGRES_DSN: ${ORLOJ_POSTGRES_DSN:-postgres://orloj:orloj@postgres:5432/orloj?sslmode=disable}
+      ORLOJ_LOG_LEVEL: ${ORLOJ_LOG_LEVEL:-info}
+      ORLOJ_LOG_FORMAT: ${ORLOJ_LOG_FORMAT:-json}
     command:
       - --storage-backend=postgres
       - --worker-id=worker-b
@@ -107,6 +139,7 @@ services:
       - --lease-duration=30s
       - --heartbeat-interval=10s
       - --region=default
+      - --max-concurrent-tasks=1
       - --task-execution-mode=message-driven
       - --agent-message-bus-backend=nats-jetstream
       - --agent-message-nats-url=nats://nats:4222
@@ -123,8 +156,14 @@ services:
         condition: service_healthy
       nats:
         condition: service_started
+    networks:
+      - orloj
     healthcheck:
-      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8081/healthz >/dev/null 2>&1"]
+      test:
+        [
+          "CMD-SHELL",
+          "wget -q -O - http://127.0.0.1:8081/healthz >/dev/null 2>&1",
+        ]
       interval: 5s
       timeout: 3s
       retries: 12
@@ -132,3 +171,6 @@ services:
 
 volumes:
   postgres_data:
+
+networks:
+  orloj:
