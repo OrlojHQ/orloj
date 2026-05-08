@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-05-08
+
 ### Changed
 
 - **`docker-compose.yml` updated for codebase parity**: added explicit `--max-concurrent-tasks` to workers, surfaced commonly-needed operator env vars (`ORLOJ_AUTH_MODE`, `ORLOJ_API_TOKEN`, `ORLOJ_SETUP_TOKEN`, `ORLOJ_SECRET_ENCRYPTION_KEY`, `ORLOJ_LOG_LEVEL`, `ORLOJ_LOG_FORMAT`, `ORLOJ_TOOL_ISOLATION_BACKEND`) on `orlojd`, added `ORLOJ_LOG_LEVEL`/`ORLOJ_LOG_FORMAT` to workers, and defined an explicit `orloj` Docker network for all services.
@@ -416,7 +418,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Homebrew tap distribution (`OrlojHQ/orloj`)
 - Blueprint scaffolding via `orlojctl init`
 
-[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.14.1...HEAD
+[0.14.1]: https://github.com/OrlojHQ/orloj/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/OrlojHQ/orloj/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/OrlojHQ/orloj/compare/v0.12.1...v0.13.0
 [0.12.1]: https://github.com/OrlojHQ/orloj/compare/v0.12.0...v0.12.1
