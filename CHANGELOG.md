@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`docker-compose.yml` updated for codebase parity**: added explicit `--max-concurrent-tasks` to workers, surfaced commonly-needed operator env vars (`ORLOJ_AUTH_MODE`, `ORLOJ_API_TOKEN`, `ORLOJ_SETUP_TOKEN`, `ORLOJ_SECRET_ENCRYPTION_KEY`, `ORLOJ_LOG_LEVEL`, `ORLOJ_LOG_FORMAT`, `ORLOJ_TOOL_ISOLATION_BACKEND`) on `orlojd`, added `ORLOJ_LOG_LEVEL`/`ORLOJ_LOG_FORMAT` to workers, and defined an explicit `orloj` Docker network for all services.
+
+### Fixed
+
+- **`orlojworker` Dockerfile missing `wget`**: the `orlojworker` container stage now installs `wget` to match `orlojd`, ensuring compose healthchecks work reliably.
+
 ## [0.14.0] - 2026-05-07
 
 ### Added
