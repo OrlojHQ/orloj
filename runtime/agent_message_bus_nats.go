@@ -10,15 +10,29 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 )
 
 const (
 	defaultAgentMessageSubjectPrefix = "orloj.agentmsg"
 	defaultAgentMessageStreamName    = "ORLOJ_AGENT_MESSAGES"
+
+	// defaultStreamMaxBytes caps the stream at 1 GiB to prevent unbounded disk
+	// growth when MaxAge alone is not enough (e.g. during message bursts).
+	defaultStreamMaxBytes = 1 << 30 // 1 GiB
+
+	// defaultConsumerMaxDeliver limits redelivery attempts for a single message.
+	// After this many failures the message is terminated, preventing poison
+	// messages from looping forever.
+	defaultConsumerMaxDeliver = 10
+
+	// defaultConsumerAckWait is the time the server waits for an ack before
+	// redelivering.  Matches the long-running agent execution window.
+	defaultConsumerAckWait = 120 * time.Second
 )
 
 type natsAgentMessageDelivery struct {
-	msg     *nats.Msg
+	msg     jetstream.Msg
 	payload AgentMessage
 	mu      sync.Mutex
 	acked   bool
@@ -71,7 +85,7 @@ func (d *natsAgentMessageDelivery) ExtendLease(_ context.Context, _ time.Duratio
 // NATSJetStreamAgentMessageBus is a durable runtime message bus backed by JetStream.
 type NATSJetStreamAgentMessageBus struct {
 	nc            *nats.Conn
-	js            nats.JetStreamContext
+	js            jetstream.JetStream
 	logger        *log.Logger
 	subjectPrefix string
 	streamName    string
@@ -102,27 +116,23 @@ func NewNATSJetStreamAgentMessageBus(url string, subjectPrefix string, streamNam
 		return nil, fmt.Errorf("connect nats %q: %w", url, err)
 	}
 
-	js, err := nc.JetStream()
+	js, err := jetstream.New(nc)
 	if err != nil {
 		nc.Close()
 		return nil, fmt.Errorf("jetstream context: %w", err)
 	}
 
-	cfg := &nats.StreamConfig{
+	cfg := jetstream.StreamConfig{
 		Name:      streamName,
 		Subjects:  []string{subjectPrefix + ".>"},
-		Storage:   nats.FileStorage,
-		Retention: nats.LimitsPolicy,
+		Storage:   jetstream.FileStorage,
+		Retention: jetstream.LimitsPolicy,
 		MaxAge:    7 * 24 * time.Hour,
+		MaxBytes:  defaultStreamMaxBytes,
 	}
-	if _, err := js.AddStream(cfg); err != nil {
-		if !strings.Contains(strings.ToLower(err.Error()), "stream name already in use") {
-			nc.Close()
-			return nil, fmt.Errorf("add stream %q: %w", streamName, err)
-		}
-		if logger != nil {
-			logger.Printf("agent message stream already exists name=%s", streamName)
-		}
+	if _, err := js.CreateOrUpdateStream(context.Background(), cfg); err != nil {
+		nc.Close()
+		return nil, fmt.Errorf("create/update stream %q: %w", streamName, err)
 	}
 
 	bus := &NATSJetStreamAgentMessageBus{
@@ -133,12 +143,12 @@ func NewNATSJetStreamAgentMessageBus(url string, subjectPrefix string, streamNam
 		streamName:    streamName,
 	}
 	if logger != nil {
-		logger.Printf("agent message bus backend=nats-jetstream url=%s prefix=%s stream=%s", url, subjectPrefix, streamName)
+		logger.Printf("agent message bus backend=nats-jetstream url=%s prefix=%s stream=%s max_bytes=%d", url, subjectPrefix, streamName, defaultStreamMaxBytes)
 	}
 	return bus, nil
 }
 
-func (b *NATSJetStreamAgentMessageBus) Publish(_ context.Context, message AgentMessage) (AgentMessage, error) {
+func (b *NATSJetStreamAgentMessageBus) Publish(ctx context.Context, message AgentMessage) (AgentMessage, error) {
 	normalized, err := normalizeAgentMessage(message)
 	if err != nil {
 		return AgentMessage{}, err
@@ -148,7 +158,7 @@ func (b *NATSJetStreamAgentMessageBus) Publish(_ context.Context, message AgentM
 		return AgentMessage{}, err
 	}
 	subject := messageSubject(b.subjectPrefix, normalized.Namespace, normalized.ToAgent)
-	_, err = b.js.Publish(subject, payload, nats.MsgId(normalized.MessageID))
+	_, err = b.js.Publish(ctx, subject, payload, jetstream.WithMsgID(normalized.MessageID))
 	if err != nil {
 		return AgentMessage{}, err
 	}
@@ -165,16 +175,25 @@ func (b *NATSJetStreamAgentMessageBus) Consume(ctx context.Context, sub AgentMes
 		durable = fmt.Sprintf("agent-%s-%s", sanitizeSubjectToken(sub.Namespace), sanitizeSubjectToken(sub.Agent))
 	}
 
-	jetSub, err := b.js.PullSubscribe(
-		subject,
-		durable,
-		nats.BindStream(b.streamName),
-		nats.ManualAck(),
-	)
+	consumer, err := b.js.CreateOrUpdateConsumer(ctx, b.streamName, jetstream.ConsumerConfig{
+		Durable:       durable,
+		FilterSubject: subject,
+		AckPolicy:     jetstream.AckExplicitPolicy,
+		AckWait:       defaultConsumerAckWait,
+		MaxDeliver:    defaultConsumerMaxDeliver,
+	})
 	if err != nil {
-		return err
+		return fmt.Errorf("create/update consumer %q: %w", durable, err)
 	}
-	defer jetSub.Unsubscribe()
+
+	// Use the push-based Messages() iterator instead of the old Fetch polling
+	// loop.  The server pushes messages and sends heartbeats so we consume zero
+	// CPU when idle and get instant delivery when messages arrive.
+	iter, err := consumer.Messages()
+	if err != nil {
+		return fmt.Errorf("consume messages %q: %w", durable, err)
+	}
+	defer iter.Stop()
 
 	for {
 		select {
@@ -183,33 +202,33 @@ func (b *NATSJetStreamAgentMessageBus) Consume(ctx context.Context, sub AgentMes
 		default:
 		}
 
-		msgs, err := jetSub.Fetch(10, nats.MaxWait(2*time.Second))
+		msg, err := iter.Next()
 		if err != nil {
-			if err == nats.ErrTimeout || strings.Contains(strings.ToLower(err.Error()), "timeout") {
-				continue
+			// iter.Stop() was called or context cancelled — exit cleanly.
+			if ctx.Err() != nil {
+				return nil
 			}
-			return err
+			return fmt.Errorf("message iterator error %q: %w", durable, err)
 		}
-		for _, msg := range msgs {
-			var payload AgentMessage
-			if err := json.Unmarshal(msg.Data, &payload); err != nil {
-				if b.logger != nil {
-					b.logger.Printf("agent message unmarshal failed: %v", err)
-				}
-				_ = msg.Term()
-				continue
+
+		var payload AgentMessage
+		if err := json.Unmarshal(msg.Data(), &payload); err != nil {
+			if b.logger != nil {
+				b.logger.Printf("agent message unmarshal failed: %v", err)
 			}
-			delivery := &natsAgentMessageDelivery{msg: msg, payload: payload}
-			if err := handler(ctx, delivery); err != nil {
-				if delay, ok := retryDelayFromError(err); ok {
-					_ = delivery.NackWithDelay(ctx, delay)
-				} else {
-					_ = delivery.Nack(ctx, true)
-				}
-				continue
-			}
-			_ = delivery.Ack(ctx)
+			_ = msg.Term()
+			continue
 		}
+		delivery := &natsAgentMessageDelivery{msg: msg, payload: payload}
+		if err := handler(ctx, delivery); err != nil {
+			if delay, ok := retryDelayFromError(err); ok {
+				_ = delivery.NackWithDelay(ctx, delay)
+			} else {
+				_ = delivery.Nack(ctx, true)
+			}
+			continue
+		}
+		_ = delivery.Ack(ctx)
 	}
 }
 

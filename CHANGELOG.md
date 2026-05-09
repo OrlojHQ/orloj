@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **JetStream API migrated to `jetstream` package**: the agent message bus now uses `jetstream.New(nc)` and the push-based `consumer.Messages()` iterator instead of the deprecated `nc.JetStream()` v1 API with `PullSubscribe`/`Fetch` polling. This eliminates idle CPU from the 2-second poll loop and delivers messages instantly via server-side push with heartbeats.
+- **Stream bounded by `MaxBytes`**: the `ORLOJ_AGENT_MESSAGES` stream now enforces a 1 GiB `MaxBytes` cap alongside the existing 7-day `MaxAge`, preventing unbounded disk growth during message bursts.
+- **Consumer poison-message protection**: JetStream consumers now set `AckWait: 120s` and `MaxDeliver: 10`, terminating messages that fail processing after 10 attempts instead of redelivering indefinitely.
+- **Redundant task lookup eliminated**: `handleDelivery` now passes the already-fetched task into `processMessage`, removing a duplicate `tasks.Get` round-trip on every agent message.
+- **Event bus publish failure monitoring**: `NATSBus` now tracks cumulative publish failures with a new `PublishFailures()` accessor for health checks and metrics export, and includes the running failure count in log messages.
+
 ## [0.14.1] - 2026-05-08
 
 ### Changed

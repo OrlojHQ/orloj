@@ -29,8 +29,9 @@ type NATSBus struct {
 	origin  string
 	logger  *log.Logger
 
-	mu     sync.Mutex
-	closed bool
+	mu          sync.Mutex
+	closed      bool
+	publishFail uint64
 }
 
 func NewNATSBus(url, subjectPrefix string, historyMax int, logger *log.Logger) (*NATSBus, error) {
@@ -94,8 +95,14 @@ func (b *NATSBus) Publish(evt Event) Event {
 		}
 		return published
 	}
-	if err := b.nc.Publish(b.subject, payload); err != nil && b.logger != nil {
-		b.logger.Printf("event bus nats publish failed: %v", err)
+	if err := b.nc.Publish(b.subject, payload); err != nil {
+		b.mu.Lock()
+		b.publishFail++
+		failCount := b.publishFail
+		b.mu.Unlock()
+		if b.logger != nil {
+			b.logger.Printf("event bus nats publish failed (total_failures=%d): %v", failCount, err)
+		}
 	}
 	return published
 }
@@ -106,6 +113,18 @@ func (b *NATSBus) Subscribe(ctx context.Context, filter Filter) <-chan Event {
 
 func (b *NATSBus) LatestID() uint64 {
 	return b.local.LatestID()
+}
+
+// PublishFailures returns the cumulative number of NATS publish errors since
+// startup.  Useful for health checks and metrics export — a rising count
+// signals connectivity issues or backpressure from the NATS server.
+func (b *NATSBus) PublishFailures() uint64 {
+	if b == nil {
+		return 0
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.publishFail
 }
 
 func (b *NATSBus) Close() error {

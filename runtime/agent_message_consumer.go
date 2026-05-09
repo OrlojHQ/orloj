@@ -365,15 +365,14 @@ func (m *AgentMessageConsumerManager) handleDelivery(ctx context.Context, _ stri
 		return nil
 	}
 
-	return m.processMessage(ctx, taskKey, msg)
+	return m.processMessage(ctx, taskKey, task, msg)
 }
 
-func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKey string, msg AgentMessage) error {
+func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKey string, cachedTask resources.Task, msg AgentMessage) error {
 	// Restore the W3C trace context from task annotations so the message span
 	// is linked as a continuation of the HTTP request that created the task.
-	if task, ok, err := m.tasks.Get(ctx, taskKey); err == nil && ok {
-		ctx = telemetry.ExtractTraceContext(ctx, task.Metadata.Annotations)
-	}
+	// Uses the task already fetched by handleDelivery to avoid a redundant lookup.
+	ctx = telemetry.ExtractTraceContext(ctx, cachedTask.Metadata.Annotations)
 	ctx, msgSpan := telemetry.StartMessageSpan(ctx, taskKey,
 		msg.MessageID, msg.FromAgent, msg.ToAgent, msg.BranchID)
 	defer msgSpan.End()
