@@ -1,26 +1,29 @@
 # Orloj Helm Chart
 
-This chart deploys:
+Deploy the full Orloj stack on Kubernetes: API server (`orlojd`), distributed
+task workers (`orlojworker`), PostgreSQL, and NATS with JetStream.
 
-- `orlojd` (API/control plane)
-- `orlojworker` (task workers)
-- Postgres
-- NATS (JetStream enabled)
+## Prerequisites
 
-## Install
+- Helm 3.10+
+- Kubernetes 1.26+
+
+## Quick start
 
 ```bash
+# Fetch sub-chart dependencies (PostgreSQL + NATS)
+helm dependency update charts/orloj/
+
 helm upgrade --install orloj ./charts/orloj \
   --namespace orloj \
   --create-namespace \
-  --set orlojd.image.repository=ghcr.io/<your-org-or-user>/orloj-orlojd \
-  --set orlojworker.image.repository=ghcr.io/<your-org-or-user>/orloj-orlojworker \
-  --set orlojd.image.tag=v0.1.0 \
-  --set orlojworker.image.tag=v0.1.0 \
-  --set postgres.auth.password='<strong-password>' \
-  --set runtimeSecret.modelGatewayApiKey='<model-provider-api-key>' \
-  --set runtimeSecret.apiToken='<automation-api-token>'
+  --set auth.mode=native \
+  --set auth.setupToken="$(openssl rand -hex 16)" \
+  --set secretEncryptionKey="$(openssl rand -hex 32)"
 ```
+
+The chart uses Bitnami PostgreSQL and NATS sub-charts by default. Both can be
+disabled in favour of external services — see **External services** below.
 
 ## Uninstall
 
@@ -28,24 +31,64 @@ helm upgrade --install orloj ./charts/orloj \
 helm uninstall orloj --namespace orloj
 ```
 
-## Important Values
+## Key values
 
-- `orlojd.image.repository`, `orlojd.image.tag`
-- `orlojworker.image.repository`, `orlojworker.image.tag`
-- `postgres.auth.user`, `postgres.auth.password`, `postgres.auth.database`, `postgres.auth.dsn`
-- `runtimeSecret.modelGatewayApiKey`
-- `runtimeSecret.apiToken`
-- `runtimeConfig.*` (Orloj runtime env vars)
+| Value | Default | Description |
+|---|---|---|
+| `image.registry` | `ghcr.io` | Container registry |
+| `image.server.repository` | `orlojhq/orlojd` | Server image |
+| `image.worker.repository` | `orlojhq/orlojworker` | Worker image |
+| `server.replicaCount` | `1` | Server replicas (HA requires leader election) |
+| `worker.replicaCount` | `2` | Worker replicas |
+| `worker.maxConcurrentTasks` | `1` | Max tasks per worker pod |
+| `auth.mode` | `off` | Auth mode: `off` or `native` |
+| `auth.apiToken` | `""` | Bearer token (simple auth) |
+| `auth.setupToken` | `""` | First-user bootstrap token (`native` mode) |
+| `secretEncryptionKey` | `""` | 256-bit AES key for Secret resources at rest |
+| `existingSecret` | `""` | Use an existing K8s Secret instead of chart-managed |
+| `server.ingress.enabled` | `false` | Enable Ingress for the web console |
 
-Enable process-wide debug logs during troubleshooting:
+See [`values.yaml`](values.yaml) for the full reference.
 
-```bash
-helm upgrade --install orloj ./charts/orloj \
-  --namespace orloj \
-  --set runtimeConfig.ORLOJ_LOG_LEVEL=debug
+## External services
+
+### Bring-your-own PostgreSQL
+
+```yaml
+postgresql:
+  enabled: false
+externalPostgres:
+  dsn: "postgres://orloj:secret@db.example.com:5432/orloj?sslmode=require"
+  # or reference an existing K8s Secret:
+  # existingSecret: my-pg-secret
+  # existingSecretKey: postgres-dsn
 ```
 
-## Notes
+### Bring-your-own NATS
 
-- By default, this chart deploys a single Postgres replica with a PVC and a single NATS replica.
-- For production hardening, externalize Postgres/NATS and rotate credentials.
+```yaml
+nats:
+  enabled: false
+externalNats:
+  url: "nats://nats.example.com:4222"
+```
+
+## Debug logging
+
+```bash
+helm upgrade orloj ./charts/orloj \
+  --namespace orloj \
+  --reuse-values \
+  --set server.logLevel=debug \
+  --set worker.logLevel=debug
+```
+
+## Production checklist
+
+- Set `auth.mode=native` and provide `auth.setupToken`
+- Generate `secretEncryptionKey` with `openssl rand -hex 32`
+- Enable Ingress with TLS or use a LoadBalancer service
+- Tune `worker.replicaCount` and `worker.maxConcurrentTasks` for your workload
+- Consider enabling `worker.autoscaling.enabled` with appropriate HPA thresholds
+- Externalize PostgreSQL and NATS for durability and independent scaling
+- Enable `server.serviceMonitor.enabled` if running Prometheus Operator

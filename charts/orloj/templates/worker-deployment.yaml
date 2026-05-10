@@ -1,0 +1,168 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "orloj.fullname" . }}-worker
+  labels:
+    {{- include "orloj.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  {{- if not .Values.worker.autoscaling.enabled }}
+  replicas: {{ .Values.worker.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "orloj.worker.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "orloj.worker.selectorLabels" . | nindent 8 }}
+        {{- with .Values.worker.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.worker.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "orloj.worker.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.worker.podSecurityContext | nindent 8 }}
+      containers:
+        - name: orlojworker
+          image: {{ include "orloj.worker.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.worker.securityContext | nindent 12 }}
+          args:
+            - --storage-backend={{ .Values.server.storageBackend }}
+            - --worker-id=$(POD_NAME)
+            - --region={{ .Values.worker.region }}
+            - --max-concurrent-tasks={{ .Values.worker.maxConcurrentTasks }}
+            - --task-execution-mode={{ .Values.worker.taskExecutionMode }}
+            - --agent-message-bus-backend={{ .Values.worker.agentMessageBusBackend }}
+            {{- $natsURL := include "orloj.natsURL" . }}
+            {{- if $natsURL }}
+            - --agent-message-nats-url={{ $natsURL }}
+            {{- end }}
+            - --reconcile-interval={{ .Values.worker.reconcileInterval }}
+            - --lease-duration={{ .Values.worker.leaseDuration }}
+            - --heartbeat-interval={{ .Values.worker.heartbeatInterval }}
+            - --healthz-addr={{ .Values.worker.healthzAddr }}
+            - --postgres-max-open-conns={{ .Values.worker.postgres.maxOpenConns }}
+            - --postgres-max-idle-conns={{ .Values.worker.postgres.maxIdleConns }}
+            - --postgres-conn-max-lifetime={{ .Values.worker.postgres.connMaxLifetime }}
+            {{- if .Values.worker.agentMessageConsume }}
+            - --agent-message-consume
+            {{- end }}
+            {{- if .Values.worker.gpu }}
+            - --gpu
+            {{- end }}
+            {{- if .Values.worker.supportedModels }}
+            - --supported-models={{ .Values.worker.supportedModels }}
+            {{- end }}
+            {{- with .Values.worker.extraArgs }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: ORLOJ_LOG_LEVEL
+              value: {{ .Values.worker.logLevel | quote }}
+            - name: ORLOJ_LOG_FORMAT
+              value: {{ .Values.worker.logFormat | quote }}
+            # --- PostgreSQL DSN ---
+            {{- if .Values.externalPostgres.existingSecret }}
+            - name: ORLOJ_POSTGRES_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalPostgres.existingSecret }}
+                  key: {{ .Values.externalPostgres.existingSecretKey }}
+            {{- else if .Values.postgresql.enabled }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgresql.auth.existingSecret | default (printf "%s-postgresql" .Release.Name) }}
+                  key: password
+            - name: ORLOJ_POSTGRES_DSN
+              value: {{ include "orloj.postgresDSN" . | quote }}
+            {{- else if .Values.externalPostgres.dsn }}
+            - name: ORLOJ_POSTGRES_DSN
+              value: {{ .Values.externalPostgres.dsn | quote }}
+            {{- end }}
+            # --- Secret encryption key ---
+            {{- if or .Values.secretEncryptionKey .Values.existingSecret }}
+            - name: ORLOJ_SECRET_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "orloj.secretName" . }}
+                  key: secret-encryption-key
+                  optional: true
+            {{- end }}
+            # --- Tool isolation ---
+            - name: ORLOJ_TOOL_ISOLATION_BACKEND
+              value: {{ .Values.toolIsolation.backend | quote }}
+            {{- if eq .Values.toolIsolation.backend "container" }}
+            - name: ORLOJ_TOOL_CONTAINER_RUNTIME
+              value: {{ .Values.toolIsolation.containerRuntime | quote }}
+            - name: ORLOJ_TOOL_CONTAINER_IMAGE
+              value: {{ .Values.toolIsolation.containerImage | quote }}
+            - name: ORLOJ_TOOL_CONTAINER_NETWORK
+              value: {{ .Values.toolIsolation.containerNetwork | quote }}
+            - name: ORLOJ_TOOL_CONTAINER_MEMORY
+              value: {{ .Values.toolIsolation.containerMemory | quote }}
+            - name: ORLOJ_TOOL_CONTAINER_CPUS
+              value: {{ .Values.toolIsolation.containerCpus | quote }}
+            - name: ORLOJ_TOOL_CONTAINER_PIDS_LIMIT
+              value: {{ .Values.toolIsolation.containerPidsLimit | quote }}
+            {{- end }}
+            {{- if .Values.cliToolAllowedCommands }}
+            - name: ORLOJ_CLI_TOOL_ALLOWED_COMMANDS
+              value: {{ .Values.cliToolAllowedCommands | quote }}
+            {{- end }}
+            {{- with .Values.worker.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.worker.extraEnvFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: healthz
+              containerPort: {{ .Values.worker.healthzPort }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: healthz
+            initialDelaySeconds: {{ .Values.worker.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.worker.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.worker.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.worker.livenessProbe.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: healthz
+            initialDelaySeconds: {{ .Values.worker.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.worker.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.worker.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.worker.readinessProbe.failureThreshold }}
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}
+      {{- with .Values.worker.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.worker.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.worker.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,182 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "orloj.fullname" . }}-server
+  labels:
+    {{- include "orloj.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+spec:
+  replicas: {{ .Values.server.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "orloj.server.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "orloj.server.selectorLabels" . | nindent 8 }}
+        {{- with .Values.server.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.server.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "orloj.server.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.server.podSecurityContext | nindent 8 }}
+      containers:
+        - name: orlojd
+          image: {{ include "orloj.server.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.server.securityContext | nindent 12 }}
+          args:
+            - --addr={{ .Values.server.addr }}
+            - --storage-backend={{ .Values.server.storageBackend }}
+            - --task-execution-mode={{ .Values.server.taskExecutionMode }}
+            - --event-bus-backend={{ .Values.server.eventBusBackend }}
+            {{- $natsURL := include "orloj.natsURL" . }}
+            {{- if $natsURL }}
+            - --nats-url={{ $natsURL }}
+            {{- end }}
+            - --agent-message-bus-backend={{ .Values.server.agentMessageBusBackend }}
+            {{- if $natsURL }}
+            - --agent-message-nats-url={{ $natsURL }}
+            {{- end }}
+            - --reconcile-interval={{ .Values.server.reconcileInterval }}
+            - --postgres-max-open-conns={{ .Values.server.postgres.maxOpenConns }}
+            - --postgres-max-idle-conns={{ .Values.server.postgres.maxIdleConns }}
+            - --postgres-conn-max-lifetime={{ .Values.server.postgres.connMaxLifetime }}
+            {{- if .Values.server.uiPath }}
+            - --ui-path={{ .Values.server.uiPath }}
+            {{- end }}
+            {{- if .Values.server.trustedProxies }}
+            - --trusted-proxies={{ .Values.server.trustedProxies }}
+            {{- end }}
+            {{- if .Values.server.embeddedWorker }}
+            - --embedded-worker
+            - --embedded-worker-max-concurrent-tasks={{ .Values.server.embeddedWorkerMaxConcurrentTasks }}
+            {{- end }}
+            {{- with .Values.server.extraArgs }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          env:
+            - name: ORLOJ_LOG_LEVEL
+              value: {{ .Values.server.logLevel | quote }}
+            - name: ORLOJ_LOG_FORMAT
+              value: {{ .Values.server.logFormat | quote }}
+            - name: ORLOJ_AUTH_MODE
+              value: {{ .Values.auth.mode | quote }}
+            # --- PostgreSQL DSN ---
+            {{- if .Values.externalPostgres.existingSecret }}
+            - name: ORLOJ_POSTGRES_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalPostgres.existingSecret }}
+                  key: {{ .Values.externalPostgres.existingSecretKey }}
+            {{- else if .Values.postgresql.enabled }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgresql.auth.existingSecret | default (printf "%s-postgresql" .Release.Name) }}
+                  key: password
+            - name: ORLOJ_POSTGRES_DSN
+              value: {{ include "orloj.postgresDSN" . | quote }}
+            {{- else if .Values.externalPostgres.dsn }}
+            - name: ORLOJ_POSTGRES_DSN
+              value: {{ .Values.externalPostgres.dsn | quote }}
+            {{- end }}
+            # --- Secret encryption key ---
+            {{- if or .Values.secretEncryptionKey .Values.existingSecret }}
+            - name: ORLOJ_SECRET_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "orloj.secretName" . }}
+                  key: secret-encryption-key
+                  optional: true
+            {{- end }}
+            # --- API token ---
+            {{- if or .Values.auth.apiToken .Values.existingSecret }}
+            - name: ORLOJ_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "orloj.secretName" . }}
+                  key: api-token
+                  optional: true
+            {{- end }}
+            # --- Setup token ---
+            {{- if or .Values.auth.setupToken .Values.existingSecret }}
+            - name: ORLOJ_SETUP_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "orloj.secretName" . }}
+                  key: setup-token
+                  optional: true
+            {{- end }}
+            # --- Tool isolation ---
+            - name: ORLOJ_TOOL_ISOLATION_BACKEND
+              value: {{ .Values.toolIsolation.backend | quote }}
+            {{- if eq .Values.toolIsolation.backend "container" }}
+            - name: ORLOJ_TOOL_CONTAINER_RUNTIME
+              value: {{ .Values.toolIsolation.containerRuntime | quote }}
+            - name: ORLOJ_TOOL_CONTAINER_IMAGE
+              value: {{ .Values.toolIsolation.containerImage | quote }}
+            - name: ORLOJ_TOOL_CONTAINER_NETWORK
+              value: {{ .Values.toolIsolation.containerNetwork | quote }}
+            - name: ORLOJ_TOOL_CONTAINER_MEMORY
+              value: {{ .Values.toolIsolation.containerMemory | quote }}
+            - name: ORLOJ_TOOL_CONTAINER_CPUS
+              value: {{ .Values.toolIsolation.containerCpus | quote }}
+            - name: ORLOJ_TOOL_CONTAINER_PIDS_LIMIT
+              value: {{ .Values.toolIsolation.containerPidsLimit | quote }}
+            {{- end }}
+            {{- if .Values.cliToolAllowedCommands }}
+            - name: ORLOJ_CLI_TOOL_ALLOWED_COMMANDS
+              value: {{ .Values.cliToolAllowedCommands | quote }}
+            {{- end }}
+            {{- with .Values.server.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.server.extraEnvFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.server.containerPort }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: {{ .Values.server.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.server.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.server.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.server.livenessProbe.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: {{ .Values.server.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.server.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.server.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.server.readinessProbe.failureThreshold }}
+          resources:
+            {{- toYaml .Values.server.resources | nindent 12 }}
+      {{- with .Values.server.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.server.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.server.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

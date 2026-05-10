@@ -1,0 +1,19 @@
+{{- if .Values.server.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "orloj.fullname" . }}
+  labels:
+    {{- include "orloj.labels" . | nindent 4 }}
+    {{- with .Values.server.serviceMonitor.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "orloj.server.selectorLabels" . | nindent 6 }}
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: {{ .Values.server.serviceMonitor.interval }}
+{{- end }}

@@ -1,6 +1,30 @@
 apiVersion: v2
 name: orloj
-description: Helm chart for deploying Orloj (orlojd, orlojworker, Postgres, and NATS)
+description: The full stack for agentic systems — deploy, orchestrate, govern, and observe multi-agent workflows on Kubernetes.
 type: application
 version: 0.1.0
-appVersion: "0.1.0"
+appVersion: "0.14.1"
+home: https://orloj.dev
+sources:
+  - https://github.com/OrlojHQ/orloj
+maintainers:
+  - name: OrlojHQ
+    url: https://github.com/OrlojHQ
+keywords:
+  - agents
+  - ai
+  - llm
+  - orchestration
+  - multi-agent
+  - infrastructure
+icon: https://orloj.dev/icon.png
+
+dependencies:
+  - name: postgresql
+    version: "16.4.x"
+    repository: https://charts.bitnami.com/bitnami
+    condition: postgresql.enabled
+  - name: nats
+    version: "1.2.x"
+    repository: https://nats-io.github.io/k8s/helm/charts/
+    condition: nats.enabled

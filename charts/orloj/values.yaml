@@ -1,95 +1,363 @@
-nameOverride: ""
-fullnameOverride: ""
+# -- Global image settings
+image:
+  # -- Container image registry
+  registry: ghcr.io
+  # -- orlojd image repository
+  server:
+    repository: orlojhq/orlojd
+    tag: ""  # defaults to appVersion
+  # -- orlojworker image repository
+  worker:
+    repository: orlojhq/orlojworker
+    tag: ""  # defaults to appVersion
+  # -- Image pull policy
+  pullPolicy: IfNotPresent
 
-commonLabels: {}
-
-namespace:
-  create: false
-
+# -- Image pull secrets for private registries
 imagePullSecrets: []
 
-podSecurityContext:
-  seccompProfile:
-    type: RuntimeDefault
+# -- Override the chart name
+nameOverride: ""
+# -- Override the full release name
+fullnameOverride: ""
 
-containerSecurityContext:
-  runAsNonRoot: true
-  allowPrivilegeEscalation: false
+# ---------------------------------------------------------------------------
+# orlojd — API server & control plane
+# ---------------------------------------------------------------------------
+server:
+  # -- Number of orlojd replicas (1 for now; HA requires leader election)
+  replicaCount: 1
 
-runtimeSecret:
-  modelGatewayApiKey: ""
-  apiToken: ""
+  # -- Listen address inside the container
+  addr: ":8080"
+  # -- Container port (must match the port in addr)
+  containerPort: 8080
 
-# Shared non-secret runtime environment variables for orlojd and orlojworker.
-# Example: set ORLOJ_LOG_LEVEL: debug while investigating scheduling/runtime behavior.
-runtimeConfig: {}
+  # -- Base URL path for the web console (e.g. "/orloj/" for subpath routing)
+  uiPath: "/"
 
-postgres:
-  auth:
-    user: orloj
-    password: change-me
-    database: orloj
-    dsn: ""
-  image:
-    repository: postgres
-    tag: 16-alpine
-    pullPolicy: IfNotPresent
+  # -- Storage backend: memory | postgres
+  storageBackend: postgres
+
+  # -- Task execution mode: sequential | message-driven
+  taskExecutionMode: message-driven
+
+  # -- Event bus backend: memory | nats
+  eventBusBackend: nats
+
+  # -- Agent message bus backend: none | memory | nats-jetstream
+  agentMessageBusBackend: nats-jetstream
+
+  # -- Run an embedded worker inside the orlojd process
+  embeddedWorker: false
+  embeddedWorkerMaxConcurrentTasks: 1
+
+  # -- Log level: debug | info | warn | error
+  logLevel: info
+  # -- Log format: json | text
+  logFormat: json
+
+  # -- PostgreSQL connection pool settings
+  postgres:
+    maxOpenConns: 20
+    maxIdleConns: 10
+    connMaxLifetime: 30m
+
+  # -- Reconcile interval for controllers
+  reconcileInterval: 2s
+
+  # -- Comma-separated CIDRs of trusted reverse proxies for X-Forwarded-For
+  trustedProxies: ""
+
+  # -- Additional CLI flags appended to the orlojd command
+  extraArgs: []
+
+  # -- Additional environment variables for orlojd
+  extraEnv: []
+  #   - name: MY_VAR
+  #     value: "my-value"
+
+  # -- Additional environment variables from secrets/configmaps
+  extraEnvFrom: []
+
   service:
-    port: 5432
-  persistence:
-    enabled: true
-    size: 20Gi
-    storageClass: ""
-  resources: {}
+    # -- Service type: ClusterIP | LoadBalancer | NodePort
+    type: ClusterIP
+    # -- Service port
+    port: 8080
 
+  ingress:
+    # -- Enable ingress resource
+    enabled: false
+    # -- Ingress class name
+    className: ""
+    # -- Ingress annotations
+    annotations: {}
+    #   cert-manager.io/cluster-issuer: letsencrypt-prod
+    # -- Ingress hosts
+    hosts:
+      - host: orloj.example.com
+        paths:
+          - path: /
+            pathType: Prefix
+    # -- Ingress TLS configuration
+    tls: []
+    #   - secretName: orloj-tls
+    #     hosts:
+    #       - orloj.example.com
+
+  # -- Liveness probe settings
+  livenessProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 5
+
+  # -- Readiness probe settings
+  readinessProbe:
+    initialDelaySeconds: 3
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+
+  # -- Pod-level security context
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    fsGroup: 10001
+    seccompProfile:
+      type: RuntimeDefault
+
+  # -- Container-level security context
+  securityContext:
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+
+  # -- Node selector
+  nodeSelector: {}
+  # -- Tolerations
+  tolerations: []
+  # -- Affinity rules
+  affinity: {}
+  # -- Pod annotations
+  podAnnotations: {}
+  # -- Pod labels
+  podLabels: {}
+
+  serviceAccount:
+    # -- Create a service account for orlojd
+    create: true
+    # -- Service account name (auto-generated if empty)
+    name: ""
+    # -- Annotations for the service account (e.g. IAM role for Bedrock)
+    annotations: {}
+
+  # -- PodDisruptionBudget
+  pdb:
+    enabled: false
+    minAvailable: 1
+
+  # -- Prometheus ServiceMonitor (requires prometheus-operator CRDs)
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    labels: {}
+
+# ---------------------------------------------------------------------------
+# orlojworker — distributed task executor
+# ---------------------------------------------------------------------------
+worker:
+  # -- Number of worker replicas
+  replicaCount: 2
+
+  # -- Worker region label
+  region: default
+
+  # -- Max concurrent tasks per worker pod
+  maxConcurrentTasks: 1
+
+  # -- Task execution mode: sequential | message-driven
+  taskExecutionMode: message-driven
+
+  # -- Agent message bus backend: none | memory | nats-jetstream
+  agentMessageBusBackend: nats-jetstream
+
+  # -- Enable runtime inbox consumers
+  agentMessageConsume: true
+
+  # -- Lease duration for claimed tasks
+  leaseDuration: 30s
+  # -- Heartbeat interval for lease renewal
+  heartbeatInterval: 10s
+  # -- Reconcile / claim interval
+  reconcileInterval: 1s
+
+  # -- Healthz listen address inside the container
+  healthzAddr: ":8081"
+  # -- Healthz container port (must match the port in healthzAddr)
+  healthzPort: 8081
+
+  # -- Log level: debug | info | warn | error
+  logLevel: info
+  # -- Log format: json | text
+  logFormat: json
+
+  # -- Declare GPU capability for this worker pool
+  gpu: false
+  # -- Comma-separated model IDs this worker pool supports (empty = all)
+  supportedModels: ""
+
+  # -- PostgreSQL connection pool settings
+  postgres:
+    maxOpenConns: 20
+    maxIdleConns: 10
+    connMaxLifetime: 30m
+
+  # -- Additional CLI flags appended to the orlojworker command
+  extraArgs: []
+
+  # -- Additional environment variables
+  extraEnv: []
+  # -- Additional environment variables from secrets/configmaps
+  extraEnvFrom: []
+
+  # -- Liveness probe settings
+  livenessProbe:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 5
+
+  # -- Readiness probe settings
+  readinessProbe:
+    initialDelaySeconds: 3
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: "2"
+      memory: 1Gi
+
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    fsGroup: 10001
+    seccompProfile:
+      type: RuntimeDefault
+
+  securityContext:
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  podAnnotations: {}
+  podLabels: {}
+
+  serviceAccount:
+    create: true
+    name: ""
+    annotations: {}
+
+  pdb:
+    enabled: true
+    minAvailable: 1
+
+  # -- HPA (requires metrics-server)
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
+# ---------------------------------------------------------------------------
+# Authentication & secrets
+# ---------------------------------------------------------------------------
+auth:
+  # -- Auth mode: off | native
+  mode: "off"
+  # -- API bearer token (ignored when mode=native)
+  apiToken: ""
+  # -- Setup token for first-user bootstrap (native mode)
+  setupToken: ""
+
+# -- 256-bit AES key (hex or base64) for encrypting Secret resources at rest.
+# Generate with: openssl rand -hex 32
+secretEncryptionKey: ""
+
+# -- Reference an existing Kubernetes Secret instead of creating one.
+# The secret must contain keys: secret-encryption-key, api-token, setup-token
+existingSecret: ""
+
+# ---------------------------------------------------------------------------
+# Tool isolation
+# ---------------------------------------------------------------------------
+toolIsolation:
+  # -- Container isolation backend: none | container
+  backend: none
+  # -- Container runtime binary
+  containerRuntime: docker
+  # -- Default container image for sandboxed tools
+  containerImage: "curlimages/curl:8.8.0"
+  # -- Container network mode
+  containerNetwork: none
+  # -- Default container memory limit
+  containerMemory: 128m
+  # -- Default container CPU limit
+  containerCpus: "0.50"
+  # -- Default container PID limit
+  containerPidsLimit: 64
+
+# -- CLI tool allowlist (comma-separated commands; empty = deny all in container mode)
+cliToolAllowedCommands: ""
+
+# ---------------------------------------------------------------------------
+# NATS (subchart)
+# ---------------------------------------------------------------------------
 nats:
   enabled: true
-  image:
-    repository: nats
-    tag: 2.10-alpine
-    pullPolicy: IfNotPresent
-  args:
-    - -js
-  service:
-    port: 4222
-  resources: {}
+  config:
+    jetstream:
+      enabled: true
+      fileStore:
+        pvc:
+          size: 10Gi
 
-orlojd:
-  replicas: 1
-  image:
-    repository: ghcr.io/example/orloj-orlojd
-    tag: latest
-    pullPolicy: IfNotPresent
-  args:
-    - --addr=:8080
-    - --storage-backend=postgres
-  service:
-    type: ClusterIP
-    port: 8080
-  readinessProbe:
-    enabled: true
-    path: /healthz
-    initialDelaySeconds: 5
-    periodSeconds: 5
-  livenessProbe:
-    enabled: true
-    path: /healthz
-    initialDelaySeconds: 10
-    periodSeconds: 10
-  extraEnv: []
-  resources: {}
+# ---------------------------------------------------------------------------
+# PostgreSQL (Bitnami subchart)
+# ---------------------------------------------------------------------------
+postgresql:
+  enabled: true
+  auth:
+    username: orloj
+    password: ""  # auto-generated if empty
+    database: orloj
+    existingSecret: ""
+  primary:
+    persistence:
+      size: 10Gi
 
-orlojworker:
-  replicas: 2
-  image:
-    repository: ghcr.io/example/orloj-orlojworker
-    tag: latest
-    pullPolicy: IfNotPresent
-  command:
-    - /bin/sh
-    - -c
-  args:
-    - exec /usr/local/bin/app --storage-backend=postgres --worker-id="${POD_NAME}" --region=default --max-concurrent-tasks=4
-  agentMessageConsume: true
-  extraEnv: []
-  resources: {}
+# -- External PostgreSQL DSN (used when postgresql.enabled=false)
+externalPostgres:
+  dsn: ""
+  # -- Reference an existing K8s Secret key for the DSN
+  existingSecret: ""
+  existingSecretKey: "postgres-dsn"
+
+# -- External NATS URL (used when nats.enabled=false)
+externalNats:
+  url: ""

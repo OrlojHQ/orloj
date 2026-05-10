@@ -1,11 +1,43 @@
-Orloj has been installed.
+🎯 Orloj has been deployed!
 
-1. Check rollout status:
-   kubectl -n {{ .Release.Namespace }} rollout status deploy/{{ include "orloj.orlojdFullname" . }}
-   kubectl -n {{ .Release.Namespace }} rollout status deploy/{{ include "orloj.orlojworkerFullname" . }}
+{{- if .Values.server.ingress.enabled }}
+Access the web console at:
+{{- range .Values.server.ingress.hosts }}
+  https://{{ .host }}
+{{- end }}
+{{- else }}
 
-2. Port-forward API service:
-   kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "orloj.orlojdFullname" . }} 8080:{{ .Values.orlojd.service.port }}
+Access the web console by port-forwarding:
 
-3. Verify health:
-   curl -s http://127.0.0.1:8080/healthz
+  kubectl port-forward svc/{{ include "orloj.fullname" . }}-server {{ .Values.server.service.port }}:{{ .Values.server.service.port }} -n {{ .Release.Namespace }}
+
+  Then open http://localhost:{{ .Values.server.service.port }}
+{{- end }}
+
+Workers: {{ .Values.worker.replicaCount }} replica(s) in region "{{ .Values.worker.region }}"
+
+{{- if eq .Values.auth.mode "native" }}
+
+Auth mode: native
+{{- if .Values.auth.setupToken }}
+Bootstrap the first admin account at /v1/auth/setup (setup token required).
+{{- else }}
+Bootstrap the first admin account at /v1/auth/setup
+{{- end }}
+{{- else if eq .Values.auth.mode "off" }}
+
+⚠️  Auth mode is OFF. Set auth.mode=native and auth.setupToken for production use.
+{{- end }}
+
+CLI quickstart:
+
+  orlojctl config set-context default \
+    --server http://localhost:{{ .Values.server.service.port }} \
+    {{- if .Values.auth.apiToken }}
+    --token <your-api-token> \
+    {{- end }}
+    --namespace default
+
+  orlojctl init my-first-system
+  orlojctl apply -f my-first-system/ --run
+  orlojctl trace my-first-system-task
