@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Helm chart hardening**: conditional NATS URL args (avoid passing empty `--nats-url=` when NATS is disabled), templated `containerPort` and probe settings from values (instead of hardcoded), added `seccompProfile: RuntimeDefault` to pod security contexts, security context on `helm test` pod, removed dead `postgres-password` key from chart-managed Secret, and removed placeholder sub-chart directories that shadowed real `helm dependency update`.
+
 ### Changed
 
 - **JetStream API migrated to `jetstream` package**: the agent message bus now uses `jetstream.New(nc)` and the push-based `consumer.Messages()` iterator instead of the deprecated `nc.JetStream()` v1 API with `PullSubscribe`/`Fetch` polling. This eliminates idle CPU from the 2-second poll loop and delivers messages instantly via server-side push with heartbeats.

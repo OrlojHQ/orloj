@@ -1,7 +1,12 @@
-.git/
-.github/
-.gitignore
 .DS_Store
-.vscode/
-*.tmp
 *.swp
+*.bak
+*.tmp
+*.orig
+*~
+.git
+.gitignore
+.project
+.idea
+*.tmproj
+.vscode

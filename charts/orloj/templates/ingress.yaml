@@ -1,0 +1,41 @@
+{{- if .Values.server.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "orloj.fullname" . }}
+  labels:
+    {{- include "orloj.labels" . | nindent 4 }}
+  {{- with .Values.server.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if .Values.server.ingress.className }}
+  ingressClassName: {{ .Values.server.ingress.className }}
+  {{- end }}
+  {{- if .Values.server.ingress.tls }}
+  tls:
+    {{- range .Values.server.ingress.tls }}
+    - secretName: {{ .secretName }}
+      hosts:
+        {{- range .hosts }}
+        - {{ . | quote }}
+        {{- end }}
+    {{- end }}
+  {{- end }}
+  rules:
+    {{- range .Values.server.ingress.hosts }}
+    - host: {{ .host | quote }}
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType }}
+            backend:
+              service:
+                name: {{ include "orloj.fullname" $ }}-server
+                port:
+                  name: http
+          {{- end }}
+    {{- end }}
+{{- end }}

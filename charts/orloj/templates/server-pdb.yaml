@@ -1,0 +1,14 @@
+{{- if .Values.server.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "orloj.fullname" . }}-server
+  labels:
+    {{- include "orloj.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+spec:
+  minAvailable: {{ .Values.server.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "orloj.server.selectorLabels" . | nindent 6 }}
+{{- end }}

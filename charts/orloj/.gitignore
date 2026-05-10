@@ -1,0 +1,3 @@
+# Helm dependency artifacts (run `helm dependency update` before install)
+charts/*.tgz
+Chart.lock
