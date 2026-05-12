@@ -6559,6 +6559,9 @@ paths:
       - eval-datasets
       summary: List eval datasets
       operationId: listEvalDatasets
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
       parameters:
       - name: namespace
         in: query
@@ -6584,6 +6587,9 @@ paths:
       - eval-datasets
       summary: Create or update an eval dataset
       operationId: createEvalDataset
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
       requestBody:
         required: true
         content:
@@ -6604,6 +6610,9 @@ paths:
       - eval-datasets
       summary: Get an eval dataset by name
       operationId: getEvalDataset
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
       parameters:
       - name: name
         in: path
@@ -6624,6 +6633,9 @@ paths:
       - eval-datasets
       summary: Delete an eval dataset
       operationId: deleteEvalDataset
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
       parameters:
       - name: name
         in: path
@@ -6640,6 +6652,9 @@ paths:
       - eval-runs
       summary: List eval runs
       operationId: listEvalRuns
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
       parameters:
       - name: namespace
         in: query
@@ -6665,6 +6680,9 @@ paths:
       - eval-runs
       summary: Create or update an eval run
       operationId: createEvalRun
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
       requestBody:
         required: true
         content:
@@ -6685,6 +6703,9 @@ paths:
       - eval-runs
       summary: Get an eval run by name
       operationId: getEvalRun
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
       parameters:
       - name: name
         in: path
@@ -6705,6 +6726,9 @@ paths:
       - eval-runs
       summary: Delete an eval run
       operationId: deleteEvalRun
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
       parameters:
       - name: name
         in: path
@@ -6721,6 +6745,9 @@ paths:
       - eval-runs
       summary: Export eval run results
       operationId: exportEvalRun
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
       parameters:
       - name: name
         in: path
@@ -6743,6 +6770,9 @@ paths:
       - eval-runs
       summary: Annotate a single sample result
       operationId: annotateEvalRunSample
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
       parameters:
       - name: name
         in: path
@@ -6778,6 +6808,9 @@ paths:
       - eval-runs
       summary: Bulk import annotations
       operationId: bulkImportEvalRunResults
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
       parameters:
       - name: name
         in: path
@@ -6811,6 +6844,9 @@ paths:
       - eval-runs
       summary: Finalize a PendingReview eval run
       operationId: finalizeEvalRun
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
       parameters:
       - name: name
         in: path
@@ -6833,6 +6869,9 @@ paths:
       - eval-runs
       summary: Cancel a running eval
       operationId: cancelEvalRun
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
       parameters:
       - name: name
         in: path
@@ -6855,6 +6894,9 @@ paths:
       - eval-runs
       summary: Compare multiple eval runs
       operationId: compareEvalRuns
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
       parameters:
       - name: runs
         in: query

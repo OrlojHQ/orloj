@@ -11,8 +11,8 @@ components:
       properties:
         sample_name: { type: string }
         task_name: { type: string }
-        score: { type: number, nullable: true }
-        pass: { type: boolean, nullable: true }
+        score: { type: [number, "null"] }
+        pass: { type: [boolean, "null"] }
         error: { type: string }
         latency: { type: string }
         tokens: { type: integer }
@@ -106,5 +106,5 @@ components:
                 additionalProperties:
                   type: object
                   properties:
-                    score: { type: number, nullable: true }
-                    pass: { type: boolean, nullable: true }
+                    score: { type: [number, "null"] }
+                    pass: { type: [boolean, "null"] }
