@@ -95,6 +95,7 @@ func newRootCommand() *cobra.Command {
 		newSealCommand(),
 		newValidateCommand(),
 		newToolCommand(),
+		newEvalCommand(),
 	)
 
 	return root
@@ -899,6 +900,35 @@ func runGet(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(tw, "NAME\tROLE\tCREATED_AT")
 		for _, item := range list.Items {
 			fmt.Fprintf(tw, "%s\t%s\t%s\n", item.Name, item.Role, item.CreatedAt)
+		}
+		_ = tw.Flush()
+	case "eval-datasets":
+		var list resources.EvalDatasetList
+		if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
+			return fmt.Errorf("failed to decode response: %w", err)
+		}
+		tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+		fmt.Fprintln(tw, "NAME\tSAMPLES\tSTATUS")
+		for _, item := range list.Items {
+			fmt.Fprintf(tw, "%s\t%d\t%s\n", item.Metadata.Name, len(item.Spec.Samples), item.Status.Phase)
+		}
+		_ = tw.Flush()
+	case "eval-runs":
+		var list resources.EvalRunList
+		if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
+			return fmt.Errorf("failed to decode response: %w", err)
+		}
+		tw := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+		fmt.Fprintln(tw, "NAME\tDATASET\tSYSTEM\tPHASE\tPASS_RATE\tSAMPLES")
+		for _, item := range list.Items {
+			passRate := ""
+			if item.Status.Phase == resources.EvalRunPhaseSucceeded {
+				passRate = fmt.Sprintf("%.0f%%", item.Status.Summary.PassRate*100)
+			}
+			fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%d/%d\n",
+				item.Metadata.Name, item.Spec.DatasetRef, item.Spec.System,
+				item.Status.Phase, passRate,
+				item.Status.CompletedSamples, item.Status.TotalSamples)
 		}
 		_ = tw.Flush()
 	}
@@ -2080,6 +2110,8 @@ var applyEndpoints = map[string]string{
 	"taskwebhook":    "/v1/task-webhooks",
 	"worker":         "/v1/workers",
 	"mcpserver":      "/v1/mcp-servers",
+	"evaldataset":    "/v1/eval-datasets",
+	"evalrun":        "/v1/eval-runs",
 }
 
 func buildApplyRequest(kind string, raw []byte) (string, []byte, string, error) {
@@ -2151,6 +2183,10 @@ func normalizeResource(resource string) string {
 		return "mcp-servers"
 	case "tokens", "token":
 		return "tokens"
+	case "eval-datasets", "evaldatasets", "evaldataset":
+		return "eval-datasets"
+	case "eval-runs", "evalruns", "evalrun":
+		return "eval-runs"
 	default:
 		return ""
 	}
@@ -2194,6 +2230,10 @@ func listEndpointForResource(resource string) (string, error) {
 		return "/v1/mcp-servers", nil
 	case "tokens":
 		return "/v1/tokens", nil
+	case "eval-datasets":
+		return "/v1/eval-datasets", nil
+	case "eval-runs":
+		return "/v1/eval-runs", nil
 	default:
 		return "", fmt.Errorf("unsupported resource %q", resource)
 	}

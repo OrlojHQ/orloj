@@ -39,6 +39,12 @@ A terminal state for tasks or messages that have exhausted all retry attempts. D
 **Edge**
 A directional connection between two agents in an AgentSystem graph. Edges define message routing. The `edges[]` field supports fan-out (multiple targets) and metadata annotations via labels and policy.
 
+**EvalDataset**
+A resource containing a list of (input, expected output) sample pairs with optional scoring rubrics. Datasets are referenced by EvalRun resources to drive agent evaluations. See [Agent Evaluation](../concepts/evaluation/).
+
+**EvalRun**
+A resource that executes all samples in an EvalDataset against an AgentSystem, scores the results, and produces aggregate metrics (pass rate, mean score, latency, tokens). Supports `exact_match`, `llm_judge`, `manual`, and `custom` scoring strategies. See [Agent Evaluation](../concepts/evaluation/).
+
 ## F
 
 **Fan-in**

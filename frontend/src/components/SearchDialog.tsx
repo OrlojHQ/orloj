@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, X, Network, Bot, ListTodo, Cpu, Database, Wrench, CalendarClock, Webhook, Lock, Brain, Filter, Shield, KeyRound, ShieldCheck, Plug, UserCog } from "lucide-react";
-import { useAgentSystems, useAgents, useTasks, useTaskSchedules, useTaskWebhooks, useWorkers, useModelEndpoints, useTools, useSecrets, useSealedSecrets, useMemories, useContextAdapters, useAgentPolicies, useAgentRoles, useToolPermissions, useToolApprovals, useTaskApprovals, useMcpServers } from "../api/hooks";
+import { useAgentSystems, useAgents, useTasks, useTaskSchedules, useTaskWebhooks, useWorkers, useModelEndpoints, useTools, useSecrets, useMemories, useContextAdapters, useAgentPolicies, useAgentRoles, useToolPermissions, useToolApprovals, useTaskApprovals, useMcpServers } from "../api/hooks";
 
 interface SearchResult {
   kind: string;
@@ -24,7 +24,6 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
   const taskSchedules = useTaskSchedules();
   const taskWebhooks = useTaskWebhooks();
   const secrets = useSecrets();
-  const sealedSecrets = useSealedSecrets();
   const memories = useMemories();
   const contextAdapters = useContextAdapters();
   const policies = useAgentPolicies();
@@ -70,9 +69,6 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
     for (const s of secrets.data ?? []) {
       results.push({ kind: "Secret", name: s.metadata.name, path: `/secrets/${s.metadata.name}`, icon: <Lock size={14} /> });
     }
-    for (const s of sealedSecrets.data ?? []) {
-      results.push({ kind: "Sealed Secret", name: s.metadata.name, path: `/sealed-secrets/${s.metadata.name}`, icon: <Lock size={14} /> });
-    }
     for (const m of memories.data ?? []) {
       results.push({ kind: "Memory", name: m.metadata.name, path: `/memories/${m.metadata.name}`, icon: <Brain size={14} /> });
     }
@@ -108,7 +104,7 @@ export function SearchDialog({ open, onClose }: { open: boolean; onClose: () => 
       });
     }
     return results;
-  }, [systems.data, agents.data, tasks.data, taskSchedules.data, taskWebhooks.data, workers.data, models.data, tools.data, secrets.data, sealedSecrets.data, memories.data, contextAdapters.data, policies.data, roles.data, permissions.data, approvals.data, taskApprovals.data, mcpServers.data]);
+  }, [systems.data, agents.data, tasks.data, taskSchedules.data, taskWebhooks.data, workers.data, models.data, tools.data, secrets.data, memories.data, contextAdapters.data, policies.data, roles.data, permissions.data, approvals.data, taskApprovals.data, mcpServers.data]);
 
   const filtered = useMemo(() => {
     if (!query.trim()) return allResults.slice(0, 20);

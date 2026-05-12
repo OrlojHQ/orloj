@@ -8,11 +8,13 @@ import { saveNamespacedResourceYaml } from "../hooks/saveDetailYamlWithFreshRv";
 import { StatusBadge } from "../components/StatusBadge";
 import { YamlEditor } from "../components/YamlEditor";
 import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ShieldCheck } from "lucide-react";
 import clsx from "clsx";
 import { toast } from "../components/Toast";
 import type { Secret } from "../api/types";
 import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
+
+const SEALED_OWNER_ANNOTATION = "orloj.dev/sealedsecret-owner";
 
 type Tab = "overview" | "yaml";
 
@@ -48,6 +50,7 @@ export function SecretDetail() {
   }
 
   const dataKeys = Object.keys(secret.spec.data ?? {});
+  const sealedOwner = secret.metadata.annotations?.[SEALED_OWNER_ANNOTATION];
 
   const handleDelete = async () => {
     if (!window.confirm(`Delete Secret ${secret.metadata.name}?`)) return;
@@ -111,6 +114,18 @@ export function SecretDetail() {
             <div className="detail-field">
               <span className="detail-field__label">Phase</span>
               <StatusBadge phase={secret.status?.phase} size="md" />
+            </div>
+            <div className="detail-field">
+              <span className="detail-field__label">Source</span>
+              <span className="detail-field__value">
+                {sealedOwner ? (
+                  <span className="badge badge--blue" title={`Managed by SealedSecret ${sealedOwner}`}>
+                    <ShieldCheck size={12} /> Sealed — {sealedOwner}
+                  </span>
+                ) : (
+                  "Manual"
+                )}
+              </span>
             </div>
             <div className="detail-field">
               <span className="detail-field__label">Keys</span>

@@ -43,6 +43,8 @@ tags:
 - name: task-webhooks
 - name: workers
 - name: mcp-servers
+- name: eval-datasets
+- name: eval-runs
 - name: auth
 - name: system
 - name: events
@@ -6550,6 +6552,366 @@ paths:
             text/plain:
               schema:
                 "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+
+  "/v1/eval-datasets":
+    get:
+      tags:
+      - eval-datasets
+      summary: List eval datasets
+      operationId: listEvalDatasets
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+      - name: continue
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/eval-dataset.yaml#/components/schemas/EvalDatasetList"
+    post:
+      tags:
+      - eval-datasets
+      summary: Create or update an eval dataset
+      operationId: createEvalDataset
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/eval-dataset.yaml#/components/schemas/EvalDataset"
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/eval-dataset.yaml#/components/schemas/EvalDataset"
+
+  "/v1/eval-datasets/{name}":
+    get:
+      tags:
+      - eval-datasets
+      summary: Get an eval dataset by name
+      operationId: getEvalDataset
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/eval-dataset.yaml#/components/schemas/EvalDataset"
+        '404':
+          description: Not found
+    delete:
+      tags:
+      - eval-datasets
+      summary: Delete an eval dataset
+      operationId: deleteEvalDataset
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: Deleted
+
+  "/v1/eval-runs":
+    get:
+      tags:
+      - eval-runs
+      summary: List eval runs
+      operationId: listEvalRuns
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+      - name: continue
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/eval-run.yaml#/components/schemas/EvalRunList"
+    post:
+      tags:
+      - eval-runs
+      summary: Create or update an eval run
+      operationId: createEvalRun
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "./schemas/eval-run.yaml#/components/schemas/EvalRun"
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/eval-run.yaml#/components/schemas/EvalRun"
+
+  "/v1/eval-runs/{name}":
+    get:
+      tags:
+      - eval-runs
+      summary: Get an eval run by name
+      operationId: getEvalRun
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/eval-run.yaml#/components/schemas/EvalRun"
+        '404':
+          description: Not found
+    delete:
+      tags:
+      - eval-runs
+      summary: Delete an eval run
+      operationId: deleteEvalRun
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '204':
+          description: Deleted
+
+  "/v1/eval-runs/{name}/export":
+    get:
+      tags:
+      - eval-runs
+      summary: Export eval run results
+      operationId: exportEvalRun
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: format
+        in: query
+        schema:
+          type: string
+          enum: [csv, json]
+          default: json
+      responses:
+        '200':
+          description: Exported results
+
+  "/v1/eval-runs/{name}/results/{sample}":
+    put:
+      tags:
+      - eval-runs
+      summary: Annotate a single sample result
+      operationId: annotateEvalRunSample
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: sample
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                score: { type: number }
+                pass: { type: boolean }
+                comment: { type: string }
+      responses:
+        '200':
+          description: Annotated
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/eval-run.yaml#/components/schemas/EvalRun"
+
+  "/v1/eval-runs/{name}/results":
+    post:
+      tags:
+      - eval-runs
+      summary: Bulk import annotations
+      operationId: bulkImportEvalRunResults
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: object
+                properties:
+                  sample_name: { type: string }
+                  score: { type: number }
+                  pass: { type: boolean }
+                  comment: { type: string }
+      responses:
+        '200':
+          description: Imported
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/eval-run.yaml#/components/schemas/EvalRun"
+
+  "/v1/eval-runs/{name}/finalize":
+    post:
+      tags:
+      - eval-runs
+      summary: Finalize a PendingReview eval run
+      operationId: finalizeEvalRun
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Finalized
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/eval-run.yaml#/components/schemas/EvalRun"
+        '409':
+          description: Run is not in PendingReview phase
+
+  "/v1/eval-runs/{name}/cancel":
+    post:
+      tags:
+      - eval-runs
+      summary: Cancel a running eval
+      operationId: cancelEvalRun
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/eval-run.yaml#/components/schemas/EvalRun"
+        '409':
+          description: Run is already in a terminal phase
+
+  "/v1/eval-runs/compare":
+    get:
+      tags:
+      - eval-runs
+      summary: Compare multiple eval runs
+      operationId: compareEvalRuns
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: runs
+        in: query
+        required: true
+        description: Comma-separated list of eval run names (minimum 2)
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Comparison result
+          content:
+            application/json:
+              schema:
+                $ref: "./schemas/eval-run.yaml#/components/schemas/EvalRunCompareResponse"
+
 components:
   securitySchemes:
     bearerAuth:

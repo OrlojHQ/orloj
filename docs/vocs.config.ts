@@ -99,6 +99,13 @@ export default defineConfig({
           ],
         },
         { text: "Worker", link: "/concepts/infrastructure/worker" },
+        {
+          text: "Evaluation",
+          collapsed: false,
+          items: [
+            { text: "Agent Evaluation", link: "/concepts/evaluation/" },
+          ],
+        },
       ],
     },
 
@@ -129,6 +136,10 @@ export default defineConfig({
         { text: "Connect an MCP Server", link: "/guides/connect-mcp-server" },
         { text: "Build a Custom Tool", link: "/guides/build-custom-tool" },
         { text: "Build a WASM Tool", link: "/guides/build-wasm-tool" },
+        {
+          text: "Run Your First Agent Evaluation",
+          link: "/guides/run-agent-evaluation",
+        },
         { text: "Starter Blueprints", link: "/guides/starter-blueprints" },
       ],
     },
@@ -245,6 +256,14 @@ export default defineConfig({
               collapsed: false,
               items: [
                 { text: "Worker", link: "/reference/resources/worker" },
+              ],
+            },
+            {
+              text: "Evaluation",
+              collapsed: false,
+              items: [
+                { text: "EvalDataset", link: "/reference/resources/eval-dataset" },
+                { text: "EvalRun", link: "/reference/resources/eval-run" },
               ],
             },
           ],

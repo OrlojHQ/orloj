@@ -30,6 +30,8 @@ import type {
   TaskMetrics,
   TaskMessage,
   CapabilitySnapshot,
+  EvalDataset,
+  EvalRun,
 } from "./types";
 import { RESOURCE_ENDPOINTS } from "./types";
 import { useAppStore } from "../store";
@@ -367,6 +369,19 @@ export function useMcpServers() {
 }
 export function useMcpServer(name: string) {
   return useResourceGet<McpServer>("McpServer", RESOURCE_ENDPOINTS.McpServer, name);
+}
+
+export function useEvalDatasets() {
+  return useResourceList<EvalDataset>("EvalDataset", RESOURCE_ENDPOINTS.EvalDataset);
+}
+export function useEvalDataset(name: string) {
+  return useResourceGet<EvalDataset>("EvalDataset", RESOURCE_ENDPOINTS.EvalDataset, name);
+}
+export function useEvalRuns() {
+  return useResourceList<EvalRun>("EvalRun", RESOURCE_ENDPOINTS.EvalRun);
+}
+export function useEvalRun(name: string) {
+  return useResourceGet<EvalRun>("EvalRun", RESOURCE_ENDPOINTS.EvalRun, name);
 }
 
 /**

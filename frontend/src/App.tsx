@@ -37,8 +37,6 @@ import { ContextAdapters } from "./pages/ContextAdapters";
 import { ContextAdapterDetail } from "./pages/ContextAdapterDetail";
 import { Secrets } from "./pages/Secrets";
 import { SecretDetail } from "./pages/SecretDetail";
-import { SealedSecrets } from "./pages/SealedSecrets";
-import { SealedSecretDetail } from "./pages/SealedSecretDetail";
 import { Policies } from "./pages/Policies";
 import { AgentPolicyDetail } from "./pages/AgentPolicyDetail";
 import { Roles } from "./pages/Roles";
@@ -50,6 +48,10 @@ import { ToolApprovalDetail } from "./pages/ToolApprovalDetail";
 import { TaskApprovalDetail } from "./pages/TaskApprovalDetail";
 import { McpServers } from "./pages/McpServers";
 import { McpServerDetail } from "./pages/McpServerDetail";
+import { EvalDatasets } from "./pages/EvalDatasets";
+import { EvalDatasetDetail } from "./pages/EvalDatasetDetail";
+import { EvalRuns } from "./pages/EvalRuns";
+import { EvalRunDetail } from "./pages/EvalRunDetail";
 import { Capabilities } from "./pages/Capabilities";
 import { NotFound } from "./pages/NotFound";
 import { Login } from "./pages/Login";
@@ -167,6 +169,10 @@ function AppLayout({
               <Route path="/tools/:name" element={<ToolDetail />} />
               <Route path="/mcp-servers" element={<McpServers />} />
               <Route path="/mcp-servers/:name" element={<McpServerDetail />} />
+              <Route path="/eval-datasets" element={<EvalDatasets />} />
+              <Route path="/eval-datasets/:name" element={<EvalDatasetDetail />} />
+              <Route path="/eval-runs" element={<EvalRuns />} />
+              <Route path="/eval-runs/:name" element={<EvalRunDetail />} />
               <Route path="/capabilities" element={<Capabilities />} />
               <Route path="/memories" element={<Memories />} />
               <Route path="/memories/:name" element={<MemoryDetail />} />
@@ -174,8 +180,8 @@ function AppLayout({
               <Route path="/context-adapters/:name" element={<ContextAdapterDetail />} />
               <Route path="/secrets" element={<Secrets />} />
               <Route path="/secrets/:name" element={<SecretDetail />} />
-              <Route path="/sealed-secrets" element={<SealedSecrets />} />
-              <Route path="/sealed-secrets/:name" element={<SealedSecretDetail />} />
+              <Route path="/sealed-secrets" element={<Navigate to="/secrets" replace />} />
+              <Route path="/sealed-secrets/:name" element={<Navigate to="/secrets" replace />} />
               <Route path="/policies" element={<Policies />} />
               <Route path="/policies/:name" element={<AgentPolicyDetail />} />
               <Route path="/roles" element={<Roles />} />

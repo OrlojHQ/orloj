@@ -334,6 +334,8 @@ func main() {
 		WebhookDedupe:   stores.WebhookDedupe,
 		Workers:         stores.Workers,
 		McpServers:      stores.McpServers,
+		EvalDatasets:    stores.EvalDatasets,
+		EvalRuns:        stores.EvalRuns,
 		LocalAdmins:     stores.LocalAdmins,
 		APITokens:       stores.APITokens,
 		AuthSessions:    stores.AuthSessions,
@@ -421,6 +423,12 @@ func main() {
 			}, *taskHeartbeatInterval)
 		})
 		startBackground(func() { taskController.Start(ctx) })
+		evalRunController := controllers.NewEvalRunController(
+			stores.EvalRuns, stores.EvalDatasets, stores.Tasks,
+			&agentruntime.EvalScorer{Gateway: modelGateway},
+			logger,
+		)
+		startBackground(func() { evalRunController.Start(ctx) })
 		if strings.EqualFold(strings.TrimSpace(*taskExecutionMode), "message-driven") {
 			if agentMessageBus == nil {
 				logger.Printf("embedded runtime inbox consumer disabled: agent message bus backend is none")

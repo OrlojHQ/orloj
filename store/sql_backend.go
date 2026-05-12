@@ -31,6 +31,8 @@ const (
 	tableTaskApprovals   = "task_approvals"
 	tableMcpServers      = "mcp_servers"
 	tableContextAdapters = "context_adapters"
+	tableEvalDatasets    = "eval_datasets"
+	tableEvalRuns        = "eval_runs"
 )
 
 // EnsurePostgresSchema runs all pending database migrations. New schema changes
@@ -415,6 +417,52 @@ func upsertContextAdapterSQL(ctx context.Context, db dbExecer, name string, item
 		     updated_at = NOW()`,
 		name,
 		resources.NormalizeNamespace(item.Metadata.Namespace),
+		strings.ToLower(strings.TrimSpace(item.Status.Phase)),
+		string(payload),
+	)
+	return err
+}
+
+func upsertEvalDatasetSQL(ctx context.Context, db dbExecer, name string, item resources.EvalDataset) error {
+	payload, err := json.Marshal(item)
+	if err != nil {
+		return err
+	}
+	_, err = db.ExecContext(ctx,
+		`INSERT INTO eval_datasets(name, namespace, status_phase, payload, updated_at)
+		 VALUES($1, $2, $3, $4::jsonb, NOW())
+		 ON CONFLICT(name) DO UPDATE SET
+		     namespace = EXCLUDED.namespace,
+		     status_phase = EXCLUDED.status_phase,
+		     payload = EXCLUDED.payload,
+		     updated_at = NOW()`,
+		name,
+		resources.NormalizeNamespace(item.Metadata.Namespace),
+		strings.ToLower(strings.TrimSpace(item.Status.Phase)),
+		string(payload),
+	)
+	return err
+}
+
+func upsertEvalRunSQL(ctx context.Context, db dbExecer, name string, item resources.EvalRun) error {
+	payload, err := json.Marshal(item)
+	if err != nil {
+		return err
+	}
+	_, err = db.ExecContext(ctx,
+		`INSERT INTO eval_runs(name, namespace, dataset_ref, system_ref, status_phase, payload, updated_at)
+		 VALUES($1, $2, $3, $4, $5, $6::jsonb, NOW())
+		 ON CONFLICT(name) DO UPDATE SET
+		     namespace = EXCLUDED.namespace,
+		     dataset_ref = EXCLUDED.dataset_ref,
+		     system_ref = EXCLUDED.system_ref,
+		     status_phase = EXCLUDED.status_phase,
+		     payload = EXCLUDED.payload,
+		     updated_at = NOW()`,
+		name,
+		resources.NormalizeNamespace(item.Metadata.Namespace),
+		strings.TrimSpace(item.Spec.DatasetRef),
+		strings.TrimSpace(item.Spec.System),
 		strings.ToLower(strings.TrimSpace(item.Status.Phase)),
 		string(payload),
 	)

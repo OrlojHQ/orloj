@@ -1,0 +1,63 @@
+components:
+  schemas:
+    EvalScoringConfig:
+      type: object
+      properties:
+        strategy:
+          type: string
+          enum: [exact_match, llm_judge, manual, custom]
+        model_ref: { type: string }
+        rubric: { type: string }
+        tool_ref: { type: string }
+    EvalExpected:
+      type: object
+      properties:
+        output_contains: { type: string }
+        output_not_contains: { type: string }
+        output_matches: { type: string }
+        output_json_path: { type: string }
+        equals: { type: string }
+        not_equals: { type: string }
+        contains: { type: string }
+        greater_than: { type: string }
+        less_than: { type: string }
+    EvalSample:
+      type: object
+      required: [name, input]
+      properties:
+        name: { type: string }
+        input:
+          type: object
+          additionalProperties: { type: string }
+        expected: { $ref: "#/components/schemas/EvalExpected" }
+        scoring: { $ref: "#/components/schemas/EvalScoringConfig" }
+    EvalDatasetSpec:
+      type: object
+      required: [samples]
+      properties:
+        description: { type: string }
+        samples:
+          type: array
+          items: { $ref: "#/components/schemas/EvalSample" }
+    EvalDatasetStatus:
+      type: object
+      properties:
+        phase: { type: string }
+    EvalDataset:
+      type: object
+      required: [apiVersion, kind, metadata, spec]
+      properties:
+        apiVersion: { type: string, enum: [orloj.dev/v1] }
+        kind: { type: string, enum: [EvalDataset] }
+        metadata: { $ref: "common.yaml#/components/schemas/ObjectMeta" }
+        spec: { $ref: "#/components/schemas/EvalDatasetSpec" }
+        status: { $ref: "#/components/schemas/EvalDatasetStatus" }
+    EvalDatasetList:
+      allOf:
+        - { $ref: "common.yaml#/components/schemas/ListMeta" }
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: { $ref: "#/components/schemas/EvalDataset" }

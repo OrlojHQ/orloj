@@ -100,6 +100,11 @@ func FilterRoutesForOutput(routes []GraphRoute, output string) []GraphRoute {
 	return nil
 }
 
+// EdgeConditionMatchesOutput evaluates an EdgeCondition against the given output string.
+func EdgeConditionMatchesOutput(c *EdgeCondition, output string) bool {
+	return edgeConditionMatches(c, output, strings.ToLower(output))
+}
+
 func edgeConditionMatches(c *EdgeCondition, output, outputLower string) bool {
 	if c.OutputContains != "" {
 		if !strings.Contains(outputLower, strings.ToLower(c.OutputContains)) {
