@@ -62,12 +62,6 @@ jobs:
         with:
           bun-version: 1.3.0
 
-      - name: Sync Helm chart appVersion
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          yq -i ".appVersion = \"${version}\"" charts/orloj/Chart.yaml
-          echo "Set Chart.yaml appVersion to ${version}"
-
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
