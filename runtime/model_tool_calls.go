@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 var toolDirectiveRegex = regexp.MustCompile(`(?i)\btool\s*[:=]\s*([a-z0-9._/\-]+)(?:\s+input\s*[:=]\s*(.+))?$`) //nolint:gochecknoglobals
@@ -88,7 +90,7 @@ func parseToolCallsFromModelContent(content string) []ModelToolCall {
 	}
 
 	candidates := []string{content}
-	if unwrapped := unwrapFencedCodeBlock(content); unwrapped != "" && unwrapped != content {
+	if unwrapped := resources.UnwrapFencedCodeBlock(content); unwrapped != "" && unwrapped != content {
 		candidates = append(candidates, unwrapped)
 	}
 
@@ -156,26 +158,6 @@ func parseToolCallsFromJSON(raw string) []ModelToolCall {
 		appendItem(firstNonEmptyToolCall(item.Name, item.Tool), item.Input)
 	}
 	return out
-}
-
-func unwrapFencedCodeBlock(content string) string {
-	content = strings.TrimSpace(content)
-	if !strings.HasPrefix(content, "```") {
-		return content
-	}
-	lines := strings.Split(content, "\n")
-	if len(lines) < 3 {
-		return content
-	}
-	if !strings.HasPrefix(strings.TrimSpace(lines[0]), "```") {
-		return content
-	}
-	last := strings.TrimSpace(lines[len(lines)-1])
-	if !strings.HasPrefix(last, "```") {
-		return content
-	}
-	body := strings.Join(lines[1:len(lines)-1], "\n")
-	return strings.TrimSpace(body)
 }
 
 func firstNonEmptyToolCall(values ...string) string {

@@ -998,6 +998,39 @@ func TestNormalizeGraphJoin_ValidModes(t *testing.T) {
 	}
 }
 
+func TestUnwrapFencedCodeBlock(t *testing.T) {
+	t.Parallel()
+
+	if got := UnwrapFencedCodeBlock("plain text"); got != "plain text" {
+		t.Fatalf("plain text should pass through, got %q", got)
+	}
+	if got := UnwrapFencedCodeBlock("```json\n{\"a\":1}\n```"); got != `{"a":1}` {
+		t.Fatalf("should unwrap fenced JSON, got %q", got)
+	}
+	if got := UnwrapFencedCodeBlock("```\nhello\n```"); got != "hello" {
+		t.Fatalf("should unwrap bare fences, got %q", got)
+	}
+	if got := UnwrapFencedCodeBlock("```json\n```"); got != "```json\n```" {
+		t.Fatalf("two-line fence should pass through, got %q", got)
+	}
+	if got := UnwrapFencedCodeBlock(""); got != "" {
+		t.Fatalf("empty should pass through, got %q", got)
+	}
+}
+
+func TestFilterRoutesJSONPathFencedOutput(t *testing.T) {
+	t.Parallel()
+
+	routes := []GraphRoute{
+		{To: "approve", Condition: &EdgeCondition{OutputJSONPath: "$.decision", Equals: "approve"}},
+		{To: "decline", Condition: &EdgeCondition{OutputJSONPath: "$.decision", Equals: "decline"}},
+	}
+	got := FilterRoutesForOutput(routes, "```json\n{\"decision\":\"approve\"}\n```")
+	if len(got) != 1 || got[0].To != "approve" {
+		t.Fatalf("expected [approve] for fenced JSON, got %v", routeNames(got))
+	}
+}
+
 func TestEdgeConditionRegexLengthLimit(t *testing.T) {
 	longPattern := make([]byte, 600)
 	for i := range longPattern {

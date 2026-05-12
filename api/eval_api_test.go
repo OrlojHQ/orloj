@@ -562,6 +562,114 @@ func TestEvalRunCancelTerminalPhase(t *testing.T) {
 // Start / Suspended
 // ---------------------------------------------------------------------------
 
+func TestEvalRunReapplyResetsNonTerminalPhase(t *testing.T) {
+	server := newTestServer(t)
+	defer server.Close()
+
+	seedEvalRun(t, server.URL)
+
+	// Push the run into Running phase (simulating a stuck eval run).
+	statusBody, _ := json.Marshal(map[string]any{
+		"status": map[string]any{
+			"phase":        "Running",
+			"totalSamples": 2,
+			"results": []map[string]any{
+				{"sample_name": "s1", "task_name": "eval-run-1-s1"},
+				{"sample_name": "s2", "task_name": "eval-run-1-s2"},
+			},
+		},
+	})
+	req, _ := http.NewRequest(http.MethodPut, server.URL+"/v1/eval-runs/run-1/status", bytes.NewReader(statusBody))
+	req.Header.Set("Content-Type", "application/json")
+	statusResp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer statusResp.Body.Close()
+	if statusResp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(statusResp.Body)
+		t.Fatalf("status update expected 200, got %d: %s", statusResp.StatusCode, b)
+	}
+
+	// Re-apply the same eval run.
+	body, _ := json.Marshal(resources.EvalRun{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "EvalRun",
+		Metadata:   resources.ObjectMeta{Name: "run-1"},
+		Spec: resources.EvalRunSpec{
+			DatasetRef: "golden",
+			System:     "test-system",
+			Scoring:    resources.EvalScoringConfig{Strategy: "exact_match"},
+		},
+	})
+	resp, err := http.Post(server.URL+"/v1/eval-runs", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 201, got %d: %s", resp.StatusCode, b)
+	}
+
+	var run resources.EvalRun
+	json.NewDecoder(resp.Body).Decode(&run)
+	if run.Status.Phase != resources.EvalRunPhasePending {
+		t.Fatalf("expected re-apply of Running eval run to reset to Pending, got %q", run.Status.Phase)
+	}
+	if len(run.Status.Results) != 0 {
+		t.Fatalf("expected results to be cleared on reset, got %d", len(run.Status.Results))
+	}
+}
+
+func TestEvalRunReapplyPreservesSucceeded(t *testing.T) {
+	server := newTestServer(t)
+	defer server.Close()
+
+	seedEvalRun(t, server.URL)
+
+	// Push the run into Succeeded phase.
+	score := 1.0
+	pass := true
+	statusBody, _ := json.Marshal(map[string]any{
+		"status": map[string]any{
+			"phase": "Succeeded",
+			"results": []map[string]any{
+				{"sample_name": "s1", "score": score, "pass": pass, "output": "hi"},
+			},
+		},
+	})
+	req, _ := http.NewRequest(http.MethodPut, server.URL+"/v1/eval-runs/run-1/status", bytes.NewReader(statusBody))
+	req.Header.Set("Content-Type", "application/json")
+	http.DefaultClient.Do(req)
+
+	// Re-apply the same eval run.
+	body, _ := json.Marshal(resources.EvalRun{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "EvalRun",
+		Metadata:   resources.ObjectMeta{Name: "run-1"},
+		Spec: resources.EvalRunSpec{
+			DatasetRef: "golden",
+			System:     "test-system",
+			Scoring:    resources.EvalScoringConfig{Strategy: "exact_match"},
+		},
+	})
+	resp, err := http.Post(server.URL+"/v1/eval-runs", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	var run resources.EvalRun
+	json.NewDecoder(resp.Body).Decode(&run)
+	if run.Status.Phase != resources.EvalRunPhaseSucceeded {
+		t.Fatalf("expected re-apply of Succeeded eval run to preserve phase, got %q", run.Status.Phase)
+	}
+	if len(run.Status.Results) != 1 {
+		t.Fatalf("expected results to be preserved, got %d", len(run.Status.Results))
+	}
+}
+
 func TestEvalRunPostDefaultsSuspended(t *testing.T) {
 	server := newTestServer(t)
 	defer server.Close()
