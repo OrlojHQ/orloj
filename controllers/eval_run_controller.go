@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -12,6 +13,8 @@ import (
 	agentruntime "github.com/OrlojHQ/orloj/runtime"
 	"github.com/OrlojHQ/orloj/store"
 )
+
+var modelOutputPrefixRegex = regexp.MustCompile(`^step=\d+\s+model_output=`) //nolint:gochecknoglobals
 
 // EvalRunController watches for Pending EvalRuns, creates tasks for each
 // dataset sample, watches for task completion, scores results, and updates
@@ -171,10 +174,13 @@ func (c *EvalRunController) reconcilePending(ctx context.Context, run *resources
 }
 
 // reconcileRunning checks task completion and transitions to Scoring when done.
+// Progress is persisted on every tick so the frontend can show live sample counts.
 func (c *EvalRunController) reconcileRunning(ctx context.Context, run *resources.EvalRun) error {
 	allDone := true
+	completed := 0
 	for i, result := range run.Status.Results {
 		if result.Error != "" {
+			completed++
 			continue
 		}
 		if result.TaskName == "" {
@@ -189,6 +195,7 @@ func (c *EvalRunController) reconcileRunning(ctx context.Context, run *resources
 		}
 		if !ok {
 			run.Status.Results[i].Error = "task not found"
+			completed++
 			continue
 		}
 
@@ -197,20 +204,23 @@ func (c *EvalRunController) reconcileRunning(ctx context.Context, run *resources
 			output := flattenOutput(task.Status.Output)
 			run.Status.Results[i].Output = output
 			run.Status.Results[i].Latency = computeLatency(task.Status.StartedAt, task.Status.CompletedAt)
-		case "Failed":
+			completed++
+		case "Failed", "DeadLetter":
 			run.Status.Results[i].Error = task.Status.LastError
 			if run.Status.Results[i].Error == "" {
 				run.Status.Results[i].Error = "task failed"
 			}
+			completed++
 		default:
 			allDone = false
 		}
 	}
 
+	run.Status.CompletedSamples = completed
 	if allDone {
 		run.Status.Phase = resources.EvalRunPhaseScoring
-		c.updateStatus(ctx, run)
 	}
+	c.updateStatus(ctx, run)
 	return nil
 }
 
@@ -226,6 +236,11 @@ func (c *EvalRunController) reconcileScoring(ctx context.Context, run *resources
 	for _, s := range dataset.Spec.Samples {
 		sampleMap[s.Name] = s
 	}
+
+	run.Status.CompletedSamples = 0
+	run.Status.ErroredSamples = 0
+	run.Status.PassedSamples = 0
+	run.Status.FailedSamples = 0
 
 	hasManual := false
 	for i := range run.Status.Results {
@@ -297,7 +312,7 @@ func (c *EvalRunController) reconcileCancelled(ctx context.Context, run *resourc
 		if err != nil || !ok {
 			continue
 		}
-		if task.Status.Phase == "Succeeded" || task.Status.Phase == "Failed" {
+		if task.Status.Phase == "Succeeded" || task.Status.Phase == "Failed" || task.Status.Phase == "DeadLetter" {
 			continue
 		}
 		task.Status.Phase = "Failed"
@@ -325,10 +340,14 @@ func flattenOutput(output map[string]string) string {
 	if len(output) == 0 {
 		return ""
 	}
-	if v, ok := output["result"]; ok {
-		return v
+	if v, ok := output["last_output"]; ok && strings.TrimSpace(v) != "" {
+		v = modelOutputPrefixRegex.ReplaceAllString(v, "")
+		return resources.UnwrapFencedCodeBlock(strings.TrimSpace(v))
 	}
 	if v, ok := output["response"]; ok {
+		return v
+	}
+	if v, ok := output["result"]; ok && v != "executed" {
 		return v
 	}
 	var parts []string

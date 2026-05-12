@@ -216,6 +216,9 @@ func TestEvalRunController_ReconcileRunning_StaysRunningWhileTasksPending(t *tes
 	if run.Status.Phase != resources.EvalRunPhaseRunning {
 		t.Fatalf("expected Running while tasks still pending, got %q", run.Status.Phase)
 	}
+	if run.Status.CompletedSamples != 1 {
+		t.Fatalf("expected 1 completed sample during running phase, got %d", run.Status.CompletedSamples)
+	}
 }
 
 func TestEvalRunController_ReconcileRunning_FailedTaskRecordsError(t *testing.T) {
@@ -243,6 +246,80 @@ func TestEvalRunController_ReconcileRunning_FailedTaskRecordsError(t *testing.T)
 		if r.Error == "" {
 			t.Fatalf("expected error for failed task %s", r.SampleName)
 		}
+	}
+}
+
+func TestEvalRunController_ReconcileRunning_DeadLetterTaskRecordsError(t *testing.T) {
+	ctx := context.Background()
+	c, runs, datasets, tasks := newEvalRunControllerHarness(t)
+
+	seedDatasetForController(t, datasets)
+	seedPendingEvalRun(t, runs)
+	_ = c.ReconcileOnce(ctx)
+
+	allTasks, _ := tasks.List(ctx)
+	for i := range allTasks {
+		allTasks[i].Status.Phase = "DeadLetter"
+		allTasks[i].Status.LastError = "message dead-lettered after 1 attempts: model request failed status=401"
+		allTasks[i].Status.CompletedAt = time.Now().UTC().Format(time.RFC3339)
+		tasks.Upsert(ctx, allTasks[i])
+	}
+
+	_ = c.ReconcileOnce(ctx)
+
+	run, _, _ := runs.Get(ctx, "default/eval-1")
+	if run.Status.Phase != resources.EvalRunPhaseScoring {
+		t.Fatalf("expected Scoring after all tasks dead-lettered, got %q", run.Status.Phase)
+	}
+	for _, r := range run.Status.Results {
+		if r.Error == "" {
+			t.Fatalf("expected error for dead-lettered task %s", r.SampleName)
+		}
+	}
+}
+
+func TestEvalRunController_ReconcileRunning_MixedSucceededAndDeadLetter(t *testing.T) {
+	ctx := context.Background()
+	c, runs, datasets, tasks := newEvalRunControllerHarness(t)
+
+	seedDatasetForController(t, datasets)
+	seedPendingEvalRun(t, runs)
+	_ = c.ReconcileOnce(ctx)
+
+	allTasks, _ := tasks.List(ctx)
+	allTasks[0].Status.Phase = "Succeeded"
+	allTasks[0].Status.Output = map[string]string{"result": "done"}
+	allTasks[0].Status.StartedAt = time.Now().Add(-2 * time.Second).UTC().Format(time.RFC3339)
+	allTasks[0].Status.CompletedAt = time.Now().UTC().Format(time.RFC3339)
+	tasks.Upsert(ctx, allTasks[0])
+
+	allTasks[1].Status.Phase = "DeadLetter"
+	allTasks[1].Status.LastError = "model request failed status=401"
+	allTasks[1].Status.CompletedAt = time.Now().UTC().Format(time.RFC3339)
+	tasks.Upsert(ctx, allTasks[1])
+
+	_ = c.ReconcileOnce(ctx)
+
+	run, _, _ := runs.Get(ctx, "default/eval-1")
+	if run.Status.Phase != resources.EvalRunPhaseScoring {
+		t.Fatalf("expected Scoring after mixed succeeded/dead-lettered, got %q", run.Status.Phase)
+	}
+
+	hasOutput := false
+	hasError := false
+	for _, r := range run.Status.Results {
+		if r.Output != "" {
+			hasOutput = true
+		}
+		if r.Error != "" {
+			hasError = true
+		}
+	}
+	if !hasOutput {
+		t.Fatal("expected at least one result with output from succeeded task")
+	}
+	if !hasError {
+		t.Fatal("expected at least one result with error from dead-lettered task")
 	}
 }
 
@@ -377,16 +454,76 @@ func TestFlattenOutput(t *testing.T) {
 		t.Fatalf("nil output should return empty, got %q", got)
 	}
 	if got := flattenOutput(map[string]string{"result": "hello"}); got != "hello" {
-		t.Fatalf("expected 'hello', got %q", got)
+		t.Fatalf("non-sentinel result should be returned, got %q", got)
 	}
 	if got := flattenOutput(map[string]string{"response": "world"}); got != "world" {
 		t.Fatalf("expected 'world', got %q", got)
 	}
-	if got := flattenOutput(map[string]string{"result": "hello", "response": "world"}); got != "hello" {
-		t.Fatalf("result key should take precedence, got %q", got)
-	}
 	if got := flattenOutput(map[string]string{"foo": "bar"}); got == "" {
 		t.Fatal("non-standard keys should still produce output")
+	}
+
+	// last_output takes precedence over result="executed"
+	got := flattenOutput(map[string]string{
+		"result":      "executed",
+		"last_output": `{"decision":"approve"}`,
+	})
+	if got != `{"decision":"approve"}` {
+		t.Fatalf("last_output should take precedence over result=executed, got %q", got)
+	}
+
+	// last_output with markdown fences should be unwrapped
+	got = flattenOutput(map[string]string{
+		"result":      "executed",
+		"last_output": "```json\n{\"decision\":\"approve\"}\n```",
+	})
+	if got != `{"decision":"approve"}` {
+		t.Fatalf("fenced last_output should be unwrapped, got %q", got)
+	}
+
+	// last_output with step=N model_output= prefix and fences should be cleaned
+	got = flattenOutput(map[string]string{
+		"result":      "executed",
+		"last_output": "step=1 model_output=```json\n{\"decision\":\"approve\"}\n```",
+	})
+	if got != `{"decision":"approve"}` {
+		t.Fatalf("prefixed fenced last_output should be cleaned, got %q", got)
+	}
+
+	// last_output with step=N model_output= prefix but no fences
+	got = flattenOutput(map[string]string{
+		"result":      "executed",
+		"last_output": `step=3 model_output={"decision":"decline"}`,
+	})
+	if got != `{"decision":"decline"}` {
+		t.Fatalf("prefixed last_output without fences should strip prefix, got %q", got)
+	}
+
+	// last_output takes precedence even when result is non-sentinel
+	got = flattenOutput(map[string]string{
+		"result":      "some-value",
+		"last_output": `{"decision":"decline"}`,
+	})
+	if got != `{"decision":"decline"}` {
+		t.Fatalf("last_output should take precedence over any result, got %q", got)
+	}
+
+	// result="executed" without last_output falls through to other keys
+	got = flattenOutput(map[string]string{
+		"result":   "executed",
+		"response": "fallback",
+	})
+	if got != "fallback" {
+		t.Fatalf("result=executed without last_output should fall through to response, got %q", got)
+	}
+
+	// result="executed" alone falls through to join fallback
+	got = flattenOutput(map[string]string{
+		"result": "executed",
+		"foo":    "bar",
+	})
+	if got == "" || got == "executed" {
+		t.Fatalf("result=executed should be skipped in fallback, got %q", got)
 	}
 }
 

@@ -219,7 +219,12 @@ func (s *Server) handleEvalRuns(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if ok {
-			obj.Status = existing.Status
+			switch existing.Status.Phase {
+			case resources.EvalRunPhaseSucceeded, resources.EvalRunPhasePendingReview:
+				obj.Status = existing.Status
+			default:
+				obj.Status = resources.EvalRunStatus{Phase: resources.EvalRunPhasePending}
+			}
 		} else if r.URL.Query().Get("run") != "true" {
 			obj.Spec.Suspended = true
 		}

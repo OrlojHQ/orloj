@@ -186,16 +186,26 @@ func jsonPathConditionMatches(c *EdgeCondition, output string) bool {
 func extractJSONPath(jsonStr string, path string) (any, error) {
 	path = strings.TrimPrefix(path, "$")
 	path = strings.TrimPrefix(path, ".")
-	if path == "" {
-		var val any
-		if err := json.Unmarshal([]byte(jsonStr), &val); err != nil {
+
+	parseJSON := func(s string) (any, error) {
+		var v any
+		if err := json.Unmarshal([]byte(s), &v); err != nil {
+			if unwrapped := UnwrapFencedCodeBlock(s); unwrapped != s {
+				if err2 := json.Unmarshal([]byte(unwrapped), &v); err2 == nil {
+					return v, nil
+				}
+			}
 			return nil, err
 		}
-		return val, nil
+		return v, nil
 	}
 
-	var root any
-	if err := json.Unmarshal([]byte(jsonStr), &root); err != nil {
+	if path == "" {
+		return parseJSON(jsonStr)
+	}
+
+	root, err := parseJSON(jsonStr)
+	if err != nil {
 		return nil, fmt.Errorf("invalid JSON output: %w", err)
 	}
 
@@ -304,4 +314,27 @@ func NormalizeGraphJoin(join GraphJoin) (GraphJoin, error) {
 		return join, fmt.Errorf("invalid join.on_failure %q: expected deadletter, skip, or continue_partial", join.OnFailure)
 	}
 	return join, nil
+}
+
+// UnwrapFencedCodeBlock strips markdown code fences (```lang ... ```) from
+// content that models sometimes wrap around JSON output. If the content is
+// not fenced the original string is returned unchanged.
+func UnwrapFencedCodeBlock(content string) string {
+	content = strings.TrimSpace(content)
+	if !strings.HasPrefix(content, "```") {
+		return content
+	}
+	lines := strings.Split(content, "\n")
+	if len(lines) < 3 {
+		return content
+	}
+	if !strings.HasPrefix(strings.TrimSpace(lines[0]), "```") {
+		return content
+	}
+	last := strings.TrimSpace(lines[len(lines)-1])
+	if !strings.HasPrefix(last, "```") {
+		return content
+	}
+	body := strings.Join(lines[1:len(lines)-1], "\n")
+	return strings.TrimSpace(body)
 }
