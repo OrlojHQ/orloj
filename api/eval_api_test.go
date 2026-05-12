@@ -191,7 +191,10 @@ func TestEvalRunCRUD(t *testing.T) {
 	}
 
 	req, _ := http.NewRequest(http.MethodDelete, server.URL+"/v1/eval-runs/run-1", nil)
-	delResp, _ := http.DefaultClient.Do(req)
+	delResp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("delete request failed: %v", err)
+	}
 	defer delResp.Body.Close()
 	if delResp.StatusCode != http.StatusNoContent {
 		b, _ := io.ReadAll(delResp.Body)
@@ -373,7 +376,10 @@ func TestEvalRunAnnotateSampleNotFound(t *testing.T) {
 	ann, _ := json.Marshal(map[string]any{"score": 0.5})
 	req, _ := http.NewRequest(http.MethodPut, server.URL+"/v1/eval-runs/run-1/results/nonexistent", bytes.NewReader(ann))
 	req.Header.Set("Content-Type", "application/json")
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("annotate request failed: %v", err)
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("expected 404 for missing sample, got %d", resp.StatusCode)
@@ -490,7 +496,10 @@ func TestEvalRunFinalizeWrongPhase(t *testing.T) {
 	seedEvalRun(t, server.URL)
 
 	finReq, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/eval-runs/run-1/finalize", nil)
-	finResp, _ := http.DefaultClient.Do(finReq)
+	finResp, err := http.DefaultClient.Do(finReq)
+	if err != nil {
+		t.Fatalf("finalize request failed: %v", err)
+	}
 	defer finResp.Body.Close()
 	if finResp.StatusCode != http.StatusConflict {
 		b, _ := io.ReadAll(finResp.Body)
@@ -539,7 +548,10 @@ func TestEvalRunCancelTerminalPhase(t *testing.T) {
 	http.DefaultClient.Do(req)
 
 	cancelReq, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/eval-runs/run-1/cancel", nil)
-	cancelResp, _ := http.DefaultClient.Do(cancelReq)
+	cancelResp, err := http.DefaultClient.Do(cancelReq)
+	if err != nil {
+		t.Fatalf("cancel request failed: %v", err)
+	}
 	defer cancelResp.Body.Close()
 	if cancelResp.StatusCode != http.StatusConflict {
 		t.Fatalf("expected 409 for cancel on Succeeded, got %d", cancelResp.StatusCode)
