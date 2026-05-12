@@ -71,6 +71,9 @@ func (c *EvalRunController) ReconcileOnce(ctx context.Context) error {
 		run := &runs[i]
 		switch run.Status.Phase {
 		case resources.EvalRunPhasePending:
+			if run.Spec.Suspended {
+				continue
+			}
 			if err := c.reconcilePending(ctx, run); err != nil {
 				c.logf("error reconciling pending eval run %s: %v", run.Metadata.Name, err)
 			}

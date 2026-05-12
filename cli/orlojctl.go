@@ -151,7 +151,7 @@ func newApplyCommand() *cobra.Command {
 		RunE:  runApply,
 	}
 	cmd.Flags().StringP("file", "f", "", "path to resource manifest file or directory")
-	cmd.Flags().Bool("run", false, "include runnable Task manifests when applying a directory")
+	cmd.Flags().Bool("run", false, "include runnable Task manifests and start EvalRun manifests immediately")
 	cmd.Flags().Bool("dry-run", false, "preview changes without persisting")
 	return cmd
 }
@@ -268,6 +268,9 @@ func runApply(cmd *cobra.Command, args []string) error {
 		if includeRunnable && endpoint == "/v1/tasks" {
 			postURL += "?rerun=true"
 		}
+		if includeRunnable && endpoint == "/v1/eval-runs" {
+			postURL += "?run=true"
+		}
 		resp, err := http.Post(postURL, "application/json", bytes.NewReader(payload))
 		if err != nil {
 			applyErrs = append(applyErrs, fmt.Sprintf("%s: apply request failed: %v", f, err))
@@ -282,8 +285,11 @@ func runApply(cmd *cobra.Command, args []string) error {
 		}
 
 		actualName := nameFromResponseBody(body, name)
+		isSuspendedEvalRun := !includeRunnable && endpoint == "/v1/eval-runs"
 		if actualName != name {
 			fmt.Printf("applied %s/%s (rerun as %s)\n", strings.ToLower(kind), name, actualName)
+		} else if isSuspendedEvalRun {
+			fmt.Printf("applied %s/%s (suspended; use --run or 'orlojctl eval start %s' to execute)\n", strings.ToLower(kind), name, name)
 		} else {
 			fmt.Printf("applied %s/%s\n", strings.ToLower(kind), name)
 		}

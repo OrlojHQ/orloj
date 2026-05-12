@@ -188,6 +188,7 @@ type EvalRunSpec struct {
 	Concurrency           int                       `json:"concurrency,omitempty" yaml:"concurrency,omitempty"`
 	Timeout               string                    `json:"timeout,omitempty" yaml:"timeout,omitempty"`
 	Labels                map[string]string         `json:"labels,omitempty" yaml:"labels,omitempty"`
+	Suspended             bool                      `json:"suspended,omitempty" yaml:"suspended,omitempty"`
 }
 
 // AgentOverride holds per-agent prompt/model overrides for A/B comparisons.

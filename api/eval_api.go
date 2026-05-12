@@ -220,6 +220,8 @@ func (s *Server) handleEvalRuns(w http.ResponseWriter, r *http.Request) {
 		}
 		if ok {
 			obj.Status = existing.Status
+		} else if r.URL.Query().Get("run") != "true" {
+			obj.Spec.Suspended = true
 		}
 		obj, err = s.stores.EvalRuns.Upsert(r.Context(), obj)
 		if err != nil {
@@ -254,6 +256,11 @@ func (s *Server) handleEvalRunByName(w http.ResponseWriter, r *http.Request) {
 	if strings.HasSuffix(path, "/finalize") {
 		name := strings.TrimSuffix(path, "/finalize")
 		s.handleEvalRunFinalize(w, r, name)
+		return
+	}
+	if strings.HasSuffix(path, "/start") {
+		name := strings.TrimSuffix(path, "/start")
+		s.handleEvalRunStart(w, r, name)
 		return
 	}
 	if strings.HasSuffix(path, "/cancel") {
@@ -552,6 +559,39 @@ func (s *Server) handleEvalRunFinalize(w http.ResponseWriter, r *http.Request, n
 	obj.Status.Phase = resources.EvalRunPhaseSucceeded
 
 	obj, err = s.stores.EvalRuns.UpdateStatus(r.Context(), key, obj.Status)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	s.publishResourceEvent("EvalRun", obj.Metadata.Name, "updated", obj)
+	writeJSON(w, http.StatusOK, obj)
+}
+
+func (s *Server) handleEvalRunStart(w http.ResponseWriter, r *http.Request, name string) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	key := scopedNameForRequest(r, name)
+	obj, ok, err := s.stores.EvalRuns.Get(r.Context(), key)
+	if writeStoreFetchError(w, err) {
+		return
+	}
+	if !ok {
+		http.Error(w, fmt.Sprintf("eval run %q not found", name), http.StatusNotFound)
+		return
+	}
+	if !obj.Spec.Suspended {
+		http.Error(w, fmt.Sprintf("eval run %q is not suspended (phase: %s)", name, obj.Status.Phase), http.StatusConflict)
+		return
+	}
+	if obj.Status.Phase != resources.EvalRunPhasePending {
+		http.Error(w, fmt.Sprintf("eval run %q is in phase %q, not Pending", name, obj.Status.Phase), http.StatusConflict)
+		return
+	}
+
+	obj.Spec.Suspended = false
+	obj, err = s.stores.EvalRuns.Upsert(r.Context(), obj)
 	if err != nil {
 		writeStoreError(w, err)
 		return

@@ -192,7 +192,7 @@ export function EvalRunDetail() {
               )}
             </div>
 
-            {run.spec.agent_overrides && run.spec.agent_overrides.length > 0 && (
+            {run.spec.agent_overrides && Object.keys(run.spec.agent_overrides).length > 0 && (
               <div style={{ marginTop: "1.5rem" }}>
                 <h3 className="detail-section-title">Agent overrides</h3>
                 <div className="detail-table-wrap">
@@ -201,19 +201,19 @@ export function EvalRunDetail() {
                       <tr>
                         <th>Agent</th>
                         <th>Model ref</th>
-                        <th>System prompt</th>
+                        <th>Prompt</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {run.spec.agent_overrides.map((o) => (
-                        <tr key={o.agent}>
-                          <td className="mono">{o.agent}</td>
+                      {Object.entries(run.spec.agent_overrides).map(([agent, o]) => (
+                        <tr key={agent}>
+                          <td className="mono">{agent}</td>
                           <td className="mono text-secondary">{o.model_ref || "—"}</td>
                           <td className="text-secondary">
-                            {o.system_prompt
-                              ? o.system_prompt.length > 60
-                                ? o.system_prompt.slice(0, 60) + "…"
-                                : o.system_prompt
+                            {o.prompt
+                              ? o.prompt.length > 60
+                                ? o.prompt.slice(0, 60) + "…"
+                                : o.prompt
                               : "—"}
                           </td>
                         </tr>

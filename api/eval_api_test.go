@@ -559,6 +559,187 @@ func TestEvalRunCancelTerminalPhase(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Start / Suspended
+// ---------------------------------------------------------------------------
+
+func TestEvalRunPostDefaultsSuspended(t *testing.T) {
+	server := newTestServer(t)
+	defer server.Close()
+
+	seedEvalDataset(t, server.URL)
+
+	body, _ := json.Marshal(resources.EvalRun{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "EvalRun",
+		Metadata:   resources.ObjectMeta{Name: "auto-suspended"},
+		Spec: resources.EvalRunSpec{
+			DatasetRef: "golden",
+			System:     "test-system",
+		},
+	})
+	resp, err := http.Post(server.URL+"/v1/eval-runs", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 201, got %d: %s", resp.StatusCode, b)
+	}
+	var run resources.EvalRun
+	json.NewDecoder(resp.Body).Decode(&run)
+	if !run.Spec.Suspended {
+		t.Fatal("expected new eval run to be suspended by default")
+	}
+}
+
+func TestEvalRunPostWithRunQueryParam(t *testing.T) {
+	server := newTestServer(t)
+	defer server.Close()
+
+	seedEvalDataset(t, server.URL)
+
+	body, _ := json.Marshal(resources.EvalRun{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "EvalRun",
+		Metadata:   resources.ObjectMeta{Name: "immediate-run"},
+		Spec: resources.EvalRunSpec{
+			DatasetRef: "golden",
+			System:     "test-system",
+		},
+	})
+	resp, err := http.Post(server.URL+"/v1/eval-runs?run=true", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 201, got %d: %s", resp.StatusCode, b)
+	}
+	var run resources.EvalRun
+	json.NewDecoder(resp.Body).Decode(&run)
+	if run.Spec.Suspended {
+		t.Fatal("expected eval run with ?run=true to not be suspended")
+	}
+}
+
+func TestEvalRunStart(t *testing.T) {
+	server := newTestServer(t)
+	defer server.Close()
+
+	seedEvalDataset(t, server.URL)
+
+	body, _ := json.Marshal(resources.EvalRun{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "EvalRun",
+		Metadata:   resources.ObjectMeta{Name: "start-me"},
+		Spec: resources.EvalRunSpec{
+			DatasetRef: "golden",
+			System:     "test-system",
+		},
+	})
+	http.Post(server.URL+"/v1/eval-runs", "application/json", bytes.NewReader(body))
+
+	startReq, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/eval-runs/start-me/start", nil)
+	startResp, err := http.DefaultClient.Do(startReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer startResp.Body.Close()
+	if startResp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(startResp.Body)
+		t.Fatalf("expected 200, got %d: %s", startResp.StatusCode, b)
+	}
+	var run resources.EvalRun
+	json.NewDecoder(startResp.Body).Decode(&run)
+	if run.Spec.Suspended {
+		t.Fatal("expected suspended to be false after start")
+	}
+	if run.Status.Phase != resources.EvalRunPhasePending {
+		t.Fatalf("expected Pending phase, got %q", run.Status.Phase)
+	}
+}
+
+func TestEvalRunStartNotSuspended(t *testing.T) {
+	server := newTestServer(t)
+	defer server.Close()
+
+	seedEvalDataset(t, server.URL)
+
+	body, _ := json.Marshal(resources.EvalRun{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "EvalRun",
+		Metadata:   resources.ObjectMeta{Name: "already-active"},
+		Spec: resources.EvalRunSpec{
+			DatasetRef: "golden",
+			System:     "test-system",
+		},
+	})
+	http.Post(server.URL+"/v1/eval-runs?run=true", "application/json", bytes.NewReader(body))
+
+	startReq, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/eval-runs/already-active/start", nil)
+	startResp, err := http.DefaultClient.Do(startReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer startResp.Body.Close()
+	if startResp.StatusCode != http.StatusConflict {
+		t.Fatalf("expected 409 for start on non-suspended run, got %d", startResp.StatusCode)
+	}
+}
+
+func TestEvalRunStartWrongPhase(t *testing.T) {
+	server := newTestServer(t)
+	defer server.Close()
+
+	seedEvalDataset(t, server.URL)
+
+	body, _ := json.Marshal(resources.EvalRun{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "EvalRun",
+		Metadata:   resources.ObjectMeta{Name: "wrong-phase"},
+		Spec: resources.EvalRunSpec{
+			DatasetRef: "golden",
+			System:     "test-system",
+		},
+	})
+	http.Post(server.URL+"/v1/eval-runs", "application/json", bytes.NewReader(body))
+
+	statusBody, _ := json.Marshal(map[string]any{
+		"status": map[string]any{"phase": "Succeeded"},
+	})
+	req, _ := http.NewRequest(http.MethodPut, server.URL+"/v1/eval-runs/wrong-phase/status", bytes.NewReader(statusBody))
+	req.Header.Set("Content-Type", "application/json")
+	http.DefaultClient.Do(req)
+
+	startReq, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/eval-runs/wrong-phase/start", nil)
+	startResp, err := http.DefaultClient.Do(startReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer startResp.Body.Close()
+	if startResp.StatusCode != http.StatusConflict {
+		t.Fatalf("expected 409 for start on wrong phase, got %d", startResp.StatusCode)
+	}
+}
+
+func TestEvalRunStartNotFound(t *testing.T) {
+	server := newTestServer(t)
+	defer server.Close()
+
+	startReq, _ := http.NewRequest(http.MethodPost, server.URL+"/v1/eval-runs/nonexistent/start", nil)
+	startResp, err := http.DefaultClient.Do(startReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer startResp.Body.Close()
+	if startResp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", startResp.StatusCode)
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Compare
 // ---------------------------------------------------------------------------
 

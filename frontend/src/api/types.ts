@@ -934,8 +934,7 @@ export interface EvalSummary {
 }
 
 export interface AgentOverride {
-  agent: string;
-  system_prompt?: string;
+  prompt?: string;
   model_ref?: string;
 }
 
@@ -946,11 +945,12 @@ export interface EvalRun {
   spec: {
     dataset_ref: string;
     system: string;
-    agent_overrides?: AgentOverride[];
+    agent_overrides?: Record<string, AgentOverride>;
     scoring?: EvalScoringConfig;
     concurrency?: number;
     timeout?: string;
     labels?: Record<string, string>;
+    suspended?: boolean;
   };
   status?: {
     phase?: string;

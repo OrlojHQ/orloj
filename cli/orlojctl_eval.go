@@ -24,6 +24,7 @@ func newEvalCommand() *cobra.Command {
 	}
 	cmd.AddCommand(
 		newEvalRunCommand(),
+		newEvalStartCommand(),
 		newEvalListCommand(),
 		newEvalGetCommand(),
 		newEvalCompareCommand(),
@@ -96,7 +97,7 @@ func runEvalRun(cmd *cobra.Command, _ []string) error {
 		return fmt.Errorf("failed to encode eval run: %w", err)
 	}
 
-	reqURL := strings.TrimRight(server, "/") + "/v1/eval-runs"
+	reqURL := strings.TrimRight(server, "/") + "/v1/eval-runs?run=true"
 	resp, err := http.Post(reqURL, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("failed to create eval run: %w", err)
@@ -120,6 +121,51 @@ func runEvalRun(cmd *cobra.Command, _ []string) error {
 		return waitAndPrintEvalRun(server, created.Metadata.Name, ns, output)
 	}
 	return nil
+}
+
+func newEvalStartCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "start <name>",
+		Short: "Start a suspended eval run",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			server := resolveServer(cmd)
+			ns := resolveNamespace(cmd)
+			wait, _ := cmd.Flags().GetBool("wait")
+			output, _ := cmd.Flags().GetString("output")
+
+			reqURL := strings.TrimRight(server, "/") + "/v1/eval-runs/" + url.PathEscape(args[0]) + "/start"
+			if ns != "" {
+				reqURL += "?namespace=" + url.QueryEscape(ns)
+			}
+			resp, err := http.Post(reqURL, "application/json", nil)
+			if err != nil {
+				return fmt.Errorf("failed to start eval run: %w", err)
+			}
+			defer resp.Body.Close()
+
+			if resp.StatusCode >= 300 {
+				body, _ := io.ReadAll(resp.Body)
+				return fmt.Errorf("start failed: %s", bytes.TrimSpace(body))
+			}
+
+			var started resources.EvalRun
+			if err := json.NewDecoder(resp.Body).Decode(&started); err != nil {
+				return fmt.Errorf("failed to decode response: %w", err)
+			}
+
+			fmt.Printf("eval run %s started (phase: %s)\n", started.Metadata.Name, started.Status.Phase)
+
+			if wait {
+				fmt.Println("waiting for eval run to complete...")
+				return waitAndPrintEvalRun(server, started.Metadata.Name, ns, output)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().Bool("wait", false, "block until the run completes")
+	cmd.Flags().StringP("output", "o", "table", "output format: table|json")
+	return cmd
 }
 
 func waitAndPrintEvalRun(server, name, ns, format string) error {

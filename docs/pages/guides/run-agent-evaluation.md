@@ -107,7 +107,7 @@ kind: EvalRun
 metadata:
   name: triage-eval-exact
 spec:
-  dataset: triage-golden
+  dataset_ref: triage-golden
   system: support-triage-system
   scoring:
     strategy: exact_match
@@ -116,7 +116,10 @@ spec:
 ```
 
 ```bash
-orlojctl apply -f eval-run.yaml
+orlojctl apply -f eval-run.yaml               # creates the run in suspended state
+orlojctl eval start triage-eval-exact          # start it when ready
+# or apply and start immediately:
+orlojctl apply -f eval-run.yaml --run
 ```
 
 ## Step 3: Run with LLM-as-Judge
@@ -140,7 +143,7 @@ kind: EvalRun
 metadata:
   name: triage-eval-llm
 spec:
-  dataset: triage-golden
+  dataset_ref: triage-golden
   system: support-triage-system
   scoring:
     strategy: llm_judge
@@ -162,7 +165,7 @@ kind: EvalRun
 metadata:
   name: triage-eval-claude
 spec:
-  dataset: triage-golden
+  dataset_ref: triage-golden
   system: support-triage-system
   scoring:
     strategy: llm_judge
@@ -170,15 +173,15 @@ spec:
     rubric: "Rate accuracy and helpfulness of the triage classification (0-1)."
   concurrency: 4
   agent_overrides:
-    - agent: triage-agent
+    triage-agent:
       model_ref: claude-sonnet
 ```
 
-Apply and wait for completion:
+Apply and start:
 
 ```bash
-orlojctl apply -f eval-claude.yaml
-orlojctl get eval-runs triage-eval-claude -w
+orlojctl apply -f eval-claude.yaml --run
+orlojctl eval get triage-eval-claude -w
 ```
 
 ## Step 5: Compare Runs

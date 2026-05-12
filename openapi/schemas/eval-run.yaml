@@ -44,6 +44,7 @@ components:
         labels:
           type: object
           additionalProperties: { type: string }
+        suspended: { type: boolean, default: false }
     EvalRunStatus:
       type: object
       properties:
