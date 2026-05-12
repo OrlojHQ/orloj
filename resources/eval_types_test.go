@@ -208,6 +208,39 @@ func TestEvalRunNormalize(t *testing.T) {
 			t.Fatalf("expected valid timeout, got error: %v", err)
 		}
 	})
+
+	t.Run("suspended field preserved", func(t *testing.T) {
+		run := EvalRun{
+			Metadata: ObjectMeta{Name: "run"},
+			Spec: EvalRunSpec{
+				DatasetRef: "ds",
+				System:     "sys",
+				Suspended:  true,
+			},
+		}
+		if err := run.Normalize(); err != nil {
+			t.Fatal(err)
+		}
+		if !run.Spec.Suspended {
+			t.Fatal("expected Suspended to be preserved as true")
+		}
+	})
+
+	t.Run("suspended defaults to false", func(t *testing.T) {
+		run := EvalRun{
+			Metadata: ObjectMeta{Name: "run"},
+			Spec: EvalRunSpec{
+				DatasetRef: "ds",
+				System:     "sys",
+			},
+		}
+		if err := run.Normalize(); err != nil {
+			t.Fatal(err)
+		}
+		if run.Spec.Suspended {
+			t.Fatal("expected Suspended to default to false")
+		}
+	})
 }
 
 func TestComputeEvalSummary(t *testing.T) {

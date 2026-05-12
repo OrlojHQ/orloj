@@ -13,7 +13,7 @@ metadata:
   name: triage-gpt4o-20260510
   namespace: default
 spec:
-  dataset: support-triage-golden
+  dataset_ref: support-triage-golden
   system: support-triage-system
   scoring:
     strategy: llm_judge
@@ -22,8 +22,8 @@ spec:
   concurrency: 5
   timeout: 120s
   agent_overrides:
-    - agent: triage-agent
-      system_prompt: "You are a support triage bot. Classify and route."
+    triage-agent:
+      prompt: "You are a support triage bot. Classify and route."
       model_ref: gpt-4o-mini
 ```
 
@@ -31,22 +31,22 @@ spec:
 
 | Field | Type | Description |
 |---|---|---|
-| `dataset` | string, required | Name of the [EvalDataset](./eval-dataset.md) to evaluate against. |
+| `dataset_ref` | string, required | Name of the [EvalDataset](./eval-dataset.md) to evaluate against. |
 | `system` | string, required | Name of the [AgentSystem](./agent-system.md) to evaluate. |
 | `scoring` | EvalScoringConfig | Default scoring strategy for all samples. Per-sample overrides in the dataset take precedence. |
-| `concurrency` | int | Maximum parallel tasks (samples) to execute. Defaults to 1. Minimum 1. |
+| `concurrency` | int | Maximum parallel tasks (samples) to execute. Defaults to 5. Minimum 1. |
 | `timeout` | duration string | Per-sample task timeout (e.g. `120s`, `5m`). Must be a valid Go `time.Duration`. |
-| `agent_overrides` | []AgentOverride | Ephemeral overrides for agent configuration within this run. |
+| `agent_overrides` | map[string]AgentOverride | Ephemeral overrides for agent configuration within this run. Keys are agent names. |
 | `labels` | map[string]string | Arbitrary labels for filtering and comparison. |
+| `suspended` | bool | When true, the controller will not execute this run. Defaults to `true` when created via `apply` (use `--run` to override or `orlojctl eval start` to trigger later). Defaults to `false` when created via `orlojctl eval run`. |
 
 ### AgentOverride
 
-Used for A/B testing models, prompts, or parameters without modifying the base agent resource.
+Used for A/B testing models, prompts, or parameters without modifying the base agent resource. The map key is the name of the agent to override.
 
 | Field | Type | Description |
 |---|---|---|
-| `agent` | string, required | Name of the agent to override. |
-| `system_prompt` | string | Override the agent's system prompt. |
+| `prompt` | string | Override the agent's system prompt. |
 | `model_ref` | string | Override the agent's model endpoint. |
 
 ### EvalScoringConfig
@@ -59,8 +59,9 @@ See [EvalDataset](./eval-dataset.md#evalscoringconfig) for the full field list.
 - `kind` defaults to `EvalRun`.
 - `metadata.namespace` defaults to `default`.
 - `status.phase` defaults to `Pending`.
-- `spec.concurrency` defaults to 1; must be >= 1.
-- `spec.dataset` and `spec.system` are required.
+- `spec.suspended` defaults to `true` when created via `POST /v1/eval-runs` (unless `?run=true` is set). `orlojctl eval run` sets `?run=true` automatically.
+- `spec.concurrency` defaults to 5; must be >= 1.
+- `spec.dataset_ref` and `spec.system` are required.
 - `spec.timeout` must be a valid Go duration string when set.
 - `llm_judge` scoring requires `model_ref`.
 - `custom` scoring requires `tool_ref`.
@@ -113,7 +114,7 @@ Pending ──► Running ──► Scoring ──► Succeeded
 
 | Phase | Meaning |
 |---|---|
-| `Pending` | Created, waiting for the controller. |
+| `Pending` | Created, waiting for the controller. If `spec.suspended` is true, the controller skips the run until it is started. |
 | `Running` | Tasks are being created and executed (up to `concurrency` in parallel). |
 | `Scoring` | All tasks completed; scoring pipeline is evaluating results. |
 | `PendingReview` | Manual scoring; awaiting human annotations before finalization. |
@@ -133,6 +134,7 @@ Pending ──► Running ──► Scoring ──► Succeeded
 | `GET` | `/v1/eval-runs/{name}/export` | Export results as JSON (or CSV with `?format=csv`). |
 | `PUT` | `/v1/eval-runs/{name}/results/{sample}` | Annotate a single sample (manual review). |
 | `POST` | `/v1/eval-runs/{name}/results` | Bulk import sample annotations. |
+| `POST` | `/v1/eval-runs/{name}/start` | Start a suspended eval run. |
 | `POST` | `/v1/eval-runs/{name}/finalize` | Finalize a PendingReview run (computes summary). |
 | `POST` | `/v1/eval-runs/{name}/cancel` | Cancel a running eval. |
 | `GET` | `/v1/eval-runs/compare?names=a,b,c` | Compare multiple runs side-by-side. |
@@ -140,7 +142,8 @@ Pending ──► Running ──► Scoring ──► Succeeded
 ## CLI Quick Reference
 
 ```bash
-orlojctl eval run --dataset golden --system my-system      # Start a run
+orlojctl eval run --dataset golden --system my-system      # Create and start a run
+orlojctl eval start my-run                                  # Start a suspended run
 orlojctl eval list                                          # List all runs
 orlojctl eval get my-run                                    # Get run detail
 orlojctl eval export my-run --format csv                    # Export for review
@@ -149,6 +152,8 @@ orlojctl eval import my-run -f reviewed.csv                 # Bulk import
 orlojctl eval finalize my-run                               # Finalize manual run
 orlojctl eval compare run-a run-b                           # Compare runs
 orlojctl eval datasets                                      # List datasets
+orlojctl apply -f eval-run.yaml                             # Apply (suspended by default)
+orlojctl apply -f eval-run.yaml --run                       # Apply and start immediately
 ```
 
 ## Related

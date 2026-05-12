@@ -110,6 +110,46 @@ func TestEvalRunController_ReconcilePending_CreatesTasksAndTransitions(t *testin
 	}
 }
 
+func TestEvalRunController_ReconcilePending_SkipsSuspendedRuns(t *testing.T) {
+	ctx := context.Background()
+	c, runs, datasets, tasks := newEvalRunControllerHarness(t)
+
+	seedDatasetForController(t, datasets)
+
+	run := resources.EvalRun{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "EvalRun",
+		Metadata:   resources.ObjectMeta{Name: "suspended-run", Namespace: "default"},
+		Spec: resources.EvalRunSpec{
+			DatasetRef:  "golden",
+			System:      "test-system",
+			Scoring:     resources.EvalScoringConfig{Strategy: "exact_match"},
+			Concurrency: 2,
+			Suspended:   true,
+		},
+	}
+	if _, err := runs.Upsert(ctx, run); err != nil {
+		t.Fatalf("seed suspended eval run: %v", err)
+	}
+
+	if err := c.ReconcileOnce(ctx); err != nil {
+		t.Fatal(err)
+	}
+
+	got, ok, _ := runs.Get(ctx, "default/suspended-run")
+	if !ok {
+		t.Fatal("eval run not found after reconcile")
+	}
+	if got.Status.Phase == resources.EvalRunPhaseRunning {
+		t.Fatal("suspended eval run should not have transitioned to Running")
+	}
+
+	allTasks, _ := tasks.List(ctx)
+	if len(allTasks) != 0 {
+		t.Fatalf("expected 0 tasks for suspended run, got %d", len(allTasks))
+	}
+}
+
 func TestEvalRunController_ReconcilePending_MissingDataset(t *testing.T) {
 	ctx := context.Background()
 	c, runs, _, _ := newEvalRunControllerHarness(t)

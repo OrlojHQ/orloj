@@ -13,10 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **EvalRun docs and frontend type mismatches**: documentation used `dataset` instead of `dataset_ref`, showed `agent_overrides` as a list instead of a map, and used `system_prompt` instead of `prompt`. Frontend TypeScript types matched the incorrect docs rather than the Go backend. All examples, reference docs, and frontend types now match the actual `EvalRunSpec` schema.
 - **Helm chart hardening**: conditional NATS URL args (avoid passing empty `--nats-url=` when NATS is disabled), templated `containerPort` and probe settings from values (instead of hardcoded), added `seccompProfile: RuntimeDefault` to pod security contexts, security context on `helm test` pod, removed dead `postgres-password` key from chart-managed Secret, and removed placeholder sub-chart directories that shadowed real `helm dependency update`.
 
 ### Changed
 
+- **EvalRun suspended by default on apply**: `orlojctl apply` now creates EvalRun resources in a suspended state (`spec.suspended: true`) so they do not execute automatically. Use `orlojctl apply --run` to start immediately, `orlojctl eval start <name>` to start a suspended run, or `orlojctl eval run` (unchanged) to create and start in one step. New `POST /v1/eval-runs/{name}/start` API endpoint.
 - **Sealed Secrets UI consolidated into Secrets page**: removed the dedicated "Sealed Secrets" navigation entry and pages. Secrets that originate from a `SealedSecret` now show a "Sealed" source badge in the list and detail views, with the owning `SealedSecret` name. Old `/sealed-secrets` URLs redirect to `/secrets`.
 - **JetStream API migrated to `jetstream` package**: the agent message bus now uses `jetstream.New(nc)` and the push-based `consumer.Messages()` iterator instead of the deprecated `nc.JetStream()` v1 API with `PullSubscribe`/`Fetch` polling. This eliminates idle CPU from the 2-second poll loop and delivers messages instantly via server-side push with heartbeats.
 - **Stream bounded by `MaxBytes`**: the `ORLOJ_AGENT_MESSAGES` stream now enforces a 1 GiB `MaxBytes` cap alongside the existing 7-day `MaxAge`, preventing unbounded disk growth during message bursts.
