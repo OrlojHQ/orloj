@@ -40,6 +40,7 @@ You interact with Orloj through `orlojctl` (the CLI), the REST API, or the built
 | **Task scheduling**         | Cron-based schedules and webhook-triggered task creation from external events                 |
 | **Reliability**             | Lease-based ownership, idempotent replay, capped retry with jitter, dead-letter transitions   |
 | **Observability**           | Task trace, message lifecycle, per-agent/per-edge metrics, and live event streaming           |
+| **Agent Evaluation**        | Golden datasets, scoring strategies (exact, LLM judge, human review), and run comparison      |
 | **Web console**             | Built-in UI with topology views, task inspection, and command palette                         |
 
 ## Get Started

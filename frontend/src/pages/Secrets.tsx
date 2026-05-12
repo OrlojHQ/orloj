@@ -7,8 +7,20 @@ import { ResourceTable, type Column } from "../components/ResourceTable";
 import { StatusBadge } from "../components/StatusBadge";
 import { EmptyState } from "../components/EmptyState";
 import { ListFetchError } from "../components/ListFetchError";
-import { Lock, Plus } from "lucide-react";
+import { Lock, Plus, ShieldCheck } from "lucide-react";
 import type { Secret } from "../api/types";
+
+const SEALED_OWNER_ANNOTATION = "orloj.dev/sealedsecret-owner";
+
+function SourceBadge({ secret }: { secret: Secret }) {
+  const owner = secret.metadata.annotations?.[SEALED_OWNER_ANNOTATION];
+  if (!owner) return <span className="text-muted">Manual</span>;
+  return (
+    <span className="badge badge--blue" title={`Managed by SealedSecret ${owner}`}>
+      <ShieldCheck size={12} /> Sealed
+    </span>
+  );
+}
 import { CreateResourceDialog } from "../components/CreateResourceDialog";
 
 export function Secrets() {
@@ -20,6 +32,12 @@ export function Secrets() {
 
   const columns: Column<Secret>[] = [
     { key: "name", header: "Name", render: (r) => <span className="mono">{r.metadata.name}</span> },
+    {
+      key: "source",
+      header: "Source",
+      render: (r) => <SourceBadge secret={r} />,
+      width: "100px",
+    },
     { key: "keys", header: "Keys", render: (r) => Object.keys(r.spec.data ?? {}).length },
     {
       key: "keyNames",

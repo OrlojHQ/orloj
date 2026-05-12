@@ -810,6 +810,8 @@ func TestFixtureCoversAllResources(t *testing.T) {
 		"secret":         true,
 		"sealedsecret":   true, // uses full YAML library, not constrained parser
 		"contextadapter": true, // uses full YAML library, not constrained parser
+		"evaldataset":    true, // uses full YAML library, not constrained parser
+		"evalrun":        true, // uses full YAML library, not constrained parser
 	}
 
 	// Probe ParseManifest with every kind it supports.
@@ -818,7 +820,7 @@ func TestFixtureCoversAllResources(t *testing.T) {
 		"SealedSecret", "Memory", "AgentPolicy", "AgentRole",
 		"ToolPermission", "ToolApproval", "TaskApproval", "Task",
 		"TaskSchedule", "TaskWebhook", "Worker", "McpServer",
-		"ContextAdapter",
+		"ContextAdapter", "EvalDataset", "EvalRun",
 	}
 	for _, k := range probeKinds {
 		norm := strings.ToLower(k)

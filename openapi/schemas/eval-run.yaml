@@ -1,0 +1,110 @@
+components:
+  schemas:
+    AgentOverride:
+      type: object
+      properties:
+        prompt: { type: string }
+        model_ref: { type: string }
+    EvalSampleResult:
+      type: object
+      required: [sample_name]
+      properties:
+        sample_name: { type: string }
+        task_name: { type: string }
+        score: { type: number, nullable: true }
+        pass: { type: boolean, nullable: true }
+        error: { type: string }
+        latency: { type: string }
+        tokens: { type: integer }
+        output: { type: string }
+        reasoning: { type: string }
+        comment: { type: string }
+    EvalSummary:
+      type: object
+      properties:
+        pass_rate: { type: number }
+        mean_score: { type: number }
+        p50_latency: { type: string }
+        p95_latency: { type: string }
+        total_tokens: { type: integer }
+        total_cost: { type: number }
+    EvalRunSpec:
+      type: object
+      required: [dataset_ref, system]
+      properties:
+        dataset_ref: { type: string }
+        system: { type: string }
+        model_endpoint_override: { type: string }
+        agent_overrides:
+          type: object
+          additionalProperties: { $ref: "#/components/schemas/AgentOverride" }
+        scoring: { $ref: "eval-dataset.yaml#/components/schemas/EvalScoringConfig" }
+        concurrency: { type: integer, default: 5 }
+        timeout: { type: string }
+        labels:
+          type: object
+          additionalProperties: { type: string }
+    EvalRunStatus:
+      type: object
+      properties:
+        phase:
+          type: string
+          enum: [Pending, Running, Scoring, PendingReview, Succeeded, Failed, Cancelled]
+        totalSamples: { type: integer }
+        completedSamples: { type: integer }
+        passedSamples: { type: integer }
+        failedSamples: { type: integer }
+        erroredSamples: { type: integer }
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/EvalSampleResult" }
+        summary: { $ref: "#/components/schemas/EvalSummary" }
+        datasetGeneration: { type: integer }
+        startedAt: { type: string, format: date-time }
+        completedAt: { type: string, format: date-time }
+        cancelledAt: { type: string, format: date-time }
+    EvalRun:
+      type: object
+      required: [apiVersion, kind, metadata, spec]
+      properties:
+        apiVersion: { type: string, enum: [orloj.dev/v1] }
+        kind: { type: string, enum: [EvalRun] }
+        metadata: { $ref: "common.yaml#/components/schemas/ObjectMeta" }
+        spec: { $ref: "#/components/schemas/EvalRunSpec" }
+        status: { $ref: "#/components/schemas/EvalRunStatus" }
+    EvalRunList:
+      allOf:
+        - { $ref: "common.yaml#/components/schemas/ListMeta" }
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items: { $ref: "#/components/schemas/EvalRun" }
+    EvalRunCompareResponse:
+      type: object
+      properties:
+        runs:
+          type: array
+          items: { type: string }
+        summary:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              pass_rate: { type: number }
+              mean_score: { type: number }
+              total_tokens: { type: integer }
+        samples:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              results:
+                type: object
+                additionalProperties:
+                  type: object
+                  properties:
+                    score: { type: number, nullable: true }
+                    pass: { type: boolean, nullable: true }

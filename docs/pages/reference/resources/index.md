@@ -36,3 +36,5 @@ Each kind has a dedicated page; see [Resource reference pages](#resource-referen
 - [ToolApproval](./tool-approval.md)
 - [TaskApproval](./task-approval.md)
 - [Worker](./worker.md)
+- [EvalDataset](./eval-dataset.md)
+- [EvalRun](./eval-run.md)

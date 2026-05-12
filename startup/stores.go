@@ -33,6 +33,8 @@ type StoreSet struct {
 	WebhookDedupe   *store.WebhookDedupeStore
 	Workers         *store.WorkerStore
 	McpServers      *store.McpServerStore
+	EvalDatasets    *store.EvalDatasetStore
+	EvalRuns        *store.EvalRunStore
 	LocalAdmins     *store.LocalAdminStore
 	APITokens       *store.APITokenStore
 	AuthSessions    *store.AuthSessionStore
@@ -83,6 +85,8 @@ func OpenStores(cfg StoreConfig, logger *log.Logger) (*StoreSet, error) {
 		s.Workers = store.NewWorkerStore()
 		s.McpServers = store.NewMcpServerStore()
 		s.ContextAdapters = store.NewContextAdapterStore()
+		s.EvalDatasets = store.NewEvalDatasetStore()
+		s.EvalRuns = store.NewEvalRunStore()
 		s.LocalAdmins = store.NewLocalAdminStore()
 		s.APITokens = store.NewAPITokenStore()
 		s.AuthSessions = store.NewAuthSessionStore()
@@ -154,6 +158,8 @@ func OpenStores(cfg StoreConfig, logger *log.Logger) (*StoreSet, error) {
 		s.Workers = store.NewWorkerStoreWithDB(db)
 		s.McpServers = store.NewMcpServerStoreWithDB(db)
 		s.ContextAdapters = store.NewContextAdapterStoreWithDB(db)
+		s.EvalDatasets = store.NewEvalDatasetStoreWithDB(db)
+		s.EvalRuns = store.NewEvalRunStoreWithDB(db)
 		s.LocalAdmins = store.NewLocalAdminStoreWithDB(db)
 		s.APITokens = store.NewAPITokenStoreWithDB(db)
 		s.AuthSessions = store.NewAuthSessionStoreWithDB(db)

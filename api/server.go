@@ -46,6 +46,8 @@ type Stores struct {
 	WebhookDedupe *store.WebhookDedupeStore
 	Workers       *store.WorkerStore
 	McpServers    *store.McpServerStore
+	EvalDatasets  *store.EvalDatasetStore
+	EvalRuns      *store.EvalRunStore
 	LocalAdmins   *store.LocalAdminStore
 	APITokens     *store.APITokenStore
 	AuthSessions  *store.AuthSessionStore
@@ -126,6 +128,12 @@ func NewServerWithOptions(stores Stores, runtime *agentruntime.Manager, logger *
 	}
 	if stores.McpServers == nil {
 		stores.McpServers = store.NewMcpServerStore()
+	}
+	if stores.EvalDatasets == nil {
+		stores.EvalDatasets = store.NewEvalDatasetStore()
+	}
+	if stores.EvalRuns == nil {
+		stores.EvalRuns = store.NewEvalRunStore()
 	}
 	if stores.LocalAdmins == nil {
 		stores.LocalAdmins = store.NewLocalAdminStore()
@@ -354,6 +362,12 @@ func (s *Server) routes() {
 
 	s.mux.HandleFunc("/v1/context-adapters", s.handleContextAdapters)
 	s.mux.HandleFunc("/v1/context-adapters/", s.handleContextAdapterByName)
+
+	s.mux.HandleFunc("/v1/eval-datasets", s.handleEvalDatasets)
+	s.mux.HandleFunc("/v1/eval-datasets/", s.handleEvalDatasetByName)
+	s.mux.HandleFunc("/v1/eval-runs", s.handleEvalRuns)
+	s.mux.HandleFunc("/v1/eval-runs/compare", s.handleEvalRunsCompare)
+	s.mux.HandleFunc("/v1/eval-runs/", s.handleEvalRunByName)
 
 	s.mux.HandleFunc("/v1/agent-policies", s.handlePolicies)
 	s.mux.HandleFunc("/v1/agent-policies/", s.handlePolicyByName)

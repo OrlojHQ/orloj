@@ -120,6 +120,18 @@ func ParseManifest(kind string, raw []byte) (normKind string, name string, obj a
 			return "", "", nil, e
 		}
 		return normKind, o.Metadata.Name, o, nil
+	case "evaldataset":
+		o, e := ParseEvalDatasetManifest(raw)
+		if e != nil {
+			return "", "", nil, e
+		}
+		return normKind, o.Metadata.Name, o, nil
+	case "evalrun":
+		o, e := ParseEvalRunManifest(raw)
+		if e != nil {
+			return "", "", nil, e
+		}
+		return normKind, o.Metadata.Name, o, nil
 	default:
 		return "", "", nil, fmt.Errorf("unsupported kind %q", normKind)
 	}

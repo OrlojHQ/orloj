@@ -7,12 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Agent Evaluation Framework**: new `EvalDataset` and `EvalRun` resource kinds for declarative agent evaluation. Includes four scoring strategies (`exact_match`, `llm_judge`, `manual`, `custom`), a comparison API (`GET /v1/eval-runs/compare`), manual review workflow with export/annotate/import/finalize, and full `orlojctl eval` CLI subcommand tree. New database migration `013_eval_framework.up.sql`, OpenAPI schemas, and TypeScript frontend types.
+
 ### Fixed
 
 - **Helm chart hardening**: conditional NATS URL args (avoid passing empty `--nats-url=` when NATS is disabled), templated `containerPort` and probe settings from values (instead of hardcoded), added `seccompProfile: RuntimeDefault` to pod security contexts, security context on `helm test` pod, removed dead `postgres-password` key from chart-managed Secret, and removed placeholder sub-chart directories that shadowed real `helm dependency update`.
 
 ### Changed
 
+- **Sealed Secrets UI consolidated into Secrets page**: removed the dedicated "Sealed Secrets" navigation entry and pages. Secrets that originate from a `SealedSecret` now show a "Sealed" source badge in the list and detail views, with the owning `SealedSecret` name. Old `/sealed-secrets` URLs redirect to `/secrets`.
 - **JetStream API migrated to `jetstream` package**: the agent message bus now uses `jetstream.New(nc)` and the push-based `consumer.Messages()` iterator instead of the deprecated `nc.JetStream()` v1 API with `PullSubscribe`/`Fetch` polling. This eliminates idle CPU from the 2-second poll loop and delivers messages instantly via server-side push with heartbeats.
 - **Stream bounded by `MaxBytes`**: the `ORLOJ_AGENT_MESSAGES` stream now enforces a 1 GiB `MaxBytes` cap alongside the existing 7-day `MaxAge`, preventing unbounded disk growth during message bursts.
 - **Consumer poison-message protection**: JetStream consumers now set `AckWait: 120s` and `MaxDeliver: 10`, terminating messages that fail processing after 10 attempts instead of redelivering indefinitely.

@@ -47,6 +47,15 @@ orlojctl admin list-users
 orlojctl admin delete-user <username>
 orlojctl admin reset-password --username <name> --new-password <value>
 orlojctl config path|get|use <name>|set-profile <name> [--server URL] [--token value] [--token-env NAME]
+orlojctl eval run --dataset <name> --system <name> [--scoring <strategy>] [--concurrency <n>]
+orlojctl eval list [-o table|json|yaml]
+orlojctl eval get <name> [-o table|json|yaml]
+orlojctl eval compare <run1> <run2> [run3 ...]
+orlojctl eval datasets [-o table|json|yaml]
+orlojctl eval export <name> [--format csv|json]
+orlojctl eval annotate <name> --sample <sample> --score <n> [--pass] [--comment <text>]
+orlojctl eval import <name> -f <csv-file>
+orlojctl eval finalize <name>
 ```
 
 ## Global Auth and Server Resolution
@@ -231,6 +240,8 @@ Supported resources:
 - `task-webhooks`
 - `workers`
 - `mcp-servers`
+- `eval-datasets`
+- `eval-runs`
 - `tokens`
 
 Notes:
@@ -538,6 +549,106 @@ Positional argument `<name>` is required. It sets both the output directory and 
 | Flag | Default | Description |
 |---|---|---|
 | `--blueprint` | `pipeline` | Blueprint topology: `pipeline`, `hierarchical`, `swarm-loop`. |
+
+## `orlojctl eval`
+
+Evaluation framework commands for measuring and comparing agent system quality. See the [Agent Evaluation guide](../guides/run-agent-evaluation.md) for a full walkthrough.
+
+### `orlojctl eval run`
+
+Creates an EvalRun and polls until completion.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--dataset` | none | EvalDataset name (required). |
+| `--system` | none | AgentSystem name (required). |
+| `--scoring` | `exact_match` | Scoring strategy: `exact_match`, `llm_judge`, `manual`, `custom`. |
+| `--model-ref` | empty | Judge model for `llm_judge` scoring. |
+| `--rubric` | empty | Evaluation rubric for `llm_judge` scoring. |
+| `--concurrency` | `1` | Maximum parallel samples. |
+| `--timeout` | empty | Per-sample task timeout (e.g. `60s`, `5m`). |
+| `--server` | resolved server | API server URL. |
+| `--namespace` | global namespace (if set) | Namespace for the eval run. |
+| `-n` | global namespace (if set) | Shorthand for `--namespace`. |
+
+### `orlojctl eval list`
+
+Lists all EvalRuns.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--server` | resolved server | API server URL. |
+| `-o` | `table` | Output format: `table`, `json`, `yaml`. |
+| `--namespace` | global namespace (if set) | Namespace filter. |
+| `-n` | global namespace (if set) | Shorthand for `--namespace`. |
+
+### `orlojctl eval get`
+
+Gets a specific EvalRun by name.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--server` | resolved server | API server URL. |
+| `-o` | `table` | Output format: `table`, `json`, `yaml`. |
+| `--namespace` | global namespace (if set) | Namespace override. |
+| `-n` | global namespace (if set) | Shorthand for `--namespace`. |
+
+### `orlojctl eval compare`
+
+Compares two or more completed EvalRuns side-by-side, showing pass rate, mean score, tokens, and latency.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--server` | resolved server | API server URL. |
+
+### `orlojctl eval datasets`
+
+Lists all EvalDatasets.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--server` | resolved server | API server URL. |
+| `-o` | `table` | Output format: `table`, `json`, `yaml`. |
+| `--namespace` | global namespace (if set) | Namespace filter. |
+| `-n` | global namespace (if set) | Shorthand for `--namespace`. |
+
+### `orlojctl eval export`
+
+Exports an EvalRun's results for review.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--format` | `json` | Export format: `json` or `csv`. |
+| `--server` | resolved server | API server URL. |
+
+### `orlojctl eval annotate`
+
+Annotates a single sample result in a PendingReview run.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--sample` | none | Sample name (required). |
+| `--score` | none | Numeric score 0.0–1.0 (required). |
+| `--pass` | `false` | Mark the sample as passed. |
+| `--comment` | empty | Reviewer comment / reasoning. |
+| `--server` | resolved server | API server URL. |
+
+### `orlojctl eval import`
+
+Bulk-imports annotations from a CSV file into a PendingReview run.
+
+| Flag | Default | Description |
+|---|---|---|
+| `-f` | none | Path to CSV file (required). Columns: `sample_name`, `score`, `pass`, `reasoning`. |
+| `--server` | resolved server | API server URL. |
+
+### `orlojctl eval finalize`
+
+Finalizes a PendingReview run, computing aggregate summary metrics and transitioning it to Succeeded.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--server` | resolved server | API server URL. |
 
 ## Command Discovery
 

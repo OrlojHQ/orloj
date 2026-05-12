@@ -819,7 +819,9 @@ export type ResourceKind =
   | "TaskSchedule"
   | "TaskWebhook"
   | "Worker"
-  | "McpServer";
+  | "McpServer"
+  | "EvalDataset"
+  | "EvalRun";
 
 export const RESOURCE_ENDPOINTS: Record<ResourceKind, string> = {
   Agent: "agents",
@@ -840,6 +842,8 @@ export const RESOURCE_ENDPOINTS: Record<ResourceKind, string> = {
   TaskWebhook: "task-webhooks",
   Worker: "workers",
   McpServer: "mcp-servers",
+  EvalDataset: "eval-datasets",
+  EvalRun: "eval-runs",
 };
 
 /** React Router base path for resource detail pages (before `/:name`). */
@@ -862,4 +866,105 @@ export const RESOURCE_DETAIL_BASE_PATH: Record<ResourceKind, string> = {
   TaskWebhook: "/task-webhooks",
   Worker: "/workers",
   McpServer: "/mcp-servers",
+  EvalDataset: "/eval-datasets",
+  EvalRun: "/eval-runs",
 };
+
+// ---------------------------------------------------------------------------
+// Eval Framework Types
+// ---------------------------------------------------------------------------
+
+export interface EvalScoringConfig {
+  strategy?: "exact_match" | "llm_judge" | "manual" | "custom";
+  model_ref?: string;
+  rubric?: string;
+  tool_ref?: string;
+}
+
+export interface EvalExpected {
+  output_contains?: string;
+  output_not_contains?: string;
+  output_matches?: string;
+  output_json_path?: string;
+  equals?: string;
+  not_equals?: string;
+  contains?: string;
+  greater_than?: string;
+  less_than?: string;
+}
+
+export interface EvalSample {
+  name: string;
+  input: Record<string, string>;
+  expected?: EvalExpected;
+  scoring?: EvalScoringConfig;
+}
+
+export interface EvalDataset {
+  apiVersion: string;
+  kind: "EvalDataset";
+  metadata: ObjectMeta;
+  spec: {
+    description?: string;
+    samples: EvalSample[];
+  };
+  status?: {
+    phase?: string;
+  };
+}
+
+export interface EvalSampleResult {
+  sample_name: string;
+  task_name?: string;
+  score: number | null;
+  pass: boolean | null;
+  error?: string;
+  latency?: string;
+  tokens?: number;
+  output?: string;
+  reasoning?: string;
+  comment?: string;
+}
+
+export interface EvalSummary {
+  pass_rate?: number;
+  mean_score?: number;
+  total_tokens?: number;
+  mean_latency_ms?: number;
+}
+
+export interface AgentOverride {
+  agent: string;
+  system_prompt?: string;
+  model_ref?: string;
+}
+
+export interface EvalRun {
+  apiVersion: string;
+  kind: "EvalRun";
+  metadata: ObjectMeta;
+  spec: {
+    dataset_ref: string;
+    system: string;
+    agent_overrides?: AgentOverride[];
+    scoring?: EvalScoringConfig;
+    concurrency?: number;
+    timeout?: string;
+    labels?: Record<string, string>;
+  };
+  status?: {
+    phase?: string;
+    message?: string;
+    totalSamples?: number;
+    completedSamples?: number;
+    passedSamples?: number;
+    failedSamples?: number;
+    erroredSamples?: number;
+    results?: EvalSampleResult[];
+    summary?: EvalSummary;
+    datasetGeneration?: number;
+    startedAt?: string;
+    completedAt?: string;
+    cancelledAt?: string;
+  };
+}

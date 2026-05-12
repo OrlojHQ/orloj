@@ -36,3 +36,7 @@ Implement the Tool Contract v1, register the tool as a resource, configure isola
 **[Capture README Orloj in Action Media](./readme-media-capture.md)**
 *For maintainers refreshing repository branding assets.*
 Generate reproducible frontend screenshots and lifecycle GIF media for the README Orloj in Action section.
+
+**[Run Your First Agent Evaluation](./run-agent-evaluation.md)**
+*For platform engineers and ML teams who want to measure agent quality.*
+Create a golden dataset, run evaluations with multiple scoring strategies, compare models side-by-side, and set up human review workflows.
