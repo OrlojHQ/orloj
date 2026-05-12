@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-05-12
+
 ### Added
 
 - **Agent Evaluation Framework**: new `EvalDataset` and `EvalRun` resource kinds for declarative agent evaluation. Includes four scoring strategies (`exact_match`, `llm_judge`, `manual`, `custom`), a comparison API (`GET /v1/eval-runs/compare`), manual review workflow with export/annotate/import/finalize, and full `orlojctl eval` CLI subcommand tree. New database migration `013_eval_framework.up.sql`, OpenAPI schemas, and TypeScript frontend types.
@@ -14,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **EvalRun docs and frontend type mismatches**: documentation used `dataset` instead of `dataset_ref`, showed `agent_overrides` as a list instead of a map, and used `system_prompt` instead of `prompt`. Frontend TypeScript types matched the incorrect docs rather than the Go backend. All examples, reference docs, and frontend types now match the actual `EvalRunSpec` schema.
+- **EvalRun output grading and progress**: scoring prefers the agent's final model line (`last_output`), strips `step=N model_output=` prefixes and markdown fences before comparison, and JSONPath scoring parses fenced JSON. Running-phase reconciliation persists `completedSamples` for live progress; `DeadLetter` tasks are counted like failures for completion and cancellation. Re-applying an EvalRun resets non-terminal phases (clearing stale results) while preserving terminal `Succeeded` and `PendingReview` status.
+- **OpenAPI**: EvalRun-related paths and schema fields aligned with the HTTP API.
 - **Helm chart hardening**: conditional NATS URL args (avoid passing empty `--nats-url=` when NATS is disabled), templated `containerPort` and probe settings from values (instead of hardcoded), added `seccompProfile: RuntimeDefault` to pod security contexts, security context on `helm test` pod, removed dead `postgres-password` key from chart-managed Secret, and removed placeholder sub-chart directories that shadowed real `helm dependency update`.
 
 ### Changed
@@ -437,7 +441,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Homebrew tap distribution (`OrlojHQ/orloj`)
 - Blueprint scaffolding via `orlojctl init`
 
-[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.14.1...HEAD
+[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/OrlojHQ/orloj/compare/v0.14.1...v0.15.0
 [0.14.1]: https://github.com/OrlojHQ/orloj/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/OrlojHQ/orloj/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/OrlojHQ/orloj/compare/v0.12.1...v0.13.0
