@@ -198,8 +198,8 @@ jobs:
           echo "version=${v}" >> "$GITHUB_OUTPUT"
           echo "registry=oci://ghcr.io/${o}/charts" >> "$GITHUB_OUTPUT"
 
-      - name: Resolve chart dependencies
-        run: helm dependency update charts/orloj
+      - name: Build chart dependencies (from Chart.lock)
+        run: helm dependency build charts/orloj
 
       - name: Package chart
         run: |
