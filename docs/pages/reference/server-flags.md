@@ -95,6 +95,11 @@ Model routing (provider, base URL, default model, API key, timeout) is configure
 | `--tool-wasm-fuel` | `1000000` | Default WASM execution fuel limit. | Always available; env `ORLOJ_TOOL_WASM_FUEL`. |
 | `--tool-wasm-wasi` | `true` | Default: enable WASI host functions. | Always available; env `ORLOJ_TOOL_WASM_WASI`. |
 | `--tool-wasm-cache-dir` | `~/.orloj/wasm-cache` | Disk cache directory for remote WASM modules (HTTPS/OCI). | Always available; env `ORLOJ_TOOL_WASM_CACHE_DIR`. |
+| `--tool-k8s-enabled` | `false` | Enable Kubernetes tool isolation runtime. | Env `ORLOJ_TOOL_K8S_ENABLED`. When true, tools with `isolation_mode: kubernetes` run as K8s Jobs. |
+| `--tool-k8s-namespace` | pod namespace or `default` | Namespace for tool Jobs. | Env `ORLOJ_TOOL_K8S_NAMESPACE`. |
+| `--tool-k8s-service-account` | empty | Service account for tool Pods. | Env `ORLOJ_TOOL_K8S_SERVICE_ACCOUNT`. |
+| `--tool-k8s-job-ttl` | `300` | TTL seconds after Job finishes (`ttlSecondsAfterFinished`). | Env `ORLOJ_TOOL_K8S_JOB_TTL`. |
+| `--tool-k8s-default-image` | `curlimages/curl:8.8.0` | Fallback image for HTTP tools without an explicit image. | Env `ORLOJ_TOOL_K8S_DEFAULT_IMAGE`. |
 
 ---
 
@@ -173,6 +178,11 @@ Model routing (provider, base URL, default model, API key, timeout) is configure
 | `--tool-wasm-fuel` | `1000000` | Default WASM execution fuel limit. | Always available; env `ORLOJ_TOOL_WASM_FUEL`. |
 | `--tool-wasm-wasi` | `true` | Default: enable WASI host functions. | Always available; env `ORLOJ_TOOL_WASM_WASI`. |
 | `--tool-wasm-cache-dir` | `~/.orloj/wasm-cache` | Disk cache directory for remote WASM modules (HTTPS/OCI). | Always available; env `ORLOJ_TOOL_WASM_CACHE_DIR`. |
+| `--tool-k8s-enabled` | `false` | Enable Kubernetes tool isolation runtime. | Env `ORLOJ_TOOL_K8S_ENABLED`. When true, tools with `isolation_mode: kubernetes` run as K8s Jobs. |
+| `--tool-k8s-namespace` | pod namespace or `default` | Namespace for tool Jobs. | Env `ORLOJ_TOOL_K8S_NAMESPACE`. |
+| `--tool-k8s-service-account` | empty | Service account for tool Pods. | Env `ORLOJ_TOOL_K8S_SERVICE_ACCOUNT`. |
+| `--tool-k8s-job-ttl` | `300` | TTL seconds after Job finishes (`ttlSecondsAfterFinished`). | Env `ORLOJ_TOOL_K8S_JOB_TTL`. |
+| `--tool-k8s-default-image` | `curlimages/curl:8.8.0` | Fallback image for HTTP tools without an explicit image. | Env `ORLOJ_TOOL_K8S_DEFAULT_IMAGE`. |
 
 ## Command Discovery
 

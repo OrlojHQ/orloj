@@ -40,6 +40,11 @@ Example:
 | `ORLOJ_TOOL_WASM_FUEL` | `orlojd`, `orlojworker` | `--tool-wasm-fuel` | Default WASM execution fuel limit. |
 | `ORLOJ_TOOL_WASM_WASI` | `orlojd`, `orlojworker` | `--tool-wasm-wasi` | Default: enable WASI host functions for WASM tools. |
 | `ORLOJ_TOOL_WASM_CACHE_DIR` | `orlojd`, `orlojworker` | `--tool-wasm-cache-dir` | Disk cache directory for remote WASM modules (HTTPS/OCI). Default: `~/.orloj/wasm-cache`. |
+| `ORLOJ_TOOL_K8S_ENABLED` | `orlojd`, `orlojworker` | `--tool-k8s-enabled` | Enable Kubernetes tool isolation runtime. Default: `false`. |
+| `ORLOJ_TOOL_K8S_NAMESPACE` | `orlojd`, `orlojworker` | `--tool-k8s-namespace` | Namespace for tool Jobs. Default: current pod namespace or `default`. |
+| `ORLOJ_TOOL_K8S_SERVICE_ACCOUNT` | `orlojd`, `orlojworker` | `--tool-k8s-service-account` | Service account for tool Pods. |
+| `ORLOJ_TOOL_K8S_JOB_TTL` | `orlojd`, `orlojworker` | `--tool-k8s-job-ttl` | TTL seconds after Job finishes. Default: `300`. |
+| `ORLOJ_TOOL_K8S_DEFAULT_IMAGE` | `orlojd`, `orlojworker` | `--tool-k8s-default-image` | Fallback image for HTTP tools without an explicit image. Default: `curlimages/curl:8.8.0`. |
 | `ORLOJ_EVENT_BUS_BACKEND` | `orlojd` | `--event-bus-backend` | Control-plane event bus backend: `memory` or `nats`. |
 | `ORLOJ_NATS_URL` | `orlojd`, `orlojworker` | `--nats-url` (server), `--agent-message-nats-url` (runtime bus) | Base NATS URL; also fallback for runtime message bus URL. |
 | `ORLOJ_NATS_SUBJECT_PREFIX` | `orlojd` | `--nats-subject-prefix` | Subject prefix used for control-plane NATS event bus. |

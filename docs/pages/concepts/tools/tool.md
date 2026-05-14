@@ -119,6 +119,7 @@ Isolation modes control the execution boundary of a tool, independent of tool ty
 | `none` | Direct execution in the worker process. The `http` type makes real HTTP calls; other types use their respective transports. | `low` and `medium` risk tools |
 | `sandboxed` | Restricted container execution with secure defaults: read-only filesystem, no capabilities, no privilege escalation, no network, non-root user, memory/CPU/pids limits. | `high` and `critical` risk tools |
 | `container` | Each tool invocation runs in an isolated container. Full filesystem and network isolation. | Explicitly configured |
+| `kubernetes` | Executes the tool as an ephemeral Kubernetes Job. Requires `--tool-k8s-enabled=true`. The tool's `spec.cli.image`, `command`, `args`, and `resources` are mapped to the Job's Pod spec. | Explicitly configured |
 | `wasm` | Tool runs as a WebAssembly module with a host-guest stdin/stdout contract. Memory-safe and deterministic. | Explicitly configured |
 
 The isolation mode defaults are based on `risk_level`:

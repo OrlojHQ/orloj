@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Kubernetes tool isolation backend**: tools can now execute as ephemeral Kubernetes Jobs by setting `isolation_mode: kubernetes` in the tool spec. The new backend coexists with the existing Docker container backend -- per-tool `isolation_mode` selects which one handles each tool. New `--tool-k8s-*` flags (`--tool-k8s-enabled`, `--tool-k8s-namespace`, `--tool-k8s-service-account`, `--tool-k8s-job-ttl`, `--tool-k8s-default-image`) configure the runtime independently of `--tool-isolation-backend`. Helm chart adds `toolIsolation.kubernetes.*` values and conditional RBAC for Job/Pod/Secret access. Includes `KubernetesSecretResolver` for resolving secrets from Kubernetes Secrets when running in-cluster.
+
 ## [0.15.0] - 2026-05-12
 
 ### Added

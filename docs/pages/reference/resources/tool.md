@@ -29,7 +29,7 @@
 - `risk_level` (string): `low`, `medium`, `high`, `critical`.
 - `runtime` (object):
   - `timeout` (duration string)
-  - `isolation_mode`: `none`, `sandboxed`, `container`, `wasm`
+  - `isolation_mode`: `none`, `sandboxed`, `container`, `kubernetes`, `wasm`
   - `retry.max_attempts` (int)
   - `retry.backoff` (duration string)
   - `retry.max_backoff` (duration string)
@@ -58,6 +58,7 @@
   - `container` for `type=cli` (regardless of risk level)
   - `sandboxed` for `high`/`critical` risk (non-CLI)
   - `none` for `low`/`medium` risk (non-CLI)
+  - `kubernetes` must be set explicitly; requires `--tool-k8s-enabled=true`
 - `runtime.retry` defaults:
   - `max_attempts` -> `1`
   - `backoff` -> `0s`

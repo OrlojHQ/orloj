@@ -162,6 +162,7 @@ See [MCP Server concept](../concepts/tools/mcp-server.md) and the [Connect an MC
 - `none` -- direct execution with real HTTP/gRPC calls (no isolation boundary)
 - `sandboxed` -- restricted container with secure defaults (see below)
 - `container` -- per-invocation isolated container
+- `kubernetes` -- ephemeral Kubernetes Job (see below)
 - `wasm` -- WebAssembly module with host-guest stdin/stdout boundary
 
 Container backend supports constrained execution for high-risk paths.
@@ -184,6 +185,27 @@ When `isolation_mode=sandboxed` (the default for `high`/`critical` risk tools), 
 | Process limit        | `64` PIDs                          |
 
 These defaults are enforced by `SandboxedContainerDefaults()` in the runtime and validated by conformance tests. Override with `--tool-container-*` flags only when necessary.
+
+### Kubernetes Isolation
+
+When `isolation_mode: kubernetes`, tool invocations run as ephemeral Kubernetes Jobs. This provides cluster-native isolation without requiring a Docker socket on worker nodes.
+
+**Security properties:**
+
+- **Ephemeral Pods**: Each tool invocation creates a dedicated Job and Pod. No state persists between invocations.
+- **Configurable service accounts**: Tool Pods run under a dedicated service account (`--tool-k8s-service-account`), enabling least-privilege RBAC for the tool workload itself.
+- **Resource limits**: `spec.cli.resources` (memory, CPU) map to Kubernetes resource requests and limits on the Pod spec, enforced by the kubelet.
+- **Timeout enforcement**: `spec.runtime.timeout` sets `activeDeadlineSeconds` on the Job, ensuring runaway tools are killed by the cluster.
+- **Automatic cleanup**: Completed Jobs are garbage-collected via `ttlSecondsAfterFinished` (default: 300s, configurable with `--tool-k8s-job-ttl`).
+- **Network isolation**: Kubernetes NetworkPolicies can restrict tool Pod egress/ingress independently of worker Pod network rules. This replaces the Docker `--network` flag.
+- **No privilege escalation**: Tool Pods do not mount the worker's filesystem, Docker socket, or service account token.
+
+**Operational guidance:**
+
+- Apply NetworkPolicies to the tool Job namespace to restrict egress to only required endpoints.
+- Use a dedicated namespace (`--tool-k8s-namespace`) to isolate tool Jobs from application workloads.
+- Monitor Job completion rates and cleanup to detect stuck or leaked Pods.
+- Set resource quotas on the tool namespace to bound total resource consumption from tool invocations.
 
 ### CLI Tool Isolation
 

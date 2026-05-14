@@ -140,6 +140,48 @@ helm upgrade orloj ./charts/orloj --namespace orloj
 - tasks not created: verify port-forward is active and API endpoint is reachable.
 - Helm rollback: `helm rollback orloj <revision> --namespace orloj`.
 
+## Tool Isolation: Kubernetes Backend
+
+When `toolIsolation.kubernetes.enabled=true`, Orloj runs tool invocations with `isolation_mode: kubernetes` as ephemeral Kubernetes Jobs in the cluster. This eliminates the need for a Docker socket on worker nodes.
+
+### RBAC Requirements
+
+The Helm chart automatically creates a Role (and RoleBinding) for the worker ServiceAccount with the following permissions:
+
+| API Group | Resource | Verbs |
+|---|---|---|
+| `batch/v1` | `jobs` | `create`, `get`, `list`, `watch`, `delete` |
+| `v1` | `pods` | `get`, `list` |
+| `v1` | `pods/log` | `get` |
+| `v1` | `secrets` | `get` |
+
+The Role is scoped to the namespace configured by `toolIsolation.kubernetes.namespace` (defaults to the release namespace).
+
+### Helm Values
+
+Configure the Kubernetes tool isolation backend under `toolIsolation.kubernetes`:
+
+```yaml
+toolIsolation:
+  kubernetes:
+    enabled: false          # Set to true to enable
+    namespace: ""           # Namespace for tool Jobs (default: release namespace)
+    serviceAccount: ""      # Service account for tool Pods (default: worker SA)
+    jobTTL: 300             # TTL seconds after Job finishes
+    defaultImage: "curlimages/curl:8.8.0"  # Fallback image for HTTP tools
+```
+
+When enabled, the chart passes `--tool-k8s-enabled=true` and related flags to both `orlojd` (embedded worker) and `orlojworker` deployments.
+
+### Coexistence with Container Backend
+
+Both `container` and `kubernetes` isolation backends can be active simultaneously. Each tool's `spec.runtime.isolation_mode` selects which backend handles that tool:
+
+- `isolation_mode: container` -- runs via `docker run` on the worker host
+- `isolation_mode: kubernetes` -- runs as a Kubernetes Job in the cluster
+
+This allows gradual migration from Docker-based isolation to Kubernetes-native execution.
+
 ## Security Defaults
 
 - This baseline is not HA.

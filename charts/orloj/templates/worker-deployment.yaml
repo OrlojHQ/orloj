@@ -121,6 +121,23 @@ spec:
             - name: ORLOJ_TOOL_CONTAINER_PIDS_LIMIT
               value: {{ .Values.toolIsolation.containerPidsLimit | quote }}
             {{- end }}
+            # --- Kubernetes tool isolation ---
+            {{- if .Values.toolIsolation.kubernetes.enabled }}
+            - name: ORLOJ_TOOL_K8S_ENABLED
+              value: "true"
+            {{- with .Values.toolIsolation.kubernetes.namespace }}
+            - name: ORLOJ_TOOL_K8S_NAMESPACE
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.toolIsolation.kubernetes.serviceAccount }}
+            - name: ORLOJ_TOOL_K8S_SERVICE_ACCOUNT
+              value: {{ . | quote }}
+            {{- end }}
+            - name: ORLOJ_TOOL_K8S_JOB_TTL
+              value: {{ .Values.toolIsolation.kubernetes.jobTTLSeconds | quote }}
+            - name: ORLOJ_TOOL_K8S_DEFAULT_IMAGE
+              value: {{ .Values.toolIsolation.kubernetes.defaultImage | quote }}
+            {{- end }}
             {{- if .Values.cliToolAllowedCommands }}
             - name: ORLOJ_CLI_TOOL_ALLOWED_COMMANDS
               value: {{ .Values.cliToolAllowedCommands | quote }}

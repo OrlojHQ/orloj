@@ -100,6 +100,7 @@ type GovernedToolRuntime struct {
 	externalRuntime        ToolRuntime
 	grpcRuntime            ToolRuntime
 	webhookCallbackRuntime ToolRuntime
+	kubernetesRuntime      ToolRuntime
 	registry               ToolCapabilityRegistry
 	authorizer             ToolCallAuthorizer
 	strict                 bool
@@ -374,6 +375,22 @@ func ConfigureWebhookCallbackRuntime(rt ToolRuntime, secrets SecretResolver, nam
 	governed.webhookCallbackRuntime = whRT
 }
 
+// ConfigureKubernetesRuntime builds and attaches a runtime for isolation_mode=kubernetes tools.
+// The runtime is scoped to the governed runtime's registry and the provided namespace.
+func ConfigureKubernetesRuntime(rt ToolRuntime, k8sRT ToolRuntime, namespace string) {
+	governed, ok := rt.(*GovernedToolRuntime)
+	if !ok || governed == nil {
+		return
+	}
+	if scoped, ok := k8sRT.(namespaceAwareToolRuntime); ok {
+		k8sRT = scoped.WithNamespace(namespace)
+	}
+	if aware, ok := k8sRT.(registryAwareToolRuntime); ok && governed.registry != nil {
+		k8sRT = aware.WithRegistry(governed.registry)
+	}
+	governed.kubernetesRuntime = k8sRT
+}
+
 func (r *GovernedToolRuntime) Call(ctx context.Context, tool string, input string) (string, error) {
 	tool = strings.TrimSpace(tool)
 	if tool == "" {
@@ -487,6 +504,20 @@ func (r *GovernedToolRuntime) resolveTargetRuntime(tool string, spec resources.T
 		if mode == "" {
 			mode = "container"
 		}
+		if mode == "kubernetes" {
+			if r.kubernetesRuntime == nil {
+				return nil, NewToolError(
+					ToolStatusError,
+					ToolCodeIsolationUnavailable,
+					ToolReasonIsolationUnavailable,
+					false,
+					fmt.Sprintf("kubernetes isolation runtime unavailable for cli tool=%s; enable with --tool-k8s-enabled", tool),
+					ErrToolIsolationUnavailable,
+					map[string]string{"tool": tool, "isolation_mode": mode, "type": "cli"},
+				)
+			}
+			return r.kubernetesRuntime, nil
+		}
 		if mode != "none" {
 			if r.isolatedRuntime == nil {
 				return nil, NewToolError(
@@ -590,7 +621,26 @@ func (r *GovernedToolRuntime) resolveWithIsolationOverride(tool string, spec res
 			mode = "none"
 		}
 	}
-	if mode != "" && mode != "none" {
+	switch mode {
+	case "", "none":
+		return defaultRT, nil
+	case "kubernetes":
+		if r.kubernetesRuntime == nil {
+			return nil, NewToolError(
+				ToolStatusError,
+				ToolCodeIsolationUnavailable,
+				ToolReasonIsolationUnavailable,
+				false,
+				fmt.Sprintf("kubernetes isolation runtime unavailable for tool=%s; enable with --tool-k8s-enabled", tool),
+				ErrToolIsolationUnavailable,
+				map[string]string{
+					"tool":           tool,
+					"isolation_mode": mode,
+				},
+			)
+		}
+		return r.kubernetesRuntime, nil
+	default:
 		if r.isolatedRuntime == nil {
 			return nil, NewToolError(
 				ToolStatusError,
@@ -607,7 +657,6 @@ func (r *GovernedToolRuntime) resolveWithIsolationOverride(tool string, spec res
 		}
 		return r.isolatedRuntime, nil
 	}
-	return defaultRT, nil
 }
 
 func (r *GovernedToolRuntime) callWithPolicy(ctx context.Context, tool string, input string, spec resources.ToolSpec) (string, error) {

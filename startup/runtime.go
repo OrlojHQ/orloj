@@ -4,12 +4,16 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"time"
 
 	agentruntime "github.com/OrlojHQ/orloj/runtime"
 	"github.com/OrlojHQ/orloj/store"
 	"github.com/tetratelabs/wazero"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
 type IsolatedToolRuntimeConfig struct {
@@ -142,6 +146,66 @@ func NewWASMToolRuntime(cfg IsolatedToolRuntimeConfig, logger *log.Logger) (agen
 			wasmCfg.ModulePath, wasmCfg.Entrypoint, wasmCfg.EnableWASI, wasmCfg.MaxMemoryBytes, wasmCfg.Fuel, cacheDir)
 	}
 	return rt, cleanup, nil
+}
+
+// KubernetesToolRuntimeConfig holds flag-level configuration for the K8s backend.
+type KubernetesToolRuntimeConfig struct {
+	Namespace      string
+	ServiceAccount string
+	JobTTLSeconds  int32
+	DefaultImage   string
+	SecretEnvPrefix string
+	Secrets        agentruntime.SecretResourceLookup
+}
+
+// NewKubernetesToolRuntime creates a K8s Job-based tool runtime.
+// Uses in-cluster config when available, falling back to kubeconfig.
+func NewKubernetesToolRuntime(cfg KubernetesToolRuntimeConfig, logger *log.Logger) (agentruntime.ToolRuntime, error) {
+	storeResolver := agentruntime.NewStoreSecretResolver(cfg.Secrets, "value")
+	envResolver := agentruntime.NewEnvSecretResolver(strings.TrimSpace(cfg.SecretEnvPrefix))
+	secretResolver := agentruntime.NewChainSecretResolver(storeResolver, envResolver)
+
+	k8sConfig := agentruntime.KubernetesToolConfig{
+		Namespace:      strings.TrimSpace(cfg.Namespace),
+		ServiceAccount: strings.TrimSpace(cfg.ServiceAccount),
+		DefaultImage:   strings.TrimSpace(cfg.DefaultImage),
+		JobTTLSeconds:  cfg.JobTTLSeconds,
+	}
+
+	clientset, err := buildKubernetesClientset()
+	if err != nil {
+		return nil, fmt.Errorf("kubernetes client initialization failed: %w", err)
+	}
+
+	k8sSecretResolver := agentruntime.NewKubernetesSecretResolver(clientset, "value")
+	combinedResolver := agentruntime.NewChainSecretResolver(k8sSecretResolver, secretResolver)
+
+	rt := agentruntime.NewKubernetesToolRuntime(clientset, k8sConfig, combinedResolver)
+	if logger != nil {
+		ns := strings.TrimSpace(cfg.Namespace)
+		if ns == "" {
+			ns = "(pod-namespace or default)"
+		}
+		logger.Printf("kubernetes tool isolation enabled namespace=%s service_account=%s job_ttl=%d default_image=%s",
+			ns, strings.TrimSpace(cfg.ServiceAccount), cfg.JobTTLSeconds, strings.TrimSpace(cfg.DefaultImage))
+	}
+	return rt, nil
+}
+
+func buildKubernetesClientset() (kubernetes.Interface, error) {
+	cfg, err := rest.InClusterConfig()
+	if err != nil {
+		home := os.Getenv("HOME")
+		if home == "" {
+			return nil, fmt.Errorf("not in cluster and HOME not set: %w", err)
+		}
+		kubeconfigPath := home + "/.kube/config"
+		cfg, err = clientcmd.BuildConfigFromFlags("", kubeconfigPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build kubeconfig from %s: %w", kubeconfigPath, err)
+		}
+	}
+	return kubernetes.NewForConfig(cfg)
 }
 
 func NewAgentMessageBus(
