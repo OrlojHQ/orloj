@@ -173,3 +173,53 @@ jobs:
         env:
           COSIGN_YES: "true"
         run: cosign sign "${{ steps.reg.outputs.image_worker }}@${{ steps.push-worker.outputs.digest }}"
+
+  chart:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.15.4
+
+      - name: Resolve registry + version
+        id: vars
+        run: |
+          o=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          v="${GITHUB_REF_NAME#v}"
+          echo "owner=${o}" >> "$GITHUB_OUTPUT"
+          echo "version=${v}" >> "$GITHUB_OUTPUT"
+          echo "registry=oci://ghcr.io/${o}/charts" >> "$GITHUB_OUTPUT"
+
+      - name: Build chart dependencies (from Chart.lock)
+        run: helm dependency build charts/orloj
+
+      - name: Package chart
+        run: |
+          mkdir -p dist
+          helm package charts/orloj \
+            --version "${{ steps.vars.outputs.version }}" \
+            --app-version "${{ github.ref_name }}" \
+            --destination dist
+
+      - name: Log in to GHCR (Helm)
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Push chart to OCI registry
+        run: |
+          helm push "dist/orloj-${{ steps.vars.outputs.version }}.tgz" \
+            "${{ steps.vars.outputs.registry }}"
+
+      - name: Attach chart tarball to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/orloj-${{ steps.vars.outputs.version }}.tgz

@@ -4,11 +4,11 @@ image:
   registry: ghcr.io
   # -- orlojd image repository
   server:
-    repository: orlojhq/orlojd
+    repository: orlojhq/orloj-orlojd
     tag: ""  # defaults to appVersion
   # -- orlojworker image repository
   worker:
-    repository: orlojhq/orlojworker
+    repository: orlojhq/orloj-orlojworker
     tag: ""  # defaults to appVersion
   # -- Image pull policy
   pullPolicy: IfNotPresent

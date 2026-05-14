@@ -7,40 +7,34 @@ Deploy Orloj on Kubernetes with a Helm chart (recommended) or with raw manifests
 ## Prerequisites
 
 - Kubernetes cluster access (`kubectl` context configured)
-- container registry you can push to
-- Docker (or compatible image builder)
 - Helm 3 (`helm`)
-- `curl`, `jq`, and `go` for CLI verification from operator workstation
+- `curl`, `jq` for verification (and `go` if running `orlojctl` from source)
+
+The release workflow publishes `orlojd` and `orlojworker` container images plus the Helm chart to GHCR — you do not need to build anything yourself unless you're deploying from a local checkout.
 
 ## Install
 
-### 1. Build and Push Images
+### 1. Install with Helm (Recommended)
+
+The chart is published as an OCI artifact on every `v*` release:
 
 ```bash
-export REGISTRY=ghcr.io/<your-org-or-user>
-export TAG=v0.1.0
-
-docker build -t "${REGISTRY}/orloj-orlojd:${TAG}" --target orlojd \
-  --build-arg "VERSION=${TAG}" --build-arg "COMMIT=$(git rev-parse HEAD)" --build-arg "DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)" .
-docker build -t "${REGISTRY}/orloj-orlojworker:${TAG}" --target orlojworker \
-  --build-arg "VERSION=${TAG}" --build-arg "COMMIT=$(git rev-parse HEAD)" --build-arg "DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)" .
-docker push "${REGISTRY}/orloj-orlojd:${TAG}"
-docker push "${REGISTRY}/orloj-orlojworker:${TAG}"
-```
-
-### 2. Install with Helm (Recommended)
-
-```bash
-helm upgrade --install orloj ./charts/orloj \
+helm upgrade --install orloj oci://ghcr.io/orlojhq/charts/orloj \
+  --version 0.14.2 \
   --namespace orloj \
   --create-namespace \
-  --set orlojd.image.repository="${REGISTRY}/orloj-orlojd" \
-  --set orlojd.image.tag="${TAG}" \
-  --set orlojworker.image.repository="${REGISTRY}/orloj-orlojworker" \
-  --set orlojworker.image.tag="${TAG}" \
-  --set postgres.auth.password='<strong-password>' \
-  --set runtimeSecret.modelGatewayApiKey='<model-provider-api-key>'
+  --set postgresql.auth.password='<strong-password>' \
+  --set secretEncryptionKey="$(openssl rand -hex 32)" \
+  --set auth.mode=native \
+  --set auth.setupToken="$(openssl rand -hex 32)"
 ```
+
+Notes:
+
+- The chart defaults `image.registry`, `image.server.repository`, and `image.worker.repository` at the published GHCR images, so you do not need to set them.
+- `secretEncryptionKey` is a 256-bit AES key used to encrypt provider API keys at rest in Postgres. Generate with `openssl rand -hex 32` and store it as you would any other root secret.
+- `auth.mode=native` requires `auth.setupToken` for first-user bootstrap. See [Operations &gt; Security](../operations/security.md).
+- Model provider API keys (Anthropic, OpenAI, Bedrock, etc.) are **not** chart values — they are encrypted `Secret` resources you create via `orlojctl` after the control plane is up, and `ModelEndpoint` resources reference them by name. See [ModelEndpoint](../concepts/tools/model-endpoint.md).
 
 To inspect effective values:
 
@@ -48,13 +42,64 @@ To inspect effective values:
 helm get values orloj --namespace orloj
 ```
 
-### 3. Manifest Fallback (No Helm)
+#### Install from a source checkout
+
+If you've cloned the repo and want to deploy a development build, you can install from the chart directory directly. Subchart deps must be resolved first:
+
+```bash
+helm dependency update charts/orloj
+helm upgrade --install orloj ./charts/orloj \
+  --namespace orloj \
+  --create-namespace \
+  --set postgresql.auth.password='<strong-password>' \
+  --set secretEncryptionKey="$(openssl rand -hex 32)" \
+  --set auth.mode=native \
+  --set auth.setupToken="$(openssl rand -hex 32)"
+```
+
+To pin custom image tags (for example, a locally-built image pushed to your own registry):
+
+```bash
+  --set image.registry=ghcr.io/<your-org> \
+  --set image.server.repository=<your-org>/orloj-orlojd \
+  --set image.server.tag=<your-tag> \
+  --set image.worker.repository=<your-org>/orloj-orlojworker \
+  --set image.worker.tag=<your-tag>
+```
+
+#### GitOps (ArgoCD, Flux)
+
+ArgoCD `Application` example pointing at the OCI chart:
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: orloj
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: ghcr.io/orlojhq/charts
+    chart: orloj
+    targetRevision: 0.14.2
+    helm:
+      valueFiles:
+        - values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: orloj
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions: [ CreateNamespace=true ]
+```
+
+### 2. Manifest Fallback (No Helm)
 
 If you cannot use Helm, apply the baseline manifest set:
 
-1. Edit `docs/deploy/kubernetes/orloj-stack.yaml` image references.
-2. Rotate baseline secrets (`postgres-password`, DSN password, model API key).
-3. Apply manifests:
+1. Edit `docs/deploy/kubernetes/orloj-stack.yaml` image references and rotate the baseline secrets (Postgres password, secret encryption key, setup token).
+2. Apply manifests:
 
 ```bash
 kubectl apply -f docs/deploy/kubernetes/orloj-stack.yaml
@@ -62,16 +107,16 @@ kubectl apply -f docs/deploy/kubernetes/orloj-stack.yaml
 
 ## Verify
 
-Wait for rollouts:
+Wait for rollouts. The Helm release names follow the `<release>-<component>` convention; with `helm install orloj ...` you get:
 
 ```bash
-kubectl -n orloj rollout status deploy/orloj-postgres
-kubectl -n orloj rollout status deploy/orloj-nats
-kubectl -n orloj rollout status deploy/orloj-orlojd
-kubectl -n orloj rollout status deploy/orloj-orlojworker
+kubectl -n orloj rollout status statefulset/orloj-postgresql
+kubectl -n orloj rollout status statefulset/orloj-nats
+kubectl -n orloj rollout status deploy/orloj-server
+kubectl -n orloj rollout status deploy/orloj-worker
 ```
 
-If you used manifest fallback instead of Helm, use:
+If you used the manifest fallback, the names are unprefixed:
 
 ```bash
 kubectl -n orloj rollout status deploy/postgres
@@ -80,65 +125,84 @@ kubectl -n orloj rollout status deploy/orlojd
 kubectl -n orloj rollout status deploy/orlojworker
 ```
 
-Port-forward API service:
+Port-forward the API service:
 
 ```bash
-kubectl -n orloj port-forward svc/orloj-orlojd 8080:8080
-```
+# Helm install
+kubectl -n orloj port-forward svc/orloj-server 8080:8080
 
-For manifest fallback, port-forward `svc/orlojd` instead.
+# Manifest fallback
+kubectl -n orloj port-forward svc/orlojd 8080:8080
+```
 
 In another terminal:
 
 ```bash
 curl -s http://127.0.0.1:8080/healthz | jq .
-go run ./cmd/orlojctl --server http://127.0.0.1:8080 get workers
-go run ./cmd/orlojctl --server http://127.0.0.1:8080 apply -f examples/blueprints/pipeline/ --run
-go run ./cmd/orlojctl --server http://127.0.0.1:8080 get task bp-pipeline-task
+orlojctl --server http://127.0.0.1:8080 get workers
+orlojctl --server http://127.0.0.1:8080 apply -f examples/blueprints/pipeline/ --run
+orlojctl --server http://127.0.0.1:8080 get task bp-pipeline-task
 ```
 
 Done means:
 
-- all deployments are successfully rolled out.
+- all rollouts are successful.
 - API service is reachable through port-forward.
 - at least one worker is `Ready`.
 - sample task reaches `Succeeded`.
 
 ## Operate
 
-Scale workers:
+Scale workers (Helm install):
 
 ```bash
-kubectl -n orloj scale deploy/orloj-orlojworker --replicas=3
-kubectl -n orloj rollout status deploy/orloj-orlojworker
+kubectl -n orloj scale deploy/orloj-worker --replicas=3
+kubectl -n orloj rollout status deploy/orloj-worker
+```
+
+For long-term scaling, prefer the HPA values:
+
+```yaml
+worker:
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
 ```
 
 Restart control plane:
 
 ```bash
-kubectl -n orloj rollout restart deploy/orloj-orlojd
-kubectl -n orloj rollout status deploy/orloj-orlojd
+kubectl -n orloj rollout restart deploy/orloj-server
+kubectl -n orloj rollout status deploy/orloj-server
 ```
 
 View logs:
 
 ```bash
-kubectl -n orloj logs deploy/orloj-orlojd --tail=200
-kubectl -n orloj logs deploy/orloj-orlojworker --tail=200
+kubectl -n orloj logs deploy/orloj-server --tail=200
+kubectl -n orloj logs deploy/orloj-worker --tail=200
 ```
 
 Upgrade chart release:
 
 ```bash
-helm upgrade orloj ./charts/orloj --namespace orloj
+helm upgrade orloj oci://ghcr.io/orlojhq/charts/orloj \
+  --version <new-version> --namespace orloj --reuse-values
+```
+
+Rollback:
+
+```bash
+helm rollback orloj <revision> --namespace orloj
 ```
 
 ## Troubleshoot
 
 - pods in `ImagePullBackOff`: verify image names/tags and registry access.
 - workers not processing: verify `ORLOJ_AGENT_MESSAGE_CONSUME=true` and message-bus env values.
-- tasks not created: verify port-forward is active and API endpoint is reachable.
-- Helm rollback: `helm rollback orloj <revision> --namespace orloj`.
+- tasks not created: verify the API endpoint is reachable from `orlojctl`.
 
 ## Tool Isolation: Kubernetes Backend
 
@@ -150,10 +214,10 @@ The Helm chart automatically creates a Role (and RoleBinding) for the worker Ser
 
 | API Group | Resource | Verbs |
 |---|---|---|
-| `batch/v1` | `jobs` | `create`, `get`, `list`, `watch`, `delete` |
-| `v1` | `pods` | `get`, `list` |
-| `v1` | `pods/log` | `get` |
-| `v1` | `secrets` | `get` |
+| `batch` | `jobs` | `create`, `get`, `list`, `watch`, `delete` |
+| (core) | `pods` | `get`, `list` |
+| (core) | `pods/log` | `get` |
+| (core) | `secrets` | `get` |
 
 The Role is scoped to the namespace configured by `toolIsolation.kubernetes.namespace` (defaults to the release namespace).
 
@@ -164,34 +228,39 @@ Configure the Kubernetes tool isolation backend under `toolIsolation.kubernetes`
 ```yaml
 toolIsolation:
   kubernetes:
-    enabled: false          # Set to true to enable
-    namespace: ""           # Namespace for tool Jobs (default: release namespace)
-    serviceAccount: ""      # Service account for tool Pods (default: worker SA)
-    jobTTL: 300             # TTL seconds after Job finishes
+    enabled: false               # Set to true to enable
+    namespace: ""                # Namespace for tool Jobs (default: release namespace)
+    serviceAccount: ""           # Service account for tool Pods (default: worker SA)
+    jobTTLSeconds: 300           # TTL seconds after Job finishes (automatic cleanup)
     defaultImage: "curlimages/curl:8.8.0"  # Fallback image for HTTP tools
 ```
 
-When enabled, the chart passes `--tool-k8s-enabled=true` and related flags to both `orlojd` (embedded worker) and `orlojworker` deployments.
+When enabled, the chart sets `ORLOJ_TOOL_K8S_ENABLED=true` plus related env vars on both the `orlojd` server and `orlojworker` deployments.
 
 ### Coexistence with Container Backend
 
 Both `container` and `kubernetes` isolation backends can be active simultaneously. Each tool's `spec.runtime.isolation_mode` selects which backend handles that tool:
 
-- `isolation_mode: container` -- runs via `docker run` on the worker host
-- `isolation_mode: kubernetes` -- runs as a Kubernetes Job in the cluster
+- `isolation_mode: container` — runs via `docker run` on the worker host
+- `isolation_mode: kubernetes` — runs as a Kubernetes Job in the cluster
 
 This allows gradual migration from Docker-based isolation to Kubernetes-native execution.
 
 ## Security Defaults
 
-- This baseline is not HA.
-- Rotate secrets before non-test use.
-- `ORLOJ_AUTH_MODE` defaults to `native` in chart runtime config.
-- Set and rotate `runtimeSecret.apiToken` for CLI/automation bearer auth.
-- Restrict namespace and service exposure based on cluster policy.
+- This baseline is not HA — `server.replicaCount` defaults to 1. Multi-replica `orlojd` requires leader election (see roadmap).
+- Rotate secrets before non-test use:
+  - `postgresql.auth.password` (or `postgresql.auth.existingSecret` for a pre-sealed value).
+  - `secretEncryptionKey` — losing this makes every encrypted Orloj `Secret` unrecoverable.
+  - `auth.setupToken` — single-use bootstrap; rotate after the first admin account is created.
+  - `auth.apiToken` — set this only if you also need a static bearer for CLI/automation; otherwise rely on user-issued tokens minted through the native auth flow.
+- `ORLOJ_AUTH_MODE` defaults to `native` (the chart's `auth.mode` value). `auth.mode=off` disables authentication entirely and is intended only for local development.
+- Restrict namespace and service exposure based on cluster policy. The chart's `server.ingress` is opt-in and emits a `networking.k8s.io/v1 Ingress`; for Gateway API environments, leave `server.ingress.enabled=false` and ship an `HTTPRoute` alongside the release.
 
 ## Related Docs
 
 - [Deployment Assets (`docs/deploy/kubernetes`)](../../deploy/kubernetes/README.md)
 - [Configuration](../operations/configuration.md)
 - [Operations Runbook](../operations/runbook.md)
+- [ModelEndpoint](../concepts/tools/model-endpoint.md)
+- [Security](../operations/security.md)
