@@ -58,6 +58,11 @@ func main() {
 	toolWASMCacheDir := flag.String("tool-wasm-cache-dir", env("ORLOJ_TOOL_WASM_CACHE_DIR", ""), "disk cache directory for remote WASM modules (default: ~/.orloj/wasm-cache)")
 	cliToolAllowedCommands := flag.String("cli-tool-allowed-commands", env("ORLOJ_CLI_TOOL_ALLOWED_COMMANDS", ""), "comma-separated allowlist of commands for CLI tools (empty allows all)")
 	cliToolMaxArgvLength := flag.Int("cli-tool-max-argv-length", envInt("ORLOJ_CLI_TOOL_MAX_ARGV_LENGTH", 4096), "max total argv byte length for CLI tool invocations")
+	toolK8sEnabled := flag.Bool("tool-k8s-enabled", envBool("ORLOJ_TOOL_K8S_ENABLED", false), "enable kubernetes tool isolation runtime for isolation_mode=kubernetes tools")
+	toolK8sNamespace := flag.String("tool-k8s-namespace", env("ORLOJ_TOOL_K8S_NAMESPACE", ""), "namespace for kubernetes tool isolation Jobs (default: pod namespace or 'default')")
+	toolK8sServiceAccount := flag.String("tool-k8s-service-account", env("ORLOJ_TOOL_K8S_SERVICE_ACCOUNT", ""), "service account for kubernetes tool isolation Pods")
+	toolK8sJobTTL := flag.Int("tool-k8s-job-ttl", envInt("ORLOJ_TOOL_K8S_JOB_TTL", 300), "TTL seconds after kubernetes tool Job finishes (cleanup)")
+	toolK8sDefaultImage := flag.String("tool-k8s-default-image", env("ORLOJ_TOOL_K8S_DEFAULT_IMAGE", "curlimages/curl:8.8.0"), "fallback container image for kubernetes tool isolation")
 	agentMessageBusBackend := flag.String("agent-message-bus-backend", env("ORLOJ_AGENT_MESSAGE_BUS_BACKEND", "none"), "runtime agent message bus backend: none|memory|nats-jetstream")
 	agentMessageNATSURL := flag.String("agent-message-nats-url", env("ORLOJ_AGENT_MESSAGE_NATS_URL", env("ORLOJ_NATS_URL", "nats://127.0.0.1:4222")), "NATS server URL used when --agent-message-bus-backend=nats-jetstream")
 	agentMessageSubjectPrefix := flag.String("agent-message-subject-prefix", env("ORLOJ_AGENT_MESSAGE_SUBJECT_PREFIX", "orloj.agentmsg"), "runtime agent message subject prefix")
@@ -223,6 +228,20 @@ func main() {
 	taskController.SetIsolatedToolRuntime(isolatedToolRuntime)
 	taskController.SetWasmToolRuntime(wasmToolRuntime)
 	taskController.SetMcpRuntime(mcpSessionManager, stores.McpServers)
+	if *toolK8sEnabled {
+		k8sRT, k8sErr := startup.NewKubernetesToolRuntime(startup.KubernetesToolRuntimeConfig{
+			Namespace:       *toolK8sNamespace,
+			ServiceAccount:  *toolK8sServiceAccount,
+			JobTTLSeconds:   int32(*toolK8sJobTTL),
+			DefaultImage:    *toolK8sDefaultImage,
+			SecretEnvPrefix: *toolSecretEnvPrefix,
+			Secrets:         stores.Secrets,
+		}, logger)
+		if k8sErr != nil {
+			fatalLogger.Fatalf("failed to configure kubernetes tool runtime: %v", k8sErr)
+		}
+		taskController.SetKubernetesToolRuntime(k8sRT)
+	}
 
 	toolStoreResolver := agentruntime.NewStoreSecretResolver(stores.Secrets, "value")
 	toolEnvResolver := agentruntime.NewEnvSecretResolver(strings.TrimSpace(*toolSecretEnvPrefix))

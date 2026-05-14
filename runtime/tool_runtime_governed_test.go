@@ -216,6 +216,94 @@ func TestGovernedToolRuntimeFailsClosedWhenIsolationRuntimeMissing(t *testing.T)
 	}
 }
 
+func TestGovernedToolRuntimeRoutesHTTPKubernetesToK8sRuntime(t *testing.T) {
+	base := &scriptedToolRuntime{result: "base"}
+	isolated := &scriptedToolRuntime{result: "container"}
+	k8s := &scriptedToolRuntime{result: "k8s"}
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
+		"search_k8s": {
+			Type:     "http",
+			Endpoint: "https://api.example.com/search",
+			Runtime: resources.ToolRuntimePolicy{
+				Timeout:       "5s",
+				IsolationMode: "kubernetes",
+				Retry:         resources.ToolRetryPolicy{MaxAttempts: 1, Backoff: "0s", MaxBackoff: "1s", Jitter: "none"},
+			},
+		},
+	})
+	runtime := NewGovernedToolRuntime(base, isolated, registry, true)
+	ConfigureKubernetesRuntime(runtime, k8s, "")
+	out, err := runtime.Call(context.Background(), "search_k8s", "query")
+	if err != nil {
+		t.Fatalf("k8s call failed: %v", err)
+	}
+	if out != "k8s:search_k8s" {
+		t.Fatalf("expected k8s runtime output, got %q", out)
+	}
+	if k8s.calls != 1 {
+		t.Fatalf("expected k8s runtime calls=1, got %d", k8s.calls)
+	}
+	if base.calls != 0 {
+		t.Fatalf("expected base runtime calls=0, got %d", base.calls)
+	}
+}
+
+func TestGovernedToolRuntimeRoutesCLIKubernetesToK8sRuntime(t *testing.T) {
+	base := &scriptedToolRuntime{result: "base"}
+	isolated := &scriptedToolRuntime{result: "container"}
+	k8s := &scriptedToolRuntime{result: "k8s"}
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
+		"kubectl_k8s": {
+			Type: "cli",
+			Cli:  resources.ToolCliSpec{Command: "kubectl", Image: "bitnami/kubectl:latest"},
+			Runtime: resources.ToolRuntimePolicy{
+				Timeout:       "5s",
+				IsolationMode: "kubernetes",
+				Retry:         resources.ToolRetryPolicy{MaxAttempts: 1, Backoff: "0s", MaxBackoff: "1s", Jitter: "none"},
+			},
+		},
+	})
+	runtime := NewGovernedToolRuntime(base, isolated, registry, true)
+	ConfigureKubernetesRuntime(runtime, k8s, "")
+	out, err := runtime.Call(context.Background(), "kubectl_k8s", "{}")
+	if err != nil {
+		t.Fatalf("k8s cli call failed: %v", err)
+	}
+	if out != "k8s:kubectl_k8s" {
+		t.Fatalf("expected k8s runtime output, got %q", out)
+	}
+	if k8s.calls != 1 {
+		t.Fatalf("expected k8s runtime calls=1, got %d", k8s.calls)
+	}
+	if isolated.calls != 0 {
+		t.Fatalf("expected container runtime calls=0, got %d", isolated.calls)
+	}
+}
+
+func TestGovernedToolRuntimeFailsWhenCLIKubernetesNotConfigured(t *testing.T) {
+	base := &scriptedToolRuntime{result: "base"}
+	isolated := &scriptedToolRuntime{result: "container"}
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
+		"kubectl_k8s": {
+			Type: "cli",
+			Cli:  resources.ToolCliSpec{Command: "kubectl", Image: "bitnami/kubectl:latest"},
+			Runtime: resources.ToolRuntimePolicy{
+				Timeout:       "5s",
+				IsolationMode: "kubernetes",
+				Retry:         resources.ToolRetryPolicy{MaxAttempts: 1, Backoff: "0s", MaxBackoff: "1s", Jitter: "none"},
+			},
+		},
+	})
+	runtime := NewGovernedToolRuntime(base, isolated, registry, true)
+	_, err := runtime.Call(context.Background(), "kubectl_k8s", "{}")
+	if err == nil {
+		t.Fatal("expected error when kubernetes runtime not configured")
+	}
+	if !errors.Is(err, ErrToolIsolationUnavailable) {
+		t.Fatalf("expected ErrToolIsolationUnavailable, got %v", err)
+	}
+}
+
 func TestBuildGovernedToolRuntimeForAgentUsesScopedToolLookup(t *testing.T) {
 	lookup := staticToolLookup{
 		items: map[string]resources.Tool{

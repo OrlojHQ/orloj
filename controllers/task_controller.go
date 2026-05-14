@@ -49,6 +49,7 @@ type TaskController struct {
 	executionMode       string
 	isolatedTools       agentruntime.ToolRuntime
 	wasmTools           agentruntime.ToolRuntime
+	kubernetesTools     agentruntime.ToolRuntime
 	cliToolConfig       agentruntime.CLIToolRuntimeConfig
 	cliSecretResolver   agentruntime.SecretResolver
 	mcpSessionMgr       *agentruntime.McpSessionManager
@@ -134,6 +135,10 @@ func (c *TaskController) SetIsolatedToolRuntime(runtime agentruntime.ToolRuntime
 
 func (c *TaskController) SetWasmToolRuntime(runtime agentruntime.ToolRuntime) {
 	c.wasmTools = runtime
+}
+
+func (c *TaskController) SetKubernetesToolRuntime(runtime agentruntime.ToolRuntime) {
+	c.kubernetesTools = runtime
 }
 
 func (c *TaskController) SetGovernanceStores(roleStore *store.AgentRoleStore, toolPermStore *store.ToolPermissionStore) {
@@ -1887,6 +1892,9 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 		agentruntime.ConfigureGRPCRuntime(toolRuntime, c.cliSecretResolver, task.Metadata.Namespace)
 		agentruntime.ConfigureWebhookCallbackRuntime(toolRuntime, c.cliSecretResolver, task.Metadata.Namespace)
 		agentruntime.ConfigureWasmRuntime(toolRuntime, c.wasmTools, task.Metadata.Namespace)
+		if c.kubernetesTools != nil {
+			agentruntime.ConfigureKubernetesRuntime(toolRuntime, c.kubernetesTools, task.Metadata.Namespace)
+		}
 		var finalRT agentruntime.ToolRuntime = toolRuntime
 		if agentruntime.AgentHasOrlojTools(agent) {
 			finalRT = agentruntime.NewOrlojToolRuntime(toolRuntime, c.taskStore, agentruntime.OrlojToolConfig{
@@ -2327,6 +2335,9 @@ func (c *TaskController) executeTaskFromResume(
 		agentruntime.ConfigureGRPCRuntime(toolRuntime, c.cliSecretResolver, task.Metadata.Namespace)
 		agentruntime.ConfigureWebhookCallbackRuntime(toolRuntime, c.cliSecretResolver, task.Metadata.Namespace)
 		agentruntime.ConfigureWasmRuntime(toolRuntime, c.wasmTools, task.Metadata.Namespace)
+		if c.kubernetesTools != nil {
+			agentruntime.ConfigureKubernetesRuntime(toolRuntime, c.kubernetesTools, task.Metadata.Namespace)
+		}
 		var finalRT agentruntime.ToolRuntime = toolRuntime
 		if agentruntime.AgentHasOrlojTools(agent) {
 			finalRT = agentruntime.NewOrlojToolRuntime(toolRuntime, c.taskStore, agentruntime.OrlojToolConfig{

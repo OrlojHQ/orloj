@@ -159,6 +159,37 @@ cli:
 
 Operators can set a ceiling with `--tool-container-max-memory`, `--tool-container-max-cpus`, and `--tool-container-max-pids-limit` on `orlojd`. Manifests exceeding the ceiling are rejected at apply time.
 
+## Kubernetes isolation
+
+When `isolation_mode: kubernetes`, CLI tools run as ephemeral Kubernetes Jobs instead of local Docker containers. The same `cli.image`, `cli.command`, `cli.args`, and `cli.resources` fields are used, but execution happens in the cluster via the Kubernetes API rather than via `docker run`.
+
+```yaml
+spec:
+  type: cli
+  cli:
+    command: kubectl
+    args: ["get", "pods", "-n", "{{ .namespace }}"]
+    image: bitnami/kubectl:1.30
+    resources:
+      memory: 256m
+      cpus: "0.50"
+  runtime:
+    isolation_mode: kubernetes
+    timeout: 30s
+```
+
+This mode requires `--tool-k8s-enabled=true` on the server and worker. The runtime creates a Job in the configured namespace, waits for completion (bounded by `runtime.timeout`), captures stdout/stderr from the Pod logs, and cleans up via `ttlSecondsAfterFinished`.
+
+Key differences from `container` isolation:
+
+- Execution happens in-cluster; no Docker socket is required on the worker host.
+- Resource limits from `cli.resources` map to Kubernetes resource requests/limits on the Pod spec.
+- `runtime.timeout` sets `activeDeadlineSeconds` on the Job.
+- Network isolation is managed via Kubernetes NetworkPolicies rather than Docker network modes (`cli.network` is ignored).
+- Credentials from `cli.env_from` are injected as environment variables on the Job's container spec.
+
+See [Kubernetes Deployment](../../deploy/kubernetes.md) for RBAC and Helm configuration.
+
 ## Direct execution (no container)
 
 For trusted tools on the worker host, set `isolation_mode: none`. The binary must exist on the worker's filesystem. `cli.image` is not required in this mode.

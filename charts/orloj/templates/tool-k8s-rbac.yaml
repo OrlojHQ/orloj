@@ -1,0 +1,57 @@
+{{- if .Values.toolIsolation.kubernetes.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "orloj.fullname" . }}-tool-k8s
+  namespace: {{ .Values.toolIsolation.kubernetes.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "orloj.labels" . | nindent 4 }}
+    app.kubernetes.io/component: tool-isolation
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "orloj.fullname" . }}-tool-k8s-worker
+  namespace: {{ .Values.toolIsolation.kubernetes.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "orloj.labels" . | nindent 4 }}
+    app.kubernetes.io/component: tool-isolation
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "orloj.fullname" . }}-tool-k8s
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "orloj.worker.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "orloj.fullname" . }}-tool-k8s-server
+  namespace: {{ .Values.toolIsolation.kubernetes.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "orloj.labels" . | nindent 4 }}
+    app.kubernetes.io/component: tool-isolation
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "orloj.fullname" . }}-tool-k8s
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "orloj.server.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

@@ -322,6 +322,20 @@ toolIsolation:
   # -- Default container PID limit
   containerPidsLimit: 64
 
+  # -- Kubernetes tool isolation (independent of container backend above).
+  # Tools with isolation_mode: kubernetes run as ephemeral K8s Jobs.
+  kubernetes:
+    # -- Enable the kubernetes tool isolation runtime
+    enabled: false
+    # -- Namespace for tool Jobs (defaults to release namespace)
+    namespace: ""
+    # -- Service account for tool Pods
+    serviceAccount: ""
+    # -- TTL seconds after a tool Job finishes (automatic cleanup)
+    jobTTLSeconds: 300
+    # -- Fallback container image for HTTP-type tools
+    defaultImage: "curlimages/curl:8.8.0"
+
 # -- CLI tool allowlist (comma-separated commands; empty = deny all in container mode)
 cliToolAllowedCommands: ""
 

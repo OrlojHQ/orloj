@@ -293,7 +293,7 @@ spec:
   risk_level: low                      # low | medium | high | critical
   runtime:
     timeout: 30s
-    isolation_mode: none               # none | sandboxed | container | wasm
+    isolation_mode: none               # none | sandboxed | container | wasm | kubernetes
     retry:
       max_attempts: 1
       backoff: 0s

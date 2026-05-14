@@ -15,6 +15,7 @@ type ToolIsolationBackendOptions struct {
 	WASMExecutorFactory WASMToolExecutorFactory
 	McpSessionManager   *McpSessionManager
 	McpServerStore      McpServerLookup
+	KubernetesConfig    KubernetesToolConfig
 }
 
 type ToolIsolationBackendFactory func(options ToolIsolationBackendOptions) (ToolRuntime, error)
@@ -128,6 +129,13 @@ func DefaultToolIsolationBackendRegistry() *ToolIsolationBackendRegistry {
 				return nil, fmt.Errorf("mcp isolation backend requires McpSessionManager")
 			}
 			return NewMCPToolRuntime(nil, options.McpSessionManager, options.McpServerStore), nil
+		})
+		_ = registry.Register("kubernetes", func(options ToolIsolationBackendOptions) (ToolRuntime, error) {
+			resolver := options.SecretResolver
+			if resolver == nil {
+				resolver = NewEnvSecretResolver("ORLOJ_SECRET_")
+			}
+			return NewKubernetesToolRuntimeWithClient(nil, options.KubernetesConfig, resolver), nil
 		})
 		defaultToolIsolationBackendRegistry = registry
 	})

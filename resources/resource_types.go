@@ -648,10 +648,10 @@ func (t *Tool) Normalize() error {
 		}
 	}
 	switch mode {
-	case "none", "sandboxed", "container", "wasm":
+	case "none", "sandboxed", "container", "wasm", "kubernetes":
 		t.Spec.Runtime.IsolationMode = mode
 	default:
-		return fmt.Errorf("invalid spec.runtime.isolation_mode %q: expected none, sandboxed, container, or wasm", t.Spec.Runtime.IsolationMode)
+		return fmt.Errorf("invalid spec.runtime.isolation_mode %q: expected none, sandboxed, container, wasm, or kubernetes", t.Spec.Runtime.IsolationMode)
 	}
 	if toolType == "cli" && mode != "none" && t.Spec.Cli.Image == "" {
 		return fmt.Errorf("spec.cli.image is required when spec.type is cli and isolation_mode is not none")
