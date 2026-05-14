@@ -1,3 +1,2 @@
-# Helm dependency artifacts (run `helm dependency update` before install)
+# Helm dependency artifacts (run `helm dependency build` to materialize)
 charts/*.tgz
-Chart.lock
