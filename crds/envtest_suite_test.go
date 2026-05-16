@@ -3,6 +3,7 @@ package crds_test
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -29,6 +30,9 @@ func ptr[T any](v T) *T { return &v }
 
 func setupEnvtest(t *testing.T) (client.Client, *runtime.Scheme, *envtest.Environment) {
 	t.Helper()
+	if os.Getenv("KUBEBUILDER_ASSETS") == "" {
+		t.Skip("skipping envtest: KUBEBUILDER_ASSETS not set (run via 'make test-operator')")
+	}
 	logf.SetLogger(zap.New(zap.UseDevMode(true)))
 
 	scheme := runtime.NewScheme()
