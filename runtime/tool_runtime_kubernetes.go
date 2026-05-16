@@ -52,6 +52,11 @@ type defaultKubernetesJobClient struct {
 	clientset kubernetes.Interface
 }
 
+// NewDefaultKubernetesJobClient wraps a kubernetes.Interface as a KubernetesJobClient.
+func NewDefaultKubernetesJobClient(clientset kubernetes.Interface) KubernetesJobClient {
+	return &defaultKubernetesJobClient{clientset: clientset}
+}
+
 func (c *defaultKubernetesJobClient) CreateJob(ctx context.Context, namespace string, job *batchv1.Job) (*batchv1.Job, error) {
 	return c.clientset.BatchV1().Jobs(namespace).Create(ctx, job, metav1.CreateOptions{})
 }

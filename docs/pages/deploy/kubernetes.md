@@ -246,6 +246,50 @@ Both `container` and `kubernetes` isolation backends can be active simultaneousl
 
 This allows gradual migration from Docker-based isolation to Kubernetes-native execution.
 
+## Agent Execution: Kubernetes Backend
+
+When `agentExecution.kubernetes.enabled=true`, Orloj runs each agent in a multi-agent task as an ephemeral Kubernetes Job instead of executing it in-process on the worker. This isolates agent execution at the pod level and allows independent scaling of agent workloads.
+
+Agents whose tools require Docker (container isolation mode or stdio MCP servers with a container image) automatically fall back to in-process execution.
+
+### RBAC Requirements
+
+The Helm chart creates a Role (and RoleBindings for both the worker and server ServiceAccounts) with the following permissions:
+
+| API Group | Resource | Verbs |
+|---|---|---|
+| `batch` | `jobs` | `create`, `get`, `list`, `watch`, `delete` |
+| (core) | `pods` | `get`, `list` |
+| (core) | `pods/log` | `get` |
+
+The Role is scoped to the namespace configured by `agentExecution.kubernetes.namespace` (defaults to the release namespace).
+
+### Helm Values
+
+```yaml
+agentExecution:
+  kubernetes:
+    enabled: false               # Set to true to enable
+    namespace: ""                # Namespace for agent Jobs (default: release namespace)
+    serviceAccount: ""           # Service account for agent Pods
+    image: ""                    # Container image (default: worker image)
+    jobTTLSeconds: 600           # TTL seconds after Job finishes
+    defaultMemory: "512Mi"       # Default memory limit for agent Pods
+    defaultCPU: "500m"           # Default CPU limit for agent Pods
+```
+
+### How It Works
+
+1. The orchestrator (worker or server) checks whether the agent can run as a K8s Job (`CanRunAsJob`).
+2. If eligible, it writes agent input to the task's status in Postgres and creates a K8s Job running the worker image with `--single-agent` mode.
+3. The agent pod reads its input from Postgres, executes the agent, and writes the result back.
+4. The orchestrator watches the Job for completion and reads the result.
+5. If the orchestrator crashes and restarts, it detects the existing Job by its deterministic name and resumes watching.
+
+### Crash Recovery
+
+Agent Jobs use deterministic names based on the task, agent, and attempt number. If the orchestrator pod restarts mid-execution, it detects the existing Job and either reads its result (if complete) or resumes watching (if still running).
+
 ## Security Defaults
 
 - This baseline is not HA — `server.replicaCount` defaults to 1. Multi-replica `orlojd` requires leader election (see roadmap).

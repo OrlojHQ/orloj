@@ -336,6 +336,28 @@ toolIsolation:
     # -- Fallback container image for HTTP-type tools
     defaultImage: "curlimages/curl:8.8.0"
 
+# ---------------------------------------------------------------------------
+# Agent execution on Kubernetes
+# ---------------------------------------------------------------------------
+agentExecution:
+  # -- Run agents as ephemeral K8s Jobs instead of in-process.
+  # Agents whose tools require Docker fall back to in-process execution.
+  kubernetes:
+    # -- Enable kubernetes agent execution
+    enabled: false
+    # -- Namespace for agent Jobs (defaults to release namespace)
+    namespace: ""
+    # -- Service account for agent Pods
+    serviceAccount: ""
+    # -- Container image for agent Jobs (defaults to the worker image)
+    image: ""
+    # -- TTL seconds after an agent Job finishes (automatic cleanup)
+    jobTTLSeconds: 600
+    # -- Default memory limit for agent Pods
+    defaultMemory: "512Mi"
+    # -- Default CPU limit for agent Pods
+    defaultCPU: "500m"
+
 # -- CLI tool allowlist (comma-separated commands; empty = deny all in container mode)
 cliToolAllowedCommands: ""
 

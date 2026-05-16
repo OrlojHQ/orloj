@@ -80,6 +80,8 @@ type AgentMessageConsumerOptions struct {
 	TaskApprovals       TaskApprovalUpserter
 	Policies            AgentPolicyLookup
 	ContextAdapters     ContextAdapterGetter
+	KubernetesToolRT    ToolRuntime
+	AgentK8sRuntime     *KubernetesAgentRuntime
 	OnStepEvent         func(taskName, namespace string, evt AgentStepEvent)
 	DebugLogger         *log.Logger
 }
@@ -127,6 +129,8 @@ type AgentMessageConsumerManager struct {
 	taskApprovals   TaskApprovalUpserter
 	policies        AgentPolicyLookup
 	contextAdapters ContextAdapterGetter
+	kubernetesTools ToolRuntime
+	agentK8sRuntime *KubernetesAgentRuntime
 	onStepEvent     func(taskName, namespace string, evt AgentStepEvent)
 	mu              sync.Mutex
 	consumers       map[string]context.CancelFunc
@@ -193,6 +197,8 @@ func NewAgentMessageConsumerManager(
 		taskApprovals:   opts.TaskApprovals,
 		policies:        opts.Policies,
 		contextAdapters: opts.ContextAdapters,
+		kubernetesTools: opts.KubernetesToolRT,
+		agentK8sRuntime: opts.AgentK8sRuntime,
 		onStepEvent:     opts.OnStepEvent,
 		extensions:      NormalizeExtensions(opts.Extensions),
 		consumers:       make(map[string]context.CancelFunc),
@@ -588,6 +594,9 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 	ConfigureGRPCRuntime(toolRT, m.secretResolver, ns)
 	ConfigureWebhookCallbackRuntime(toolRT, m.secretResolver, ns)
 	ConfigureWasmRuntime(toolRT, m.wasmRT, ns)
+	if m.kubernetesTools != nil {
+		ConfigureKubernetesRuntime(toolRT, m.kubernetesTools, ns)
+	}
 	if orlojStore, ok := m.tasks.(OrlojTaskStore); ok && AgentHasOrlojTools(agent) {
 		orlojCfg := OrlojToolConfig{
 			ParentNamespace: ns,
@@ -622,7 +631,31 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 			m.onStepEvent(taskName, ns, evt)
 		}
 	}
-	result, err := m.executor.ExecuteAgentWithRuntime(agentCtx, agent, input, toolRT)
+
+	var result AgentExecutionResult
+	if m.agentK8sRuntime != nil && m.canRunAgentAsJob(ctx, agent) {
+		jobStore, ok := m.tasks.(AgentJobStore)
+		if !ok {
+			m.debugf("agent k8s runtime configured but task store does not implement AgentJobStore; falling back to in-process")
+			result, err = m.executor.ExecuteAgentWithRuntime(agentCtx, agent, input, toolRT)
+		} else {
+			_ = jobStore
+			jobResult, jobErr := m.agentK8sRuntime.ExecuteAgent(agentCtx, task, agent, input, msg.Attempt, msg.MessageID)
+			if jobErr != nil {
+				if m.logger != nil {
+					m.logger.Printf("agent k8s job failed for %s (falling back to in-process): %v", agent.Metadata.Name, jobErr)
+				}
+				result, err = m.executor.ExecuteAgentWithRuntime(agentCtx, agent, input, toolRT)
+			} else if jobResult.Error != "" {
+				result = AgentJobResultToExecution(jobResult, agent.Metadata.Name)
+				err = fmt.Errorf("%s", jobResult.Error)
+			} else {
+				result = AgentJobResultToExecution(jobResult, agent.Metadata.Name)
+			}
+		}
+	} else {
+		result, err = m.executor.ExecuteAgentWithRuntime(agentCtx, agent, input, toolRT)
+	}
 	if err != nil {
 		telemetry.EndSpanError(agentSpan, err)
 		if IsApprovalRequiredError(err) && m.toolApprovals != nil {
@@ -3218,4 +3251,35 @@ func max(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func (m *AgentMessageConsumerManager) canRunAgentAsJob(ctx context.Context, agent resources.Agent) bool {
+	var tools []resources.Tool
+	mcpServers := make(map[string]resources.McpServer)
+	if m.tools == nil {
+		return true
+	}
+	for _, toolName := range agent.Spec.Tools {
+		toolName = strings.TrimSpace(toolName)
+		if toolName == "" {
+			continue
+		}
+		tool, ok, err := m.tools.Get(ctx, toolName)
+		if err != nil || !ok {
+			continue
+		}
+		tools = append(tools, tool)
+		if strings.ToLower(strings.TrimSpace(tool.Spec.Type)) == "mcp" {
+			ref := strings.TrimSpace(tool.Spec.McpServerRef)
+			if ref != "" && m.mcpServerStore != nil {
+				if _, loaded := mcpServers[ref]; !loaded {
+					srv, ok, err := m.mcpServerStore.Get(ctx, ref)
+					if err == nil && ok {
+						mcpServers[ref] = srv
+					}
+				}
+			}
+		}
+	}
+	return CanRunAsJob(agent, tools, mcpServers)
 }

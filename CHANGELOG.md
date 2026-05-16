@@ -9,7 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Kubernetes agent execution**: agents in multi-agent tasks can now run as ephemeral Kubernetes Jobs instead of in-process on the worker. The orchestrator (TaskController or AgentMessageConsumerManager) delegates eligible agents to K8s Jobs running the worker image in `--single-agent` mode. Agents with Docker-dependent tools (container isolation or stdio MCP servers with images) transparently fall back to in-process execution. Crash recovery detects existing Jobs by deterministic naming and resumes watching. New `--agent-k8s-*` flags (`--agent-k8s-enabled`, `--agent-k8s-namespace`, `--agent-k8s-service-account`, `--agent-k8s-image`, `--agent-k8s-job-ttl`, `--agent-k8s-default-memory`, `--agent-k8s-default-cpu`) configure the runtime. Helm chart adds `agentExecution.kubernetes.*` values and conditional RBAC for Job/Pod access.
 - **Kubernetes tool isolation backend**: tools can now execute as ephemeral Kubernetes Jobs by setting `isolation_mode: kubernetes` in the tool spec. The new backend coexists with the existing Docker container backend -- per-tool `isolation_mode` selects which one handles each tool. New `--tool-k8s-*` flags (`--tool-k8s-enabled`, `--tool-k8s-namespace`, `--tool-k8s-service-account`, `--tool-k8s-job-ttl`, `--tool-k8s-default-image`) configure the runtime independently of `--tool-isolation-backend`. Helm chart adds `toolIsolation.kubernetes.*` values and conditional RBAC for Job/Pod/Secret access. Includes `KubernetesSecretResolver` for resolving secrets from Kubernetes Secrets when running in-cluster.
+
+### Fixed
+
+- **Message-driven agent consumer missing K8s tool runtime**: `AgentMessageConsumerManager.processMessage` was not calling `ConfigureKubernetesRuntime` when building the tool runtime stack, causing tools with `isolation_mode: kubernetes` to fail in message-driven execution mode.
 
 ## [0.15.0] - 2026-05-12
 

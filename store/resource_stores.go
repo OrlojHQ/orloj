@@ -2566,6 +2566,77 @@ func (s *TaskStore) RenewLease(ctx context.Context, name, workerID string, lease
 	return nil
 }
 
+// ---------------------------------------------------------------------------
+// AgentJobStore -- targeted updates for K8s agent execution protocol
+// ---------------------------------------------------------------------------
+
+func (s *TaskStore) SetAgentJobInput(ctx context.Context, name string, input map[string]string, agent, messageID string) error {
+	key := normalizeLookupName(name)
+	if s.db != nil {
+		return setAgentJobInputSQL(ctx, s.db, key, input, agent, messageID)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	task, ok := s.items[key]
+	if !ok {
+		return fmt.Errorf("task %q not found", name)
+	}
+	task.Status.AgentJobInput = input
+	task.Status.AgentJobAgent = agent
+	task.Status.AgentJobMessageID = messageID
+	s.items[key] = task
+	return nil
+}
+
+func (s *TaskStore) SetAgentJobResult(ctx context.Context, name string, result *resources.AgentJobResult) error {
+	key := normalizeLookupName(name)
+	if s.db != nil {
+		return setAgentJobResultSQL(ctx, s.db, key, result)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	task, ok := s.items[key]
+	if !ok {
+		return fmt.Errorf("task %q not found", name)
+	}
+	task.Status.AgentJobResult = result
+	s.items[key] = task
+	return nil
+}
+
+func (s *TaskStore) GetAgentJobResult(ctx context.Context, name string) (*resources.AgentJobResult, error) {
+	key := normalizeLookupName(name)
+	if s.db != nil {
+		return getAgentJobResultSQL(ctx, s.db, key)
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	task, ok := s.items[key]
+	if !ok {
+		return nil, fmt.Errorf("task %q not found", name)
+	}
+	return task.Status.AgentJobResult, nil
+}
+
+func (s *TaskStore) ClearAgentJobFields(ctx context.Context, name string) error {
+	key := normalizeLookupName(name)
+	if s.db != nil {
+		return clearAgentJobFieldsSQL(ctx, s.db, key)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	task, ok := s.items[key]
+	if !ok {
+		return fmt.Errorf("task %q not found", name)
+	}
+	task.Status.AgentJobInput = nil
+	task.Status.AgentJobAgent = ""
+	task.Status.AgentJobMessageID = ""
+	task.Status.AgentJobResult = nil
+	s.items[key] = task
+	return nil
+}
+
 func applyTaskClaim(task resources.Task, workerID string, lease time.Duration, now time.Time) (resources.Task, error) {
 	current := task.Metadata
 	previousPhase := strings.ToLower(strings.TrimSpace(task.Status.Phase))

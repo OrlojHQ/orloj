@@ -192,6 +192,47 @@ func NewKubernetesToolRuntime(cfg KubernetesToolRuntimeConfig, logger *log.Logge
 	return rt, nil
 }
 
+// KubernetesAgentRuntimeConfig holds flag-level configuration for agent K8s execution.
+type KubernetesAgentRuntimeConfig struct {
+	Namespace      string
+	ServiceAccount string
+	Image          string
+	JobTTLSeconds  int32
+	DefaultMemory  string
+	DefaultCPU     string
+	EnvConfigMap   string
+	EnvSecretName  string
+}
+
+// NewKubernetesAgentRuntime creates a K8s Job-based agent runtime.
+func NewKubernetesAgentRuntime(cfg KubernetesAgentRuntimeConfig, store agentruntime.AgentJobStore, logger *log.Logger) (*agentruntime.KubernetesAgentRuntime, error) {
+	clientset, err := buildKubernetesClientset()
+	if err != nil {
+		return nil, fmt.Errorf("kubernetes client initialization failed: %w", err)
+	}
+	client := agentruntime.NewDefaultKubernetesJobClient(clientset)
+	agentCfg := agentruntime.KubernetesAgentConfig{
+		Namespace:      strings.TrimSpace(cfg.Namespace),
+		ServiceAccount: strings.TrimSpace(cfg.ServiceAccount),
+		Image:          strings.TrimSpace(cfg.Image),
+		JobTTLSeconds:  cfg.JobTTLSeconds,
+		DefaultMemory:  strings.TrimSpace(cfg.DefaultMemory),
+		DefaultCPU:     strings.TrimSpace(cfg.DefaultCPU),
+		EnvConfigMap:   strings.TrimSpace(cfg.EnvConfigMap),
+		EnvSecretName:  strings.TrimSpace(cfg.EnvSecretName),
+	}
+	rt := agentruntime.NewKubernetesAgentRuntime(client, agentCfg, store, logger)
+	if logger != nil {
+		ns := strings.TrimSpace(cfg.Namespace)
+		if ns == "" {
+			ns = "(pod-namespace or default)"
+		}
+		logger.Printf("kubernetes agent execution enabled namespace=%s service_account=%s image=%s job_ttl=%d default_memory=%s default_cpu=%s",
+			ns, strings.TrimSpace(cfg.ServiceAccount), strings.TrimSpace(cfg.Image), cfg.JobTTLSeconds, strings.TrimSpace(cfg.DefaultMemory), strings.TrimSpace(cfg.DefaultCPU))
+	}
+	return rt, nil
+}
+
 func buildKubernetesClientset() (kubernetes.Interface, error) {
 	cfg, err := rest.InClusterConfig()
 	if err != nil {

@@ -1558,6 +1558,52 @@ type TaskStatus struct {
 	DelegationStates   []TaskDelegationState    `json:"delegation_states,omitempty" yaml:"delegation_states,omitempty"`
 	BlockedOn          *TaskBlockedOn           `json:"blocked_on,omitempty" yaml:"blocked_on,omitempty"`
 	ObservedGeneration int64                    `json:"observedGeneration,omitempty" yaml:"observedGeneration,omitempty"`
+
+	// Agent Job fields: orchestrator↔pod communication for K8s agent execution.
+	AgentJobInput     map[string]string `json:"agentJobInput,omitempty" yaml:"agentJobInput,omitempty"`
+	AgentJobAgent     string            `json:"agentJobAgent,omitempty" yaml:"agentJobAgent,omitempty"`
+	AgentJobMessageID string            `json:"agentJobMessageID,omitempty" yaml:"agentJobMessageID,omitempty"`
+	AgentJobResult    *AgentJobResult   `json:"agentJobResult,omitempty" yaml:"agentJobResult,omitempty"`
+}
+
+// AgentJobResult captures execution output from an agent running as a K8s Job.
+// Written by the agent pod, read by the orchestrator after Job completion.
+type AgentJobResult struct {
+	Output          string            `json:"output,omitempty" yaml:"output,omitempty"`
+	LastEvent       string            `json:"lastEvent,omitempty" yaml:"lastEvent,omitempty"`
+	Steps           int               `json:"steps,omitempty" yaml:"steps,omitempty"`
+	ToolCalls       int               `json:"toolCalls,omitempty" yaml:"toolCalls,omitempty"`
+	MemoryWrites    int               `json:"memoryWrites,omitempty" yaml:"memoryWrites,omitempty"`
+	EstimatedTokens int               `json:"estimatedTokens,omitempty" yaml:"estimatedTokens,omitempty"`
+	TokensUsed      int               `json:"tokensUsed,omitempty" yaml:"tokensUsed,omitempty"`
+	TokenSource     string            `json:"tokenSource,omitempty" yaml:"tokenSource,omitempty"`
+	DurationMS      int64             `json:"durationMS,omitempty" yaml:"durationMS,omitempty"`
+	StepEvents      []AgentJobStepEvt `json:"stepEvents,omitempty" yaml:"stepEvents,omitempty"`
+	Events          []string          `json:"events,omitempty" yaml:"events,omitempty"`
+	Error           string            `json:"error,omitempty" yaml:"error,omitempty"`
+	ExitReason      string            `json:"exitReason,omitempty" yaml:"exitReason,omitempty"`
+}
+
+// AgentJobStepEvt is the serializable form of a step event for cross-pod transfer.
+type AgentJobStepEvt struct {
+	Timestamp           string `json:"timestamp,omitempty" yaml:"timestamp,omitempty"`
+	Type                string `json:"type,omitempty" yaml:"type,omitempty"`
+	Step                int    `json:"step,omitempty" yaml:"step,omitempty"`
+	Tool                string `json:"tool,omitempty" yaml:"tool,omitempty"`
+	Message             string `json:"message,omitempty" yaml:"message,omitempty"`
+	ErrorCode           string `json:"errorCode,omitempty" yaml:"errorCode,omitempty"`
+	ErrorReason         string `json:"errorReason,omitempty" yaml:"errorReason,omitempty"`
+	Retryable           *bool  `json:"retryable,omitempty" yaml:"retryable,omitempty"`
+	ToolContractVersion string `json:"toolContractVersion,omitempty" yaml:"toolContractVersion,omitempty"`
+	ToolRequestID       string `json:"toolRequestID,omitempty" yaml:"toolRequestID,omitempty"`
+	ToolAttempt         int    `json:"toolAttempt,omitempty" yaml:"toolAttempt,omitempty"`
+	LatencyMS           int64  `json:"latencyMS,omitempty" yaml:"latencyMS,omitempty"`
+	Tokens              int    `json:"tokens,omitempty" yaml:"tokens,omitempty"`
+	InputTokens         int    `json:"inputTokens,omitempty" yaml:"inputTokens,omitempty"`
+	OutputTokens        int    `json:"outputTokens,omitempty" yaml:"outputTokens,omitempty"`
+	UsageSource         string `json:"usageSource,omitempty" yaml:"usageSource,omitempty"`
+	ToolAuthProfile     string `json:"toolAuthProfile,omitempty" yaml:"toolAuthProfile,omitempty"`
+	ToolAuthSecretRef   string `json:"toolAuthSecretRef,omitempty" yaml:"toolAuthSecretRef,omitempty"`
 }
 
 type TaskList struct {

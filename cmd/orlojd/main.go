@@ -79,6 +79,13 @@ func main() {
 	toolK8sServiceAccount := flag.String("tool-k8s-service-account", env("ORLOJ_TOOL_K8S_SERVICE_ACCOUNT", ""), "service account for kubernetes tool isolation Pods")
 	toolK8sJobTTL := flag.Int("tool-k8s-job-ttl", envInt("ORLOJ_TOOL_K8S_JOB_TTL", 300), "TTL seconds after kubernetes tool Job finishes (cleanup)")
 	toolK8sDefaultImage := flag.String("tool-k8s-default-image", env("ORLOJ_TOOL_K8S_DEFAULT_IMAGE", "curlimages/curl:8.8.0"), "fallback container image for kubernetes tool isolation")
+	agentK8sEnabled := flag.Bool("agent-k8s-enabled", envBool("ORLOJ_AGENT_K8S_ENABLED", false), "enable kubernetes agent execution (run agents as ephemeral K8s Jobs)")
+	agentK8sNamespace := flag.String("agent-k8s-namespace", env("ORLOJ_AGENT_K8S_NAMESPACE", ""), "namespace for kubernetes agent Jobs (default: pod namespace or 'default')")
+	agentK8sServiceAccount := flag.String("agent-k8s-service-account", env("ORLOJ_AGENT_K8S_SERVICE_ACCOUNT", ""), "service account for kubernetes agent Pods")
+	agentK8sImage := flag.String("agent-k8s-image", env("ORLOJ_AGENT_K8S_IMAGE", ""), "container image for agent Jobs (default: own image)")
+	agentK8sJobTTL := flag.Int("agent-k8s-job-ttl", envInt("ORLOJ_AGENT_K8S_JOB_TTL", 600), "TTL seconds after agent Job finishes (cleanup)")
+	agentK8sDefaultMemory := flag.String("agent-k8s-default-memory", env("ORLOJ_AGENT_K8S_DEFAULT_MEMORY", "512Mi"), "default memory limit for agent Pods")
+	agentK8sDefaultCPU := flag.String("agent-k8s-default-cpu", env("ORLOJ_AGENT_K8S_DEFAULT_CPU", "500m"), "default CPU limit for agent Pods")
 	eventBusBackend := flag.String("event-bus-backend", env("ORLOJ_EVENT_BUS_BACKEND", "memory"), "event bus backend: memory|nats")
 	natsURL := flag.String("nats-url", env("ORLOJ_NATS_URL", "nats://127.0.0.1:4222"), "NATS server URL used when --event-bus-backend=nats")
 	natsSubjectPrefix := flag.String("nats-subject-prefix", env("ORLOJ_NATS_SUBJECT_PREFIX", "orloj.controlplane"), "NATS subject prefix used when --event-bus-backend=nats")
@@ -299,6 +306,20 @@ func main() {
 			fatalLogger.Fatalf("failed to configure kubernetes tool runtime: %v", k8sErr)
 		}
 		taskController.SetKubernetesToolRuntime(k8sRT)
+	}
+	if *agentK8sEnabled {
+		agentK8sRT, agentK8sErr := startup.NewKubernetesAgentRuntime(startup.KubernetesAgentRuntimeConfig{
+			Namespace:      *agentK8sNamespace,
+			ServiceAccount: *agentK8sServiceAccount,
+			Image:          *agentK8sImage,
+			JobTTLSeconds:  int32(*agentK8sJobTTL),
+			DefaultMemory:  *agentK8sDefaultMemory,
+			DefaultCPU:     *agentK8sDefaultCPU,
+		}, stores.Tasks, logger)
+		if agentK8sErr != nil {
+			fatalLogger.Fatalf("failed to configure kubernetes agent runtime: %v", agentK8sErr)
+		}
+		taskController.SetAgentKubernetesRuntime(agentK8sRT)
 	}
 
 	cliStoreResolver := agentruntime.NewStoreSecretResolver(stores.Secrets, "value")
