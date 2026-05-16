@@ -1,0 +1,203 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  name: tools.orloj.dev
+spec:
+  group: orloj.dev
+  names:
+    kind: Tool
+    listKind: ToolList
+    plural: tools
+    shortNames:
+    - otool
+    singular: tool
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.type
+      name: Type
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              auth:
+                properties:
+                  headerName:
+                    type: string
+                  profile:
+                    type: string
+                  scopes:
+                    items:
+                      type: string
+                    type: array
+                  secretRef:
+                    type: string
+                  tokenURL:
+                    type: string
+                type: object
+              capabilities:
+                items:
+                  type: string
+                type: array
+              cli:
+                description: ToolCliSpec defines the configuration for CLI tool invocations.
+                properties:
+                  args:
+                    items:
+                      type: string
+                    type: array
+                  command:
+                    type: string
+                  env:
+                    additionalProperties:
+                      type: string
+                    type: object
+                  env_from:
+                    items:
+                      description: ToolCliEnvRef maps an Orloj secret to a process
+                        environment variable.
+                      properties:
+                        key:
+                          type: string
+                        name:
+                          type: string
+                        secretRef:
+                          type: string
+                      required:
+                      - name
+                      - secretRef
+                      type: object
+                    type: array
+                  image:
+                    type: string
+                  image_pull_secret:
+                    type: string
+                  network:
+                    type: string
+                  output:
+                    type: string
+                  resources:
+                    description: |-
+                      ContainerResources defines per-tool or per-McpServer container resource
+                      overrides. When set, these take precedence over the global
+                      --tool-container-{memory,cpus,pids-limit} flags.
+                    properties:
+                      cpus:
+                        type: string
+                      memory:
+                        type: string
+                      pids_limit:
+                        type: integer
+                    type: object
+                  stdin_from_input:
+                    type: boolean
+                  working_dir:
+                    type: string
+                type: object
+              description:
+                type: string
+              endpoint:
+                type: string
+              input_schema:
+                x-kubernetes-preserve-unknown-fields: true
+              mcp_server_ref:
+                type: string
+              mcp_tool_name:
+                type: string
+              operation_classes:
+                items:
+                  type: string
+                type: array
+              risk_level:
+                type: string
+              runtime:
+                properties:
+                  isolation_mode:
+                    type: string
+                  retry:
+                    properties:
+                      backoff:
+                        type: string
+                      jitter:
+                        type: string
+                      max_attempts:
+                        type: integer
+                      max_backoff:
+                        type: string
+                    type: object
+                  timeout:
+                    type: string
+                type: object
+              type:
+                type: string
+              wasm:
+                description: |-
+                  ToolWasmSpec configures per-tool WASM module execution.
+                  Module may be a local path, HTTPS URL, or OCI artifact reference (oci://...).
+                properties:
+                  enable_wasi:
+                    type: boolean
+                  entrypoint:
+                    type: string
+                  fuel:
+                    format: int64
+                    type: integer
+                  image_pull_secret:
+                    type: string
+                  max_memory_bytes:
+                    format: int64
+                    type: integer
+                  module:
+                    type: string
+                required:
+                - enable_wasi
+                type: object
+            type: object
+          status:
+            description: CRDStatus is the common status subresource for all Orloj
+              CRDs.
+            properties:
+              lastSyncedAt:
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                type: string
+              syncError:
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

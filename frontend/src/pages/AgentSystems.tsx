@@ -8,6 +8,7 @@ import { ListFetchError } from "../components/ListFetchError";
 import { Network, Grid3X3, List } from "lucide-react";
 import clsx from "clsx";
 import type { AgentSystem } from "../api/types";
+import { CrdManagedBadge } from "../components/CrdManagedBadge";
 import { CreateResourceDialog } from "../components/CreateResourceDialog";
 import { Plus } from "lucide-react";
 
@@ -25,7 +26,7 @@ export function AgentSystems() {
     {
       key: "name",
       header: "Name",
-      render: (r) => <span className="mono">{r.metadata.name}</span>,
+      render: (r) => <><span className="mono">{r.metadata.name}</span> <CrdManagedBadge metadata={r.metadata} /></>,
     },
     {
       key: "agents",

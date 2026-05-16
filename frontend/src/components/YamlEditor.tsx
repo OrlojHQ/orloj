@@ -18,9 +18,10 @@ interface YamlEditorProps {
   height?: string;
   editable?: boolean;
   onSave?: (body: unknown) => Promise<void>;
+  warning?: string;
 }
 
-export function YamlEditor({ value, onChange, readOnly = true, height = "400px", editable, onSave }: YamlEditorProps) {
+export function YamlEditor({ value, onChange, readOnly = true, height = "400px", editable, onSave, warning }: YamlEditorProps) {
   const theme = useAppStore((s) => s.theme);
   const isMobile = useIsMobile();
   const [editing, setEditing] = useState(false);
@@ -62,6 +63,7 @@ export function YamlEditor({ value, onChange, readOnly = true, height = "400px",
 
   return (
     <div className="yaml-editor">
+      {warning && <div className="yaml-editor__warning">{warning}</div>}
       {isEditable && (
         <div className="yaml-editor__toolbar">
           {!editing ? (

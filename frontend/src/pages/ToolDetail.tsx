@@ -13,6 +13,9 @@ import clsx from "clsx";
 import { toast } from "../components/Toast";
 import type { Tool } from "../api/types";
 import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
+import { CrdManagedBadge } from "../components/CrdManagedBadge";
+import { isCrdManaged, CRD_MANAGED_EDIT_WARNING } from "../utils/crd";
+import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 
 type Tab = "overview" | "yaml";
 
@@ -26,6 +29,7 @@ export function ToolDetail() {
   const namespace = useAppStore((s) => s.namespace);
   const deleteMutation = useDeleteResource("Tool");
   const updateMutation = useUpdateResource("Tool");
+  const confirmDelete = useDeleteConfirm();
   const [tab, setTab] = useState<Tab>("overview");
 
   const tabs: { id: Tab; label: string }[] = [
@@ -48,7 +52,7 @@ export function ToolDetail() {
   }
 
   const handleDelete = async () => {
-    if (!window.confirm(`Delete Tool ${tool.metadata.name}?`)) return;
+    if (!confirmDelete("Tool", tool.metadata.name, tool.metadata)) return;
     try {
       await deleteMutation.mutateAsync(routeName);
       toast("success", "Tool deleted successfully");
@@ -72,6 +76,7 @@ export function ToolDetail() {
             </p>
           </div>
           <StatusBadge phase={tool.status?.phase} size="md" />
+          <CrdManagedBadge metadata={tool.metadata} />
         </div>
         <button
           className="btn-secondary text-red"
@@ -194,6 +199,7 @@ export function ToolDetail() {
           <YamlEditor
             value={JSON.stringify(tool, null, 2)}
             editable
+            warning={isCrdManaged(tool.metadata) ? CRD_MANAGED_EDIT_WARNING : undefined}
             onSave={async (body) => {
               const updated = await saveNamespacedResourceYaml<Tool>(
                 queryClient,

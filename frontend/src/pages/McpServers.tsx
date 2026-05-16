@@ -8,6 +8,7 @@ import { StatusBadge } from "../components/StatusBadge";
 import { EmptyState } from "../components/EmptyState";
 import { Plug, Plus } from "lucide-react";
 import type { McpServer } from "../api/types";
+import { CrdManagedBadge } from "../components/CrdManagedBadge";
 import { CreateResourceDialog } from "../components/CreateResourceDialog";
 
 export function McpServers() {
@@ -18,7 +19,7 @@ export function McpServers() {
   const servers = data ?? [];
 
   const columns: Column<McpServer>[] = [
-    { key: "name", header: "Name", render: (r) => <span className="mono">{r.metadata.name}</span> },
+    { key: "name", header: "Name", render: (r) => <><span className="mono">{r.metadata.name}</span> <CrdManagedBadge metadata={r.metadata} /></> },
     { key: "transport", header: "Transport", render: (r) => r.spec.transport ?? "—", width: "100px" },
     {
       key: "target",

@@ -56,6 +56,7 @@ type TaskController struct {
 	mcpServerStore      *store.McpServerStore
 	contextAdapterStore *store.ContextAdapterStore
 	extensions          agentruntime.Extensions
+	agentK8sRuntime     *agentruntime.KubernetesAgentRuntime
 }
 
 func NewTaskController(
@@ -139,6 +140,10 @@ func (c *TaskController) SetWasmToolRuntime(runtime agentruntime.ToolRuntime) {
 
 func (c *TaskController) SetKubernetesToolRuntime(runtime agentruntime.ToolRuntime) {
 	c.kubernetesTools = runtime
+}
+
+func (c *TaskController) SetAgentKubernetesRuntime(rt *agentruntime.KubernetesAgentRuntime) {
+	c.agentK8sRuntime = rt
 }
 
 func (c *TaskController) SetGovernanceStores(roleStore *store.AgentRoleStore, toolPermStore *store.ToolPermissionStore) {
@@ -1907,7 +1912,23 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 			agent.Spec.Tools = append(agent.Spec.Tools, agentruntime.BuiltinOrlojToolNames()...)
 			agent.Spec.Tools = dedupeStringsController(agent.Spec.Tools)
 		}
-		result, err := c.executor.ExecuteAgentWithRuntime(agentCtx, agent, runtimeInput, finalRT)
+
+		var result agentruntime.AgentExecutionResult
+		if c.agentK8sRuntime != nil && c.canRunAgentAsJob(agentCtx, agent) {
+			syncMsgID := fmt.Sprintf("sync/a%d/%s", task.Status.Attempts, agentName)
+			jobResult, jobErr := c.agentK8sRuntime.ExecuteAgent(agentCtx, *task, agent, runtimeInput, task.Status.Attempts, syncMsgID)
+			if jobErr != nil {
+				c.logger.Printf("agent k8s job failed for %s (falling back to in-process): %v", agentName, jobErr)
+				result, err = c.executor.ExecuteAgentWithRuntime(agentCtx, agent, runtimeInput, finalRT)
+			} else if jobResult.Error != "" {
+				result = agentruntime.AgentJobResultToExecution(jobResult, agentName)
+				err = fmt.Errorf("%s", jobResult.Error)
+			} else {
+				result = agentruntime.AgentJobResultToExecution(jobResult, agentName)
+			}
+		} else {
+			result, err = c.executor.ExecuteAgentWithRuntime(agentCtx, agent, runtimeInput, finalRT)
+		}
 		if err != nil {
 			category := "failure"
 			if strings.Contains(strings.ToLower(err.Error()), "timed out") {
@@ -2302,10 +2323,10 @@ func (c *TaskController) executeTaskFromResume(
 			return nil, err
 		}
 
+		taskKey := taskScopedName(*task)
+		syncMsgID := fmt.Sprintf("sync/a%d/%s", task.Status.Attempts, agentName)
 		var approvalCtx *agentruntime.GovernedToolApprovalContext
 		if c.toolApprovalStore != nil {
-			taskKey := taskScopedName(*task)
-			syncMsgID := fmt.Sprintf("sync/a%d/%s", task.Status.Attempts, agentName)
 			store := c.toolApprovalStore
 			approvalCtx = &agentruntime.GovernedToolApprovalContext{
 				Getter: func(key string) (resources.ToolApproval, bool, error) {
@@ -2351,7 +2372,21 @@ func (c *TaskController) executeTaskFromResume(
 			agent.Spec.Tools = dedupeStringsController(agent.Spec.Tools)
 		}
 
-		result, err := c.executor.ExecuteAgentWithRuntime(ctx, agent, runtimeInput, finalRT)
+		var result agentruntime.AgentExecutionResult
+		if c.agentK8sRuntime != nil && c.canRunAgentAsJob(ctx, agent) {
+			jobResult, jobErr := c.agentK8sRuntime.ExecuteAgent(ctx, *task, agent, runtimeInput, task.Status.Attempts, syncMsgID)
+			if jobErr != nil {
+				c.logger.Printf("agent k8s job failed for %s (falling back to in-process): %v", agentName, jobErr)
+				result, err = c.executor.ExecuteAgentWithRuntime(ctx, agent, runtimeInput, finalRT)
+			} else if jobResult.Error != "" {
+				result = agentruntime.AgentJobResultToExecution(jobResult, agentName)
+				err = fmt.Errorf("%s", jobResult.Error)
+			} else {
+				result = agentruntime.AgentJobResultToExecution(jobResult, agentName)
+			}
+		} else {
+			result, err = c.executor.ExecuteAgentWithRuntime(ctx, agent, runtimeInput, finalRT)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("agent %q execution failed: %w", agentName, err)
 		}
@@ -3183,4 +3218,34 @@ func dedupeStringsController(values []string) []string {
 		out = append(out, v)
 	}
 	return out
+}
+
+// canRunAgentAsJob checks whether an agent's tools are compatible with K8s Job
+// execution (no Docker-dependent tools).
+func (c *TaskController) canRunAgentAsJob(ctx context.Context, agent resources.Agent) bool {
+	var tools []resources.Tool
+	mcpServers := make(map[string]resources.McpServer)
+	for _, toolName := range agent.Spec.Tools {
+		toolName = strings.TrimSpace(toolName)
+		if toolName == "" {
+			continue
+		}
+		tool, ok, err := c.toolStore.Get(ctx, toolName)
+		if err != nil || !ok {
+			continue
+		}
+		tools = append(tools, tool)
+		if strings.ToLower(strings.TrimSpace(tool.Spec.Type)) == "mcp" {
+			ref := strings.TrimSpace(tool.Spec.McpServerRef)
+			if ref != "" && c.mcpServerStore != nil {
+				if _, loaded := mcpServers[ref]; !loaded {
+					srv, ok, err := c.mcpServerStore.Get(ctx, ref)
+					if err == nil && ok {
+						mcpServers[ref] = srv
+					}
+				}
+			}
+		}
+	}
+	return agentruntime.CanRunAsJob(agent, tools, mcpServers)
 }

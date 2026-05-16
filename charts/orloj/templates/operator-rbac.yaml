@@ -1,0 +1,54 @@
+{{- if .Values.operator.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "orloj.fullname" . }}-operator
+  labels:
+    {{- include "orloj.labels" . | nindent 4 }}
+    app.kubernetes.io/component: operator
+rules:
+  - apiGroups: ["orloj.dev"]
+    resources:
+      - agents
+      - agentsystems
+      - tools
+      - mcpservers
+      - modelendpoints
+      - memories
+      - agentpolicies
+      - secrets
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["orloj.dev"]
+    resources:
+      - agents/status
+      - agentsystems/status
+      - tools/status
+      - mcpservers/status
+      - modelendpoints/status
+      - memories/status
+      - agentpolicies/status
+      - secrets/status
+    verbs: ["get", "update", "patch"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "orloj.fullname" . }}-operator
+  labels:
+    {{- include "orloj.labels" . | nindent 4 }}
+    app.kubernetes.io/component: operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "orloj.fullname" . }}-operator
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "orloj.operator.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

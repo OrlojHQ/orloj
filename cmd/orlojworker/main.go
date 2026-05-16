@@ -63,6 +63,13 @@ func main() {
 	toolK8sServiceAccount := flag.String("tool-k8s-service-account", env("ORLOJ_TOOL_K8S_SERVICE_ACCOUNT", ""), "service account for kubernetes tool isolation Pods")
 	toolK8sJobTTL := flag.Int("tool-k8s-job-ttl", envInt("ORLOJ_TOOL_K8S_JOB_TTL", 300), "TTL seconds after kubernetes tool Job finishes (cleanup)")
 	toolK8sDefaultImage := flag.String("tool-k8s-default-image", env("ORLOJ_TOOL_K8S_DEFAULT_IMAGE", "curlimages/curl:8.8.0"), "fallback container image for kubernetes tool isolation")
+	agentK8sEnabled := flag.Bool("agent-k8s-enabled", envBool("ORLOJ_AGENT_K8S_ENABLED", false), "enable kubernetes agent execution (run agents as ephemeral K8s Jobs)")
+	agentK8sNamespace := flag.String("agent-k8s-namespace", env("ORLOJ_AGENT_K8S_NAMESPACE", ""), "namespace for kubernetes agent Jobs (default: pod namespace or 'default')")
+	agentK8sServiceAccount := flag.String("agent-k8s-service-account", env("ORLOJ_AGENT_K8S_SERVICE_ACCOUNT", ""), "service account for kubernetes agent Pods")
+	agentK8sImage := flag.String("agent-k8s-image", env("ORLOJ_AGENT_K8S_IMAGE", ""), "container image for agent Jobs (default: own image)")
+	agentK8sJobTTL := flag.Int("agent-k8s-job-ttl", envInt("ORLOJ_AGENT_K8S_JOB_TTL", 600), "TTL seconds after agent Job finishes (cleanup)")
+	agentK8sDefaultMemory := flag.String("agent-k8s-default-memory", env("ORLOJ_AGENT_K8S_DEFAULT_MEMORY", "512Mi"), "default memory limit for agent Pods")
+	agentK8sDefaultCPU := flag.String("agent-k8s-default-cpu", env("ORLOJ_AGENT_K8S_DEFAULT_CPU", "500m"), "default CPU limit for agent Pods")
 	agentMessageBusBackend := flag.String("agent-message-bus-backend", env("ORLOJ_AGENT_MESSAGE_BUS_BACKEND", "none"), "runtime agent message bus backend: none|memory|nats-jetstream")
 	agentMessageNATSURL := flag.String("agent-message-nats-url", env("ORLOJ_AGENT_MESSAGE_NATS_URL", env("ORLOJ_NATS_URL", "nats://127.0.0.1:4222")), "NATS server URL used when --agent-message-bus-backend=nats-jetstream")
 	agentMessageSubjectPrefix := flag.String("agent-message-subject-prefix", env("ORLOJ_AGENT_MESSAGE_SUBJECT_PREFIX", "orloj.agentmsg"), "runtime agent message subject prefix")
@@ -74,6 +81,11 @@ func main() {
 	agentMessageConsumerRefresh := flag.Duration("agent-message-consumer-refresh", 10*time.Second, "refresh interval for reconciling runtime inbox consumers")
 	agentMessageConsumerDedupe := flag.Duration("agent-message-consumer-dedupe-window", 10*time.Minute, "dedupe window for runtime inbox message processing")
 	secretEncryptionKeyRaw := flag.String("secret-encryption-key", env("ORLOJ_SECRET_ENCRYPTION_KEY", ""), "256-bit AES key (hex or base64) for encrypting Secret resource data at rest")
+	singleAgent := flag.Bool("single-agent", false, "run a single agent from a task and exit (K8s Job mode)")
+	singleAgentTaskID := flag.String("task-id", "", "task namespace/name for --single-agent mode")
+	singleAgentName := flag.String("agent-name", "", "agent to execute in --single-agent mode")
+	singleAgentAttempt := flag.Int("attempt", 0, "task attempt number for --single-agent mode")
+	singleAgentMessageID := flag.String("message-id", "", "message ID for --single-agent mode (message-driven)")
 	storageBackend := flag.String("storage-backend", "postgres", "state backend: postgres|memory")
 	postgresDSN := flag.String("postgres-dsn", os.Getenv("ORLOJ_POSTGRES_DSN"), "postgres DSN (required when --storage-backend=postgres)")
 	sqlDriver := flag.String("sql-driver", "pgx", "database/sql driver name used for --storage-backend=postgres")
@@ -161,6 +173,102 @@ func main() {
 	}
 	defer stores.Close()
 
+	// --single-agent mode: execute one agent from a task, write result, exit.
+	if *singleAgent {
+		if strings.ToLower(strings.TrimSpace(*storageBackend)) != "postgres" {
+			fatalLogger.Fatalf("--single-agent mode requires --storage-backend=postgres")
+		}
+
+		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer cancel()
+
+		toolStoreResolver := agentruntime.NewStoreSecretResolver(stores.Secrets, "value")
+		toolEnvResolver := agentruntime.NewEnvSecretResolver(strings.TrimSpace(*toolSecretEnvPrefix))
+		toolSecretResolver := agentruntime.NewChainSecretResolver(toolStoreResolver, toolEnvResolver)
+
+		isolatedToolRuntime, isoErr := startup.NewIsolatedToolRuntime(startup.IsolatedToolRuntimeConfig{
+			Backend:          *toolIsolationBackend,
+			ContainerRuntime: *toolContainerRuntime,
+			ContainerImage:   *toolContainerImage,
+			ContainerNetwork: *toolContainerNetwork,
+			ContainerMemory:  *toolContainerMemory,
+			ContainerCPUs:    *toolContainerCPUs,
+			ContainerPids:    *toolContainerPidsLimit,
+			ContainerUser:    *toolContainerUser,
+			SecretEnvPrefix:  *toolSecretEnvPrefix,
+			Secrets:          stores.Secrets,
+		}, logger)
+		if isoErr != nil {
+			fatalLogger.Fatalf("failed to configure isolated tool runtime: %v", isoErr)
+		}
+		wasmToolRuntime, closeWasm, wasmErr := startup.NewWASMToolRuntime(startup.IsolatedToolRuntimeConfig{
+			WASMModule:      *toolWASMModule,
+			WASMEntrypoint:  *toolWASMEntrypoint,
+			WASMMemoryBytes: *toolWASMMemoryBytes,
+			WASMFuel:        *toolWASMFuel,
+			WASMWASI:        *toolWASMWASI,
+			WASMCacheDir:    *toolWASMCacheDir,
+			SecretEnvPrefix: *toolSecretEnvPrefix,
+			Secrets:         stores.Secrets,
+		}, logger)
+		if wasmErr != nil {
+			fatalLogger.Fatalf("failed to configure wasm tool runtime: %v", wasmErr)
+		}
+		if closeWasm != nil {
+			defer closeWasm()
+		}
+		mcpSessionMgr := startup.NewMcpSessionManager(startup.McpRuntimeConfig{
+			ContainerRuntime: *toolContainerRuntime,
+			ContainerNetwork: "bridge",
+			ContainerMemory:  *toolContainerMemory,
+			ContainerCPUs:    *toolContainerCPUs,
+			ContainerPids:    *toolContainerPidsLimit,
+			SecretEnvPrefix:  "ORLOJ_SECRET_",
+			Secrets:          stores.Secrets,
+		})
+		defer mcpSessionMgr.Close()
+
+		var k8sTools agentruntime.ToolRuntime
+		if *toolK8sEnabled {
+			rt, k8sErr := startup.NewKubernetesToolRuntime(startup.KubernetesToolRuntimeConfig{
+				Namespace:       *toolK8sNamespace,
+				ServiceAccount:  *toolK8sServiceAccount,
+				JobTTLSeconds:   int32(*toolK8sJobTTL),
+				DefaultImage:    *toolK8sDefaultImage,
+				SecretEnvPrefix: *toolSecretEnvPrefix,
+				Secrets:         stores.Secrets,
+			}, logger)
+			if k8sErr != nil {
+				logger.Printf("kubernetes tool runtime unavailable in agent pod: %v", k8sErr)
+			} else {
+				k8sTools = rt
+			}
+		}
+
+		saCfg := startup.SingleAgentConfig{
+			TaskID:               *singleAgentTaskID,
+			AgentName:            *singleAgentName,
+			Attempt:              *singleAgentAttempt,
+			MessageID:            *singleAgentMessageID,
+			ModelSecretEnvPrefix: *modelSecretEnvPrefix,
+			ToolSecretEnvPrefix:  *toolSecretEnvPrefix,
+			IsolatedToolRuntime:  isolatedToolRuntime,
+			WasmToolRuntime:      wasmToolRuntime,
+			McpSessionManager:    mcpSessionMgr,
+			CliToolConfig: agentruntime.CLIToolRuntimeConfig{
+				AllowedCommands: startup.ParseCSV(*cliToolAllowedCommands),
+				MaxArgvLength:   *cliToolMaxArgvLength,
+			},
+			SecretResolver:  toolSecretResolver,
+			KubernetesTools: k8sTools,
+		}
+
+		if runErr := startup.RunSingleAgent(ctx, stores, saCfg, logger); runErr != nil {
+			fatalLogger.Fatalf("single-agent failed: %v", runErr)
+		}
+		os.Exit(0)
+	}
+
 	modelGateway := agentruntime.NewModelRouter(agentruntime.ModelRouterConfig{
 		Endpoints:       stores.ModelEPs,
 		Secrets:         stores.Secrets,
@@ -241,6 +349,22 @@ func main() {
 			fatalLogger.Fatalf("failed to configure kubernetes tool runtime: %v", k8sErr)
 		}
 		taskController.SetKubernetesToolRuntime(k8sRT)
+	}
+	var agentK8sRT *agentruntime.KubernetesAgentRuntime
+	if *agentK8sEnabled {
+		var agentK8sErr error
+		agentK8sRT, agentK8sErr = startup.NewKubernetesAgentRuntime(startup.KubernetesAgentRuntimeConfig{
+			Namespace:      *agentK8sNamespace,
+			ServiceAccount: *agentK8sServiceAccount,
+			Image:          *agentK8sImage,
+			JobTTLSeconds:  int32(*agentK8sJobTTL),
+			DefaultMemory:  *agentK8sDefaultMemory,
+			DefaultCPU:     *agentK8sDefaultCPU,
+		}, stores.Tasks, logger)
+		if agentK8sErr != nil {
+			fatalLogger.Fatalf("failed to configure kubernetes agent runtime: %v", agentK8sErr)
+		}
+		taskController.SetAgentKubernetesRuntime(agentK8sRT)
 	}
 
 	toolStoreResolver := agentruntime.NewStoreSecretResolver(stores.Secrets, "value")
@@ -332,8 +456,9 @@ func main() {
 					ToolApprovals:       stores.ToolApprovals,
 					TaskApprovals:       stores.TaskApprovals,
 					Policies:            stores.Policies,
-					ContextAdapters:     stores.ContextAdapters,
-					DebugLogger:         debugLogger,
+				ContextAdapters:     stores.ContextAdapters,
+				AgentK8sRuntime:     agentK8sRT,
+				DebugLogger:         debugLogger,
 				},
 			)
 			go consumer.Start(ctx)

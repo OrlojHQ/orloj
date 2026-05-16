@@ -131,6 +131,8 @@ type AgentExecutionSpec struct {
 	DuplicateToolCallPolicy string         `json:"duplicate_tool_call_policy,omitempty" yaml:"duplicate_tool_call_policy,omitempty"`
 	OnContractViolation     string         `json:"on_contract_violation,omitempty" yaml:"on_contract_violation,omitempty"`
 	ToolUseBehavior         string         `json:"tool_use_behavior,omitempty" yaml:"tool_use_behavior,omitempty"`
+	// +kubebuilder:validation:Schemaless
+	// +kubebuilder:pruning:PreserveUnknownFields
 	OutputSchema            map[string]any `json:"output_schema,omitempty" yaml:"output_schema,omitempty"`
 }
 

@@ -336,6 +336,28 @@ toolIsolation:
     # -- Fallback container image for HTTP-type tools
     defaultImage: "curlimages/curl:8.8.0"
 
+# ---------------------------------------------------------------------------
+# Agent execution on Kubernetes
+# ---------------------------------------------------------------------------
+agentExecution:
+  # -- Run agents as ephemeral K8s Jobs instead of in-process.
+  # Agents whose tools require Docker fall back to in-process execution.
+  kubernetes:
+    # -- Enable kubernetes agent execution
+    enabled: false
+    # -- Namespace for agent Jobs (defaults to release namespace)
+    namespace: ""
+    # -- Service account for agent Pods
+    serviceAccount: ""
+    # -- Container image for agent Jobs (defaults to the worker image)
+    image: ""
+    # -- TTL seconds after an agent Job finishes (automatic cleanup)
+    jobTTLSeconds: 600
+    # -- Default memory limit for agent Pods
+    defaultMemory: "512Mi"
+    # -- Default CPU limit for agent Pods
+    defaultCPU: "500m"
+
 # -- CLI tool allowlist (comma-separated commands; empty = deny all in container mode)
 cliToolAllowedCommands: ""
 
@@ -372,6 +394,49 @@ externalPostgres:
   existingSecret: ""
   existingSecretKey: "postgres-dsn"
 
+# -- CRD conflict policy when operator is also running: off | warn | reject
+crdConflictPolicy: warn
+
 # -- External NATS URL (used when nats.enabled=false)
 externalNats:
   url: ""
+
+# ---------------------------------------------------------------------------
+# orloj-operator — CRD sync controller
+# ---------------------------------------------------------------------------
+operator:
+  # -- Enable the CRD sync operator
+  enabled: false
+  # -- Install CRD manifests with the chart
+  installCRDs: true
+  # -- Number of operator replicas
+  replicaCount: 1
+  image:
+    # -- Operator image repository
+    repository: orlojhq/orloj-operator
+    # -- Operator image tag (defaults to appVersion)
+    tag: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  # -- Interval for syncing CRD status back to Kubernetes
+  statusSyncInterval: 5s
+  # -- Enable leader election for HA
+  leaderElection: true
+  # -- Healthz probe port
+  healthzPort: 8081
+  # -- Prometheus metrics port
+  metricsPort: 8080
+  # -- Prometheus ServiceMonitor (requires prometheus-operator CRDs)
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    labels: {}
+  # -- PodDisruptionBudget
+  pdb:
+    enabled: true
+    minAvailable: 1

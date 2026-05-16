@@ -91,7 +91,11 @@ Server image reference.
 */}}
 {{- define "orloj.server.image" -}}
 {{- $tag := default .Chart.AppVersion .Values.image.server.tag -}}
+{{- if .Values.image.registry -}}
 {{- printf "%s/%s:%s" .Values.image.registry .Values.image.server.repository $tag }}
+{{- else -}}
+{{- printf "%s:%s" .Values.image.server.repository $tag }}
+{{- end -}}
 {{- end }}
 
 {{/*
@@ -99,7 +103,11 @@ Worker image reference.
 */}}
 {{- define "orloj.worker.image" -}}
 {{- $tag := default .Chart.AppVersion .Values.image.worker.tag -}}
+{{- if .Values.image.registry -}}
 {{- printf "%s/%s:%s" .Values.image.registry .Values.image.worker.repository $tag }}
+{{- else -}}
+{{- printf "%s:%s" .Values.image.worker.repository $tag }}
+{{- end -}}
 {{- end }}
 
 {{/*
@@ -127,6 +135,33 @@ PostgreSQL DSN. Resolves in order:
 {{- $host := printf "%s-postgresql" .Release.Name -}}
 {{- printf "postgres://%s:$(POSTGRES_PASSWORD)@%s:5432/%s?sslmode=disable" $user $host $db }}
 {{- end }}
+{{- end }}
+
+{{/*
+Operator selector labels.
+*/}}
+{{- define "orloj.operator.selectorLabels" -}}
+{{ include "orloj.selectorLabels" . }}
+app.kubernetes.io/component: operator
+{{- end }}
+
+{{/*
+Operator service account name.
+*/}}
+{{- define "orloj.operator.serviceAccountName" -}}
+{{- printf "%s-operator" (include "orloj.fullname" .) }}
+{{- end }}
+
+{{/*
+Operator image reference.
+*/}}
+{{- define "orloj.operator.image" -}}
+{{- $tag := default .Chart.AppVersion .Values.operator.image.tag -}}
+{{- if .Values.image.registry -}}
+{{- printf "%s/%s:%s" .Values.image.registry .Values.operator.image.repository $tag }}
+{{- else -}}
+{{- printf "%s:%s" .Values.operator.image.repository $tag }}
+{{- end -}}
 {{- end }}
 
 {{/*

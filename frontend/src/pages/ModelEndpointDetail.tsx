@@ -13,6 +13,9 @@ import { toast } from "../components/Toast";
 import type { ModelEndpoint } from "../api/types";
 import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
 import { saveNamespacedResourceYaml } from "../hooks/saveDetailYamlWithFreshRv";
+import { CrdManagedBadge } from "../components/CrdManagedBadge";
+import { isCrdManaged, CRD_MANAGED_EDIT_WARNING } from "../utils/crd";
+import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 
 type Tab = "overview" | "yaml";
 
@@ -26,6 +29,7 @@ export function ModelEndpointDetail() {
   const namespace = useAppStore((s) => s.namespace);
   const deleteMutation = useDeleteResource("ModelEndpoint");
   const updateMutation = useUpdateResource("ModelEndpoint");
+  const confirmDelete = useDeleteConfirm();
   const [tab, setTab] = useState<Tab>("overview");
 
   const tabs: { id: Tab; label: string }[] = [
@@ -48,7 +52,7 @@ export function ModelEndpointDetail() {
   }
 
   const handleDelete = async () => {
-    if (!window.confirm(`Delete ModelEndpoint ${ep.metadata.name}?`)) return;
+    if (!confirmDelete("ModelEndpoint", ep.metadata.name, ep.metadata)) return;
     try {
       await deleteMutation.mutateAsync(routeName);
       toast("success", "ModelEndpoint deleted successfully");
@@ -72,6 +76,7 @@ export function ModelEndpointDetail() {
             </p>
           </div>
           <StatusBadge phase={ep.status?.phase} size="md" />
+          <CrdManagedBadge metadata={ep.metadata} />
         </div>
         <button
           className="btn-secondary text-red"
@@ -130,6 +135,7 @@ export function ModelEndpointDetail() {
           <YamlEditor
             value={JSON.stringify(ep, null, 2)}
             editable
+            warning={isCrdManaged(ep.metadata) ? CRD_MANAGED_EDIT_WARNING : undefined}
             onSave={async (body) => {
               const updated = await saveNamespacedResourceYaml<ModelEndpoint>(
                 queryClient,

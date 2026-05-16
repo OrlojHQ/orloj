@@ -13,6 +13,9 @@ import clsx from "clsx";
 import { toast } from "../components/Toast";
 import type { McpServer } from "../api/types";
 import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
+import { CrdManagedBadge } from "../components/CrdManagedBadge";
+import { isCrdManaged, CRD_MANAGED_EDIT_WARNING } from "../utils/crd";
+import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 
 type Tab = "overview" | "yaml";
 
@@ -26,6 +29,7 @@ export function McpServerDetail() {
   const namespace = useAppStore((s) => s.namespace);
   const deleteMutation = useDeleteResource("McpServer");
   const updateMutation = useUpdateResource("McpServer");
+  const confirmDelete = useDeleteConfirm();
   const [tab, setTab] = useState<Tab>("overview");
 
   const tabs: { id: Tab; label: string }[] = [
@@ -52,7 +56,7 @@ export function McpServerDetail() {
   }
 
   const handleDelete = async () => {
-    if (!window.confirm(`Delete MCP Server ${server.metadata.name}?`)) return;
+    if (!confirmDelete("McpServer", server.metadata.name, server.metadata)) return;
     try {
       await deleteMutation.mutateAsync(routeName);
       toast("success", "MCP Server deleted successfully");
@@ -79,6 +83,7 @@ export function McpServerDetail() {
             </p>
           </div>
           <StatusBadge phase={server.status?.phase} size="md" />
+          <CrdManagedBadge metadata={server.metadata} />
         </div>
         <button
           className="btn-secondary text-red"
@@ -161,6 +166,7 @@ export function McpServerDetail() {
           <YamlEditor
             value={JSON.stringify(server, null, 2)}
             editable
+            warning={isCrdManaged(server.metadata) ? CRD_MANAGED_EDIT_WARNING : undefined}
             onSave={async (body) => {
               const updated = await saveNamespacedResourceYaml<McpServer>(
                 queryClient,

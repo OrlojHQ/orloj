@@ -1,0 +1,288 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  name: agentsystems.orloj.dev
+spec:
+  group: orloj.dev
+  names:
+    kind: AgentSystem
+    listKind: AgentSystemList
+    plural: agentsystems
+    shortNames:
+    - oasys
+    singular: agentsystem
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              agents:
+                items:
+                  type: string
+                type: array
+              completion_review:
+                properties:
+                  allow_request_changes:
+                    type: boolean
+                  checkpoint_id:
+                    type: string
+                  display_name:
+                    type: string
+                  max_review_cycles:
+                    type: integer
+                  reason:
+                    type: string
+                  ttl:
+                    type: string
+                type: object
+              context_adapter:
+                type: string
+              graph:
+                additionalProperties:
+                  properties:
+                    delegate_join:
+                      description: DelegateJoin controls how delegate returns are
+                        collected.
+                      properties:
+                        mode:
+                          description: 'Mode: wait_for_all | quorum.'
+                          type: string
+                        on_failure:
+                          description: 'OnFailure: deadletter | skip | continue_partial.'
+                          type: string
+                        quorum_count:
+                          description: QuorumCount is an absolute minimum number of
+                            upstream branches.
+                          type: integer
+                        quorum_percent:
+                          description: QuorumPercent is percentage-based minimum of
+                            expected branches (0-100).
+                          type: integer
+                      type: object
+                    delegates:
+                      description: |-
+                        Delegates dispatched after the node's first execution. Reports
+                        flow back and trigger a review re-execution before edges fire.
+                      items:
+                        properties:
+                          condition:
+                            description: Optional condition that must match the completing
+                              agent's output for this edge to fire.
+                            properties:
+                              contains:
+                                description: Contains matches when the extracted JSON
+                                  value (string or array) contains this value.
+                                type: string
+                              default:
+                                description: Default marks this edge as the fallback
+                                  when no conditional edge matches.
+                                type: boolean
+                              equals:
+                                description: Equals matches when the extracted JSON
+                                  value equals this string.
+                                type: string
+                              greater_than:
+                                description: GreaterThan matches when the extracted
+                                  numeric JSON value is greater than this threshold.
+                                type: string
+                              less_than:
+                                description: LessThan matches when the extracted numeric
+                                  JSON value is less than this threshold.
+                                type: string
+                              not_equals:
+                                description: NotEquals matches when the extracted
+                                  JSON value does NOT equal this string.
+                                type: string
+                              output_contains:
+                                description: OutputContains matches if the output
+                                  contains this string (case-insensitive).
+                                type: string
+                              output_json_path:
+                                description: |-
+                                  OutputJSONPath extracts a value from JSON output using dot-notation (e.g. "$.route").
+                                  When set, one of the comparison operators (Equals, NotEquals, Contains, GreaterThan,
+                                  LessThan) must also be set.
+                                type: string
+                              output_matches:
+                                description: OutputMatches matches if the output matches
+                                  this regex pattern.
+                                type: string
+                              output_not_contains:
+                                description: OutputNotContains matches if the output
+                                  does NOT contain this string (case-insensitive).
+                                type: string
+                            type: object
+                          labels:
+                            additionalProperties:
+                              type: string
+                            description: Optional labels used by routing/observability
+                              layers.
+                            type: object
+                          policy:
+                            additionalProperties:
+                              type: string
+                            description: Optional policy key/value bag for edge-level
+                              controls.
+                            type: object
+                          to:
+                            type: string
+                        type: object
+                      type: array
+                    edges:
+                      description: Rich edge list for fan-out and per-edge metadata.
+                      items:
+                        properties:
+                          condition:
+                            description: Optional condition that must match the completing
+                              agent's output for this edge to fire.
+                            properties:
+                              contains:
+                                description: Contains matches when the extracted JSON
+                                  value (string or array) contains this value.
+                                type: string
+                              default:
+                                description: Default marks this edge as the fallback
+                                  when no conditional edge matches.
+                                type: boolean
+                              equals:
+                                description: Equals matches when the extracted JSON
+                                  value equals this string.
+                                type: string
+                              greater_than:
+                                description: GreaterThan matches when the extracted
+                                  numeric JSON value is greater than this threshold.
+                                type: string
+                              less_than:
+                                description: LessThan matches when the extracted numeric
+                                  JSON value is less than this threshold.
+                                type: string
+                              not_equals:
+                                description: NotEquals matches when the extracted
+                                  JSON value does NOT equal this string.
+                                type: string
+                              output_contains:
+                                description: OutputContains matches if the output
+                                  contains this string (case-insensitive).
+                                type: string
+                              output_json_path:
+                                description: |-
+                                  OutputJSONPath extracts a value from JSON output using dot-notation (e.g. "$.route").
+                                  When set, one of the comparison operators (Equals, NotEquals, Contains, GreaterThan,
+                                  LessThan) must also be set.
+                                type: string
+                              output_matches:
+                                description: OutputMatches matches if the output matches
+                                  this regex pattern.
+                                type: string
+                              output_not_contains:
+                                description: OutputNotContains matches if the output
+                                  does NOT contain this string (case-insensitive).
+                                type: string
+                            type: object
+                          labels:
+                            additionalProperties:
+                              type: string
+                            description: Optional labels used by routing/observability
+                              layers.
+                            type: object
+                          policy:
+                            additionalProperties:
+                              type: string
+                            description: Optional policy key/value bag for edge-level
+                              controls.
+                            type: object
+                          to:
+                            type: string
+                        type: object
+                      type: array
+                    join:
+                      description: Join semantics for this downstream node.
+                      properties:
+                        mode:
+                          description: 'Mode: wait_for_all | quorum.'
+                          type: string
+                        on_failure:
+                          description: 'OnFailure: deadletter | skip | continue_partial.'
+                          type: string
+                        quorum_count:
+                          description: QuorumCount is an absolute minimum number of
+                            upstream branches.
+                          type: integer
+                        quorum_percent:
+                          description: QuorumPercent is percentage-based minimum of
+                            expected branches (0-100).
+                          type: integer
+                      type: object
+                    next:
+                      description: Legacy single-hop edge. Preserved for backward
+                        compatibility.
+                      type: string
+                    review:
+                      description: Review gates this node's output behind a human
+                        approval checkpoint.
+                      properties:
+                        allow_request_changes:
+                          type: boolean
+                        checkpoint_id:
+                          type: string
+                        display_name:
+                          type: string
+                        max_review_cycles:
+                          type: integer
+                        reason:
+                          type: string
+                        ttl:
+                          type: string
+                      type: object
+                  type: object
+                type: object
+            type: object
+          status:
+            description: CRDStatus is the common status subresource for all Orloj
+              CRDs.
+            properties:
+              lastSyncedAt:
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                type: string
+              syncError:
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

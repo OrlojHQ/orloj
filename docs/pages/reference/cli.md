@@ -4,6 +4,8 @@
 
 For server and worker daemon flags, see [Server Flags](./server-flags.md). For load-test and alert-check tools, see [Internal Tools](./internal-tools.md).
 
+> **Note:** When the [CRD operator](../deploy/kubernetes-operator.md) is deployed, `kubectl` can replace `orlojctl` for basic resource CRUD (`apply`, `get`, `delete`, `edit`, `diff`). Runtime operations (`run`, `cancel`, `approve`, `logs`, `trace`, `events`, etc.) and admin commands (`admin`, `auth`, `config`, `seal`, `eval`) remain `orlojctl`-only. See [kubectl vs orlojctl](../guides/kubectl-vs-orlojctl.md) for a detailed comparison.
+
 ## Usage patterns
 
 ```text

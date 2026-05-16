@@ -1,0 +1,102 @@
+{{- if .Values.operator.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "orloj.fullname" . }}-operator
+  labels:
+    {{- include "orloj.labels" . | nindent 4 }}
+    app.kubernetes.io/component: operator
+spec:
+  replicas: {{ .Values.operator.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "orloj.operator.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "orloj.operator.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "orloj.operator.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: orloj-operator
+          image: {{ include "orloj.operator.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+          args:
+            - --postgres-dsn=$(ORLOJ_POSTGRES_DSN)
+            - --secret-encryption-key=$(ORLOJ_SECRET_ENCRYPTION_KEY)
+            - --metrics-addr=:{{ .Values.operator.metricsPort }}
+            - --healthz-addr=:{{ .Values.operator.healthzPort }}
+            - --status-sync-interval={{ .Values.operator.statusSyncInterval }}
+            - --leader-elect={{ .Values.operator.leaderElection }}
+            - --leader-election-namespace={{ .Release.Namespace }}
+          env:
+            # --- PostgreSQL DSN ---
+            {{- if .Values.externalPostgres.existingSecret }}
+            - name: ORLOJ_POSTGRES_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.externalPostgres.existingSecret }}
+                  key: {{ .Values.externalPostgres.existingSecretKey }}
+            {{- else if .Values.postgresql.enabled }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.postgresql.auth.existingSecret | default (printf "%s-postgresql" .Release.Name) }}
+                  key: password
+            - name: ORLOJ_POSTGRES_DSN
+              value: {{ include "orloj.postgresDSN" . | quote }}
+            {{- else if .Values.externalPostgres.dsn }}
+            - name: ORLOJ_POSTGRES_DSN
+              value: {{ .Values.externalPostgres.dsn | quote }}
+            {{- end }}
+            # --- Secret encryption key ---
+            {{- if or .Values.secretEncryptionKey .Values.existingSecret }}
+            - name: ORLOJ_SECRET_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "orloj.secretName" . }}
+                  key: secret-encryption-key
+                  optional: true
+            {{- else }}
+            - name: ORLOJ_SECRET_ENCRYPTION_KEY
+              value: ""
+            {{- end }}
+          ports:
+            - name: healthz
+              containerPort: {{ .Values.operator.healthzPort }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.operator.metricsPort }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: healthz
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 5
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: healthz
+            initialDelaySeconds: 3
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.operator.resources | nindent 12 }}
+{{- end }}

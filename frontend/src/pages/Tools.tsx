@@ -9,6 +9,7 @@ import { EmptyState } from "../components/EmptyState";
 import { Wrench, Plus } from "lucide-react";
 import clsx from "clsx";
 import type { Tool } from "../api/types";
+import { CrdManagedBadge } from "../components/CrdManagedBadge";
 import { CreateResourceDialog } from "../components/CreateResourceDialog";
 
 const RISK_COLORS: Record<string, string> = {
@@ -32,7 +33,7 @@ export function Tools() {
   const tools = data ?? [];
 
   const columns: Column<Tool>[] = [
-    { key: "name", header: "Name", render: (r) => <span className="mono">{r.metadata.name}</span> },
+    { key: "name", header: "Name", render: (r) => <><span className="mono">{r.metadata.name}</span> <CrdManagedBadge metadata={r.metadata} /></> },
     { key: "type", header: "Type", render: (r) => r.spec.type ?? "http" },
     { key: "endpoint", header: "Endpoint", render: (r) => <span className="text-muted mono text-ellipsis">{r.spec.endpoint ?? "—"}</span> },
     {

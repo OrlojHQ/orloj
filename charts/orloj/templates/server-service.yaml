@@ -12,5 +12,8 @@ spec:
       targetPort: http
       protocol: TCP
       name: http
+      {{- if and (eq .Values.server.service.type "NodePort") .Values.server.service.nodePort }}
+      nodePort: {{ .Values.server.service.nodePort }}
+      {{- end }}
   selector:
     {{- include "orloj.server.selectorLabels" . | nindent 4 }}

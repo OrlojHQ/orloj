@@ -152,10 +152,36 @@ spec:
             - name: ORLOJ_TOOL_K8S_DEFAULT_IMAGE
               value: {{ .Values.toolIsolation.kubernetes.defaultImage | quote }}
             {{- end }}
+            # --- Kubernetes agent execution ---
+            {{- if .Values.agentExecution.kubernetes.enabled }}
+            - name: ORLOJ_AGENT_K8S_ENABLED
+              value: "true"
+            {{- with .Values.agentExecution.kubernetes.namespace }}
+            - name: ORLOJ_AGENT_K8S_NAMESPACE
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.agentExecution.kubernetes.serviceAccount }}
+            - name: ORLOJ_AGENT_K8S_SERVICE_ACCOUNT
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.agentExecution.kubernetes.image }}
+            - name: ORLOJ_AGENT_K8S_IMAGE
+              value: {{ . | quote }}
+            {{- end }}
+            - name: ORLOJ_AGENT_K8S_JOB_TTL
+              value: {{ .Values.agentExecution.kubernetes.jobTTLSeconds | quote }}
+            - name: ORLOJ_AGENT_K8S_DEFAULT_MEMORY
+              value: {{ .Values.agentExecution.kubernetes.defaultMemory | quote }}
+            - name: ORLOJ_AGENT_K8S_DEFAULT_CPU
+              value: {{ .Values.agentExecution.kubernetes.defaultCPU | quote }}
+            {{- end }}
             {{- if .Values.cliToolAllowedCommands }}
             - name: ORLOJ_CLI_TOOL_ALLOWED_COMMANDS
               value: {{ .Values.cliToolAllowedCommands | quote }}
             {{- end }}
+            # --- CRD conflict policy ---
+            - name: ORLOJ_CRD_CONFLICT_POLICY
+              value: {{ .Values.crdConflictPolicy | default "warn" | quote }}
             {{- with .Values.server.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

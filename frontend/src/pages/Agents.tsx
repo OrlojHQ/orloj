@@ -7,6 +7,7 @@ import { EmptyState } from "../components/EmptyState";
 import { ListFetchError } from "../components/ListFetchError";
 import { Bot, Plus } from "lucide-react";
 import type { Agent } from "../api/types";
+import { CrdManagedBadge } from "../components/CrdManagedBadge";
 import { CreateResourceDialog } from "../components/CreateResourceDialog";
 
 export function Agents() {
@@ -16,7 +17,7 @@ export function Agents() {
   const agents = data ?? [];
 
   const columns: Column<Agent>[] = [
-    { key: "name", header: "Name", render: (r) => <span className="mono">{r.metadata.name}</span> },
+    { key: "name", header: "Name", render: (r) => <><span className="mono">{r.metadata.name}</span> <CrdManagedBadge metadata={r.metadata} /></> },
     { key: "model", header: "Model Ref", render: (r) => r.spec.model_ref || "—" },
     { key: "tools", header: "Tools", render: (r) => r.spec.tools?.length ?? 0, width: "80px" },
     { key: "roles", header: "Roles", render: (r) => r.spec.roles?.length ?? 0, width: "80px" },

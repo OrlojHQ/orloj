@@ -190,6 +190,28 @@ These defaults are enforced by `SandboxedContainerDefaults()` in the runtime and
 
 When `isolation_mode: kubernetes`, tool invocations run as ephemeral Kubernetes Jobs. This provides cluster-native isolation without requiring a Docker socket on worker nodes.
 
+### Agent Execution on Kubernetes
+
+When `--agent-k8s-enabled=true`, each agent in a multi-agent task runs as an ephemeral Kubernetes Job. This isolates agent execution at the pod level.
+
+**Security properties:**
+
+- **Ephemeral Pods**: Each agent execution creates a dedicated Job and Pod. No state persists between executions.
+- **Configurable service accounts**: Agent Pods run under a dedicated service account (`--agent-k8s-service-account`), separate from the orchestrator's service account.
+- **Resource limits**: Default memory and CPU limits are enforced on every agent Pod (`--agent-k8s-default-memory`, `--agent-k8s-default-cpu`).
+- **Timeout enforcement**: Agent-level `spec.limits.timeout` sets `activeDeadlineSeconds` on the Job.
+- **Automatic cleanup**: Completed Jobs are garbage-collected via `ttlSecondsAfterFinished` (default: 600s).
+- **Deterministic naming**: Job names are derived from the task, agent, and attempt, enabling crash recovery without orphaned resources.
+- **Transparent fallback**: Agents with Docker-dependent tools (container isolation or stdio MCP servers with images) fall back to in-process execution automatically.
+- **No privilege escalation**: Agent Pods do not mount the orchestrator's filesystem, Docker socket, or service account token.
+
+**Operational guidance:**
+
+- Use a dedicated namespace (`--agent-k8s-namespace`) to isolate agent Jobs.
+- Apply NetworkPolicies to restrict agent Pod egress.
+- Set resource quotas on the agent namespace to bound total resource consumption.
+- Monitor Job completion and cleanup for stuck or leaked Pods.
+
 **Security properties:**
 
 - **Ephemeral Pods**: Each tool invocation creates a dedicated Job and Pod. No state persists between invocations.

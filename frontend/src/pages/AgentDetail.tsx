@@ -14,6 +14,9 @@ import { ArrowLeft } from "lucide-react";
 import clsx from "clsx";
 import type { Agent } from "../api/types";
 import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
+import { CrdManagedBadge } from "../components/CrdManagedBadge";
+import { isCrdManaged, CRD_MANAGED_EDIT_WARNING } from "../utils/crd";
+import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 
 type Tab = "overview" | "yaml" | "logs";
 
@@ -28,10 +31,11 @@ export function AgentDetail() {
   const namespace = useAppStore((s) => s.namespace);
   const deleteMutation = useDeleteResource("Agent");
   const updateMutation = useUpdateResource("Agent");
+  const confirmDelete = useDeleteConfirm();
   const [tab, setTab] = useState<Tab>("overview");
 
   const handleDelete = async () => {
-    if (!agent || !window.confirm(`Delete Agent ${agent.metadata.name}?`)) return;
+    if (!agent || !confirmDelete("Agent", agent.metadata.name, agent.metadata)) return;
     try {
       await deleteMutation.mutateAsync(routeName);
       toast("success", "Agent deleted successfully");
@@ -73,6 +77,7 @@ export function AgentDetail() {
             <p className="page__subtitle">{agent.spec.model_ref} &middot; {agent.metadata.namespace}</p>
           </div>
           <StatusBadge phase={agent.status?.phase} size="md" />
+          <CrdManagedBadge metadata={agent.metadata} />
         </div>
         <button
           className="btn-secondary text-red"
@@ -136,6 +141,7 @@ export function AgentDetail() {
           <YamlEditor
             value={JSON.stringify(agent, null, 2)}
             editable
+            warning={isCrdManaged(agent.metadata) ? CRD_MANAGED_EDIT_WARNING : undefined}
             onSave={async (body) => {
               const updated = await saveNamespacedResourceYaml<Agent>(
                 queryClient,

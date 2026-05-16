@@ -1234,6 +1234,83 @@ func upsertMcpServerSQL(ctx context.Context, db dbExecer, name string, item reso
 }
 
 // ---------------------------------------------------------------------------
+// Agent Job SQL helpers -- targeted JSONB updates that avoid full-document
+// rewrites, eliminating write contention with lease renewal and heartbeats.
+// ---------------------------------------------------------------------------
+
+func setAgentJobInputSQL(ctx context.Context, db *sql.DB, name string, input map[string]string, agent, messageID string) error {
+	inputJSON, err := json.Marshal(input)
+	if err != nil {
+		return fmt.Errorf("marshal agent job input: %w", err)
+	}
+	_, err = db.ExecContext(ctx,
+		`UPDATE tasks SET
+		     payload = jsonb_set(
+		         jsonb_set(
+		             jsonb_set(
+		                 payload,
+		                 '{status,agentJobInput}', $2::jsonb
+		             ),
+		             '{status,agentJobAgent}', to_jsonb($3::text)
+		         ),
+		         '{status,agentJobMessageID}', to_jsonb($4::text)
+		     ),
+		     updated_at = NOW()
+		 WHERE name = $1`,
+		name, string(inputJSON), agent, messageID,
+	)
+	return err
+}
+
+func setAgentJobResultSQL(ctx context.Context, db *sql.DB, name string, result *resources.AgentJobResult) error {
+	resultJSON, err := json.Marshal(result)
+	if err != nil {
+		return fmt.Errorf("marshal agent job result: %w", err)
+	}
+	_, err = db.ExecContext(ctx,
+		`UPDATE tasks SET
+		     payload = jsonb_set(payload, '{status,agentJobResult}', $2::jsonb),
+		     updated_at = NOW()
+		 WHERE name = $1`,
+		name, string(resultJSON),
+	)
+	return err
+}
+
+func getAgentJobResultSQL(ctx context.Context, db *sql.DB, name string) (*resources.AgentJobResult, error) {
+	var raw sql.NullString
+	err := db.QueryRowContext(ctx,
+		`SELECT payload->'status'->'agentJobResult' FROM tasks WHERE name = $1`, name,
+	).Scan(&raw)
+	if err != nil {
+		return nil, err
+	}
+	if !raw.Valid || raw.String == "" || raw.String == "null" {
+		return nil, nil
+	}
+	var result resources.AgentJobResult
+	if err := json.Unmarshal([]byte(raw.String), &result); err != nil {
+		return nil, fmt.Errorf("unmarshal agent job result: %w", err)
+	}
+	return &result, nil
+}
+
+func clearAgentJobFieldsSQL(ctx context.Context, db *sql.DB, name string) error {
+	_, err := db.ExecContext(ctx,
+		`UPDATE tasks SET
+		     payload = payload
+		         #- '{status,agentJobInput}'
+		         #- '{status,agentJobAgent}'
+		         #- '{status,agentJobMessageID}'
+		         #- '{status,agentJobResult}',
+		     updated_at = NOW()
+		 WHERE name = $1`,
+		name,
+	)
+	return err
+}
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 

@@ -28,6 +28,9 @@ import { ArrowLeft } from "lucide-react";
 import clsx from "clsx";
 import type { AgentSystem, Task } from "../api/types";
 import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
+import { CrdManagedBadge } from "../components/CrdManagedBadge";
+import { isCrdManaged, CRD_MANAGED_EDIT_WARNING } from "../utils/crd";
+import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 
 type Tab = "graph" | "tasks" | "yaml" | "status";
 
@@ -59,6 +62,7 @@ export function AgentSystemDetail() {
   const workers = useWorkers();
   const deleteMutation = useDeleteResource("AgentSystem");
   const updateMutation = useUpdateResource("AgentSystem");
+  const confirmDelete = useDeleteConfirm();
   const [tab, setTab] = useState<Tab>(() => parseTab(searchParams.get(TAB_PARAM)) ?? "graph");
 
   useEffect(() => {
@@ -133,7 +137,7 @@ export function AgentSystemDetail() {
   }, [systemTasks]);
 
   const handleDelete = async () => {
-    if (!system || !window.confirm(`Delete AgentSystem ${system.metadata.name}?`)) return;
+    if (!system || !confirmDelete("AgentSystem", system.metadata.name, system.metadata)) return;
     try {
       await deleteMutation.mutateAsync(routeName);
       toast("success", "AgentSystem deleted successfully");
@@ -232,6 +236,7 @@ export function AgentSystemDetail() {
             </p>
           </div>
           <StatusBadge phase={system.status?.phase} size="md" />
+          <CrdManagedBadge metadata={system.metadata} />
         </div>
         <button
           className="btn-secondary text-red"
@@ -275,6 +280,7 @@ export function AgentSystemDetail() {
           <YamlEditor
             value={yamlContent}
             editable
+            warning={isCrdManaged(system.metadata) ? CRD_MANAGED_EDIT_WARNING : undefined}
             onSave={async (body) => {
               const updated = await saveNamespacedResourceYaml<AgentSystem>(
                 queryClient,

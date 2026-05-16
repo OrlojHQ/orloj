@@ -8,6 +8,7 @@ import { StatusBadge } from "../components/StatusBadge";
 import { EmptyState } from "../components/EmptyState";
 import { Brain, Plus } from "lucide-react";
 import type { Memory } from "../api/types";
+import { CrdManagedBadge } from "../components/CrdManagedBadge";
 import { CreateResourceDialog } from "../components/CreateResourceDialog";
 
 export function Memories() {
@@ -18,7 +19,7 @@ export function Memories() {
   const memories = data ?? [];
 
   const columns: Column<Memory>[] = [
-    { key: "name", header: "Name", render: (r) => <span className="mono">{r.metadata.name}</span> },
+    { key: "name", header: "Name", render: (r) => <><span className="mono">{r.metadata.name}</span> <CrdManagedBadge metadata={r.metadata} /></> },
     { key: "type", header: "Type", render: (r) => r.spec.type ?? "—" },
     { key: "provider", header: "Provider", render: (r) => r.spec.provider ?? "—" },
     { key: "embedding", header: "Embedding Model", render: (r) => <span className="mono">{r.spec.embedding_model ?? "—"}</span> },

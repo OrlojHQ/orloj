@@ -72,6 +72,23 @@ builds:
       - -X=github.com/OrlojHQ/orloj/internal/version.Commit={{.Commit}}
       - -X=github.com/OrlojHQ/orloj/internal/version.Date={{.Date}}
 
+  - id: orloj-operator
+    main: ./cmd/orloj-operator
+    binary: orloj-operator
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s
+      - -w
+      - -X=github.com/OrlojHQ/orloj/internal/version.Version={{.Version}}
+      - -X=github.com/OrlojHQ/orloj/internal/version.Commit={{.Commit}}
+      - -X=github.com/OrlojHQ/orloj/internal/version.Date={{.Date}}
+
 archives:
   - id: orlojd
     formats:
@@ -105,6 +122,13 @@ archives:
     name_template: "{{ .Binary }}_{{ .Tag }}_{{ .Os }}_{{ .Arch }}"
     ids:
       - orlojctl
+
+  - id: orloj-operator
+    formats:
+      - tar.gz
+    name_template: "{{ .Binary }}_{{ .Tag }}_{{ .Os }}_{{ .Arch }}"
+    ids:
+      - orloj-operator
 
 checksum:
   name_template: checksums.txt

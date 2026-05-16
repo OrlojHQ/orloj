@@ -6,6 +6,7 @@ import { StatusBadge } from "../components/StatusBadge";
 import { EmptyState } from "../components/EmptyState";
 import { Shield, Plus } from "lucide-react";
 import type { AgentPolicy } from "../api/types";
+import { CrdManagedBadge } from "../components/CrdManagedBadge";
 import { CreateResourceDialog } from "../components/CreateResourceDialog";
 
 export function Policies() {
@@ -15,7 +16,7 @@ export function Policies() {
   const policies = data ?? [];
 
   const columns: Column<AgentPolicy>[] = [
-    { key: "name", header: "Name", render: (r) => <span className="mono">{r.metadata.name}</span> },
+    { key: "name", header: "Name", render: (r) => <><span className="mono">{r.metadata.name}</span> <CrdManagedBadge metadata={r.metadata} /></> },
     { key: "mode", header: "Apply Mode", render: (r) => r.spec.apply_mode ?? "scoped" },
     { key: "tokens", header: "Max Tokens", render: (r) => r.spec.max_tokens_per_run ?? "—", width: "110px" },
     { key: "models", header: "Allowed Models", render: (r) => r.spec.allowed_models?.join(", ") || "any" },

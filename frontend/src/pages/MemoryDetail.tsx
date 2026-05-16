@@ -13,6 +13,9 @@ import clsx from "clsx";
 import { toast } from "../components/Toast";
 import type { Memory } from "../api/types";
 import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
+import { CrdManagedBadge } from "../components/CrdManagedBadge";
+import { isCrdManaged, CRD_MANAGED_EDIT_WARNING } from "../utils/crd";
+import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 
 type Tab = "overview" | "entries" | "yaml";
 
@@ -26,6 +29,7 @@ export function MemoryDetail() {
   const namespace = useAppStore((s) => s.namespace);
   const deleteMutation = useDeleteResource("Memory");
   const updateMutation = useUpdateResource("Memory");
+  const confirmDelete = useDeleteConfirm();
   const [tab, setTab] = useState<Tab>("overview");
 
   const tabs: { id: Tab; label: string }[] = [
@@ -49,7 +53,7 @@ export function MemoryDetail() {
   }
 
   const handleDelete = async () => {
-    if (!window.confirm(`Delete Memory ${memory.metadata.name}?`)) return;
+    if (!confirmDelete("Memory", memory.metadata.name, memory.metadata)) return;
     try {
       await deleteMutation.mutateAsync(routeName);
       toast("success", "Memory deleted successfully");
@@ -73,6 +77,7 @@ export function MemoryDetail() {
             </p>
           </div>
           <StatusBadge phase={memory.status?.phase} size="md" />
+          <CrdManagedBadge metadata={memory.metadata} />
         </div>
         <button
           className="btn-secondary text-red"
@@ -147,6 +152,7 @@ export function MemoryDetail() {
           <YamlEditor
             value={JSON.stringify(memory, null, 2)}
             editable
+            warning={isCrdManaged(memory.metadata) ? CRD_MANAGED_EDIT_WARNING : undefined}
             onSave={async (body) => {
               const updated = await saveNamespacedResourceYaml<Memory>(
                 queryClient,

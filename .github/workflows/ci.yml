@@ -39,7 +39,7 @@ jobs:
         if: needs.changes.outputs.code == 'true'
         uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.26"
 
       - name: Setup Bun
         if: needs.changes.outputs.code == 'true'
@@ -71,6 +71,22 @@ jobs:
         if: needs.changes.outputs.code == 'true'
         run: go vet ./...
 
+      - name: Verify CRD manifests are up to date
+        if: needs.changes.outputs.code == 'true'
+        run: |
+          go install sigs.k8s.io/controller-tools/cmd/controller-gen@v0.21.0
+          make generate-crds
+          git diff --exit-code config/crd/bases/ || {
+            echo "::error::CRD manifests are stale. Run 'make generate-crds' and commit the result."
+            exit 1
+          }
+
+      - name: Operator integration tests (envtest)
+        if: needs.changes.outputs.code == 'true'
+        run: |
+          go install sigs.k8s.io/controller-runtime/tools/setup-envtest@latest
+          KUBEBUILDER_ASSETS="$(setup-envtest use -p path)" go test ./crds/... -count=1 -timeout 120s
+
       - name: Validate OpenAPI spec
         if: needs.changes.outputs.code == 'true'
         run: npx --yes @redocly/cli@1.28.5 lint openapi/openapi.yaml
@@ -91,7 +107,7 @@ jobs:
         if: needs.changes.outputs.code == 'true'
         uses: actions/setup-go@v5
         with:
-          go-version: "1.25"
+          go-version: "1.26"
 
       - name: Setup Bun
         if: needs.changes.outputs.code == 'true'

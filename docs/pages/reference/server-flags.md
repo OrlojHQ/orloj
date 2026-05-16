@@ -37,6 +37,20 @@ go run ./cmd/orlojd -h
 | `--postgres-max-idle-conns` | `10` | Max idle Postgres connections. | Postgres backend only. |
 | `--postgres-conn-max-lifetime` | `30m` | Max Postgres connection lifetime. | Postgres backend only. |
 
+### CRD conflict policy
+
+| Flag | Default | Description | Condition / Notes |
+|---|---|---|---|
+| `--crd-conflict-policy` | `warn` | How `orlojd` handles REST API writes to CRD-managed resources. | `off|warn|reject`; env `ORLOJ_CRD_CONFLICT_POLICY`. Only relevant when the CRD operator is also running. |
+
+Modes:
+
+- **`off`** — No conflict detection. REST writes proceed normally even if the resource is CRD-managed.
+- **`warn`** (default) — REST writes succeed, but `orlojd` logs a warning and sets the `X-Orloj-CRD-Managed: true` response header. The operator will overwrite the change on its next reconcile.
+- **`reject`** — REST writes to CRD-managed resources return `409 Conflict` with a message directing the user to update via `kubectl apply` or Git.
+
+See [Kubernetes CRD Operator](../deploy/kubernetes-operator.md) for full operator documentation.
+
 ### Task execution and embedded worker
 
 | Flag | Default | Description | Condition / Notes |
@@ -100,6 +114,18 @@ Model routing (provider, base URL, default model, API key, timeout) is configure
 | `--tool-k8s-service-account` | empty | Service account for tool Pods. | Env `ORLOJ_TOOL_K8S_SERVICE_ACCOUNT`. |
 | `--tool-k8s-job-ttl` | `300` | TTL seconds after Job finishes (`ttlSecondsAfterFinished`). | Env `ORLOJ_TOOL_K8S_JOB_TTL`. |
 | `--tool-k8s-default-image` | `curlimages/curl:8.8.0` | Fallback image for HTTP tools without an explicit image. | Env `ORLOJ_TOOL_K8S_DEFAULT_IMAGE`. |
+
+### Agent Kubernetes execution
+
+| Flag | Default | Description | Condition / Notes |
+|---|---|---|---|
+| `--agent-k8s-enabled` | `false` | Run agents as ephemeral K8s Jobs. | Env `ORLOJ_AGENT_K8S_ENABLED`. Agents with Docker-dependent tools fall back to in-process. |
+| `--agent-k8s-namespace` | pod namespace or `default` | Namespace for agent Jobs. | Env `ORLOJ_AGENT_K8S_NAMESPACE`. |
+| `--agent-k8s-service-account` | empty | Service account for agent Pods. | Env `ORLOJ_AGENT_K8S_SERVICE_ACCOUNT`. |
+| `--agent-k8s-image` | own image | Container image for agent Jobs. | Env `ORLOJ_AGENT_K8S_IMAGE`. Defaults to the running binary's own image. |
+| `--agent-k8s-job-ttl` | `600` | TTL seconds after Job finishes (`ttlSecondsAfterFinished`). | Env `ORLOJ_AGENT_K8S_JOB_TTL`. |
+| `--agent-k8s-default-memory` | `512Mi` | Default memory limit for agent Pods. | Env `ORLOJ_AGENT_K8S_DEFAULT_MEMORY`. |
+| `--agent-k8s-default-cpu` | `500m` | Default CPU limit for agent Pods. | Env `ORLOJ_AGENT_K8S_DEFAULT_CPU`. |
 
 ---
 
@@ -183,6 +209,23 @@ Model routing (provider, base URL, default model, API key, timeout) is configure
 | `--tool-k8s-service-account` | empty | Service account for tool Pods. | Env `ORLOJ_TOOL_K8S_SERVICE_ACCOUNT`. |
 | `--tool-k8s-job-ttl` | `300` | TTL seconds after Job finishes (`ttlSecondsAfterFinished`). | Env `ORLOJ_TOOL_K8S_JOB_TTL`. |
 | `--tool-k8s-default-image` | `curlimages/curl:8.8.0` | Fallback image for HTTP tools without an explicit image. | Env `ORLOJ_TOOL_K8S_DEFAULT_IMAGE`. |
+
+### Agent Kubernetes execution
+
+| Flag | Default | Description | Condition / Notes |
+|---|---|---|---|
+| `--agent-k8s-enabled` | `false` | Run agents as ephemeral K8s Jobs. | Env `ORLOJ_AGENT_K8S_ENABLED`. Agents with Docker-dependent tools fall back to in-process. |
+| `--agent-k8s-namespace` | pod namespace or `default` | Namespace for agent Jobs. | Env `ORLOJ_AGENT_K8S_NAMESPACE`. |
+| `--agent-k8s-service-account` | empty | Service account for agent Pods. | Env `ORLOJ_AGENT_K8S_SERVICE_ACCOUNT`. |
+| `--agent-k8s-image` | own image | Container image for agent Jobs. | Env `ORLOJ_AGENT_K8S_IMAGE`. Defaults to the running binary's own image. |
+| `--agent-k8s-job-ttl` | `600` | TTL seconds after Job finishes (`ttlSecondsAfterFinished`). | Env `ORLOJ_AGENT_K8S_JOB_TTL`. |
+| `--agent-k8s-default-memory` | `512Mi` | Default memory limit for agent Pods. | Env `ORLOJ_AGENT_K8S_DEFAULT_MEMORY`. |
+| `--agent-k8s-default-cpu` | `500m` | Default CPU limit for agent Pods. | Env `ORLOJ_AGENT_K8S_DEFAULT_CPU`. |
+| `--single-agent` | `false` | Run a single agent execution (used by K8s agent Jobs). | Internal flag; not for manual use. |
+| `--task-id` | empty | Task ID for single-agent mode. | Used with `--single-agent`. |
+| `--agent-name` | empty | Agent name for single-agent mode. | Used with `--single-agent`. |
+| `--attempt` | `0` | Attempt number for single-agent mode. | Used with `--single-agent`. |
+| `--message-id` | empty | Message ID for single-agent mode. | Used with `--single-agent`. |
 
 ## Command Discovery
 
