@@ -1,4 +1,4 @@
-SHELL := /bin/zsh
+SHELL := /bin/bash
 
 CONTROLLER_GEN_VERSION ?= v0.21.0
 CONTROLLER_GEN ?= $(shell go env GOPATH)/bin/controller-gen
