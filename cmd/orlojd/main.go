@@ -65,6 +65,7 @@ func main() {
 	toolContainerMaxMemory := flag.String("tool-container-max-memory", env("ORLOJ_TOOL_CONTAINER_MAX_MEMORY", ""), "operator ceiling for per-tool/McpServer resources.memory (empty = unbounded)")
 	toolContainerMaxCPUs := flag.String("tool-container-max-cpus", env("ORLOJ_TOOL_CONTAINER_MAX_CPUS", ""), "operator ceiling for per-tool/McpServer resources.cpus (empty = unbounded)")
 	toolContainerMaxPidsLimit := flag.Int("tool-container-max-pids-limit", envInt("ORLOJ_TOOL_CONTAINER_MAX_PIDS_LIMIT", 0), "operator ceiling for per-tool/McpServer resources.pids_limit (0 = unbounded)")
+	crdConflictPolicy := flag.String("crd-conflict-policy", env("ORLOJ_CRD_CONFLICT_POLICY", "warn"), "CRD conflict guard: off|warn|reject (env: ORLOJ_CRD_CONFLICT_POLICY)")
 	toolSecretEnvPrefix := flag.String("tool-secret-env-prefix", env("ORLOJ_TOOL_SECRET_ENV_PREFIX", "ORLOJ_SECRET_"), "environment variable prefix used to resolve Tool.spec.auth.secretRef")
 	toolWASMModule := flag.String("tool-wasm-module", env("ORLOJ_TOOL_WASM_MODULE", ""), "default wasm module path (per-tool spec.wasm.module takes precedence)")
 	toolWASMEntrypoint := flag.String("tool-wasm-entrypoint", env("ORLOJ_TOOL_WASM_ENTRYPOINT", "run"), "default wasm entrypoint function")
@@ -391,6 +392,7 @@ func main() {
 			MaxCPUs:      *toolContainerMaxCPUs,
 			MaxPidsLimit: *toolContainerMaxPidsLimit,
 		},
+		CRDConflictPolicy: *crdConflictPolicy,
 	})
 	bus, closeBus := newEventBus(logger, fatalLogger, *eventBusBackend, *natsURL, *natsSubjectPrefix)
 	if closeBus != nil {

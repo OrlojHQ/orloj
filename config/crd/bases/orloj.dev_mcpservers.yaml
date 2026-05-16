@@ -1,0 +1,164 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  name: mcpservers.orloj.dev
+spec:
+  group: orloj.dev
+  names:
+    kind: McpServer
+    listKind: McpServerList
+    plural: mcpservers
+    shortNames:
+    - omcp
+    singular: mcpserver
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.transport
+      name: Transport
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              args:
+                items:
+                  type: string
+                type: array
+              auth:
+                properties:
+                  headerName:
+                    type: string
+                  profile:
+                    type: string
+                  scopes:
+                    items:
+                      type: string
+                    type: array
+                  secretRef:
+                    type: string
+                  tokenURL:
+                    type: string
+                type: object
+              command:
+                type: string
+              default_tool_runtime:
+                properties:
+                  isolation_mode:
+                    type: string
+                  retry:
+                    properties:
+                      backoff:
+                        type: string
+                      jitter:
+                        type: string
+                      max_attempts:
+                        type: integer
+                      max_backoff:
+                        type: string
+                    type: object
+                  timeout:
+                    type: string
+                type: object
+              endpoint:
+                type: string
+              env:
+                items:
+                  properties:
+                    mountPath:
+                      type: string
+                    name:
+                      type: string
+                    secretRef:
+                      type: string
+                    value:
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
+              idle_timeout:
+                type: string
+              image:
+                type: string
+              image_pull_secret:
+                type: string
+              reconnect:
+                properties:
+                  backoff:
+                    type: string
+                  max_attempts:
+                    type: integer
+                type: object
+              resources:
+                description: |-
+                  ContainerResources defines per-tool or per-McpServer container resource
+                  overrides. When set, these take precedence over the global
+                  --tool-container-{memory,cpus,pids-limit} flags.
+                properties:
+                  cpus:
+                    type: string
+                  memory:
+                    type: string
+                  pids_limit:
+                    type: integer
+                type: object
+              tool_filter:
+                properties:
+                  include:
+                    items:
+                      type: string
+                    type: array
+                type: object
+              transport:
+                type: string
+            required:
+            - transport
+            type: object
+          status:
+            description: CRDStatus is the common status subresource for all Orloj
+              CRDs.
+            properties:
+              lastSyncedAt:
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                type: string
+              syncError:
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

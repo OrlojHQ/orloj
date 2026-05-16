@@ -1124,6 +1124,8 @@
 .badge--orange .badge__dot { background: var(--badge-deadletter); }
 .badge--gray { color: var(--text-tertiary); background: var(--gray-bg); }
 .badge--gray .badge__dot { background: var(--gray); }
+.badge--purple { color: var(--purple); background: var(--purple-bg); text-transform: none; }
+.badge--purple .badge__dot { background: var(--purple); }
 
 .badge--neutral {
   color: var(--text-secondary);
@@ -3511,6 +3513,19 @@ button:focus-visible {
   color: var(--red);
   font-size: 12px;
   margin-left: 8px;
+}
+
+.yaml-editor__warning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--badge-pending);
+  background: var(--badge-pending-bg);
+  border-radius: 6px;
+  margin-bottom: 8px;
 }
 
 /* Small buttons */

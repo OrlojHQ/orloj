@@ -13,6 +13,9 @@ import clsx from "clsx";
 import { toast } from "../components/Toast";
 import type { Secret } from "../api/types";
 import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
+import { CrdManagedBadge } from "../components/CrdManagedBadge";
+import { isCrdManaged, CRD_MANAGED_EDIT_WARNING } from "../utils/crd";
+import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 
 const SEALED_OWNER_ANNOTATION = "orloj.dev/sealedsecret-owner";
 
@@ -28,6 +31,7 @@ export function SecretDetail() {
   const namespace = useAppStore((s) => s.namespace);
   const deleteMutation = useDeleteResource("Secret");
   const updateMutation = useUpdateResource("Secret");
+  const confirmDelete = useDeleteConfirm();
   const [tab, setTab] = useState<Tab>("overview");
 
   const tabs: { id: Tab; label: string }[] = [
@@ -53,7 +57,7 @@ export function SecretDetail() {
   const sealedOwner = secret.metadata.annotations?.[SEALED_OWNER_ANNOTATION];
 
   const handleDelete = async () => {
-    if (!window.confirm(`Delete Secret ${secret.metadata.name}?`)) return;
+    if (!confirmDelete("Secret", secret.metadata.name, secret.metadata)) return;
     try {
       await deleteMutation.mutateAsync(routeName);
       toast("success", "Secret deleted successfully");
@@ -86,6 +90,7 @@ export function SecretDetail() {
             <p className="page__subtitle">{secret.metadata.namespace ?? "default"}</p>
           </div>
           <StatusBadge phase={secret.status?.phase} size="md" />
+          <CrdManagedBadge metadata={secret.metadata} />
         </div>
         <button
           className="btn-secondary text-red"
@@ -158,6 +163,7 @@ export function SecretDetail() {
           <YamlEditor
             value={JSON.stringify(redactedSecret, null, 2)}
             editable
+            warning={isCrdManaged(secret.metadata) ? CRD_MANAGED_EDIT_WARNING : undefined}
             onSave={async (body) => {
               const updated = await saveNamespacedResourceYaml<Secret>(
                 queryClient,

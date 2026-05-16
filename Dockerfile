@@ -9,7 +9,7 @@ COPY frontend/ ./
 RUN bun run build
 
 # --- Go module cache ---
-FROM golang:1.25-alpine AS base
+FROM golang:1.26-alpine AS base
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
@@ -40,11 +40,30 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     -ldflags="-s -w -X github.com/OrlojHQ/orloj/internal/version.Version=${VERSION} -X github.com/OrlojHQ/orloj/internal/version.Commit=${COMMIT} -X github.com/OrlojHQ/orloj/internal/version.Date=${DATE}" \
     -o /out/orlojworker ./cmd/orlojworker
 
+# --- orloj-operator binary (no UI, no docker-cli) ---
+FROM base AS build-operator
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
+ARG VERSION=dev
+ARG COMMIT=unknown
+ARG DATE=unknown
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    go build -trimpath \
+    -ldflags="-s -w -X github.com/OrlojHQ/orloj/internal/version.Version=${VERSION} -X github.com/OrlojHQ/orloj/internal/version.Commit=${COMMIT} -X github.com/OrlojHQ/orloj/internal/version.Date=${DATE}" \
+    -o /out/orloj-operator ./cmd/orloj-operator
+
 # --- Runtime images (default final stage: orlojd) ---
 FROM alpine:3.20 AS orlojworker
 RUN apk add --no-cache ca-certificates tzdata wget docker-cli \
     && adduser -D -u 10001 appuser
 COPY --from=build-orlojworker /out/orlojworker /usr/local/bin/app
+USER appuser
+ENTRYPOINT ["/usr/local/bin/app"]
+
+FROM alpine:3.20 AS orloj-operator
+RUN apk add --no-cache ca-certificates tzdata \
+    && adduser -D -u 10001 appuser
+COPY --from=build-operator /out/orloj-operator /usr/local/bin/app
 USER appuser
 ENTRYPOINT ["/usr/local/bin/app"]
 

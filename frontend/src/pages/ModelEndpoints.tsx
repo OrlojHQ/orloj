@@ -8,6 +8,7 @@ import { StatusBadge } from "../components/StatusBadge";
 import { EmptyState } from "../components/EmptyState";
 import { Database, Plus } from "lucide-react";
 import type { ModelEndpoint } from "../api/types";
+import { CrdManagedBadge } from "../components/CrdManagedBadge";
 import { CreateResourceDialog } from "../components/CreateResourceDialog";
 
 export function ModelEndpoints() {
@@ -18,7 +19,7 @@ export function ModelEndpoints() {
   const endpoints = data ?? [];
 
   const columns: Column<ModelEndpoint>[] = [
-    { key: "name", header: "Name", render: (r) => <span className="mono">{r.metadata.name}</span> },
+    { key: "name", header: "Name", render: (r) => <><span className="mono">{r.metadata.name}</span> <CrdManagedBadge metadata={r.metadata} /></> },
     { key: "provider", header: "Provider", render: (r) => r.spec.provider ?? "—" },
     { key: "model", header: "Default Model", render: (r) => <span className="mono">{r.spec.default_model ?? "—"}</span> },
     { key: "url", header: "Base URL", render: (r) => <span className="text-muted">{r.spec.base_url ?? "—"}</span> },

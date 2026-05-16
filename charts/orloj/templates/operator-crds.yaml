@@ -1,0 +1,1168 @@
+{{- if and .Values.operator.enabled .Values.operator.installCRDs }}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  name: agentpolicies.orloj.dev
+  labels:
+    {{- include "orloj.labels" . | nindent 4 }}
+spec:
+  group: orloj.dev
+  names:
+    kind: AgentPolicy
+    listKind: AgentPolicyList
+    plural: agentpolicies
+    shortNames:
+    - opol
+    singular: agentpolicy
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              allowed_models:
+                items:
+                  type: string
+                type: array
+              apply_mode:
+                type: string
+              blocked_tools:
+                items:
+                  type: string
+                type: array
+              max_child_depth:
+                type: integer
+              max_child_tasks:
+                type: integer
+              max_tokens_per_run:
+                type: integer
+              target_agents:
+                items:
+                  type: string
+                type: array
+              target_systems:
+                items:
+                  type: string
+                type: array
+              target_tasks:
+                items:
+                  type: string
+                type: array
+            type: object
+          status:
+            description: CRDStatus is the common status subresource for all Orloj
+              CRDs.
+            properties:
+              lastSyncedAt:
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                type: string
+              syncError:
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  name: agents.orloj.dev
+  labels:
+    {{- include "orloj.labels" . | nindent 4 }}
+spec:
+  group: orloj.dev
+  names:
+    kind: Agent
+    listKind: AgentList
+    plural: agents
+    shortNames:
+    - oagent
+    singular: agent
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: AgentSpec defines desired runtime behavior.
+            properties:
+              allowed_tools:
+                items:
+                  type: string
+                type: array
+              execution:
+                description: AgentExecutionSpec configures optional per-agent execution
+                  contracts.
+                properties:
+                  duplicate_tool_call_policy:
+                    type: string
+                  on_contract_violation:
+                    type: string
+                  output_schema:
+                    x-kubernetes-preserve-unknown-fields: true
+                  profile:
+                    type: string
+                  required_output_markers:
+                    items:
+                      type: string
+                    type: array
+                  tool_sequence:
+                    items:
+                      type: string
+                    type: array
+                  tool_use_behavior:
+                    type: string
+                type: object
+              fallback_model_refs:
+                items:
+                  type: string
+                type: array
+              limits:
+                description: AgentLimits configures execution safety bounds.
+                properties:
+                  max_steps:
+                    type: integer
+                  timeout:
+                    type: string
+                type: object
+              memory:
+                description: MemorySpec configures runtime memory backend.
+                properties:
+                  allow:
+                    items:
+                      type: string
+                    type: array
+                  provider:
+                    type: string
+                  ref:
+                    type: string
+                  type:
+                    type: string
+                type: object
+              model_ref:
+                type: string
+              prompt:
+                type: string
+              roles:
+                items:
+                  type: string
+                type: array
+              tools:
+                items:
+                  type: string
+                type: array
+            required:
+            - prompt
+            type: object
+          status:
+            description: CRDStatus is the common status subresource for all Orloj
+              CRDs.
+            properties:
+              lastSyncedAt:
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                type: string
+              syncError:
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  name: agentsystems.orloj.dev
+  labels:
+    {{- include "orloj.labels" . | nindent 4 }}
+spec:
+  group: orloj.dev
+  names:
+    kind: AgentSystem
+    listKind: AgentSystemList
+    plural: agentsystems
+    shortNames:
+    - oasys
+    singular: agentsystem
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              agents:
+                items:
+                  type: string
+                type: array
+              completion_review:
+                properties:
+                  allow_request_changes:
+                    type: boolean
+                  checkpoint_id:
+                    type: string
+                  display_name:
+                    type: string
+                  max_review_cycles:
+                    type: integer
+                  reason:
+                    type: string
+                  ttl:
+                    type: string
+                type: object
+              context_adapter:
+                type: string
+              graph:
+                additionalProperties:
+                  properties:
+                    delegate_join:
+                      description: DelegateJoin controls how delegate returns are
+                        collected.
+                      properties:
+                        mode:
+                          description: 'Mode: wait_for_all | quorum.'
+                          type: string
+                        on_failure:
+                          description: 'OnFailure: deadletter | skip | continue_partial.'
+                          type: string
+                        quorum_count:
+                          description: QuorumCount is an absolute minimum number of
+                            upstream branches.
+                          type: integer
+                        quorum_percent:
+                          description: QuorumPercent is percentage-based minimum of
+                            expected branches (0-100).
+                          type: integer
+                      type: object
+                    delegates:
+                      description: |-
+                        Delegates dispatched after the node's first execution. Reports
+                        flow back and trigger a review re-execution before edges fire.
+                      items:
+                        properties:
+                          condition:
+                            description: Optional condition that must match the completing
+                              agent's output for this edge to fire.
+                            properties:
+                              contains:
+                                description: Contains matches when the extracted JSON
+                                  value (string or array) contains this value.
+                                type: string
+                              default:
+                                description: Default marks this edge as the fallback
+                                  when no conditional edge matches.
+                                type: boolean
+                              equals:
+                                description: Equals matches when the extracted JSON
+                                  value equals this string.
+                                type: string
+                              greater_than:
+                                description: GreaterThan matches when the extracted
+                                  numeric JSON value is greater than this threshold.
+                                type: string
+                              less_than:
+                                description: LessThan matches when the extracted numeric
+                                  JSON value is less than this threshold.
+                                type: string
+                              not_equals:
+                                description: NotEquals matches when the extracted
+                                  JSON value does NOT equal this string.
+                                type: string
+                              output_contains:
+                                description: OutputContains matches if the output
+                                  contains this string (case-insensitive).
+                                type: string
+                              output_json_path:
+                                description: |-
+                                  OutputJSONPath extracts a value from JSON output using dot-notation (e.g. "$.route").
+                                  When set, one of the comparison operators (Equals, NotEquals, Contains, GreaterThan,
+                                  LessThan) must also be set.
+                                type: string
+                              output_matches:
+                                description: OutputMatches matches if the output matches
+                                  this regex pattern.
+                                type: string
+                              output_not_contains:
+                                description: OutputNotContains matches if the output
+                                  does NOT contain this string (case-insensitive).
+                                type: string
+                            type: object
+                          labels:
+                            additionalProperties:
+                              type: string
+                            description: Optional labels used by routing/observability
+                              layers.
+                            type: object
+                          policy:
+                            additionalProperties:
+                              type: string
+                            description: Optional policy key/value bag for edge-level
+                              controls.
+                            type: object
+                          to:
+                            type: string
+                        type: object
+                      type: array
+                    edges:
+                      description: Rich edge list for fan-out and per-edge metadata.
+                      items:
+                        properties:
+                          condition:
+                            description: Optional condition that must match the completing
+                              agent's output for this edge to fire.
+                            properties:
+                              contains:
+                                description: Contains matches when the extracted JSON
+                                  value (string or array) contains this value.
+                                type: string
+                              default:
+                                description: Default marks this edge as the fallback
+                                  when no conditional edge matches.
+                                type: boolean
+                              equals:
+                                description: Equals matches when the extracted JSON
+                                  value equals this string.
+                                type: string
+                              greater_than:
+                                description: GreaterThan matches when the extracted
+                                  numeric JSON value is greater than this threshold.
+                                type: string
+                              less_than:
+                                description: LessThan matches when the extracted numeric
+                                  JSON value is less than this threshold.
+                                type: string
+                              not_equals:
+                                description: NotEquals matches when the extracted
+                                  JSON value does NOT equal this string.
+                                type: string
+                              output_contains:
+                                description: OutputContains matches if the output
+                                  contains this string (case-insensitive).
+                                type: string
+                              output_json_path:
+                                description: |-
+                                  OutputJSONPath extracts a value from JSON output using dot-notation (e.g. "$.route").
+                                  When set, one of the comparison operators (Equals, NotEquals, Contains, GreaterThan,
+                                  LessThan) must also be set.
+                                type: string
+                              output_matches:
+                                description: OutputMatches matches if the output matches
+                                  this regex pattern.
+                                type: string
+                              output_not_contains:
+                                description: OutputNotContains matches if the output
+                                  does NOT contain this string (case-insensitive).
+                                type: string
+                            type: object
+                          labels:
+                            additionalProperties:
+                              type: string
+                            description: Optional labels used by routing/observability
+                              layers.
+                            type: object
+                          policy:
+                            additionalProperties:
+                              type: string
+                            description: Optional policy key/value bag for edge-level
+                              controls.
+                            type: object
+                          to:
+                            type: string
+                        type: object
+                      type: array
+                    join:
+                      description: Join semantics for this downstream node.
+                      properties:
+                        mode:
+                          description: 'Mode: wait_for_all | quorum.'
+                          type: string
+                        on_failure:
+                          description: 'OnFailure: deadletter | skip | continue_partial.'
+                          type: string
+                        quorum_count:
+                          description: QuorumCount is an absolute minimum number of
+                            upstream branches.
+                          type: integer
+                        quorum_percent:
+                          description: QuorumPercent is percentage-based minimum of
+                            expected branches (0-100).
+                          type: integer
+                      type: object
+                    next:
+                      description: Legacy single-hop edge. Preserved for backward
+                        compatibility.
+                      type: string
+                    review:
+                      description: Review gates this node's output behind a human
+                        approval checkpoint.
+                      properties:
+                        allow_request_changes:
+                          type: boolean
+                        checkpoint_id:
+                          type: string
+                        display_name:
+                          type: string
+                        max_review_cycles:
+                          type: integer
+                        reason:
+                          type: string
+                        ttl:
+                          type: string
+                      type: object
+                  type: object
+                type: object
+            type: object
+          status:
+            description: CRDStatus is the common status subresource for all Orloj
+              CRDs.
+            properties:
+              lastSyncedAt:
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                type: string
+              syncError:
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  name: mcpservers.orloj.dev
+  labels:
+    {{- include "orloj.labels" . | nindent 4 }}
+spec:
+  group: orloj.dev
+  names:
+    kind: McpServer
+    listKind: McpServerList
+    plural: mcpservers
+    shortNames:
+    - omcp
+    singular: mcpserver
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.transport
+      name: Transport
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              args:
+                items:
+                  type: string
+                type: array
+              auth:
+                properties:
+                  headerName:
+                    type: string
+                  profile:
+                    type: string
+                  scopes:
+                    items:
+                      type: string
+                    type: array
+                  secretRef:
+                    type: string
+                  tokenURL:
+                    type: string
+                type: object
+              command:
+                type: string
+              default_tool_runtime:
+                properties:
+                  isolation_mode:
+                    type: string
+                  retry:
+                    properties:
+                      backoff:
+                        type: string
+                      jitter:
+                        type: string
+                      max_attempts:
+                        type: integer
+                      max_backoff:
+                        type: string
+                    type: object
+                  timeout:
+                    type: string
+                type: object
+              endpoint:
+                type: string
+              env:
+                items:
+                  properties:
+                    mountPath:
+                      type: string
+                    name:
+                      type: string
+                    secretRef:
+                      type: string
+                    value:
+                      type: string
+                  required:
+                  - name
+                  type: object
+                type: array
+              idle_timeout:
+                type: string
+              image:
+                type: string
+              image_pull_secret:
+                type: string
+              reconnect:
+                properties:
+                  backoff:
+                    type: string
+                  max_attempts:
+                    type: integer
+                type: object
+              resources:
+                description: |-
+                  ContainerResources defines per-tool or per-McpServer container resource
+                  overrides. When set, these take precedence over the global
+                  --tool-container-{memory,cpus,pids-limit} flags.
+                properties:
+                  cpus:
+                    type: string
+                  memory:
+                    type: string
+                  pids_limit:
+                    type: integer
+                type: object
+              tool_filter:
+                properties:
+                  include:
+                    items:
+                      type: string
+                    type: array
+                type: object
+              transport:
+                type: string
+            required:
+            - transport
+            type: object
+          status:
+            description: CRDStatus is the common status subresource for all Orloj
+              CRDs.
+            properties:
+              lastSyncedAt:
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                type: string
+              syncError:
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  name: memories.orloj.dev
+  labels:
+    {{- include "orloj.labels" . | nindent 4 }}
+spec:
+  group: orloj.dev
+  names:
+    kind: Memory
+    listKind: MemoryList
+    plural: memories
+    shortNames:
+    - omem
+    singular: memory
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.type
+      name: Type
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              auth:
+                properties:
+                  secretRef:
+                    type: string
+                type: object
+              embedding_model:
+                type: string
+              endpoint:
+                type: string
+              endpoint_secret_ref:
+                type: string
+              provider:
+                type: string
+              type:
+                type: string
+            type: object
+          status:
+            description: CRDStatus is the common status subresource for all Orloj
+              CRDs.
+            properties:
+              lastSyncedAt:
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                type: string
+              syncError:
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  name: modelendpoints.orloj.dev
+  labels:
+    {{- include "orloj.labels" . | nindent 4 }}
+spec:
+  group: orloj.dev
+  names:
+    kind: ModelEndpoint
+    listKind: ModelEndpointList
+    plural: modelendpoints
+    shortNames:
+    - omep
+    singular: modelendpoint
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.provider
+      name: Provider
+      type: string
+    - jsonPath: .spec.default_model
+      name: Model
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              allowPrivate:
+                description: |-
+                  AllowPrivate permits outbound connections from this endpoint's
+                  model gateway to trusted local/private model servers, including
+                  loopback, RFC 1918 / ULA, and carrier-grade NAT addresses (e.g.
+                  Ollama, vLLM, LM Studio, or LiteLLM). Link-local, cloud metadata,
+                  and unspecified addresses remain blocked regardless.
+
+                  Pointer so that the schema can distinguish "unset" (defaulted by
+                  provider) from explicit true/false. Defaults: ollama -> true,
+                  everything else -> false.
+                type: boolean
+              auth:
+                properties:
+                  secretRef:
+                    type: string
+                type: object
+              base_url:
+                type: string
+              default_model:
+                type: string
+              options:
+                additionalProperties:
+                  type: string
+                type: object
+              provider:
+                type: string
+            type: object
+          status:
+            description: CRDStatus is the common status subresource for all Orloj
+              CRDs.
+            properties:
+              lastSyncedAt:
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                type: string
+              syncError:
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  name: secrets.orloj.dev
+  labels:
+    {{- include "orloj.labels" . | nindent 4 }}
+spec:
+  group: orloj.dev
+  names:
+    kind: Secret
+    listKind: SecretList
+    plural: secrets
+    shortNames:
+    - osec
+    singular: secret
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              data:
+                additionalProperties:
+                  type: string
+                type: object
+              stringData:
+                additionalProperties:
+                  type: string
+                type: object
+            type: object
+          status:
+            description: CRDStatus is the common status subresource for all Orloj
+              CRDs.
+            properties:
+              lastSyncedAt:
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                type: string
+              syncError:
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  name: tools.orloj.dev
+  labels:
+    {{- include "orloj.labels" . | nindent 4 }}
+spec:
+  group: orloj.dev
+  names:
+    kind: Tool
+    listKind: ToolList
+    plural: tools
+    shortNames:
+    - otool
+    singular: tool
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.type
+      name: Type
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1
+    schema:
+      openAPIV3Schema:
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            properties:
+              auth:
+                properties:
+                  headerName:
+                    type: string
+                  profile:
+                    type: string
+                  scopes:
+                    items:
+                      type: string
+                    type: array
+                  secretRef:
+                    type: string
+                  tokenURL:
+                    type: string
+                type: object
+              capabilities:
+                items:
+                  type: string
+                type: array
+              cli:
+                description: ToolCliSpec defines the configuration for CLI tool invocations.
+                properties:
+                  args:
+                    items:
+                      type: string
+                    type: array
+                  command:
+                    type: string
+                  env:
+                    additionalProperties:
+                      type: string
+                    type: object
+                  env_from:
+                    items:
+                      description: ToolCliEnvRef maps an Orloj secret to a process
+                        environment variable.
+                      properties:
+                        key:
+                          type: string
+                        name:
+                          type: string
+                        secretRef:
+                          type: string
+                      required:
+                      - name
+                      - secretRef
+                      type: object
+                    type: array
+                  image:
+                    type: string
+                  image_pull_secret:
+                    type: string
+                  network:
+                    type: string
+                  output:
+                    type: string
+                  resources:
+                    description: |-
+                      ContainerResources defines per-tool or per-McpServer container resource
+                      overrides. When set, these take precedence over the global
+                      --tool-container-{memory,cpus,pids-limit} flags.
+                    properties:
+                      cpus:
+                        type: string
+                      memory:
+                        type: string
+                      pids_limit:
+                        type: integer
+                    type: object
+                  stdin_from_input:
+                    type: boolean
+                  working_dir:
+                    type: string
+                type: object
+              description:
+                type: string
+              endpoint:
+                type: string
+              input_schema:
+                x-kubernetes-preserve-unknown-fields: true
+              mcp_server_ref:
+                type: string
+              mcp_tool_name:
+                type: string
+              operation_classes:
+                items:
+                  type: string
+                type: array
+              risk_level:
+                type: string
+              runtime:
+                properties:
+                  isolation_mode:
+                    type: string
+                  retry:
+                    properties:
+                      backoff:
+                        type: string
+                      jitter:
+                        type: string
+                      max_attempts:
+                        type: integer
+                      max_backoff:
+                        type: string
+                    type: object
+                  timeout:
+                    type: string
+                type: object
+              type:
+                type: string
+              wasm:
+                description: |-
+                  ToolWasmSpec configures per-tool WASM module execution.
+                  Module may be a local path, HTTPS URL, or OCI artifact reference (oci://...).
+                properties:
+                  enable_wasi:
+                    type: boolean
+                  entrypoint:
+                    type: string
+                  fuel:
+                    format: int64
+                    type: integer
+                  image_pull_secret:
+                    type: string
+                  max_memory_bytes:
+                    format: int64
+                    type: integer
+                  module:
+                    type: string
+                required:
+                - enable_wasi
+                type: object
+            type: object
+          status:
+            description: CRDStatus is the common status subresource for all Orloj
+              CRDs.
+            properties:
+              lastSyncedAt:
+                type: string
+              observedGeneration:
+                format: int64
+                type: integer
+              phase:
+                type: string
+              syncError:
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+{{- end }}

@@ -37,6 +37,20 @@ go run ./cmd/orlojd -h
 | `--postgres-max-idle-conns` | `10` | Max idle Postgres connections. | Postgres backend only. |
 | `--postgres-conn-max-lifetime` | `30m` | Max Postgres connection lifetime. | Postgres backend only. |
 
+### CRD conflict policy
+
+| Flag | Default | Description | Condition / Notes |
+|---|---|---|---|
+| `--crd-conflict-policy` | `warn` | How `orlojd` handles REST API writes to CRD-managed resources. | `off|warn|reject`; env `ORLOJ_CRD_CONFLICT_POLICY`. Only relevant when the CRD operator is also running. |
+
+Modes:
+
+- **`off`** — No conflict detection. REST writes proceed normally even if the resource is CRD-managed.
+- **`warn`** (default) — REST writes succeed, but `orlojd` logs a warning and sets the `X-Orloj-CRD-Managed: true` response header. The operator will overwrite the change on its next reconcile.
+- **`reject`** — REST writes to CRD-managed resources return `409 Conflict` with a message directing the user to update via `kubectl apply` or Git.
+
+See [Kubernetes CRD Operator](../deploy/kubernetes-operator.md) for full operator documentation.
+
 ### Task execution and embedded worker
 
 | Flag | Default | Description | Condition / Notes |

@@ -179,6 +179,9 @@ spec:
             - name: ORLOJ_CLI_TOOL_ALLOWED_COMMANDS
               value: {{ .Values.cliToolAllowedCommands | quote }}
             {{- end }}
+            # --- CRD conflict policy ---
+            - name: ORLOJ_CRD_CONFLICT_POLICY
+              value: {{ .Values.crdConflictPolicy | default "warn" | quote }}
             {{- with .Values.server.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

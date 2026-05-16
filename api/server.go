@@ -63,6 +63,7 @@ type ServerOptions struct {
 	UIBasePath         string // URL path prefix for the web console (default "/")
 	TrustedProxies     string // comma-separated CIDRs whose forwarding headers are trusted
 	ContainerResourceCeiling resources.ContainerResourceCeiling
+	CRDConflictPolicy  string // "off", "warn" (default), or "reject"
 }
 
 // Server exposes CRUD endpoints for control plane resources.
@@ -83,6 +84,7 @@ type Server struct {
 	trustedProxies     []*net.IPNet
 	uiBasePath         string
 	containerResourceCeiling resources.ContainerResourceCeiling
+	crdConflictPolicy  string
 }
 
 func NewServer(stores Stores, runtime *agentruntime.Manager, logger *log.Logger) *Server {
@@ -184,6 +186,7 @@ func NewServerWithOptions(stores Stores, runtime *agentruntime.Manager, logger *
 		trustedProxies:             trustedProxies,
 		uiBasePath:                 uiBase,
 		containerResourceCeiling:   opts.ContainerResourceCeiling,
+		crdConflictPolicy:          normalizeCRDConflictPolicy(opts.CRDConflictPolicy),
 	}
 	s.routes()
 	return s
@@ -598,6 +601,9 @@ func (s *Server) handleAgentByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusConflict)
 			return
 		}
+		if s.checkCRDConflict(w, current.Metadata, "Agent") {
+			return
+		}
 		agent.Status = current.Status
 		bodyKey := store.ScopedName(requestNamespace(r), strings.TrimSpace(agent.Metadata.Name))
 		if bodyKey != key {
@@ -640,6 +646,9 @@ func (s *Server) createOrUpdateAgent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if ok {
+		if s.checkCRDConflict(w, existing.Metadata, "Agent") {
+			return
+		}
 		agent.Status = existing.Status
 	}
 	agent, err = s.stores.Agents.Upsert(r.Context(), agent)
@@ -702,6 +711,18 @@ func (s *Server) getAgent(w http.ResponseWriter, ctx context.Context, key, name 
 }
 
 func (s *Server) deleteAgent(w http.ResponseWriter, r *http.Request, key, name string) {
+	existing, ok, err := s.stores.Agents.Get(r.Context(), key)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if !ok {
+		http.Error(w, fmt.Sprintf("agent %q not found", name), http.StatusNotFound)
+		return
+	}
+	if s.checkCRDConflict(w, existing.Metadata, "Agent") {
+		return
+	}
 	if err := s.stores.Agents.Delete(r.Context(), key); err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
@@ -777,6 +798,9 @@ func (s *Server) handleAgentSystems(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if ok {
+			if s.checkCRDConflict(w, existing.Metadata, "AgentSystem") {
+				return
+			}
 			obj.Status = existing.Status
 		}
 		obj, err = s.stores.AgentSystems.Upsert(r.Context(), obj)
@@ -820,6 +844,18 @@ func (s *Server) handleAgentSystemByName(w http.ResponseWriter, r *http.Request)
 		}
 		writeJSON(w, http.StatusOK, obj)
 	case http.MethodDelete:
+		existing, ok, err := s.stores.AgentSystems.Get(r.Context(), key)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if !ok {
+			http.Error(w, fmt.Sprintf("agentsystem %q not found", name), http.StatusNotFound)
+			return
+		}
+		if s.checkCRDConflict(w, existing.Metadata, "AgentSystem") {
+			return
+		}
 		if err := s.stores.AgentSystems.Delete(r.Context(), key); err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
@@ -851,6 +887,9 @@ func (s *Server) handleAgentSystemByName(w http.ResponseWriter, r *http.Request)
 		}
 		if err := requireUpdatePrecondition(r.Header.Get("If-Match"), &obj.Metadata, current.Metadata); err != nil {
 			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+		if s.checkCRDConflict(w, current.Metadata, "AgentSystem") {
 			return
 		}
 		obj.Status = current.Status
@@ -929,6 +968,9 @@ func (s *Server) handleModelEndpoints(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if ok {
+			if s.checkCRDConflict(w, existing.Metadata, "ModelEndpoint") {
+				return
+			}
 			obj.Status = existing.Status
 		}
 		obj, err = s.stores.ModelEPs.Upsert(r.Context(), obj)
@@ -972,6 +1014,18 @@ func (s *Server) handleModelEndpointByName(w http.ResponseWriter, r *http.Reques
 		}
 		writeJSON(w, http.StatusOK, obj)
 	case http.MethodDelete:
+		existing, ok, err := s.stores.ModelEPs.Get(r.Context(), key)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if !ok {
+			http.Error(w, fmt.Sprintf("modelendpoint %q not found", name), http.StatusNotFound)
+			return
+		}
+		if s.checkCRDConflict(w, existing.Metadata, "ModelEndpoint") {
+			return
+		}
 		if err := s.stores.ModelEPs.Delete(r.Context(), key); err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
@@ -1003,6 +1057,9 @@ func (s *Server) handleModelEndpointByName(w http.ResponseWriter, r *http.Reques
 		}
 		if err := requireUpdatePrecondition(r.Header.Get("If-Match"), &obj.Metadata, current.Metadata); err != nil {
 			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+		if s.checkCRDConflict(w, current.Metadata, "ModelEndpoint") {
 			return
 		}
 		obj.Status = current.Status
@@ -1085,6 +1142,9 @@ func (s *Server) handleTools(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if ok {
+			if s.checkCRDConflict(w, existing.Metadata, "Tool") {
+				return
+			}
 			obj.Status = existing.Status
 		}
 		obj, err = s.stores.Tools.Upsert(r.Context(), obj)
@@ -1128,6 +1188,18 @@ func (s *Server) handleToolByName(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, obj)
 	case http.MethodDelete:
+		existing, ok, err := s.stores.Tools.Get(r.Context(), key)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if !ok {
+			http.Error(w, fmt.Sprintf("tool %q not found", name), http.StatusNotFound)
+			return
+		}
+		if s.checkCRDConflict(w, existing.Metadata, "Tool") {
+			return
+		}
 		if err := s.stores.Tools.Delete(r.Context(), key); err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
@@ -1163,6 +1235,9 @@ func (s *Server) handleToolByName(w http.ResponseWriter, r *http.Request) {
 		}
 		if err := requireUpdatePrecondition(r.Header.Get("If-Match"), &obj.Metadata, current.Metadata); err != nil {
 			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+		if s.checkCRDConflict(w, current.Metadata, "Tool") {
 			return
 		}
 		obj.Status = current.Status
@@ -1244,6 +1319,9 @@ func (s *Server) handleSecrets(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if ok {
+			if s.checkCRDConflict(w, existing.Metadata, "Secret") {
+				return
+			}
 			obj.Status = existing.Status
 		}
 		obj, err = s.stores.Secrets.Upsert(r.Context(), obj)
@@ -1281,6 +1359,18 @@ func (s *Server) handleSecretByName(w http.ResponseWriter, r *http.Request) {
 		redactSecretData(&obj)
 		writeJSON(w, http.StatusOK, obj)
 	case http.MethodDelete:
+		existing, ok, err := s.stores.Secrets.Get(r.Context(), key)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if !ok {
+			http.Error(w, fmt.Sprintf("secret %q not found", name), http.StatusNotFound)
+			return
+		}
+		if s.checkCRDConflict(w, existing.Metadata, "Secret") {
+			return
+		}
 		if err := s.stores.Secrets.Delete(r.Context(), key); err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
@@ -1312,6 +1402,9 @@ func (s *Server) handleSecretByName(w http.ResponseWriter, r *http.Request) {
 		}
 		if err := requireUpdatePrecondition(r.Header.Get("If-Match"), &obj.Metadata, current.Metadata); err != nil {
 			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+		if s.checkCRDConflict(w, current.Metadata, "Secret") {
 			return
 		}
 		obj.Status = current.Status
@@ -1408,6 +1501,9 @@ func (s *Server) handleMemories(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if ok {
+			if s.checkCRDConflict(w, existing.Metadata, "Memory") {
+				return
+			}
 			obj.Status = existing.Status
 		}
 		obj, err = s.stores.Memories.Upsert(r.Context(), obj)
@@ -1460,6 +1556,18 @@ func (s *Server) handleMemoryByName(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, obj)
 	case http.MethodDelete:
+		existing, ok, err := s.stores.Memories.Get(r.Context(), key)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if !ok {
+			http.Error(w, fmt.Sprintf("memory %q not found", name), http.StatusNotFound)
+			return
+		}
+		if s.checkCRDConflict(w, existing.Metadata, "Memory") {
+			return
+		}
 		if err := s.stores.Memories.Delete(r.Context(), key); err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
@@ -1491,6 +1599,9 @@ func (s *Server) handleMemoryByName(w http.ResponseWriter, r *http.Request) {
 		}
 		if err := requireUpdatePrecondition(r.Header.Get("If-Match"), &obj.Metadata, current.Metadata); err != nil {
 			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+		if s.checkCRDConflict(w, current.Metadata, "Memory") {
 			return
 		}
 		obj.Status = current.Status
@@ -1625,6 +1736,9 @@ func (s *Server) handlePolicies(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if ok {
+			if s.checkCRDConflict(w, existing.Metadata, "AgentPolicy") {
+				return
+			}
 			obj.Status = existing.Status
 		}
 		obj, err = s.stores.Policies.Upsert(r.Context(), obj)
@@ -1668,6 +1782,18 @@ func (s *Server) handlePolicyByName(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, obj)
 	case http.MethodDelete:
+		existing, ok, err := s.stores.Policies.Get(r.Context(), key)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if !ok {
+			http.Error(w, fmt.Sprintf("agentpolicy %q not found", name), http.StatusNotFound)
+			return
+		}
+		if s.checkCRDConflict(w, existing.Metadata, "AgentPolicy") {
+			return
+		}
 		if err := s.stores.Policies.Delete(r.Context(), key); err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
@@ -1699,6 +1825,9 @@ func (s *Server) handlePolicyByName(w http.ResponseWriter, r *http.Request) {
 		}
 		if err := requireUpdatePrecondition(r.Header.Get("If-Match"), &obj.Metadata, current.Metadata); err != nil {
 			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+		if s.checkCRDConflict(w, current.Metadata, "AgentPolicy") {
 			return
 		}
 		obj.Status = current.Status
@@ -3007,6 +3136,9 @@ func (s *Server) handleMcpServers(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if ok {
+			if s.checkCRDConflict(w, existing.Metadata, "McpServer") {
+				return
+			}
 			obj.Status = existing.Status
 		}
 		obj, err = s.stores.McpServers.Upsert(r.Context(), obj)
@@ -3071,6 +3203,9 @@ func (s *Server) handleMcpServerByName(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusConflict)
 			return
 		}
+		if s.checkCRDConflict(w, current.Metadata, "McpServer") {
+			return
+		}
 		obj.Status = current.Status
 		bodyKey := store.ScopedName(requestNamespace(r), strings.TrimSpace(obj.Metadata.Name))
 		if bodyKey != key {
@@ -3089,6 +3224,18 @@ func (s *Server) handleMcpServerByName(w http.ResponseWriter, r *http.Request) {
 		s.publishResourceEvent("McpServer", obj.Metadata.Name, "updated", obj)
 		writeJSON(w, http.StatusOK, obj)
 	case http.MethodDelete:
+		existing, ok, err := s.stores.McpServers.Get(r.Context(), key)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if !ok {
+			http.Error(w, fmt.Sprintf("mcp-server %q not found", name), http.StatusNotFound)
+			return
+		}
+		if s.checkCRDConflict(w, existing.Metadata, "McpServer") {
+			return
+		}
 		if err := s.stores.McpServers.Delete(r.Context(), key); err != nil {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return

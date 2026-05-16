@@ -1,0 +1,18 @@
+{{- if .Values.operator.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "orloj.fullname" . }}-operator
+  labels:
+    {{- include "orloj.labels" . | nindent 4 }}
+    app.kubernetes.io/component: operator
+spec:
+  clusterIP: None
+  selector:
+    {{- include "orloj.operator.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: metrics
+      port: {{ .Values.operator.metricsPort }}
+      targetPort: metrics
+      protocol: TCP
+{{- end }}

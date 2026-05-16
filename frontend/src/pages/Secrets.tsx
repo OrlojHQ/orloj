@@ -9,6 +9,7 @@ import { EmptyState } from "../components/EmptyState";
 import { ListFetchError } from "../components/ListFetchError";
 import { Lock, Plus, ShieldCheck } from "lucide-react";
 import type { Secret } from "../api/types";
+import { CrdManagedBadge } from "../components/CrdManagedBadge";
 
 const SEALED_OWNER_ANNOTATION = "orloj.dev/sealedsecret-owner";
 
@@ -31,7 +32,7 @@ export function Secrets() {
   const secrets = data ?? [];
 
   const columns: Column<Secret>[] = [
-    { key: "name", header: "Name", render: (r) => <span className="mono">{r.metadata.name}</span> },
+    { key: "name", header: "Name", render: (r) => <><span className="mono">{r.metadata.name}</span> <CrdManagedBadge metadata={r.metadata} /></> },
     {
       key: "source",
       header: "Source",

@@ -376,6 +376,8 @@ type ToolSpec struct {
 	Type             string            `json:"type,omitempty" yaml:"type,omitempty"`
 	Endpoint         string            `json:"endpoint,omitempty" yaml:"endpoint,omitempty"`
 	Description      string            `json:"description,omitempty" yaml:"description,omitempty"`
+	// +kubebuilder:validation:Schemaless
+	// +kubebuilder:pruning:PreserveUnknownFields
 	InputSchema      map[string]any    `json:"input_schema,omitempty" yaml:"input_schema,omitempty"`
 	McpServerRef     string            `json:"mcp_server_ref,omitempty" yaml:"mcp_server_ref,omitempty"`
 	McpToolName      string            `json:"mcp_tool_name,omitempty" yaml:"mcp_tool_name,omitempty"`

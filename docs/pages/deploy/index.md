@@ -17,7 +17,8 @@ Choose a deployment path based on your environment:
 1. [Local Deployment](./local.md)
 2. [VPS Deployment (Compose + systemd)](./vps.md)
 3. [Kubernetes Deployment (Helm + Manifest Fallback)](./kubernetes.md)
-4. [Remote CLI and API access](./remote-cli-access.md) -- tokens, `orlojctl` profiles, and `config.json` after you expose the control plane
+4. [Kubernetes CRD Operator](./kubernetes-operator.md) -- optional GitOps-ready operator that syncs Orloj resources as real K8s CRDs
+5. [Remote CLI and API access](./remote-cli-access.md) -- tokens, `orlojctl` profiles, and `config.json` after you expose the control plane
 
 ## Hosted Stack, Local CLI
 

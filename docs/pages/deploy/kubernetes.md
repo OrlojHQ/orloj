@@ -290,6 +290,21 @@ agentExecution:
 
 Agent Jobs use deterministic names based on the task, agent, and attempt number. If the orchestrator pod restarts mid-execution, it detects the existing Job and either reads its result (if complete) or resumes watching (if still running).
 
+## CRD Sync Operator (Optional)
+
+The Orloj CRD operator makes Orloj resources (Agents, Tools, AgentSystems, etc.) real Kubernetes Custom Resource Definitions. When enabled, you can manage configuration with `kubectl apply` and integrate with GitOps tools like Argo CD and Flux.
+
+```bash
+helm upgrade --install orloj oci://ghcr.io/orlojhq/charts/orloj \
+  --namespace orloj --reuse-values \
+  --set operator.enabled=true \
+  --set operator.installCRDs=true
+```
+
+The operator is independent of tool isolation and agent execution backends — it manages the *configuration* plane (resource definitions), not the *execution* plane (how tools and agents run). You can use any combination.
+
+See [Kubernetes CRD Operator](./kubernetes-operator.md) for full documentation, values reference, GitOps examples, and migration guide.
+
 ## Security Defaults
 
 - This baseline is not HA — `server.replicaCount` defaults to 1. Multi-replica `orlojd` requires leader election (see roadmap).

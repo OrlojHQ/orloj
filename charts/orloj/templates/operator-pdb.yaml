@@ -1,0 +1,14 @@
+{{- if and .Values.operator.enabled .Values.operator.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "orloj.fullname" . }}-operator
+  labels:
+    {{- include "orloj.labels" . | nindent 4 }}
+    app.kubernetes.io/component: operator
+spec:
+  minAvailable: {{ .Values.operator.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "orloj.operator.selectorLabels" . | nindent 6 }}
+{{- end }}

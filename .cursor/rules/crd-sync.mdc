@@ -1,0 +1,30 @@
+---
+description: Regenerate CRD manifests when Go types that define CRD schemas change
+globs: crds/**/*.go,resources/resource_types.go,resources/agent.go,resources/model_endpoint.go
+alwaysApply: false
+---
+
+# CRD manifest generation
+
+When you modify Go types that feed into the Kubernetes CRD schemas, regenerate the CRD YAML so it stays in sync:
+
+```bash
+make generate-crds
+```
+
+This runs `controller-gen` (v0.21.0) and outputs to `config/crd/bases/`. CI will fail if the checked-in YAML doesn't match what controller-gen produces.
+
+**Files that require regeneration**
+
+- **`crds/*_types.go`** — CRD struct definitions with `kubebuilder` markers (adding/removing fields, changing validation markers, renaming JSON tags).
+- **`resources/resource_types.go`** — defines `AgentSystemSpec`, `ToolSpec`, `SecretSpec`, `AgentPolicySpec`, `McpServerSpec` (all embedded by CRDs).
+- **`resources/agent.go`** — defines `AgentSpec` and `MemorySpec` (embedded by CRDs).
+- **`resources/model_endpoint.go`** — defines `ModelEndpointSpec` (embedded by CRDs).
+- **`crds/groupversion_info.go`** — API group/version metadata.
+
+**Files that do NOT require regeneration**
+
+- `crds/reconciler.go`, `crds/convert.go`, `crds/status_writer.go` — runtime logic only, no schema impact.
+- `crds/deepcopy.go` — generated code (regenerated separately via `controller-gen object`).
+
+**After regenerating**, commit the updated YAML files in `config/crd/bases/` alongside your Go changes.

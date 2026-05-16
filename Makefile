@@ -1,5 +1,9 @@
 SHELL := /bin/zsh
 
+CONTROLLER_GEN_VERSION ?= v0.21.0
+CONTROLLER_GEN ?= $(shell go env GOPATH)/bin/controller-gen
+CRD_OUTPUT_DIR := config/crd/bases
+
 # Canonical CLI command variable; AGENTCTL is a deprecated compatibility alias.
 ORLOJCTL ?=
 ifeq ($(strip $(ORLOJCTL)),)
@@ -98,7 +102,7 @@ REAL_APPROVAL_GATE_TIMEOUT_SECONDS ?= 240
 REAL_GATE_POLL_INTERVAL_SECONDS ?= 2
 REAL_SCHEDULE_TIMEOUT_SECONDS ?= 120
 
-.PHONY: build help ui-install ui-dev ui-build \
+.PHONY: build help install-controller-gen generate-crds test-operator ui-install ui-dev ui-build \
 	real-help real-tool-stub real-repeat \
 	real-delete-task real-delete-tool-approvals-in-ns real-capture \
 	real-apply real-apply-all \
@@ -125,6 +129,16 @@ REAL_SCHEDULE_TIMEOUT_SECONDS ?= 120
 
 build:
 	go build ./cmd/...
+
+install-controller-gen:
+	go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION)
+
+generate-crds:
+	$(CONTROLLER_GEN) crd:allowDangerousTypes=true paths=./crds/... output:crd:dir=$(CRD_OUTPUT_DIR)
+	@rm -f $(CRD_OUTPUT_DIR)/_*.yaml
+
+test-operator:
+	KUBEBUILDER_ASSETS="$$($(shell go env GOPATH)/bin/setup-envtest use -p path)" go test ./crds/... -count=1 -timeout 120s
 
 help: real-help
 

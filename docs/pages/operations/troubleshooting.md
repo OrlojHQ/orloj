@@ -149,6 +149,75 @@ grep '"trace_id"' /var/log/orlojd.log | head -5
 
 Then search for that trace ID in Jaeger, Tempo, or the web console Trace tab.
 
+## Operator
+
+### CRD applied but resource not appearing in Orloj
+
+Cause:
+
+- The operator failed to upsert the resource into Postgres.
+
+Checks:
+
+- Inspect CRD status: `kubectl get agent my-agent -o jsonpath='{.status}'`
+- Look for `phase: SyncError` and read `syncError`.
+- Check operator logs: `kubectl -n orloj logs deploy/orloj-operator --tail=200`
+- Verify the operator has connectivity to Postgres (same DSN as `orlojd`).
+
+Fix:
+
+- Resolve the validation or connectivity error. The operator will retry automatically.
+
+### Namespace stuck in Terminating (stale finalizer)
+
+Cause:
+
+- The operator was uninstalled or is down while CRD resources with the `orloj.dev/sync` finalizer still exist. Kubernetes cannot delete the namespace because the finalizer is never removed.
+
+Fix:
+
+- Redeploy the operator so it can process deletions and remove finalizers, or manually patch the finalizer off each stuck resource:
+
+```bash
+kubectl patch agent my-agent -p '{"metadata":{"finalizers":null}}' --type=merge
+```
+
+### REST API returns `X-Orloj-CRD-Managed` header warning
+
+Cause:
+
+- You are updating a resource via the REST API (or `orlojctl apply`) that was originally created by the CRD operator. The `--crd-conflict-policy=warn` mode is active.
+
+Fix:
+
+- Update the resource via `kubectl apply` or your Git repo instead. The operator will overwrite REST changes on its next reconcile.
+- To enforce this, set `--crd-conflict-policy=reject` on `orlojd`.
+
+### Resource adopted unexpectedly
+
+Cause:
+
+- You `kubectl apply`'d a CRD manifest whose `metadata.name` and `metadata.namespace` match an existing REST-created resource. The operator upserted it, adding the `orloj.dev/managed-by: crd-sync` annotation.
+
+Fix:
+
+- This is expected behavior. Once a CRD with a matching name is applied, the operator takes ownership. Delete the CRD to return to REST-only management, or keep the CRD as the source of truth.
+
+### CRD status stuck on old generation
+
+Cause:
+
+- The status writer runs on a periodic interval (`--status-sync-interval`, default 5s). Immediately after apply, the status may lag.
+
+Checks:
+
+- Wait for one status sync interval and re-check: `kubectl get agent my-agent -o jsonpath='{.status.observedGeneration}'`
+- Verify the operator pod is running and the leader election lease is held.
+
+Fix:
+
+- If status never updates, check operator logs for errors writing the status subresource.
+
 ## Escalation Workflow
 
 1. Capture failing command and exact error text.

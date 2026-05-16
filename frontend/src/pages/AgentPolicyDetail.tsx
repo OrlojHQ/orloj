@@ -12,6 +12,9 @@ import clsx from "clsx";
 import { toast } from "../components/Toast";
 import type { AgentPolicy } from "../api/types";
 import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
+import { CrdManagedBadge } from "../components/CrdManagedBadge";
+import { isCrdManaged, CRD_MANAGED_EDIT_WARNING } from "../utils/crd";
+import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 
 type Tab = "overview" | "yaml";
 
@@ -24,6 +27,7 @@ export function AgentPolicyDetail() {
   const namespace = useAppStore((s) => s.namespace);
   const deleteMutation = useDeleteResource("AgentPolicy");
   const updateMutation = useUpdateResource("AgentPolicy");
+  const confirmDelete = useDeleteConfirm();
   const [tab, setTab] = useState<Tab>("overview");
 
   const tabs: { id: Tab; label: string }[] = [
@@ -46,7 +50,7 @@ export function AgentPolicyDetail() {
   }
 
   const handleDelete = async () => {
-    if (!window.confirm(`Delete AgentPolicy ${policy.metadata.name}?`)) return;
+    if (!confirmDelete("AgentPolicy", policy.metadata.name, policy.metadata)) return;
     try {
       await deleteMutation.mutateAsync(routeName);
       toast("success", "AgentPolicy deleted successfully");
@@ -70,6 +74,7 @@ export function AgentPolicyDetail() {
             </p>
           </div>
           <StatusBadge phase={policy.status?.phase} size="md" />
+          <CrdManagedBadge metadata={policy.metadata} />
         </div>
         <button
           className="btn-secondary text-red"
@@ -150,6 +155,7 @@ export function AgentPolicyDetail() {
           <YamlEditor
             value={JSON.stringify(policy, null, 2)}
             editable
+            warning={isCrdManaged(policy.metadata) ? CRD_MANAGED_EDIT_WARNING : undefined}
             onSave={async (body) => {
               const updated = await saveNamespacedResourceYaml<AgentPolicy>(
                 queryClient,

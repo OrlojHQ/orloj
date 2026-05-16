@@ -81,6 +81,19 @@ The governance layer is not a separate process -- it is enforced inline during w
 
 All governance decisions are deterministic and fail-closed. Denied actions produce structured errors that flow into task trace and history for auditability.
 
+## CRD Operator (Optional)
+
+The **CRD sync operator** (`orloj-operator`) is an optional component that provides an alternative input path into the resource store. Instead of going through the REST API, resources can be defined as Kubernetes Custom Resource Definitions and synced into Postgres by the operator.
+
+```
+  kubectl apply ──► K8s CRDs ──► orloj-operator ──► Postgres store
+  orlojctl apply ──► REST API ──► orlojd ──────────► Postgres store
+```
+
+Both paths write to the same store and produce identical runtime behavior. The operator enables GitOps workflows (Argo CD, Flux) and `kubectl`-native management for teams that prefer Kubernetes-style resource definitions. Resources synced by the operator are annotated `orloj.dev/managed-by: crd-sync`; the `--crd-conflict-policy` flag on `orlojd` controls whether REST API writes to CRD-managed resources are warned or rejected.
+
+The operator is not required for any Orloj functionality — it is purely an integration convenience. See [Kubernetes CRD Operator](../deploy/kubernetes-operator.md) for deployment and configuration.
+
 ## Execution Modes
 
 Orloj supports two execution modes. Start with sequential for development, then graduate to message-driven for production.
