@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-05-17
+
 ### Added
 
 - **Helm chart: CRD sync operator templates**: new `operator.*` values section and six templates (`operator-deployment`, `operator-serviceaccount`, `operator-rbac`, `operator-pdb`, `operator-servicemonitor`, `operator-crds`) for deploying the `orloj-operator` CRD sync controller. Includes ClusterRole/ClusterRoleBinding for orloj.dev CRDs, leader election leases, and event recording. All 8 CRD manifests are bundled in `operator-crds.yaml` (conditional on `operator.installCRDs`). Adds `crdConflictPolicy` value (default `warn`) and passes it to the server deployment as `ORLOJ_CRD_CONFLICT_POLICY`.
@@ -454,7 +456,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Homebrew tap distribution (`OrlojHQ/orloj`)
 - Blueprint scaffolding via `orlojctl init`
 
-[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.15.0...HEAD
+[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/OrlojHQ/orloj/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/OrlojHQ/orloj/compare/v0.14.1...v0.15.0
 [0.14.1]: https://github.com/OrlojHQ/orloj/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/OrlojHQ/orloj/compare/v0.13.0...v0.14.0
