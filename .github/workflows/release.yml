@@ -230,6 +230,11 @@ jobs:
           echo "version=${v}" >> "$GITHUB_OUTPUT"
           echo "registry=oci://ghcr.io/${o}/charts" >> "$GITHUB_OUTPUT"
 
+      - name: Add Helm repositories
+        run: |
+          helm repo add bitnami https://charts.bitnami.com/bitnami
+          helm repo add nats https://nats-io.github.io/k8s/helm/charts/
+
       - name: Build chart dependencies (from Chart.lock)
         run: helm dependency build charts/orloj
 
