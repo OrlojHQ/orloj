@@ -476,9 +476,14 @@ func (m *McpSessionManager) buildHTTPTransport(ctx context.Context, server resou
 			headers[headerName] = secret
 		}
 	}
+	allowPrivate := false
+	if server.Spec.AllowPrivate != nil {
+		allowPrivate = *server.Spec.AllowPrivate
+	}
 	return NewStreamableHTTPMcpTransport(StreamableHTTPMcpTransportConfig{
-		Endpoint: server.Spec.Endpoint,
-		Headers:  headers,
+		Endpoint:     server.Spec.Endpoint,
+		Headers:      headers,
+		AllowPrivate: allowPrivate,
 	}), nil
 }
 

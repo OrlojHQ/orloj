@@ -399,6 +399,7 @@ spec:
   image: ghcr.io/org/mcp:v1
   image_pull_secret: ghcr-creds
   idle_timeout: 5m
+  allowPrivate: true
   args:
     - --port=8080
   env:

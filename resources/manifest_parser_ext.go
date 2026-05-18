@@ -2405,6 +2405,9 @@ func ParseMcpServerManifest(data []byte) (McpServer, error) {
 			out.Spec.ImagePullSecret = value
 		case section == "spec" && subsection == "" && (key == "idle_timeout" || key == "idleTimeout"):
 			out.Spec.IdleTimeout = value
+		case section == "spec" && subsection == "" && (key == "allowPrivate" || key == "allow_private"):
+			b := strings.EqualFold(strings.TrimSpace(value), "true")
+			out.Spec.AllowPrivate = &b
 		case section == "spec" && subsection == "auth" && (key == "secretRef" || key == "secret_ref"):
 			out.Spec.Auth.SecretRef = value
 		case section == "spec" && subsection == "auth" && key == "profile":
