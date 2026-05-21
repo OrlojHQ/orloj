@@ -6,6 +6,8 @@ alwaysApply: false
 
 # OpenAPI and API surface
 
+Shared agent guidance lives in [.agents/rules.md](../../.agents/rules.md). Keep this Cursor rule consistent with that file.
+
 When you change any of the following, update **[openapi/](openapi/)** so paths and schemas stay accurate, then run the same check as CI:
 
 `npx --yes @redocly/cli@1.28.5 lint openapi/openapi.yaml`
@@ -22,4 +24,4 @@ When you change any of the following, update **[openapi/](openapi/)** so paths a
 - Internal refactors with identical wire format.
 - Docs-only changes outside the spec.
 
-When unsure, compare **`api/server.go`** route registration and handler payloads to **`openapi/openapi.yaml`** (and split schemas under **`openapi/schemas/`**). Regenerate the bundled root doc when your workflow uses **`openapi/build_openapi.py`**.
+When unsure, compare **`api/server.go`** route registration and handler payloads to **`openapi/openapi.yaml`** (and split schemas under **`openapi/schemas/`**). OpenAPI lint can pass even when a newly added Go resource field is missing from `openapi/schemas/`, so check resource schema changes manually. Regenerate the bundled root doc when your workflow uses **`openapi/build_openapi.py`**.
