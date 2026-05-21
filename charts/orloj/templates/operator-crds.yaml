@@ -578,6 +578,14 @@ spec:
             type: object
           spec:
             properties:
+              allowPrivate:
+                description: |-
+                  AllowPrivate permits this MCP server's HTTP transport to connect to
+                  RFC 1918 / ULA / CGNAT addresses (e.g. in-cluster Services). Loopback,
+                  link-local, cloud metadata, and unspecified addresses remain blocked
+                  regardless. Defaults to false; set true only for trusted internal MCP
+                  servers. Has no effect on stdio transport.
+                type: boolean
               args:
                 items:
                   type: string

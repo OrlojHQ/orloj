@@ -2297,6 +2297,12 @@ type McpServerSpec struct {
 	Reconnect          McpReconnectPolicy `json:"reconnect,omitempty" yaml:"reconnect,omitempty"`
 	Resources          ContainerResources `json:"resources,omitempty" yaml:"resources,omitempty"`
 	DefaultToolRuntime *ToolRuntimePolicy `json:"default_tool_runtime,omitempty" yaml:"default_tool_runtime,omitempty"`
+	// AllowPrivate permits this MCP server's HTTP transport to connect to
+	// RFC 1918 / ULA / CGNAT addresses (e.g. in-cluster Services). Loopback,
+	// link-local, cloud metadata, and unspecified addresses remain blocked
+	// regardless. Defaults to false; set true only for trusted internal MCP
+	// servers. Has no effect on stdio transport.
+	AllowPrivate *bool `json:"allowPrivate,omitempty" yaml:"allowPrivate,omitempty"`
 }
 
 type McpServerEnvVar struct {

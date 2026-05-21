@@ -32,6 +32,14 @@ components:
           type: array
           items: { $ref: "#/components/schemas/McpServerEnvVar" }
         endpoint: { type: string }
+        allowPrivate:
+          type: boolean
+          description: |
+            Permit this MCP server's HTTP transport to connect to RFC 1918 /
+            ULA / carrier-grade NAT addresses, such as trusted in-cluster
+            services. Loopback, link-local, cloud metadata, and unspecified
+            addresses remain blocked regardless. Defaults to false and has no
+            effect on stdio transport.
         image: { type: string, description: "Container image for stdio transport. When set, the MCP server runs inside a Docker container." }
         image_pull_secret: { type: string, description: "Name of a Secret containing registry credentials for pulling spec.image." }
         idle_timeout: { type: string, description: "Duration after which an idle session is reaped (e.g. 5m). 0 means never evict.", default: "0" }

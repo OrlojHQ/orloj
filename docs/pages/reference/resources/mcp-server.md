@@ -30,6 +30,7 @@ Represents a connection to an external MCP (Model Context Protocol) server. The 
   - `timeout` (duration string): max tool call execution time (e.g. `30s`, `2m`).
   - `isolation_mode` (string): isolation mode for tool execution.
   - `retry` (object): retry policy (see [Tool resource](./tool.md)).
+- `allowPrivate` (boolean): http transport only. When `true`, permits this MCP server's HTTP transport to connect to RFC 1918 / ULA / CGNAT addresses (e.g. in-cluster Services like `http://mcp.internal.svc.cluster.local:8000`). Loopback, link-local, cloud metadata, and unspecified addresses remain blocked regardless. Defaults to `false`; set `true` only for trusted internal MCP servers. Has no effect on `stdio` transport.
 
 ## Defaults and Validation
 
