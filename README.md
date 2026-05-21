@@ -37,20 +37,20 @@ Orloj is not a single runtime component. It spans the layers teams need to devel
 
 | Stack Layer                      | What Orloj Provides                                                                                                      |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| **Interfaces**                   | YAML manifests, `orlojctl`, REST API, SDKs, and web console.                                                             |
+| **Interfaces**                   | YAML manifests, `orlojctl`, REST API, SDKs, Kubernetes CRDs, and web console.                                            |
 | **Agent Definitions**            | `Agent`, `AgentSystem`, prompts, graph topology, roles, execution contracts, and runtime bounds.                         |
 | **Execution Runtime**            | Sequential and message-driven execution, workers, leases, heartbeats, retries, idempotency keys, and dead-letter states. |
-| **Model & Context Layer**        | `ModelEndpoint` resources, provider routing, fallback models, secrets, token budgets, and `Memory`.                      |
-| **Tool & Integration Layer**     | HTTP, gRPC, external services, webhook callbacks, MCP, CLI, WASM, auth, isolation, timeouts, and retries.                |
+| **Model & Context Layer**        | `ModelEndpoint`, `ContextAdapter`, provider routing, fallback models, secrets, token budgets, and `Memory`.              |
+| **Tool & Integration Layer**     | HTTP, gRPC, external services, webhook callbacks, `McpServer` discovery, CLI, WASM, auth, isolation, timeouts, and retries. |
 | **Governance & Human Review**    | `AgentPolicy`, `AgentRole`, `ToolPermission`, `ToolApproval`, and `TaskApproval`.                                        |
 | **Observability & Operations**   | Traces, logs, messages, task history, watch streams, events, Prometheus metrics, OpenTelemetry spans, and UI views.      |
-| **State & Deployment Substrate** | In-memory and Postgres state, NATS JetStream messaging, Docker Compose, VPS deployments, and Kubernetes paths.           |
+| **State & Deployment Substrate** | In-memory and Postgres state, NATS JetStream messaging, Docker Compose, VPS deployments, Kubernetes paths, and CRD GitOps. |
 
 ## How The Stack Operates
 
 |                                                                                                                       |                                                                                                                              |                                                                                                                      |
 | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| **Declare:** Write YAML resources for agents, systems, tools, model endpoints, memory, tasks, and policy.             | **Reconcile:** Controllers validate resources, update status, discover MCP tools, manage schedules, and drive state forward. | **Schedule:** Tasks target an AgentSystem and are assigned to workers based on capacity and requirements.            |
+| **Declare:** Write YAML resources for agents, systems, tools, model endpoints, memory, tasks, secrets, evaluations, and policy. | **Reconcile:** Controllers validate resources, update status, discover MCP tools, manage schedules, and drive state forward. | **Schedule:** Tasks target an AgentSystem and are assigned to workers based on capacity and requirements.            |
 | **Claim:** Workers claim tasks with leases, renew heartbeats, and allow takeover when ownership expires.              | **Execute:** Bounded agent loops route model calls, invoke tools, use memory, and pass messages through the graph.           | **Govern:** Policies, roles, tool permissions, ToolApprovals, and TaskApprovals fail closed during runtime.          |
 | **Observe:** Every run records trace events, task history, messages, logs, metrics, and optional OpenTelemetry spans. | **Scale:** Start local with an embedded worker, then move to Postgres, NATS JetStream, and distributed workers.              | **Operate:** Use the CLI, REST API, watch streams, web console, Prometheus metrics, and standard deployment targets. |
 
@@ -84,10 +84,14 @@ Orloj is not a single runtime component. It spans the layers teams need to devel
 | **Systems**    | `AgentSystem` resources compose agents into graphs with edges, conditional routing, fan-out, fan-in, delegation, and human review checkpoints. |
 | **Tasks**      | `Task` resources execute an AgentSystem and track phase, output, attempts, leases, messages, joins, delegation, trace, history, and blockers.  |
 | **Models**     | `ModelEndpoint` resources route calls to OpenAI, Anthropic, AWS Bedrock, Azure OpenAI, Ollama, mock, and OpenAI-compatible providers.          |
+| **Context**    | `ContextAdapter` resources sanitize or transform raw task input before an AgentSystem starts.                                                 |
 | **Tools**      | `Tool` resources support HTTP, external services, gRPC, webhook callbacks, MCP, CLI, and WASM with runtime policy and auth.                    |
+| **Integrations** | `McpServer` resources connect external MCP servers and materialize discovered tools.                                                        |
 | **Memory**     | `Memory` resources back task-scoped and persistent memory through in-memory, pgvector, or HTTP providers.                                      |
+| **Secrets**    | `Secret` resources hold runtime credentials, while `SealedSecret` resources support git-safe encrypted secret manifests.                      |
 | **Triggers**   | `TaskSchedule` and `TaskWebhook` resources create Tasks from cron schedules and signed HTTP events.                                            |
 | **Governance** | `AgentPolicy`, `AgentRole`, `ToolPermission`, `ToolApproval`, and `TaskApproval` enforce model, tool, and review controls at runtime.          |
+| **Evaluation** | `EvalDataset` and `EvalRun` resources test agent systems against golden data and compare runs.                                                |
 | **Workers**    | `Worker` resources declare capacity, region, supported models, GPU support, heartbeat, and current task load.                                  |
 
 ## Example: An Agent System As Code
@@ -287,6 +291,7 @@ Local development can run in one process. Production can split the Orloj server 
 | **Distributed**      | `orlojd` plus one or more `orlojworker` processes with message-driven execution.         |
 | **Durable handoffs** | `--agent-message-bus-backend=nats-jetstream` for runtime agent messages.                 |
 | **Observability**    | `/metrics`, OpenTelemetry export, task traces, logs, message views, and the web console. |
+| **GitOps**           | Optional Kubernetes CRD operator syncs Orloj resource definitions from Kubernetes into Postgres. |
 
 Configure `ORLOJ_POSTGRES_DSN` before using the Postgres examples. Configure `ORLOJ_NATS_URL` or
 `ORLOJ_AGENT_MESSAGE_NATS_URL` when NATS is not running on the default local address.
@@ -324,14 +329,25 @@ orlojworker \
 | [Architecture](https://docs.orloj.dev/concepts/architecture)            | Server, workers, governance, execution modes, and reliability characteristics. |
 | [Starter blueprints](https://docs.orloj.dev/guides/starter-blueprints)  | Pipeline, hierarchical, and swarm-loop topologies.                             |
 | [Governance guide](https://docs.orloj.dev/guides/setup-governance)      | Policies, roles, tool permissions, and runtime enforcement.                    |
+| [MCP servers](https://docs.orloj.dev/guides/connect-mcp-server)         | Connect MCP servers and auto-discover tools.                                   |
+| [Agent evaluation](https://docs.orloj.dev/guides/run-agent-evaluation)  | Run datasets, score outputs, and compare agent system changes.                 |
+| [Kubernetes CRD operator](https://docs.orloj.dev/deploy/kubernetes-operator) | Manage Orloj resources with Kubernetes CRDs and GitOps workflows.          |
 | [Deploy and operate](https://docs.orloj.dev/deploy/)                    | Local, VPS, Kubernetes, remote CLI access, and production configuration.       |
 | Examples                                                                | Resource samples, blueprints, and use-case bundles.                            |
+
+Useful CLI entry points:
+
+```bash
+orlojctl validate -f manifests/
+orlojctl seal secret openai-api-key --from-literal value=sk-your-key-here --stdout
+orlojctl eval run --dataset <dataset> --system <agent-system>
+```
 
 ## SDKs
 
 Use the REST API directly, operate through `orlojctl`, or call Orloj from application code with official SDKs.
 
-| Language   | Install                 | Links                                       |
+| Language   | Install                 | Package                                     | Repository                                                |
 | ---------- | ----------------------- | ------------------------------------------- | --------------------------------------------------------- |
 | Python     | `pip install orloj-sdk` | [PyPI](https://pypi.org/project/orloj-sdk/) | [Repository](https://github.com/OrlojHQ/orloj-python-sdk) |
 | TypeScript | `npm install orloj`     | [npm](https://www.npmjs.com/package/orloj)  | [Repository](https://github.com/OrlojHQ/orloj-js-sdk)     |
