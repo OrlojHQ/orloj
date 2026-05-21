@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-05-21
+
 ### Added
 
 - **Trusted private MCP HTTP servers**: `McpServer.spec.allowPrivate: true` now permits HTTP MCP transports to connect to trusted RFC 1918 / ULA / CGNAT destinations, such as in-cluster Kubernetes Services, while loopback, link-local, cloud metadata, and unspecified addresses remain blocked. The field is supported in manifests, CRDs, Helm-embedded CRDs, OpenAPI, and resource docs.
@@ -460,7 +462,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Homebrew tap distribution (`OrlojHQ/orloj`)
 - Blueprint scaffolding via `orlojctl init`
 
-[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.16.1...HEAD
+[0.16.1]: https://github.com/OrlojHQ/orloj/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/OrlojHQ/orloj/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/OrlojHQ/orloj/compare/v0.14.1...v0.15.0
 [0.14.1]: https://github.com/OrlojHQ/orloj/compare/v0.14.0...v0.14.1
