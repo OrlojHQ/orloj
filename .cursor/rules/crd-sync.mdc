@@ -6,6 +6,8 @@ alwaysApply: false
 
 # CRD manifest generation
 
+Shared agent guidance lives in [.agents/rules.md](../../.agents/rules.md). Keep this Cursor rule consistent with that file.
+
 When you modify Go types that feed into the Kubernetes CRD schemas, regenerate the CRD YAML so it stays in sync:
 
 ```bash
@@ -28,3 +30,5 @@ This runs `controller-gen` (v0.21.0) and outputs to `config/crd/bases/`. CI will
 - `crds/deepcopy.go` — generated code (regenerated separately via `controller-gen object`).
 
 **After regenerating**, commit the updated YAML files in `config/crd/bases/` alongside your Go changes.
+
+If the CRD schema is embedded in the Helm chart, also update `charts/orloj/templates/operator-crds.yaml` in the same PR.
