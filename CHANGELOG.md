@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **UI: Gold/bronze design system**: replaced green accent palette with a warm gold (#F5B041) and bronze (#D68930) theme across all surfaces, sidebar, cards, and graph nodes. Updated dark and light theme CSS variables for a premium modern feel.
+- **UI: Agent system detail page**: redesigned from tab-based layout to a single-page bento-box dashboard featuring a System Health Horizon banner (task success rate with sparkline, API reachability, workers online), full-width topology view with glowing gold edges and pulsing running nodes, and a three-column bottom grid (system definitions, recent tasks, task trace timeline).
+
 ## [0.16.1] - 2026-05-21
 
 ### Added

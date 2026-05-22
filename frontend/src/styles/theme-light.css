@@ -5,7 +5,7 @@
   --bg-secondary: #ffffff;
   --bg-tertiary: #f4f4f5;
   --bg-surface: #ffffff;
-  --bg-hover: rgba(0, 0, 0, 0.03);
+  --bg-hover: rgba(214, 137, 48, 0.04);
   --bg-input: #ffffff;
   --bg-overlay: rgba(0, 0, 0, 0.4);
 
@@ -18,16 +18,17 @@
   --border-subtle: rgba(0, 0, 0, 0.06);
   --border-strong: #a1a1aa;
 
-  --accent: #16a34a;
-  --accent-hover: #15803d;
-  --accent-alpha: rgba(22, 163, 74, 0.12);
-  --accent-text: #15803d;
-  --accent-glow: 0 0 0 1px rgba(22, 163, 74, 0.35), 0 0 20px rgba(22, 163, 74, 0.15);
+  --accent: #D68930;
+  --accent-hover: #B8721A;
+  --accent-alpha: rgba(214, 137, 48, 0.12);
+  --accent-text: #B8721A;
+  --accent-glow: 0 0 0 1px rgba(214, 137, 48, 0.35), 0 0 20px rgba(214, 137, 48, 0.15);
+  --accent-blue: #4C6EF5;
 
   --blue: #2563eb;
   --blue-bg: rgba(37, 99, 235, 0.08);
-  --green: #16a34a;
-  --green-bg: rgba(22, 163, 74, 0.08);
+  --green: #2E7D32;
+  --green-bg: rgba(46, 125, 50, 0.08);
   --yellow: #ca8a04;
   --yellow-bg: rgba(202, 138, 4, 0.08);
   --orange: #ea580c;
@@ -47,8 +48,8 @@
   --sidebar-border: #e4e4e7;
   --sidebar-text: #52525b;
   --sidebar-text-active: #18181b;
-  --sidebar-hover: rgba(0, 0, 0, 0.04);
-  --sidebar-active: rgba(0, 0, 0, 0.06);
+  --sidebar-hover: rgba(214, 137, 48, 0.06);
+  --sidebar-active: rgba(214, 137, 48, 0.1);
 
   --topbar-bg: rgba(255, 255, 255, 0.78);
   --topbar-border: rgba(0, 0, 0, 0.06);
@@ -71,6 +72,6 @@
   --node-border: #e4e4e7;
   --node-text: #18181b;
   --edge-color: #a1a1aa;
-  --edge-stroke: #a1a1aa;
-  --graph-grid: rgba(0, 0, 0, 0.04);
+  --edge-stroke: rgba(214, 137, 48, 0.5);
+  --graph-grid: rgba(214, 137, 48, 0.04);
 }

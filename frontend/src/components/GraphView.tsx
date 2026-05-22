@@ -198,12 +198,12 @@ const KIND_CONFIG: Record<NodeKind, { icon: React.ReactNode; colorVar: string }>
   system:  { icon: <Network   size={14} />, colorVar: "var(--accent)" },
   adapter: { icon: <Shield     size={14} />, colorVar: "var(--yellow)" },
   agent:   { icon: <Bot        size={14} />, colorVar: "var(--green)" },
-  model:   { icon: <Database   size={14} />, colorVar: "var(--blue)" },
+  model:   { icon: <Database   size={14} />, colorVar: "var(--accent-blue)" },
   tool:    { icon: <Wrench     size={14} />, colorVar: "var(--yellow)" },
   secret:  { icon: <Lock       size={14} />, colorVar: "var(--orange)" },
   memory:  { icon: <Brain      size={14} />, colorVar: "var(--purple)" },
   role:    { icon: <UserCog   size={14} />, colorVar: "var(--purple)" },
-  task:    { icon: <ListTodo   size={14} />, colorVar: "var(--blue)" },
+  task:    { icon: <ListTodo   size={14} />, colorVar: "var(--accent-blue)" },
   schedule:{ icon: <CalendarClock size={14} />, colorVar: "var(--orange)" },
   webhook: { icon: <Webhook    size={14} />, colorVar: "var(--orange)" },
   worker:  { icon: <Cpu        size={14} />, colorVar: "var(--green)" },
@@ -343,7 +343,7 @@ function buildTree(
   // -- Dagre graph: TB layout, all nodes included -----------------------------
 
   const g = new Dagre.graphlib.Graph().setDefaultEdgeLabel(() => ({}));
-  g.setGraph({ rankdir: "LR", nodesep: 80, ranksep: 140, marginx: 50, marginy: 50 });
+  g.setGraph({ rankdir: "LR", nodesep: 120, ranksep: 200, marginx: 60, marginy: 60 });
 
   const sysId = nid("system", system.metadata.name);
   g.setNode(sysId, { width: NODE_W + 20, height: NODE_H + 8 });
@@ -723,11 +723,7 @@ function buildTree(
       edgeAnimated = tgtAgent ? runningAgents.has(tgtAgent) : false;
     }
 
-    // Routing edges are neutral gray at rest so an idle pipeline with many
-    // agents doesn't read as a wall of green. They only paint accent when
-    // actively animating (handled by the `.animated` CSS rule) or when the
-    // hover-focus subtree highlights them.
-    const strokeColor = "var(--edge-stroke)";
+    const strokeColor = edgeAnimated ? "var(--accent)" : "var(--edge-stroke)";
     const arrowColor = edgeAnimated ? "var(--accent)" : "var(--edge-stroke)";
 
     edges.push({
@@ -738,11 +734,11 @@ function buildTree(
       targetHandle,
       animated: edgeAnimated,
       className: routing ? "edge--routing" : "edge--dep",
-      type: agentToAgent ? "default" : "smoothstep",
+      type: "default",
       markerEnd: { type: MarkerType.ArrowClosed, width: routing ? 12 : 10, height: routing ? 12 : 10, color: arrowColor },
       style: {
         stroke: strokeColor,
-        strokeWidth: routing ? 1.5 : 1,
+        strokeWidth: routing ? 2.5 : 1.5,
         strokeDasharray: routing ? undefined : "3 4",
         // Dep edges: single-source opacity via CSS (.edge--dep { stroke-opacity }).
         // Routing edges keep a slight inline opacity for a softer line at rest.
@@ -769,7 +765,7 @@ interface GraphViewProps {
 export function GraphView({ system, related, onNodeClick, animated, runningAgents }: GraphViewProps) {
   const isMobile = useIsMobile();
   const [showLegend, setShowLegend] = useState(false);
-  const [showMinimap, setShowMinimap] = useState(false);
+  const [showMinimap, setShowMinimap] = useState(true);
   const [focusedNode, setFocusedNode] = useState<string | null>(null);
   const agentNames = system.spec.agents ?? [];
   const graph = system.spec.graph ?? {};
@@ -957,7 +953,7 @@ export function GraphView({ system, related, onNodeClick, animated, runningAgent
         maxZoom={2}
         proOptions={{ hideAttribution: true }}
       >
-        <Background gap={28} size={1} color="var(--graph-grid)" />
+        <Background gap={32} size={0.5} color="var(--graph-grid)" />
         <Controls position="bottom-right" showInteractive={false} />
         {!isMobile && showMinimap && (
           <MiniMap
