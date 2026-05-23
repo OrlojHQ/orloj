@@ -506,6 +506,9 @@ func ParseToolManifest(data []byte) (Tool, error) {
 		if section == "spec" && subsection == "wasm" && indent <= 4 && !strings.HasSuffix(trimmed, ":") && !strings.HasPrefix(trimmed, "- ") {
 			runtimeSubsection = ""
 		}
+		if section == "spec" && subsection == "a2a" && indent <= 4 && !strings.HasSuffix(trimmed, ":") && !strings.HasPrefix(trimmed, "- ") {
+			runtimeSubsection = ""
+		}
 
 		if strings.HasSuffix(trimmed, ":") {
 			switch strings.TrimSuffix(trimmed, ":") {
@@ -560,11 +563,16 @@ func ParseToolManifest(data []byte) (Tool, error) {
 					subsection = "wasm"
 					runtimeSubsection = ""
 				}
-			case "cli":
-				if section == "spec" {
-					subsection = "cli"
-					runtimeSubsection = ""
-				}
+		case "cli":
+			if section == "spec" {
+				subsection = "cli"
+				runtimeSubsection = ""
+			}
+		case "a2a":
+			if section == "spec" {
+				subsection = "a2a"
+				runtimeSubsection = ""
+			}
 			case "args":
 				if section == "spec" && subsection == "cli" {
 					runtimeSubsection = "args"
@@ -733,6 +741,12 @@ func ParseToolManifest(data []byte) (Tool, error) {
 			out.Spec.Wasm.EnableWASI = strings.EqualFold(value, "true")
 		case section == "spec" && subsection == "wasm" && (key == "image_pull_secret" || key == "imagePullSecret"):
 			out.Spec.Wasm.ImagePullSecret = value
+		case section == "spec" && subsection == "a2a" && (key == "agent_url" || key == "agentUrl"):
+			out.Spec.A2A.AgentURL = value
+		case section == "spec" && subsection == "a2a" && (key == "protocol_version" || key == "protocolVersion"):
+			out.Spec.A2A.ProtocolVersion = value
+		case section == "spec" && subsection == "a2a" && (key == "prefer_streaming" || key == "preferStreaming"):
+			out.Spec.A2A.PreferStreaming = strings.EqualFold(value, "true")
 		}
 	}
 

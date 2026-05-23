@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A2A protocol support**: expose agents as discoverable A2A agents via Agent Cards, accept inbound A2A task requests (JSON-RPC), call external A2A agents as `type: a2a` tools, and maintain a configured registry of remote agents. Includes Agent Card generation from agents/systems, `POST /a2a` and per-agent `POST /v1/agents/{name}/a2a` JSON-RPC endpoints, `GET /.well-known/agent-card.json` discovery, `GET /v1/a2a/agents` registry endpoint, Orloj/A2A task state mapping, outbound A2A client with SSRF protection, A2A-specific Prometheus metrics, `orlojctl a2a card` and `orlojctl a2a test` CLI commands, React SPA A2A Registry page, Helm chart `a2a.*` values, and comprehensive documentation.
+
 ### Changed
 
 - **UI: Gold/bronze design system**: replaced green accent palette with a warm gold (#F5B041) and bronze (#D68930) theme across all surfaces, sidebar, cards, and graph nodes. Updated dark and light theme CSS variables for a premium modern feel.

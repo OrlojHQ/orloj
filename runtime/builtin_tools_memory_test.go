@@ -1,6 +1,7 @@
 package agentruntime
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
@@ -36,7 +37,7 @@ func TestMemoryIngest_ContentSizeLimit(t *testing.T) {
 
 	largeContent := strings.Repeat("x", 11*1024*1024)
 	input := `{"source": "test", "content": "` + largeContent + `"}`
-	_, err := rt.handleIngest(nil, input)
+	_, err := rt.handleIngest(context.Background(), input)
 	if err == nil {
 		t.Fatal("expected error for oversized content")
 	}

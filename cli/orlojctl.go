@@ -96,6 +96,7 @@ func newRootCommand() *cobra.Command {
 		newValidateCommand(),
 		newToolCommand(),
 		newEvalCommand(),
+		newA2ACommand(),
 	)
 
 	return root

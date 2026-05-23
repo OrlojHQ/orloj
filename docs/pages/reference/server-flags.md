@@ -37,6 +37,20 @@ go run ./cmd/orlojd -h
 | `--postgres-max-idle-conns` | `10` | Max idle Postgres connections. | Postgres backend only. |
 | `--postgres-conn-max-lifetime` | `30m` | Max Postgres connection lifetime. | Postgres backend only. |
 
+### A2A protocol
+
+| Flag | Default | Description | Condition / Notes |
+|---|---|---|---|
+| `--a2a-enabled` | `false` | Enable A2A protocol endpoints and tool type. | Env `ORLOJ_A2A_ENABLED`. |
+| `--a2a-public-base-url` | empty | Public base URL for Agent Card `url` fields. | Env `ORLOJ_A2A_PUBLIC_BASE_URL`. Required for externally-reachable Agent Cards. |
+| `--a2a-protocol-version` | empty | A2A protocol version to advertise. | Env `ORLOJ_A2A_PROTOCOL_VERSION`. |
+| `--a2a-card-cache-ttl` | `5m` | TTL for cached remote Agent Cards. | Env `ORLOJ_A2A_CARD_CACHE_TTL`. |
+| `--a2a-allow-private-endpoints` | `false` | Allow outbound A2A requests to private/loopback IPs. | Env `ORLOJ_A2A_ALLOW_PRIVATE_ENDPOINTS`. See [Security — A2A Security](../operations/security.md#a2a-security). |
+| `--a2a-remote-agents` | empty | JSON-encoded list of static remote A2A agents. | Env `ORLOJ_A2A_REMOTE_AGENTS`. |
+| `--a2a-rate-limit-enabled` | `true` | Enable per-IP rate limiting for A2A endpoints. | Env `ORLOJ_A2A_RATE_LIMIT_ENABLED`. |
+| `--a2a-rate-limit-rpm` | `30` | Max A2A JSON-RPC requests per minute per IP. | Env `ORLOJ_A2A_RATE_LIMIT_RPM`. |
+| `--a2a-rate-limit-max-subscribe` | `10` | Max concurrent SSE subscribe connections. | Env `ORLOJ_A2A_RATE_LIMIT_MAX_SUBSCRIBE`. |
+
 ### CRD conflict policy
 
 | Flag | Default | Description | Condition / Notes |

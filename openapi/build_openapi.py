@@ -945,6 +945,105 @@ def build() -> dict:
         }
     }
 
+    # --- A2A Protocol ---
+
+    a2a_card_ref = "./schemas/a2a.yaml#/components/schemas/AgentCard"
+    a2a_req_ref = "./schemas/a2a.yaml#/components/schemas/A2AJsonRpcRequest"
+    a2a_resp_ref = "./schemas/a2a.yaml#/components/schemas/A2AJsonRpcResponse"
+    a2a_registry_ref = "./schemas/a2a.yaml#/components/schemas/A2ARegistryResponse"
+
+    paths["/.well-known/agent-card.json"] = {
+        "get": {
+            "tags": ["a2a"],
+            "summary": "Get the default Agent Card",
+            "description": (
+                "Returns the A2A Agent Card for the default agent or agent system. "
+                "Used by A2A clients for agent discovery."
+            ),
+            "security": [],
+            "responses": {
+                "200": {"description": "OK", "content": json_body(a2a_card_ref)},
+                "404": {"description": "No default agent configured", "content": text_plain_error()},
+                "default": {"description": "Error", "content": text_plain_error()},
+            },
+        }
+    }
+    paths["/v1/agents/{name}/.well-known/agent-card.json"] = {
+        "get": {
+            "tags": ["a2a"],
+            "summary": "Get Agent Card for a specific agent",
+            "description": (
+                "Returns the A2A Agent Card for the named agent, including derived skills "
+                "and capabilities."
+            ),
+            "parameters": [
+                {
+                    "name": "name",
+                    "in": "path",
+                    "required": True,
+                    "schema": {"type": "string"},
+                },
+            ],
+            "security": [],
+            "responses": {
+                "200": {"description": "OK", "content": json_body(a2a_card_ref)},
+                "404": {"description": "Agent not found", "content": text_plain_error()},
+                "default": {"description": "Error", "content": text_plain_error()},
+            },
+        }
+    }
+
+    a2a_rpc_post = {
+        "tags": ["a2a"],
+        "summary": "A2A JSON-RPC endpoint",
+        "description": (
+            "JSON-RPC 2.0 endpoint implementing the A2A protocol. Supports methods: "
+            "tasks/send, tasks/get, tasks/cancel, tasks/sendSubscribe."
+        ),
+        "security": SEC_WRITER,
+        "requestBody": {"required": True, "content": json_body(a2a_req_ref)},
+        "responses": {
+            "200": {"description": "JSON-RPC response", "content": json_body(a2a_resp_ref)},
+            "400": {"description": "Bad request", "content": text_plain_error()},
+            "default": {"description": "Error", "content": text_plain_error()},
+        },
+    }
+    paths["/a2a"] = {"post": a2a_rpc_post}
+    paths["/v1/agents/{name}/a2a"] = {
+        "post": {
+            **a2a_rpc_post,
+            "summary": "A2A JSON-RPC endpoint for a specific agent",
+            "description": (
+                "JSON-RPC 2.0 endpoint for the named agent. The agent name in the path "
+                "determines routing; no target field is needed in request params."
+            ),
+            "parameters": [
+                {
+                    "name": "name",
+                    "in": "path",
+                    "required": True,
+                    "schema": {"type": "string"},
+                },
+            ],
+        }
+    }
+
+    paths["/v1/a2a/agents"] = {
+        "get": {
+            "tags": ["a2a"],
+            "summary": "List A2A agent registry",
+            "description": (
+                "Returns locally exposed Agent Cards and configured remote agent entries "
+                "with cache metadata."
+            ),
+            "security": SEC_READER,
+            "responses": {
+                "200": {"description": "OK", "content": json_body(a2a_registry_ref)},
+                "default": {"description": "Error", "content": text_plain_error()},
+            },
+        }
+    }
+
     paths["/healthz"] = {
         "get": {
             "tags": ["system"],
@@ -1308,6 +1407,10 @@ def build() -> dict:
             {"name": "task-webhooks"},
             {"name": "workers"},
             {"name": "mcp-servers"},
+            {"name": "a2a", "description": (
+                "Agent-to-Agent (A2A) protocol endpoints. Provides Agent Card discovery, "
+                "JSON-RPC task operations, and a registry of local and remote A2A agents."
+            )},
             {"name": "auth"},
             {"name": "system"},
             {"name": "events"},

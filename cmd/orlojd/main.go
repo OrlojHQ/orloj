@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
@@ -19,6 +20,7 @@ import (
 	"github.com/OrlojHQ/orloj/internal/version"
 	"github.com/OrlojHQ/orloj/resources"
 	agentruntime "github.com/OrlojHQ/orloj/runtime"
+	"github.com/OrlojHQ/orloj/runtime/a2a"
 	"github.com/OrlojHQ/orloj/startup"
 	"github.com/OrlojHQ/orloj/store"
 	"github.com/OrlojHQ/orloj/telemetry"
@@ -75,6 +77,15 @@ func main() {
 	toolWASMCacheDir := flag.String("tool-wasm-cache-dir", env("ORLOJ_TOOL_WASM_CACHE_DIR", ""), "disk cache directory for remote WASM modules (default: ~/.orloj/wasm-cache)")
 	cliToolAllowedCommands := flag.String("cli-tool-allowed-commands", env("ORLOJ_CLI_TOOL_ALLOWED_COMMANDS", ""), "comma-separated allowlist of commands for CLI tools (empty allows all)")
 	cliToolMaxArgvLength := flag.Int("cli-tool-max-argv-length", envInt("ORLOJ_CLI_TOOL_MAX_ARGV_LENGTH", 4096), "max total argv byte length for CLI tool invocations")
+	a2aEnabled := flag.Bool("a2a-enabled", envBool("ORLOJ_A2A_ENABLED", false), "enable A2A protocol endpoints and tool type (env: ORLOJ_A2A_ENABLED)")
+	a2aPublicBaseURL := flag.String("a2a-public-base-url", env("ORLOJ_A2A_PUBLIC_BASE_URL", ""), "public base URL for A2A Agent Cards (env: ORLOJ_A2A_PUBLIC_BASE_URL)")
+	a2aProtocolVersion := flag.String("a2a-protocol-version", env("ORLOJ_A2A_PROTOCOL_VERSION", ""), "A2A protocol version to advertise (env: ORLOJ_A2A_PROTOCOL_VERSION)")
+	a2aCardCacheTTL := flag.Duration("a2a-card-cache-ttl", envDuration("ORLOJ_A2A_CARD_CACHE_TTL", 5*time.Minute), "TTL for cached remote Agent Cards (env: ORLOJ_A2A_CARD_CACHE_TTL)")
+	a2aAllowPrivateEndpoints := flag.Bool("a2a-allow-private-endpoints", envBool("ORLOJ_A2A_ALLOW_PRIVATE_ENDPOINTS", false), "allow outbound A2A requests to private/RFC1918 addresses (env: ORLOJ_A2A_ALLOW_PRIVATE_ENDPOINTS)")
+	a2aRemoteAgents := flag.String("a2a-remote-agents", env("ORLOJ_A2A_REMOTE_AGENTS", ""), "JSON-encoded array of remote A2A agent configs (env: ORLOJ_A2A_REMOTE_AGENTS)")
+	a2aRateLimitEnabled := flag.Bool("a2a-rate-limit-enabled", envBool("ORLOJ_A2A_RATE_LIMIT_ENABLED", true), "enable per-IP rate limiting on A2A endpoints (env: ORLOJ_A2A_RATE_LIMIT_ENABLED)")
+	a2aRateLimitRPM := flag.Int("a2a-rate-limit-rpm", envInt("ORLOJ_A2A_RATE_LIMIT_RPM", 30), "A2A requests per minute per IP (env: ORLOJ_A2A_RATE_LIMIT_RPM)")
+	a2aRateLimitMaxSubscribe := flag.Int("a2a-rate-limit-max-subscribe", envInt("ORLOJ_A2A_RATE_LIMIT_MAX_SUBSCRIBE", 10), "max concurrent A2A SSE subscriptions per IP (env: ORLOJ_A2A_RATE_LIMIT_MAX_SUBSCRIBE)")
 	toolK8sEnabled := flag.Bool("tool-k8s-enabled", envBool("ORLOJ_TOOL_K8S_ENABLED", false), "enable kubernetes tool isolation runtime for isolation_mode=kubernetes tools")
 	toolK8sNamespace := flag.String("tool-k8s-namespace", env("ORLOJ_TOOL_K8S_NAMESPACE", ""), "namespace for kubernetes tool isolation Jobs (default: pod namespace or 'default')")
 	toolK8sServiceAccount := flag.String("tool-k8s-service-account", env("ORLOJ_TOOL_K8S_SERVICE_ACCOUNT", ""), "service account for kubernetes tool isolation Pods")
@@ -330,6 +341,54 @@ func main() {
 		AllowedCommands: startup.ParseCSV(*cliToolAllowedCommands),
 		MaxArgvLength:   *cliToolMaxArgvLength,
 	}, cliSecretResolver)
+
+	// A2A outbound tool runtime — always available so type=a2a tools work
+	// regardless of whether the inbound A2A API is enabled.
+	a2aClient := a2a.NewClient(a2a.ClientConfig{
+		AllowPrivate: *a2aAllowPrivateEndpoints,
+		CardCacheTTL: *a2aCardCacheTTL,
+	})
+	a2aToolRT := a2a.NewToolRuntime(a2aClient, nil, cliSecretResolver)
+	taskController.SetA2AToolRuntime(a2aToolRT)
+
+	// A2A inbound protocol (API endpoints, registry, agent cards)
+	var a2aConfig *api.A2AConfig
+	var a2aRegistry *a2a.Registry
+	if *a2aEnabled {
+		var remoteAgentConfigs []a2a.RemoteAgentConfig
+		if raw := strings.TrimSpace(*a2aRemoteAgents); raw != "" {
+			if err := json.Unmarshal([]byte(raw), &remoteAgentConfigs); err != nil {
+				logger.Printf("WARNING: failed to parse ORLOJ_A2A_REMOTE_AGENTS: %v", err)
+			}
+		}
+
+		if len(remoteAgentConfigs) > 0 {
+			a2aRegistry = a2a.NewRegistry(a2aClient, remoteAgentConfigs, *a2aCardCacheTTL, logger)
+		}
+
+		authSchemes := []string{}
+		if authMode != api.AuthModeOff {
+			authSchemes = append(authSchemes, "bearer")
+		}
+
+		rateLimitRPM := 0
+		maxConcurrentSubscribe := 0
+		if *a2aRateLimitEnabled {
+			rateLimitRPM = *a2aRateLimitRPM
+			maxConcurrentSubscribe = *a2aRateLimitMaxSubscribe
+		}
+		a2aConfig = &api.A2AConfig{
+			Enabled:                true,
+			PublicBaseURL:          strings.TrimSpace(*a2aPublicBaseURL),
+			ProtocolVersion:       strings.TrimSpace(*a2aProtocolVersion),
+			StreamingEnabled:      true,
+			AuthSchemes:           authSchemes,
+			Registry:              a2aRegistry,
+			RateLimitRPM:          rateLimitRPM,
+			MaxConcurrentSubscribe: maxConcurrentSubscribe,
+		}
+	}
+
 	debugLogger.Printf(
 		"tool runtime config isolation_backend=%s container_runtime=%s container_image=%s container_network=%s container_memory=%s container_cpus=%s container_pids_limit=%d container_user=%s cli_allowed_commands=%d cli_max_argv_length=%d wasm_entrypoint=%s wasm_memory_bytes=%d wasm_fuel=%d wasm_wasi=%t wasm_cache_configured=%t mcp_container_network=%s",
 		*toolIsolationBackend,
@@ -409,6 +468,10 @@ func main() {
 	}
 	server.SetEventBus(bus)
 	server.SetMemoryBackends(memoryBackendRegistry)
+	if a2aConfig != nil {
+		server.SetA2AConfig(a2aConfig)
+		logger.Printf("A2A protocol enabled base_url=%s protocol_version=%s", a2aConfig.PublicBaseURL, a2aConfig.ProtocolVersion)
+	}
 	taskController.SetEventBus(bus)
 	taskController.SetAgentMessageBus(agentMessageBus)
 	taskSchedulerController.SetEventBus(bus)
@@ -445,6 +508,9 @@ func main() {
 	startBackground(func() { workerController.Start(ctx) })
 	startBackground(func() { mcpServerController.Start(ctx) })
 	startBackground(func() { mcpSessionManager.StartReaper(ctx, 30*time.Second) })
+	if a2aRegistry != nil {
+		startBackground(func() { a2aRegistry.Start(ctx) })
+	}
 	startBackground(func() {
 		ticker := time.NewTicker(60 * time.Second)
 		defer ticker.Stop()
@@ -499,6 +565,7 @@ func main() {
 						TaskApprovals:       stores.TaskApprovals,
 						Policies:            stores.Policies,
 						ContextAdapters:     stores.ContextAdapters,
+						A2AToolRuntime:      a2aToolRT,
 						DebugLogger:         debugLogger,
 						OnStepEvent: func(taskName, namespace string, evt agentruntime.AgentStepEvent) {
 							if bus != nil {

@@ -106,6 +106,10 @@ export default defineConfig({
             { text: "Agent Evaluation", link: "/concepts/evaluation/" },
           ],
         },
+        {
+          text: "A2A Interoperability",
+          link: "/concepts/a2a-interoperability",
+        },
       ],
     },
 
@@ -141,6 +145,14 @@ export default defineConfig({
           link: "/guides/run-agent-evaluation",
         },
         { text: "Starter Blueprints", link: "/guides/starter-blueprints" },
+        {
+          text: "Expose Agents via A2A",
+          link: "/guides/a2a-expose-agents",
+        },
+        {
+          text: "Use Remote A2A Agents",
+          link: "/guides/a2a-remote-agents",
+        },
       ],
     },
 
@@ -203,6 +215,7 @@ export default defineConfig({
       items: [
         { text: "CLI (orlojctl)", link: "/reference/cli" },
         { text: "API", link: "/reference/api" },
+        { text: "A2A JSON-RPC", link: "/reference/a2a-jsonrpc" },
         { text: "Server Flags", link: "/reference/server-flags" },
         { text: "Internal Tools", link: "/reference/internal-tools" },
         {
@@ -216,6 +229,7 @@ export default defineConfig({
               items: [
                 { text: "Agent", link: "/reference/resources/agent" },
                 { text: "AgentSystem", link: "/reference/resources/agent-system" },
+                { text: "Agent Card", link: "/reference/resources/agent-card" },
               ],
             },
             {

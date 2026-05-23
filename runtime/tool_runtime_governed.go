@@ -101,6 +101,7 @@ type GovernedToolRuntime struct {
 	grpcRuntime            ToolRuntime
 	webhookCallbackRuntime ToolRuntime
 	kubernetesRuntime      ToolRuntime
+	a2aRuntime             ToolRuntime
 	registry               ToolCapabilityRegistry
 	authorizer             ToolCallAuthorizer
 	strict                 bool
@@ -391,6 +392,22 @@ func ConfigureKubernetesRuntime(rt ToolRuntime, k8sRT ToolRuntime, namespace str
 	governed.kubernetesRuntime = k8sRT
 }
 
+// ConfigureA2ARuntime builds and attaches a runtime for type=a2a tools.
+// The runtime is scoped to the governed runtime's registry and the provided namespace.
+func ConfigureA2ARuntime(rt ToolRuntime, a2aRT ToolRuntime, namespace string) {
+	governed, ok := rt.(*GovernedToolRuntime)
+	if !ok || governed == nil || a2aRT == nil {
+		return
+	}
+	if scoped, ok := a2aRT.(namespaceAwareToolRuntime); ok {
+		a2aRT = scoped.WithNamespace(namespace)
+	}
+	if aware, ok := a2aRT.(registryAwareToolRuntime); ok && governed.registry != nil {
+		a2aRT = aware.WithRegistry(governed.registry)
+	}
+	governed.a2aRuntime = a2aRT
+}
+
 func (r *GovernedToolRuntime) Call(ctx context.Context, tool string, input string) (string, error) {
 	tool = strings.TrimSpace(tool)
 	if tool == "" {
@@ -596,6 +613,19 @@ func (r *GovernedToolRuntime) resolveTargetRuntime(tool string, spec resources.T
 			)
 		}
 		return r.wasmRuntime, nil
+	case "a2a":
+		if r.a2aRuntime == nil {
+			return nil, NewToolError(
+				ToolStatusError,
+				ToolCodeIsolationUnavailable,
+				ToolReasonIsolationUnavailable,
+				false,
+				fmt.Sprintf("a2a runtime unavailable for tool=%s; enable A2A support", tool),
+				ErrToolIsolationUnavailable,
+				map[string]string{"tool": tool, "type": "a2a"},
+			)
+		}
+		return r.a2aRuntime, nil
 	default:
 		return nil, NewToolError(
 			ToolStatusError,

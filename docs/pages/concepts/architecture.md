@@ -94,6 +94,10 @@ Both paths write to the same store and produce identical runtime behavior. The o
 
 The operator is not required for any Orloj functionality — it is purely an integration convenience. See [Kubernetes CRD Operator](../deploy/kubernetes-operator.md) for deployment and configuration.
 
+## A2A Integration
+
+Orloj supports the [Agent-to-Agent (A2A) protocol](./a2a-interoperability.md) as an integration point for cross-system agent communication. When enabled, the server publishes Agent Cards describing local agents and exposes JSON-RPC 2.0 endpoints for inbound task delegation. Outbound A2A calls are handled by the `a2a` tool type, allowing local agents to delegate work to remote A2A-compatible agents. The A2A layer sits alongside the existing Tool Runtime and uses the same SSRF protection, auth enforcement, and governed runtime pipeline.
+
 ## Execution Modes
 
 Orloj supports two execution modes. Start with sequential for development, then graduate to message-driven for production.

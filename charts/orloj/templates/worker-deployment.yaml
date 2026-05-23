@@ -165,6 +165,17 @@ spec:
             - name: ORLOJ_CLI_TOOL_ALLOWED_COMMANDS
               value: {{ .Values.cliToolAllowedCommands | quote }}
             {{- end }}
+            # --- A2A Protocol ---
+            {{- if .Values.a2a }}
+            - name: ORLOJ_A2A_ALLOW_PRIVATE_ENDPOINTS
+              value: {{ .Values.a2a.allowPrivateEndpoints | quote }}
+            - name: ORLOJ_A2A_CARD_CACHE_TTL
+              value: {{ .Values.a2a.cardCacheTTL | quote }}
+            {{- if .Values.a2a.remoteAgents }}
+            - name: ORLOJ_A2A_REMOTE_AGENTS
+              value: {{ .Values.a2a.remoteAgents | toJson | quote }}
+            {{- end }}
+            {{- end }}
             {{- with .Values.worker.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}

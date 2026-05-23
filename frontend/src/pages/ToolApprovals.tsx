@@ -45,8 +45,28 @@ export function ToolApprovals() {
     return approvals.filter((item) => (item.approval.status?.phase ?? "Pending") === phaseFilter);
   }, [approvals, phaseFilter]);
 
+  const a2aInputRows = useMemo(
+    () => filtered.filter((r) => r.approval.metadata.labels?.["orloj.dev/blocked-reason"] === "a2a-input-required"),
+    [filtered],
+  );
+  const regularRows = useMemo(
+    () => filtered.filter((r) => r.approval.metadata.labels?.["orloj.dev/blocked-reason"] !== "a2a-input-required"),
+    [filtered],
+  );
+
   const columns: Column<ApprovalRow>[] = [
-    { key: "name", header: "Name", render: (r) => <span className="mono">{r.approval.metadata.name}</span> },
+    {
+      key: "name",
+      header: "Name",
+      render: (r) => (
+        <span className="mono">
+          {r.approval.metadata.name}
+          {r.approval.metadata.labels?.["orloj.dev/blocked-reason"] === "a2a-input-required" && (
+            <span className="badge badge--blue" style={{ marginLeft: "0.5rem" }}>A2A Input</span>
+          )}
+        </span>
+      ),
+    },
     { key: "type", header: "Type", render: (r) => (r.type === "tool" ? "Tool" : "Task"), width: "90px" },
     {
       key: "subject",
@@ -105,13 +125,32 @@ export function ToolApprovals() {
           description="Approvals are created when tool calls or review checkpoints need human authorization."
         />
       ) : (
-        <ResourceTable
-          columns={columns}
-          data={filtered}
-          rowKey={(r) => `${r.type}:${r.approval.metadata.name}`}
-          onRowClick={(r) => navigate(r.type === "tool" ? `/approvals/${r.approval.metadata.name}` : `/approvals/task/${r.approval.metadata.name}`)}
-          loading={toolsLoading || tasksLoading}
-        />
+        <>
+          {a2aInputRows.length > 0 && (
+            <>
+              <h2 className="section-heading">A2A Input Requests</h2>
+              <ResourceTable
+                columns={columns}
+                data={a2aInputRows}
+                rowKey={(r) => `${r.type}:${r.approval.metadata.name}`}
+                onRowClick={(r) => navigate(r.type === "tool" ? `/approvals/${r.approval.metadata.name}` : `/approvals/task/${r.approval.metadata.name}`)}
+                loading={toolsLoading || tasksLoading}
+              />
+            </>
+          )}
+          {regularRows.length > 0 && (
+            <>
+              {a2aInputRows.length > 0 && <h2 className="section-heading">Approvals</h2>}
+              <ResourceTable
+                columns={columns}
+                data={regularRows}
+                rowKey={(r) => `${r.type}:${r.approval.metadata.name}`}
+                onRowClick={(r) => navigate(r.type === "tool" ? `/approvals/${r.approval.metadata.name}` : `/approvals/task/${r.approval.metadata.name}`)}
+                loading={toolsLoading || tasksLoading}
+              />
+            </>
+          )}
+        </>
       )}
       <CreateResourceDialog kind="ToolApproval" open={showCreate} onClose={() => setShowCreate(false)} />
     </div>

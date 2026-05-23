@@ -50,6 +50,7 @@ type TaskController struct {
 	isolatedTools       agentruntime.ToolRuntime
 	wasmTools           agentruntime.ToolRuntime
 	kubernetesTools     agentruntime.ToolRuntime
+	a2aTools            agentruntime.ToolRuntime
 	cliToolConfig       agentruntime.CLIToolRuntimeConfig
 	cliSecretResolver   agentruntime.SecretResolver
 	mcpSessionMgr       *agentruntime.McpSessionManager
@@ -140,6 +141,10 @@ func (c *TaskController) SetWasmToolRuntime(runtime agentruntime.ToolRuntime) {
 
 func (c *TaskController) SetKubernetesToolRuntime(runtime agentruntime.ToolRuntime) {
 	c.kubernetesTools = runtime
+}
+
+func (c *TaskController) SetA2AToolRuntime(runtime agentruntime.ToolRuntime) {
+	c.a2aTools = runtime
 }
 
 func (c *TaskController) SetAgentKubernetesRuntime(rt *agentruntime.KubernetesAgentRuntime) {
@@ -1900,6 +1905,9 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 		if c.kubernetesTools != nil {
 			agentruntime.ConfigureKubernetesRuntime(toolRuntime, c.kubernetesTools, task.Metadata.Namespace)
 		}
+		if c.a2aTools != nil {
+			agentruntime.ConfigureA2ARuntime(toolRuntime, c.a2aTools, task.Metadata.Namespace)
+		}
 		var finalRT agentruntime.ToolRuntime = toolRuntime
 		if agentruntime.AgentHasOrlojTools(agent) {
 			finalRT = agentruntime.NewOrlojToolRuntime(toolRuntime, c.taskStore, agentruntime.OrlojToolConfig{
@@ -2358,6 +2366,9 @@ func (c *TaskController) executeTaskFromResume(
 		agentruntime.ConfigureWasmRuntime(toolRuntime, c.wasmTools, task.Metadata.Namespace)
 		if c.kubernetesTools != nil {
 			agentruntime.ConfigureKubernetesRuntime(toolRuntime, c.kubernetesTools, task.Metadata.Namespace)
+		}
+		if c.a2aTools != nil {
+			agentruntime.ConfigureA2ARuntime(toolRuntime, c.a2aTools, task.Metadata.Namespace)
 		}
 		var finalRT agentruntime.ToolRuntime = toolRuntime
 		if agentruntime.AgentHasOrlojTools(agent) {

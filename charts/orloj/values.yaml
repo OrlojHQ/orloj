@@ -285,6 +285,36 @@ worker:
     targetCPUUtilizationPercentage: 70
 
 # ---------------------------------------------------------------------------
+# A2A Protocol interoperability
+# ---------------------------------------------------------------------------
+a2a:
+  # -- Enable A2A protocol endpoints and tool type
+  enabled: false
+  # -- Public base URL for Agent Card `url` fields (required when enabled)
+  # Must be reachable by external A2A clients. Example: https://orloj.example.com
+  publicBaseURL: ""
+  # -- A2A protocol version to advertise. Empty defaults to latest supported.
+  protocolVersion: ""
+  # -- TTL for cached remote Agent Cards
+  cardCacheTTL: "5m"
+  # -- Allow outbound A2A requests to private/RFC1918 addresses (dangerous)
+  allowPrivateEndpoints: false
+  # -- Static list of remote A2A agents to register
+  remoteAgents: []
+  # - name: external-summarizer
+  #   url: https://partner.example.com/.well-known/agent-card.json
+  #   authType: bearer
+  #   secretRef: partner-token
+  # -- Rate limiting for A2A endpoints
+  rateLimit:
+    # -- Enable rate limiting on A2A endpoints (default true when a2a.enabled)
+    enabled: true
+    # -- Requests per minute for unauthenticated callers
+    requestsPerMinute: 30
+    # -- Max concurrent SSE subscribe connections per client
+    maxConcurrentSubscriptions: 10
+
+# ---------------------------------------------------------------------------
 # Authentication & secrets
 # ---------------------------------------------------------------------------
 auth:

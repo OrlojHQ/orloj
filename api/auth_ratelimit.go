@@ -209,3 +209,51 @@ func isTrustedPeer(r *http.Request, trustedProxies []*net.IPNet) bool {
 	}
 	return isTrustedProxy(ip, trustedProxies)
 }
+
+// ipRateLimiter is a generic per-IP rate limiter reusable across endpoints.
+type ipRateLimiter struct {
+	mu             sync.Mutex
+	limiters       map[string]*rateLimiterEntry
+	rate           rate.Limit
+	burst          int
+	trustedProxies []*net.IPNet
+	lastCleanup    time.Time
+}
+
+func newIPRateLimiter(r rate.Limit, burst int, trustedProxies []*net.IPNet) *ipRateLimiter {
+	return &ipRateLimiter{
+		limiters:       make(map[string]*rateLimiterEntry),
+		rate:           r,
+		burst:          burst,
+		trustedProxies: trustedProxies,
+		lastCleanup:    time.Now(),
+	}
+}
+
+func (rl *ipRateLimiter) Allow(r *http.Request) bool {
+	ip := extractClientIP(r, rl.trustedProxies)
+	if ip == "" {
+		return true
+	}
+	rl.mu.Lock()
+	now := time.Now()
+	if now.Sub(rl.lastCleanup) >= 5*time.Minute {
+		cutoff := now.Add(-10 * time.Minute)
+		for k, e := range rl.limiters {
+			if e.lastSeen.Before(cutoff) {
+				delete(rl.limiters, k)
+			}
+		}
+		rl.lastCleanup = now
+	}
+	entry, ok := rl.limiters[ip]
+	if !ok {
+		entry = &rateLimiterEntry{
+			limiter: rate.NewLimiter(rl.rate, rl.burst),
+		}
+		rl.limiters[ip] = entry
+	}
+	entry.lastSeen = now
+	rl.mu.Unlock()
+	return entry.limiter.Allow()
+}

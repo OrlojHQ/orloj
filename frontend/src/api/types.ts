@@ -134,12 +134,19 @@ export interface ToolWasmSpec {
   image_pull_secret?: string;
 }
 
+export interface ToolA2ASpec {
+  agent_url: string;
+  protocol_version?: string;
+  prefer_streaming?: boolean;
+}
+
 export interface ToolSpec {
   type?: string;
   endpoint?: string;
   /** Reference to an McpServer resource when tools are sourced from MCP. */
   mcp_server_ref?: string;
   wasm?: ToolWasmSpec;
+  a2a?: ToolA2ASpec;
   capabilities?: string[];
   operation_classes?: string[];
   risk_level?: string;
@@ -869,6 +876,50 @@ export const RESOURCE_DETAIL_BASE_PATH: Record<ResourceKind, string> = {
   EvalDataset: "/eval-datasets",
   EvalRun: "/eval-runs",
 };
+
+// ---------------------------------------------------------------------------
+// A2A Protocol Types
+// ---------------------------------------------------------------------------
+
+export interface AgentCard {
+  name: string;
+  description?: string;
+  url: string;
+  version?: string;
+  protocolVersion?: string;
+  capabilities?: {
+    streaming?: boolean;
+    pushNotifications?: boolean;
+    stateTransitionHistory?: boolean;
+  };
+  skills?: AgentCardSkill[];
+  authentication?: { schemes?: string[] };
+  provider?: { organization?: string; url?: string };
+}
+
+export interface AgentCardSkill {
+  id: string;
+  name: string;
+  description?: string;
+  inputSchema?: Record<string, any>;
+  tags?: string[];
+}
+
+export interface RemoteAgentEntry {
+  name: string;
+  url: string;
+  protocolVersion?: string;
+  cacheStatus?: string;
+  lastRefreshed?: string;
+  cacheTTL?: string;
+  error?: string;
+  card?: AgentCard;
+}
+
+export interface A2ARegistryResponse {
+  localAgents: AgentCard[];
+  remoteAgents: RemoteAgentEntry[];
+}
 
 // ---------------------------------------------------------------------------
 // Eval Framework Types

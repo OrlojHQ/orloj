@@ -83,6 +83,51 @@ var (
 		Help:      "Duration of remote WASM module fetches in seconds.",
 		Buckets:   prometheus.DefBuckets,
 	}, []string{"source"})
+
+	// A2A protocol metrics.
+	A2AInboundRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "orloj",
+		Name:      "a2a_inbound_requests_total",
+		Help:      "Total inbound A2A JSON-RPC calls.",
+	}, []string{"method", "status", "agent"})
+
+	A2AInboundRequestDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: "orloj",
+		Name:      "a2a_inbound_request_duration_seconds",
+		Help:      "Latency of inbound A2A request handling.",
+		Buckets:   prometheus.DefBuckets,
+	}, []string{"method", "agent"})
+
+	A2AOutboundRequestsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Namespace: "orloj",
+		Name:      "a2a_outbound_requests_total",
+		Help:      "Total outbound A2A tool calls.",
+	}, []string{"remote_agent", "status"})
+
+	A2AOutboundRequestDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace: "orloj",
+		Name:      "a2a_outbound_request_duration_seconds",
+		Help:      "Latency of outbound A2A calls.",
+		Buckets:   prometheus.DefBuckets,
+	}, []string{"remote_agent"})
+
+	A2ACardCacheHitsTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: "orloj",
+		Name:      "a2a_card_cache_hits_total",
+		Help:      "Agent Card cache hits.",
+	})
+
+	A2ACardCacheMissesTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Namespace: "orloj",
+		Name:      "a2a_card_cache_misses_total",
+		Help:      "Agent Card cache misses / refreshes.",
+	})
+
+	A2AActiveSubscriptions = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: "orloj",
+		Name:      "a2a_active_subscriptions",
+		Help:      "Currently open A2A streaming subscribe connections.",
+	}, []string{"agent"})
 )
 
 // RecordToolExecution records a tool invocation's duration and outcome.
@@ -111,6 +156,24 @@ func RecordWASMCacheMiss(tool string) {
 func RecordWASMModuleFetch(source string, durationSec float64) {
 	WASMModuleFetchDuration.WithLabelValues(source).Observe(durationSec)
 }
+
+// RecordA2AInbound records an inbound A2A JSON-RPC request.
+func RecordA2AInbound(method, status, agent string, durationSec float64) {
+	A2AInboundRequestsTotal.WithLabelValues(method, status, agent).Inc()
+	A2AInboundRequestDuration.WithLabelValues(method, agent).Observe(durationSec)
+}
+
+// RecordA2AOutbound records an outbound A2A tool call.
+func RecordA2AOutbound(remoteAgent, status string, durationSec float64) {
+	A2AOutboundRequestsTotal.WithLabelValues(remoteAgent, status).Inc()
+	A2AOutboundRequestDuration.WithLabelValues(remoteAgent).Observe(durationSec)
+}
+
+// RecordA2ACardCacheHit increments the card cache hit counter.
+func RecordA2ACardCacheHit() { A2ACardCacheHitsTotal.Inc() }
+
+// RecordA2ACardCacheMiss increments the card cache miss counter.
+func RecordA2ACardCacheMiss() { A2ACardCacheMissesTotal.Inc() }
 
 // RecordAgentExecution updates Prometheus counters after an agent finishes.
 func RecordAgentExecution(agent, model string, durationSec float64, tokensUsed, tokensEstimated int) {

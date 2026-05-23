@@ -72,6 +72,20 @@ Example:
 | `ORLOJ_LOG_LEVEL` | `orlojd`, `orlojworker` | `--log-level`, `--debug` | Minimum log level: `debug`, `info` (default), `warn`, or `error`. `--debug` is equivalent to `--log-level=debug` and takes precedence. |
 | `ORLOJ_LOG_FORMAT` | `orlojd`, `orlojworker` | none | Log format: `json` (default) or `text`. |
 
+## A2A Protocol
+
+| Variable | Used By | Flag Overrides | Purpose / Conditions |
+|---|---|---|---|
+| `ORLOJ_A2A_ENABLED` | `orlojd` | `--a2a-enabled` | Enable A2A protocol endpoints and `a2a` tool type. Default: `false`. |
+| `ORLOJ_A2A_PUBLIC_BASE_URL` | `orlojd` | `--a2a-public-base-url` | Public base URL used in Agent Card `url` fields. Required for externally-reachable cards. |
+| `ORLOJ_A2A_PROTOCOL_VERSION` | `orlojd` | `--a2a-protocol-version` | A2A protocol version string to advertise in Agent Cards. |
+| `ORLOJ_A2A_CARD_CACHE_TTL` | `orlojd`, `orlojworker` | `--a2a-card-cache-ttl` | Cache TTL for fetched remote Agent Cards. Default: `5m`. |
+| `ORLOJ_A2A_ALLOW_PRIVATE_ENDPOINTS` | `orlojd`, `orlojworker` | `--a2a-allow-private-endpoints` | Allow outbound A2A requests to private/loopback IPs. Default: `false`. |
+| `ORLOJ_A2A_REMOTE_AGENTS` | `orlojd` | `--a2a-remote-agents` | JSON-encoded list of static remote A2A agents to register. |
+| `ORLOJ_A2A_RATE_LIMIT_ENABLED` | `orlojd` | `--a2a-rate-limit-enabled` | Enable per-IP rate limiting on A2A endpoints. Default: `true`. |
+| `ORLOJ_A2A_RATE_LIMIT_RPM` | `orlojd` | `--a2a-rate-limit-rpm` | Max JSON-RPC requests per minute per IP when rate limiting is enabled. Default: `30`. |
+| `ORLOJ_A2A_RATE_LIMIT_MAX_SUBSCRIBE` | `orlojd` | `--a2a-rate-limit-max-subscribe` | Max concurrent SSE subscribe connections globally. Default: `10`. |
+
 ## Server and Worker Flags
 
 Use [CLI reference](../reference/cli.md) as the exhaustive list for all flags and defaults.

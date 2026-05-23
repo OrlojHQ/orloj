@@ -179,7 +179,11 @@ export function TaskDetail() {
             <h1 className="page__title">{task.metadata.name}</h1>
             <p className="page__subtitle">{task.spec.system} &middot; {task.metadata.namespace}</p>
           </div>
-          <StatusBadge phase={task.status?.phase} size="md" pulse={task.status?.phase === "Running"} />
+          <StatusBadge
+            phase={task.metadata?.labels?.["orloj.dev/a2a-cancelled"] === "true" ? "Cancelled (A2A)" : task.status?.phase}
+            size="md"
+            pulse={task.status?.phase === "Running"}
+          />
         </div>
         <button
           className="btn-secondary text-red"
@@ -222,6 +226,45 @@ export function TaskDetail() {
                 </div>
               </div>
             )}
+            {(() => {
+              const labels = task.metadata.labels ?? {};
+              const a2aTaskId = labels["orloj.dev/a2a-task-id"];
+              const a2aContextId = labels["orloj.dev/a2a-context-id"];
+              const a2aClient = labels["orloj.dev/a2a-client"];
+              const a2aCancelled = labels["orloj.dev/a2a-cancelled"] === "true";
+              const hasA2A = a2aTaskId || a2aContextId || a2aClient || a2aCancelled;
+              if (!hasA2A) return null;
+              return (
+                <div className="card card--mb">
+                  <div className="detail-grid">
+                    {a2aCancelled && (
+                      <div className="detail-field">
+                        <span className="detail-field__label">A2A Status</span>
+                        <StatusBadge phase="Cancelled (A2A)" />
+                      </div>
+                    )}
+                    {a2aTaskId && (
+                      <div className="detail-field">
+                        <span className="detail-field__label">A2A Task ID</span>
+                        <span className="detail-field__value mono">{a2aTaskId}</span>
+                      </div>
+                    )}
+                    {a2aContextId && (
+                      <div className="detail-field">
+                        <span className="detail-field__label">A2A Context</span>
+                        <span className="detail-field__value mono">{a2aContextId}</span>
+                      </div>
+                    )}
+                    {a2aClient && (
+                      <div className="detail-field">
+                        <span className="detail-field__label">A2A Client</span>
+                        <span className="detail-field__value mono">{a2aClient}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
             <div className="detail-grid">
             <div className="detail-field">
               <span className="detail-field__label">Phase</span>

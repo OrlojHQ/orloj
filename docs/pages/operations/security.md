@@ -119,9 +119,33 @@ When trusted proxies are configured, `X-Forwarded-For` is parsed right-to-left: 
 
 The same trust gate applies to `X-Forwarded-Proto` for session cookie security: the `Secure` flag is only set based on the forwarding header when the peer is a trusted proxy.
 
+## A2A Security
+
+When A2A protocol support is enabled, additional security considerations apply.
+
+### SSRF Protection
+
+Outbound A2A requests (fetching remote Agent Cards and sending JSON-RPC calls) use the same `SafeHTTPClient` and `ValidateEndpointURL` checks described in [SSRF Protection](#ssrf-protection). By default, loopback, link-local, cloud metadata, and private network addresses are blocked.
+
+### Auth Enforcement
+
+Inbound A2A JSON-RPC requests are subject to the same authentication and authorization checks as other API endpoints. When `--auth-mode=native` is enabled, A2A callers must provide a valid bearer token.
+
+### Private Endpoint Risks
+
+Setting `--a2a-allow-private-endpoints=true` (env: `ORLOJ_A2A_ALLOW_PRIVATE_ENDPOINTS`) permits outbound A2A requests to private and loopback IPs. This weakens SSRF protection and should only be enabled in trusted network environments (e.g., when remote A2A agents run on the same private network). Cloud metadata endpoints remain blocked regardless of this setting.
+
+### Production Recommendations
+
+- Keep `allowPrivateEndpoints` disabled unless remote agents are on a trusted private network.
+- Use TLS for all A2A endpoints to protect task payloads in transit.
+- Configure `a2a.rateLimit` to prevent abuse of inbound A2A JSON-RPC endpoints.
+- Review remote agent URLs before adding them to `--a2a-remote-agents` or the Helm `a2a.remoteAgents` list.
+- Monitor A2A request metrics for anomalous traffic patterns.
+
 ## Tool Types
 
-All tool types (`http`, `external`, `grpc`, `webhook-callback`, `mcp`, `cli`, `wasm`) flow through the governed runtime pipeline, so policy enforcement, retry, timeout, and error handling behave identically regardless of transport. See [Tools](../concepts/tools/tool.md) for type details.
+All tool types (`http`, `external`, `grpc`, `webhook-callback`, `mcp`, `cli`, `wasm`, `a2a`) flow through the governed runtime pipeline, so policy enforcement, retry, timeout, and error handling behave identically regardless of transport. See [Tools](../concepts/tools/tool.md) for type details.
 
 ### gRPC TLS
 

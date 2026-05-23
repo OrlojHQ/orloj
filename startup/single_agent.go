@@ -28,6 +28,7 @@ type SingleAgentConfig struct {
 	SecretResolver      agentruntime.SecretResolver
 	Extensions          agentruntime.Extensions
 	KubernetesTools     agentruntime.ToolRuntime
+	A2ATools            agentruntime.ToolRuntime
 }
 
 // RunSingleAgent loads a task and agent from the stores, executes the agent,
@@ -121,6 +122,9 @@ func RunSingleAgent(ctx context.Context, stores *StoreSet, cfg SingleAgentConfig
 	agentruntime.ConfigureWasmRuntime(toolRuntime, cfg.WasmToolRuntime, ns)
 	if cfg.KubernetesTools != nil {
 		agentruntime.ConfigureKubernetesRuntime(toolRuntime, cfg.KubernetesTools, ns)
+	}
+	if cfg.A2ATools != nil {
+		agentruntime.ConfigureA2ARuntime(toolRuntime, cfg.A2ATools, ns)
 	}
 
 	var finalRT agentruntime.ToolRuntime = toolRuntime
