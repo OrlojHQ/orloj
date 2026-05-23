@@ -300,7 +300,7 @@ helm upgrade orloj ./charts/orloj --namespace orloj --reuse-values \
   --set a2a.publicBaseURL=https://orloj.example.com
 ```
 
-See the [Chart README](../../charts/orloj/README.md#a2a-protocol) for the full list of `a2a.*` values and their defaults.
+See the [Chart README](../../../charts/orloj/README.md#a2a-protocol) for the full list of `a2a.*` values and their defaults.
 
 ## CRD Sync Operator (Optional)
 
