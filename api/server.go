@@ -9,6 +9,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"sync/atomic"
 	"sort"
 	"strings"
 	"time"
@@ -85,6 +86,9 @@ type Server struct {
 	uiBasePath         string
 	containerResourceCeiling resources.ContainerResourceCeiling
 	crdConflictPolicy  string
+	a2aConfig           *A2AConfig
+	a2aRateLimiter      *ipRateLimiter
+	a2aSubscribeCount   atomic.Int32
 }
 
 func NewServer(stores Stores, runtime *agentruntime.Manager, logger *log.Logger) *Server {
@@ -209,6 +213,18 @@ func (s *Server) SetMemoryBackends(registry *agentruntime.PersistentMemoryBacken
 	s.memoryBackends = registry
 }
 
+// SetA2AConfig configures A2A protocol support on this server.
+func (s *Server) SetA2AConfig(config *A2AConfig) {
+	s.a2aConfig = config
+	if config != nil && config.RateLimitRPM > 0 {
+		s.a2aRateLimiter = newIPRateLimiter(
+			rate.Limit(float64(config.RateLimitRPM)/60.0),
+			config.RateLimitRPM,
+			s.trustedProxies,
+		)
+	}
+}
+
 func (s *Server) validateToolContainerResources(tool resources.Tool) error {
 	res := tool.Spec.Cli.Resources
 	if err := resources.ValidateContainerResources(res, "spec.cli.resources"); err != nil {
@@ -311,10 +327,17 @@ func isStreamingWatchRequest(r *http.Request) bool {
 	if r == nil || r.URL == nil {
 		return false
 	}
+	path := strings.TrimSpace(r.URL.Path)
+
+	// A2A endpoints use POST and may include long-lived SSE subscriptions;
+	// the JSON-RPC handler manages its own timeouts.
+	if r.Method == http.MethodPost && (path == "/a2a" || strings.HasSuffix(path, "/a2a")) {
+		return true
+	}
+
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		return false
 	}
-	path := strings.TrimSpace(r.URL.Path)
 	return path == "/v1/events/watch" || strings.HasSuffix(path, "/watch")
 }
 
@@ -405,6 +428,12 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/v1/mcp-servers/", s.handleMcpServerByName)
 
 	s.mux.HandleFunc("/v1/namespaces", s.handleNamespaces)
+
+	// A2A Protocol routes
+	s.mux.HandleFunc("/.well-known/agent-card.json", s.handleWellKnownAgentCard)
+	s.mux.HandleFunc("/.well-known/agent.json", s.handleWellKnownAgentCard)
+	s.mux.HandleFunc("/a2a", s.handleA2AJSONRPC)
+	s.mux.HandleFunc("/v1/a2a/agents", s.handleA2ARegistry)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
@@ -419,6 +448,13 @@ func (s *Server) handleCapabilities(w http.ResponseWriter, r *http.Request) {
 	snapshot := s.extensions.Capabilities.Capabilities(r.Context())
 	if strings.TrimSpace(snapshot.GeneratedAt) == "" {
 		snapshot.GeneratedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	}
+	if s.a2aConfig != nil && s.a2aConfig.Enabled {
+		snapshot.Capabilities = append(snapshot.Capabilities,
+			agentruntime.Capability{ID: "a2a", Enabled: true, Description: "A2A protocol interoperability", Source: "config"},
+			agentruntime.Capability{ID: "a2a.streaming", Enabled: s.a2aConfig.StreamingEnabled, Description: "A2A streaming subscribe support", Source: "config"},
+			agentruntime.Capability{ID: "a2a.registry", Enabled: s.a2aConfig.Registry != nil, Description: "Remote agent registry", Source: "config"},
+		)
 	}
 	writeJSON(w, http.StatusOK, snapshot)
 }
@@ -538,6 +574,14 @@ func (s *Server) handleAgentByName(w http.ResponseWriter, r *http.Request) {
 	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/v1/agents/"), "/")
 	if path == "" {
 		http.Error(w, "agent name is required", http.StatusBadRequest)
+		return
+	}
+	if strings.Contains(r.URL.Path, "/.well-known/agent-card.json") || strings.HasSuffix(r.URL.Path, "/.well-known/agent.json") {
+		s.handleAgentCard(w, r)
+		return
+	}
+	if strings.HasSuffix(r.URL.Path, "/a2a") {
+		s.handleA2AJSONRPC(w, r)
 		return
 	}
 	if path == "watch" {

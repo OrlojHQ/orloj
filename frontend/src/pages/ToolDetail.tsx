@@ -116,11 +116,29 @@ export function ToolDetail() {
                 <span className="detail-field__value mono">{tool.spec.mcp_server_ref}</span>
               </div>
             )}
-            {tool.spec.type !== "wasm" && (
+            {tool.spec.type !== "wasm" && tool.spec.type !== "a2a" && (
               <div className="detail-field">
                 <span className="detail-field__label">Endpoint</span>
                 <span className="detail-field__value mono">{tool.spec.endpoint ?? "-"}</span>
               </div>
+            )}
+            {tool.spec.type === "a2a" && tool.spec.a2a && (
+              <>
+                <div className="detail-field">
+                  <span className="detail-field__label">Remote Agent URL</span>
+                  <span className="detail-field__value mono">{tool.spec.a2a.agent_url}</span>
+                </div>
+                {tool.spec.a2a.protocol_version && (
+                  <div className="detail-field">
+                    <span className="detail-field__label">Protocol Version</span>
+                    <span className="detail-field__value">{tool.spec.a2a.protocol_version}</span>
+                  </div>
+                )}
+                <div className="detail-field">
+                  <span className="detail-field__label">Prefer Streaming</span>
+                  <span className="detail-field__value">{tool.spec.a2a.prefer_streaming ? "Yes" : "No"}</span>
+                </div>
+              </>
             )}
             {tool.spec.type === "wasm" && (
               <>

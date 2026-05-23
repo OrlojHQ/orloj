@@ -15,6 +15,7 @@ import (
 	"github.com/OrlojHQ/orloj/internal/version"
 	"github.com/OrlojHQ/orloj/resources"
 	agentruntime "github.com/OrlojHQ/orloj/runtime"
+	"github.com/OrlojHQ/orloj/runtime/a2a"
 	"github.com/OrlojHQ/orloj/startup"
 	"github.com/OrlojHQ/orloj/telemetry"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -23,6 +24,7 @@ import (
 func main() {
 	env := startup.EnvOrDefault
 	envBool := startup.EnvBoolOrDefault
+	envDuration := startup.EnvDurationOrDefault
 	envInt := startup.EnvIntOrDefault
 	envInt64 := startup.EnvInt64OrDefault
 	envUint64 := startup.EnvUint64OrDefault
@@ -58,6 +60,8 @@ func main() {
 	toolWASMCacheDir := flag.String("tool-wasm-cache-dir", env("ORLOJ_TOOL_WASM_CACHE_DIR", ""), "disk cache directory for remote WASM modules (default: ~/.orloj/wasm-cache)")
 	cliToolAllowedCommands := flag.String("cli-tool-allowed-commands", env("ORLOJ_CLI_TOOL_ALLOWED_COMMANDS", ""), "comma-separated allowlist of commands for CLI tools (empty allows all)")
 	cliToolMaxArgvLength := flag.Int("cli-tool-max-argv-length", envInt("ORLOJ_CLI_TOOL_MAX_ARGV_LENGTH", 4096), "max total argv byte length for CLI tool invocations")
+	a2aAllowPrivateEndpoints := flag.Bool("a2a-allow-private-endpoints", envBool("ORLOJ_A2A_ALLOW_PRIVATE_ENDPOINTS", false), "allow outbound A2A requests to private addresses (env: ORLOJ_A2A_ALLOW_PRIVATE_ENDPOINTS)")
+	a2aCardCacheTTL := flag.Duration("a2a-card-cache-ttl", envDuration("ORLOJ_A2A_CARD_CACHE_TTL", 5*time.Minute), "TTL for cached remote Agent Cards (env: ORLOJ_A2A_CARD_CACHE_TTL)")
 	toolK8sEnabled := flag.Bool("tool-k8s-enabled", envBool("ORLOJ_TOOL_K8S_ENABLED", false), "enable kubernetes tool isolation runtime for isolation_mode=kubernetes tools")
 	toolK8sNamespace := flag.String("tool-k8s-namespace", env("ORLOJ_TOOL_K8S_NAMESPACE", ""), "namespace for kubernetes tool isolation Jobs (default: pod namespace or 'default')")
 	toolK8sServiceAccount := flag.String("tool-k8s-service-account", env("ORLOJ_TOOL_K8S_SERVICE_ACCOUNT", ""), "service account for kubernetes tool isolation Pods")
@@ -261,6 +265,10 @@ func main() {
 			},
 			SecretResolver:  toolSecretResolver,
 			KubernetesTools: k8sTools,
+			A2ATools: a2a.NewToolRuntime(a2a.NewClient(a2a.ClientConfig{
+				AllowPrivate: *a2aAllowPrivateEndpoints,
+				CardCacheTTL: *a2aCardCacheTTL,
+			}), nil, toolSecretResolver),
 		}
 
 		if runErr := startup.RunSingleAgent(ctx, stores, saCfg, logger); runErr != nil {
@@ -375,6 +383,15 @@ func main() {
 		MaxArgvLength:   *cliToolMaxArgvLength,
 	}
 	taskController.SetCliToolRuntime(cliConfig, toolSecretResolver)
+
+	// A2A tool runtime
+	a2aClient := a2a.NewClient(a2a.ClientConfig{
+		AllowPrivate: *a2aAllowPrivateEndpoints,
+		CardCacheTTL: *a2aCardCacheTTL,
+	})
+	a2aToolRT := a2a.NewToolRuntime(a2aClient, nil, toolSecretResolver)
+	taskController.SetA2AToolRuntime(a2aToolRT)
+
 	taskController.SetContextAdapterStore(stores.ContextAdapters)
 	debugLogger.Printf(
 		"tool runtime config isolation_backend=%s container_runtime=%s container_image=%s container_network=%s container_memory=%s container_cpus=%s container_pids_limit=%d container_user=%s cli_allowed_commands=%d cli_max_argv_length=%d wasm_entrypoint=%s wasm_memory_bytes=%d wasm_fuel=%d wasm_wasi=%t wasm_cache_configured=%t mcp_container_network=%s",
@@ -457,6 +474,7 @@ func main() {
 					TaskApprovals:       stores.TaskApprovals,
 					Policies:            stores.Policies,
 				ContextAdapters:     stores.ContextAdapters,
+				A2AToolRuntime:      a2aToolRT,
 				AgentK8sRuntime:     agentK8sRT,
 				DebugLogger:         debugLogger,
 				},

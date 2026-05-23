@@ -290,6 +290,18 @@ agentExecution:
 
 Agent Jobs use deterministic names based on the task, agent, and attempt number. If the orchestrator pod restarts mid-execution, it detects the existing Job and either reads its result (if complete) or resumes watching (if still running).
 
+## A2A Protocol
+
+To enable A2A protocol support in a Helm deployment, set the `a2a.*` values:
+
+```bash
+helm upgrade orloj ./charts/orloj --namespace orloj --reuse-values \
+  --set a2a.enabled=true \
+  --set a2a.publicBaseURL=https://orloj.example.com
+```
+
+See the [Chart README](../../../charts/orloj/README.md#a2a-protocol) for the full list of `a2a.*` values and their defaults.
+
 ## CRD Sync Operator (Optional)
 
 The Orloj CRD operator makes Orloj resources (Agents, Tools, AgentSystems, etc.) real Kubernetes Custom Resource Definitions. When enabled, you can manage configuration with `kubectl apply` and integrate with GitOps tools like Argo CD and Flux.

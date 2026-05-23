@@ -1,0 +1,216 @@
+components:
+  schemas:
+    AgentCard:
+      type: object
+      required: [name, url]
+      properties:
+        name:
+          type: string
+          description: Human-readable agent name
+        description:
+          type: string
+          description: Agent description
+        url:
+          type: string
+          format: uri
+          description: A2A JSON-RPC endpoint URL
+        version:
+          type: string
+        protocolVersion:
+          type: string
+          description: A2A protocol version
+        capabilities:
+          $ref: '#/components/schemas/CardCapabilities'
+        skills:
+          type: array
+          items:
+            $ref: '#/components/schemas/CardSkill'
+        authentication:
+          type: object
+          properties:
+            schemes:
+              type: array
+              items:
+                type: string
+        provider:
+          type: object
+          properties:
+            organization:
+              type: string
+            url:
+              type: string
+              format: uri
+
+    CardCapabilities:
+      type: object
+      properties:
+        streaming:
+          type: boolean
+        pushNotifications:
+          type: boolean
+        stateTransitionHistory:
+          type: boolean
+
+    CardSkill:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        inputSchema:
+          type: object
+          additionalProperties: true
+        tags:
+          type: array
+          items:
+            type: string
+
+    A2AJsonRpcRequest:
+      type: object
+      required: [jsonrpc, method]
+      properties:
+        jsonrpc:
+          type: string
+          enum: ["2.0"]
+        id:
+          oneOf:
+            - type: string
+            - type: integer
+        method:
+          type: string
+          enum: ["tasks/send", "tasks/get", "tasks/cancel", "tasks/sendSubscribe"]
+        params:
+          type: object
+
+    A2AJsonRpcResponse:
+      type: object
+      required: [jsonrpc]
+      properties:
+        jsonrpc:
+          type: string
+          enum: ["2.0"]
+        id:
+          oneOf:
+            - type: string
+            - type: integer
+        result:
+          type: object
+        error:
+          $ref: '#/components/schemas/A2AJsonRpcError'
+
+    A2AJsonRpcError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+        data: {}
+
+    A2ATask:
+      type: object
+      required: [id, status]
+      properties:
+        id:
+          type: string
+        status:
+          $ref: '#/components/schemas/A2AStatus'
+        artifacts:
+          type: array
+          items:
+            $ref: '#/components/schemas/A2AArtifact'
+        history:
+          type: array
+          items:
+            $ref: '#/components/schemas/A2AMessage'
+        metadata:
+          type: object
+          additionalProperties:
+            type: string
+
+    A2AStatus:
+      type: object
+      required: [state]
+      properties:
+        state:
+          type: string
+          enum: [submitted, working, input-required, completed, failed, canceled, rejected]
+        message:
+          $ref: '#/components/schemas/A2AMessage'
+
+    A2AArtifact:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        parts:
+          type: array
+          items:
+            $ref: '#/components/schemas/A2APart'
+        index:
+          type: integer
+
+    A2AMessage:
+      type: object
+      required: [role, parts]
+      properties:
+        role:
+          type: string
+        parts:
+          type: array
+          items:
+            $ref: '#/components/schemas/A2APart'
+
+    A2APart:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+        text:
+          type: string
+        data: {}
+        metadata:
+          type: object
+
+    RemoteAgentEntry:
+      type: object
+      required: [name, url]
+      properties:
+        name:
+          type: string
+        url:
+          type: string
+          format: uri
+        protocolVersion:
+          type: string
+        cacheStatus:
+          type: string
+        lastRefreshed:
+          type: string
+          format: date-time
+        cacheTTL:
+          type: string
+        error:
+          type: string
+        card:
+          $ref: '#/components/schemas/AgentCard'
+
+    A2ARegistryResponse:
+      type: object
+      properties:
+        localAgents:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentCard'
+        remoteAgents:
+          type: array
+          items:
+            $ref: '#/components/schemas/RemoteAgentEntry'

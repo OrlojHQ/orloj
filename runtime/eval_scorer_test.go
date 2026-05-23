@@ -18,7 +18,7 @@ func TestEvalScorer_ExactMatch(t *testing.T) {
 	scorer := &EvalScorer{}
 
 	t.Run("output_contains match", func(t *testing.T) {
-		result := scorer.Score(nil, resources.EvalScoringConfig{Strategy: "exact_match"},
+		result := scorer.Score(context.Background(), resources.EvalScoringConfig{Strategy: "exact_match"},
 			resources.EvalExpected{OutputContains: "billing"},
 			map[string]string{"prompt": "test"},
 			"This is about billing issues")
@@ -31,7 +31,7 @@ func TestEvalScorer_ExactMatch(t *testing.T) {
 	})
 
 	t.Run("output_contains no match", func(t *testing.T) {
-		result := scorer.Score(nil, resources.EvalScoringConfig{Strategy: "exact_match"},
+		result := scorer.Score(context.Background(), resources.EvalScoringConfig{Strategy: "exact_match"},
 			resources.EvalExpected{OutputContains: "billing"},
 			map[string]string{"prompt": "test"},
 			"This is about shipping issues")
@@ -44,7 +44,7 @@ func TestEvalScorer_ExactMatch(t *testing.T) {
 	})
 
 	t.Run("output_contains case insensitive", func(t *testing.T) {
-		result := scorer.Score(nil, resources.EvalScoringConfig{Strategy: "exact_match"},
+		result := scorer.Score(context.Background(), resources.EvalScoringConfig{Strategy: "exact_match"},
 			resources.EvalExpected{OutputContains: "BILLING"},
 			map[string]string{"prompt": "test"},
 			"This is about billing issues")
@@ -54,7 +54,7 @@ func TestEvalScorer_ExactMatch(t *testing.T) {
 	})
 
 	t.Run("output_not_contains pass", func(t *testing.T) {
-		result := scorer.Score(nil, resources.EvalScoringConfig{Strategy: "exact_match"},
+		result := scorer.Score(context.Background(), resources.EvalScoringConfig{Strategy: "exact_match"},
 			resources.EvalExpected{OutputNotContains: "error"},
 			map[string]string{"prompt": "test"},
 			"Everything went well")
@@ -64,7 +64,7 @@ func TestEvalScorer_ExactMatch(t *testing.T) {
 	})
 
 	t.Run("output_not_contains fail", func(t *testing.T) {
-		result := scorer.Score(nil, resources.EvalScoringConfig{Strategy: "exact_match"},
+		result := scorer.Score(context.Background(), resources.EvalScoringConfig{Strategy: "exact_match"},
 			resources.EvalExpected{OutputNotContains: "error"},
 			map[string]string{"prompt": "test"},
 			"There was an error processing your request")
@@ -74,7 +74,7 @@ func TestEvalScorer_ExactMatch(t *testing.T) {
 	})
 
 	t.Run("output_matches regex match", func(t *testing.T) {
-		result := scorer.Score(nil, resources.EvalScoringConfig{Strategy: "exact_match"},
+		result := scorer.Score(context.Background(), resources.EvalScoringConfig{Strategy: "exact_match"},
 			resources.EvalExpected{OutputMatches: `order\s+#\d+`},
 			map[string]string{"prompt": "test"},
 			"Processing order #12345")
@@ -84,7 +84,7 @@ func TestEvalScorer_ExactMatch(t *testing.T) {
 	})
 
 	t.Run("output_matches regex no match", func(t *testing.T) {
-		result := scorer.Score(nil, resources.EvalScoringConfig{Strategy: "exact_match"},
+		result := scorer.Score(context.Background(), resources.EvalScoringConfig{Strategy: "exact_match"},
 			resources.EvalExpected{OutputMatches: `order\s+#\d+`},
 			map[string]string{"prompt": "test"},
 			"No orders found")
@@ -94,7 +94,7 @@ func TestEvalScorer_ExactMatch(t *testing.T) {
 	})
 
 	t.Run("combined conditions all must match", func(t *testing.T) {
-		result := scorer.Score(nil, resources.EvalScoringConfig{Strategy: "exact_match"},
+		result := scorer.Score(context.Background(), resources.EvalScoringConfig{Strategy: "exact_match"},
 			resources.EvalExpected{
 				OutputContains:    "billing",
 				OutputNotContains: "error",
@@ -105,7 +105,7 @@ func TestEvalScorer_ExactMatch(t *testing.T) {
 			t.Fatalf("expected 1.0 when both conditions met, got %v", result.Score)
 		}
 
-		result2 := scorer.Score(nil, resources.EvalScoringConfig{Strategy: "exact_match"},
+		result2 := scorer.Score(context.Background(), resources.EvalScoringConfig{Strategy: "exact_match"},
 			resources.EvalExpected{
 				OutputContains:    "billing",
 				OutputNotContains: "error",
@@ -119,7 +119,7 @@ func TestEvalScorer_ExactMatch(t *testing.T) {
 
 	t.Run("json_path with equals", func(t *testing.T) {
 		output := `{"category": "billing", "confidence": 0.95}`
-		result := scorer.Score(nil, resources.EvalScoringConfig{Strategy: "exact_match"},
+		result := scorer.Score(context.Background(), resources.EvalScoringConfig{Strategy: "exact_match"},
 			resources.EvalExpected{
 				OutputJSONPath: "$.category",
 				Equals:         "billing",
@@ -133,7 +133,7 @@ func TestEvalScorer_ExactMatch(t *testing.T) {
 
 	t.Run("json_path with not_equals", func(t *testing.T) {
 		output := `{"category": "shipping"}`
-		result := scorer.Score(nil, resources.EvalScoringConfig{Strategy: "exact_match"},
+		result := scorer.Score(context.Background(), resources.EvalScoringConfig{Strategy: "exact_match"},
 			resources.EvalExpected{
 				OutputJSONPath: "$.category",
 				NotEquals:      "billing",
@@ -147,7 +147,7 @@ func TestEvalScorer_ExactMatch(t *testing.T) {
 
 	t.Run("json_path equals fail", func(t *testing.T) {
 		output := `{"category": "shipping"}`
-		result := scorer.Score(nil, resources.EvalScoringConfig{Strategy: "exact_match"},
+		result := scorer.Score(context.Background(), resources.EvalScoringConfig{Strategy: "exact_match"},
 			resources.EvalExpected{
 				OutputJSONPath: "$.category",
 				Equals:         "billing",
@@ -160,7 +160,7 @@ func TestEvalScorer_ExactMatch(t *testing.T) {
 	})
 
 	t.Run("empty expected skips scoring", func(t *testing.T) {
-		result := scorer.Score(nil, resources.EvalScoringConfig{Strategy: "exact_match"},
+		result := scorer.Score(context.Background(), resources.EvalScoringConfig{Strategy: "exact_match"},
 			resources.EvalExpected{},
 			map[string]string{"prompt": "test"},
 			"any output")
@@ -170,7 +170,7 @@ func TestEvalScorer_ExactMatch(t *testing.T) {
 	})
 
 	t.Run("default strategy falls through to exact_match", func(t *testing.T) {
-		result := scorer.Score(nil, resources.EvalScoringConfig{},
+		result := scorer.Score(context.Background(), resources.EvalScoringConfig{},
 			resources.EvalExpected{OutputContains: "hello"},
 			map[string]string{"prompt": "test"},
 			"hello world")
@@ -187,7 +187,7 @@ func TestEvalScorer_ExactMatch(t *testing.T) {
 func TestEvalScorer_Manual(t *testing.T) {
 	t.Parallel()
 	scorer := &EvalScorer{}
-	result := scorer.Score(nil, resources.EvalScoringConfig{Strategy: "manual"},
+	result := scorer.Score(context.Background(), resources.EvalScoringConfig{Strategy: "manual"},
 		resources.EvalExpected{OutputContains: "billing"},
 		map[string]string{"prompt": "test"},
 		"output")
@@ -206,7 +206,7 @@ func TestEvalScorer_Manual(t *testing.T) {
 func TestEvalScorer_Custom(t *testing.T) {
 	t.Parallel()
 	scorer := &EvalScorer{}
-	result := scorer.Score(nil, resources.EvalScoringConfig{Strategy: "custom", ToolRef: "scorer-tool"},
+	result := scorer.Score(context.Background(), resources.EvalScoringConfig{Strategy: "custom", ToolRef: "scorer-tool"},
 		resources.EvalExpected{},
 		map[string]string{"prompt": "test"},
 		"output")
@@ -222,7 +222,7 @@ func TestEvalScorer_Custom(t *testing.T) {
 func TestEvalScorer_UnknownStrategy(t *testing.T) {
 	t.Parallel()
 	scorer := &EvalScorer{}
-	result := scorer.Score(nil, resources.EvalScoringConfig{Strategy: "nonexistent"},
+	result := scorer.Score(context.Background(), resources.EvalScoringConfig{Strategy: "nonexistent"},
 		resources.EvalExpected{},
 		map[string]string{"prompt": "test"},
 		"output")
@@ -238,7 +238,7 @@ func TestEvalScorer_UnknownStrategy(t *testing.T) {
 func TestEvalScorer_LLMJudge_NoGateway(t *testing.T) {
 	t.Parallel()
 	scorer := &EvalScorer{Gateway: nil}
-	result := scorer.Score(nil, resources.EvalScoringConfig{Strategy: "llm_judge", ModelRef: "judge"},
+	result := scorer.Score(context.Background(), resources.EvalScoringConfig{Strategy: "llm_judge", ModelRef: "judge"},
 		resources.EvalExpected{},
 		map[string]string{"prompt": "test"},
 		"output")

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useDetailReturnNav } from "../hooks/useDetailReturnNav";
-import { useAgent, useAgentLogs, useDeleteResource, useUpdateResource } from "../api/hooks";
+import { useAgent, useAgentLogs, useDeleteResource, useUpdateResource, useAgentCard, useCapabilities } from "../api/hooks";
 import { useAppStore } from "../store";
 import { saveNamespacedResourceYaml } from "../hooks/saveDetailYamlWithFreshRv";
 import { toast } from "../components/Toast";
@@ -17,8 +17,9 @@ import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
 import { CrdManagedBadge } from "../components/CrdManagedBadge";
 import { isCrdManaged, CRD_MANAGED_EDIT_WARNING } from "../utils/crd";
 import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
+import { AgentCardPreview } from "../components/AgentCardPreview";
 
-type Tab = "overview" | "yaml" | "logs";
+type Tab = "overview" | "yaml" | "logs" | "agent-card";
 
 export function AgentDetail() {
   const { name: nameParam } = useParams<{ name: string }>();
@@ -32,6 +33,9 @@ export function AgentDetail() {
   const deleteMutation = useDeleteResource("Agent");
   const updateMutation = useUpdateResource("Agent");
   const confirmDelete = useDeleteConfirm();
+  const { data: capSnap } = useCapabilities();
+  const a2aEnabled = capSnap?.capabilities?.some((c) => c.id === "a2a" && c.enabled) ?? false;
+  const { data: agentCard } = useAgentCard(a2aEnabled ? routeName : "");
   const [tab, setTab] = useState<Tab>("overview");
 
   const handleDelete = async () => {
@@ -63,6 +67,7 @@ export function AgentDetail() {
     { id: "overview", label: "Overview" },
     { id: "yaml", label: "YAML" },
     { id: "logs", label: "Logs" },
+    ...(a2aEnabled ? [{ id: "agent-card" as const, label: "Agent Card" }] : []),
   ];
 
   return (
@@ -162,6 +167,10 @@ export function AgentDetail() {
           />
         )}
         {tab === "logs" && <LogViewer logs={logs.data ?? ""} loading={logs.isLoading} />}
+        {tab === "agent-card" && agentCard && <AgentCardPreview card={agentCard} />}
+        {tab === "agent-card" && !agentCard && (
+          <p className="text-muted">No agent card available</p>
+        )}
       </div>
     </div>
   );

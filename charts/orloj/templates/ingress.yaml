@@ -28,6 +28,15 @@ spec:
     - host: {{ .host | quote }}
       http:
         paths:
+          {{- if $.Values.a2a.enabled }}
+          - path: /.well-known
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "orloj.fullname" $ }}-server
+                port:
+                  name: http
+          {{- end }}
           {{- range .paths }}
           - path: {{ .path }}
             pathType: {{ .pathType }}

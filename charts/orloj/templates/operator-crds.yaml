@@ -1021,6 +1021,16 @@ spec:
             type: object
           spec:
             properties:
+              a2a:
+                description: ToolA2ASpec configures per-tool A2A remote agent invocation.
+                properties:
+                  agent_url:
+                    type: string
+                  prefer_streaming:
+                    type: boolean
+                  protocol_version:
+                    type: string
+                type: object
               auth:
                 properties:
                   headerName:

@@ -1,7 +1,7 @@
 import { useMemo, useEffect, useSyncExternalStore } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useAppStore } from "../store";
-import { useToolApprovals, useTaskApprovals } from "../api/hooks";
+import { useToolApprovals, useTaskApprovals, useCapabilities } from "../api/hooks";
 import clsx from "clsx";
 
 const mqMobile = typeof window !== "undefined" ? window.matchMedia("(max-width: 768px)") : null;
@@ -35,6 +35,7 @@ import {
   UserCog,
   ClipboardList,
   FlaskConical,
+  Radio,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import orlojMark from "/orloj-mark.png?url";
@@ -66,6 +67,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/approvals", icon: <ShieldCheck size={18} />, label: "Approvals", group: "Governance" },
   { to: "/eval-datasets", icon: <ClipboardList size={18} />, label: "Eval Datasets", group: "Evaluation" },
   { to: "/eval-runs", icon: <FlaskConical size={18} />, label: "Eval Runs", group: "Evaluation" },
+  { to: "/a2a", icon: <Radio size={18} />, label: "A2A Registry", group: "Integrations" },
   { to: "/capabilities", icon: <Sparkles size={18} />, label: "Capabilities", group: "System" },
 ];
 
@@ -81,6 +83,8 @@ export function Sidebar({ nativeAuthEnabled = false, username }: SidebarProps) {
   const setSidebarOpen = useAppStore((s) => s.setSidebarOpen);
   const approvals = useToolApprovals();
   const taskApprovals = useTaskApprovals();
+  const { data: capabilities } = useCapabilities();
+  const a2aEnabled = capabilities?.capabilities?.some((c) => c.id === "a2a" && c.enabled) ?? false;
   const location = useLocation();
   const isMobile = useIsMobile();
   const collapsed = isMobile ? false : storeCollapsed;
@@ -102,6 +106,11 @@ export function Sidebar({ nativeAuthEnabled = false, username }: SidebarProps) {
     return toolPending + taskPending;
   }, [approvals.data, taskApprovals.data]);
 
+  const visibleNavItems = useMemo(
+    () => NAV_ITEMS.filter((item) => item.to !== "/a2a" || a2aEnabled),
+    [a2aEnabled],
+  );
+
   let lastGroup: string | undefined;
 
   return (
@@ -116,7 +125,7 @@ export function Sidebar({ nativeAuthEnabled = false, username }: SidebarProps) {
         </div>
 
         <nav className="sidebar__nav">
-          {NAV_ITEMS.map((item) => {
+          {visibleNavItems.map((item) => {
             const showGroup = !collapsed && item.group && item.group !== lastGroup;
             lastGroup = item.group;
             const badge = item.to === "/approvals" && pendingCount > 0 ? pendingCount : 0;

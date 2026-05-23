@@ -428,6 +428,22 @@ export function useCapabilities() {
   });
 }
 
+export function useA2AAgents() {
+  return useQuery<import("./types").A2ARegistryResponse>({
+    queryKey: ["a2a-agents"],
+    queryFn: client.getA2AAgents,
+    refetchInterval: 30000,
+  });
+}
+
+export function useAgentCard(name: string) {
+  return useQuery<import("./types").AgentCard>({
+    queryKey: ["agent-card", name],
+    queryFn: () => client.getAgentCard(name),
+    enabled: !!name,
+  });
+}
+
 export function useCreateResource(kind: string) {
   const qc = useQueryClient();
   const ns = useNamespace();

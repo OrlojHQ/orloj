@@ -58,6 +58,7 @@ var skipPaths = map[string]map[string]bool{
 		"Spec.Endpoint":     true, // not used for CLI type
 		"Spec.Auth":         true, // not valid for CLI type
 		"Spec.Wasm":         true, // not used for CLI type
+		"Spec.A2A":          true, // not used for CLI type
 		"Status":            true,
 	},
 	"Tool/HTTP": {
@@ -66,6 +67,7 @@ var skipPaths = map[string]map[string]bool{
 		"Spec.InputSchema":  true,
 		"Spec.Cli":          true, // not used for HTTP type
 		"Spec.Wasm":         true, // not used for HTTP type
+		"Spec.A2A":          true, // not used for HTTP type
 		"Status":            true,
 	},
 	"Tool/WASM": {
@@ -75,6 +77,16 @@ var skipPaths = map[string]map[string]bool{
 		"Spec.Endpoint":     true, // not used for WASM type
 		"Spec.Cli":          true, // not used for WASM type
 		"Spec.Auth":         true, // not used for WASM type
+		"Spec.A2A":          true, // not used for WASM type
+		"Status":            true,
+	},
+	"Tool/A2A": {
+		"Spec.McpServerRef": true,
+		"Spec.McpToolName":  true,
+		"Spec.InputSchema":  true,
+		"Spec.Endpoint":     true, // not used for A2A type
+		"Spec.Cli":          true, // not used for A2A type
+		"Spec.Wasm":         true, // not used for A2A type
 		"Status":            true,
 	},
 	"TaskApproval": {
@@ -366,6 +378,42 @@ spec:
     fuel: 1000000
     enable_wasi: true
     image_pull_secret: oci-creds
+`)
+
+// Tool A2A fixture — exercises a2a-specific fields.
+var toolA2AMaximalYAML = []byte(`apiVersion: orloj.dev/v1
+kind: Tool
+metadata:
+  name: completeness-tool-a2a
+  namespace: test-ns
+  labels:
+    env: test
+spec:
+  type: a2a
+  description: An A2A test tool
+  risk_level: medium
+  capabilities:
+    - a2a.invoke
+  operation_classes:
+    - read
+  auth:
+    profile: bearer
+    secretRef: my-secret
+    headerName: Authorization
+    tokenURL: https://auth.example.com/token
+    scopes:
+      - read
+  runtime:
+    timeout: 30s
+    retry:
+      max_attempts: 3
+      backoff: 1s
+      max_backoff: 30s
+      jitter: full
+  a2a:
+    agent_url: https://remote.example.com/a2a
+    protocol_version: "1.0"
+    prefer_streaming: true
 `)
 
 var modelEndpointMaximalYAML = []byte(`apiVersion: orloj.dev/v1
@@ -665,6 +713,7 @@ func TestYAMLParserFieldCompleteness(t *testing.T) {
 		{"Tool/CLI", toolCLIMaximalYAML, func(b []byte) (any, error) { return ParseToolManifest(b) }},
 		{"Tool/HTTP", toolHTTPMaximalYAML, func(b []byte) (any, error) { return ParseToolManifest(b) }},
 		{"Tool/WASM", toolWASMMaximalYAML, func(b []byte) (any, error) { return ParseToolManifest(b) }},
+		{"Tool/A2A", toolA2AMaximalYAML, func(b []byte) (any, error) { return ParseToolManifest(b) }},
 		{"ModelEndpoint", modelEndpointMaximalYAML, func(b []byte) (any, error) { return ParseModelEndpointManifest(b) }},
 		{"McpServer", mcpServerMaximalYAML, func(b []byte) (any, error) { return ParseMcpServerManifest(b) }},
 		{"AgentPolicy", agentPolicyMaximalYAML, func(b []byte) (any, error) { return ParseAgentPolicyManifest(b) }},
@@ -704,6 +753,7 @@ func TestYAMLJSONParity(t *testing.T) {
 		{"Tool/CLI", toolCLIMaximalYAML, func(b []byte) (any, error) { return ParseToolManifest(b) }},
 		{"Tool/HTTP", toolHTTPMaximalYAML, func(b []byte) (any, error) { return ParseToolManifest(b) }},
 		{"Tool/WASM", toolWASMMaximalYAML, func(b []byte) (any, error) { return ParseToolManifest(b) }},
+		{"Tool/A2A", toolA2AMaximalYAML, func(b []byte) (any, error) { return ParseToolManifest(b) }},
 		{"ModelEndpoint", modelEndpointMaximalYAML, func(b []byte) (any, error) { return ParseModelEndpointManifest(b) }},
 		{"McpServer", mcpServerMaximalYAML, func(b []byte) (any, error) { return ParseMcpServerManifest(b) }},
 		{"AgentPolicy", agentPolicyMaximalYAML, func(b []byte) (any, error) { return ParseAgentPolicyManifest(b) }},

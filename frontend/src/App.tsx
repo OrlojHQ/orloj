@@ -52,6 +52,7 @@ import { EvalDatasets } from "./pages/EvalDatasets";
 import { EvalDatasetDetail } from "./pages/EvalDatasetDetail";
 import { EvalRuns } from "./pages/EvalRuns";
 import { EvalRunDetail } from "./pages/EvalRunDetail";
+import { A2ARegistry } from "./pages/A2ARegistry";
 import { Capabilities } from "./pages/Capabilities";
 import { NotFound } from "./pages/NotFound";
 import { Login } from "./pages/Login";
@@ -173,6 +174,7 @@ function AppLayout({
               <Route path="/eval-datasets/:name" element={<EvalDatasetDetail />} />
               <Route path="/eval-runs" element={<EvalRuns />} />
               <Route path="/eval-runs/:name" element={<EvalRunDetail />} />
+              <Route path="/a2a" element={<A2ARegistry />} />
               <Route path="/capabilities" element={<Capabilities />} />
               <Route path="/memories" element={<Memories />} />
               <Route path="/memories/:name" element={<MemoryDetail />} />

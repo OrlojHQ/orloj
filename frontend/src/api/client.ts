@@ -385,6 +385,22 @@ export async function logoutLocalAuth(): Promise<void> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// A2A Protocol
+// ---------------------------------------------------------------------------
+
+export async function getA2AAgents(): Promise<import("./types").A2ARegistryResponse> {
+  const { apiBase } = getConnection();
+  const base = apiBase.replace(/\/$/, "");
+  return request<import("./types").A2ARegistryResponse>(`${base}/v1/a2a/agents`);
+}
+
+export async function getAgentCard(name: string): Promise<import("./types").AgentCard> {
+  const { apiBase } = getConnection();
+  const base = apiBase.replace(/\/$/, "");
+  return request<import("./types").AgentCard>(`${base}/v1/agents/${encodeURIComponent(name)}/.well-known/agent-card.json`);
+}
+
 export async function changeLocalAuthPassword(
   currentPassword: string,
   newPassword: string,

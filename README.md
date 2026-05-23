@@ -41,7 +41,7 @@ Orloj is not a single runtime component. It spans the layers teams need to devel
 | **Agent Definitions**            | `Agent`, `AgentSystem`, prompts, graph topology, roles, execution contracts, and runtime bounds.                         |
 | **Execution Runtime**            | Sequential and message-driven execution, workers, leases, heartbeats, retries, idempotency keys, and dead-letter states. |
 | **Model & Context Layer**        | `ModelEndpoint`, `ContextAdapter`, provider routing, fallback models, secrets, token budgets, and `Memory`.              |
-| **Tool & Integration Layer**     | HTTP, gRPC, external services, webhook callbacks, `McpServer` discovery, CLI, WASM, auth, isolation, timeouts, and retries. |
+| **Tool & Integration Layer**     | HTTP, gRPC, external services, webhook callbacks, `McpServer` discovery, CLI, WASM, A2A interop, auth, isolation, timeouts, and retries. |
 | **Governance & Human Review**    | `AgentPolicy`, `AgentRole`, `ToolPermission`, `ToolApproval`, and `TaskApproval`.                                        |
 | **Observability & Operations**   | Traces, logs, messages, task history, watch streams, events, Prometheus metrics, OpenTelemetry spans, and UI views.      |
 | **State & Deployment Substrate** | In-memory and Postgres state, NATS JetStream messaging, Docker Compose, VPS deployments, Kubernetes paths, and CRD GitOps. |
@@ -85,7 +85,7 @@ Orloj is not a single runtime component. It spans the layers teams need to devel
 | **Tasks**      | `Task` resources execute an AgentSystem and track phase, output, attempts, leases, messages, joins, delegation, trace, history, and blockers.  |
 | **Models**     | `ModelEndpoint` resources route calls to OpenAI, Anthropic, AWS Bedrock, Azure OpenAI, Ollama, mock, and OpenAI-compatible providers.          |
 | **Context**    | `ContextAdapter` resources sanitize or transform raw task input before an AgentSystem starts.                                                 |
-| **Tools**      | `Tool` resources support HTTP, external services, gRPC, webhook callbacks, MCP, CLI, and WASM with runtime policy and auth.                    |
+| **Tools**      | `Tool` resources support HTTP, external services, gRPC, webhook callbacks, MCP, CLI, WASM, and A2A with runtime policy and auth.               |
 | **Integrations** | `McpServer` resources connect external MCP servers and materialize discovered tools.                                                        |
 | **Memory**     | `Memory` resources back task-scoped and persistent memory through in-memory, pgvector, or HTTP providers.                                      |
 | **Secrets**    | `Secret` resources hold runtime credentials, while `SealedSecret` resources support git-safe encrypted secret manifests.                      |
@@ -330,6 +330,7 @@ orlojworker \
 | [Starter blueprints](https://docs.orloj.dev/guides/starter-blueprints)  | Pipeline, hierarchical, and swarm-loop topologies.                             |
 | [Governance guide](https://docs.orloj.dev/guides/setup-governance)      | Policies, roles, tool permissions, and runtime enforcement.                    |
 | [MCP servers](https://docs.orloj.dev/guides/connect-mcp-server)         | Connect MCP servers and auto-discover tools.                                   |
+| [A2A interoperability](https://docs.orloj.dev/concepts/a2a-interoperability) | Expose agents as A2A endpoints and call remote A2A agents as tools.       |
 | [Agent evaluation](https://docs.orloj.dev/guides/run-agent-evaluation)  | Run datasets, score outputs, and compare agent system changes.                 |
 | [Kubernetes CRD operator](https://docs.orloj.dev/deploy/kubernetes-operator) | Manage Orloj resources with Kubernetes CRDs and GitOps workflows.          |
 | [Deploy and operate](https://docs.orloj.dev/deploy/)                    | Local, VPS, Kubernetes, remote CLI access, and production configuration.       |

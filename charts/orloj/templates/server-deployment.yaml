@@ -179,6 +179,31 @@ spec:
             - name: ORLOJ_CLI_TOOL_ALLOWED_COMMANDS
               value: {{ .Values.cliToolAllowedCommands | quote }}
             {{- end }}
+            # --- A2A Protocol ---
+            {{- if .Values.a2a.enabled }}
+            - name: ORLOJ_A2A_ENABLED
+              value: "true"
+            - name: ORLOJ_A2A_PUBLIC_BASE_URL
+              value: {{ .Values.a2a.publicBaseURL | quote }}
+            {{- if .Values.a2a.protocolVersion }}
+            - name: ORLOJ_A2A_PROTOCOL_VERSION
+              value: {{ .Values.a2a.protocolVersion | quote }}
+            {{- end }}
+            - name: ORLOJ_A2A_CARD_CACHE_TTL
+              value: {{ .Values.a2a.cardCacheTTL | quote }}
+            - name: ORLOJ_A2A_ALLOW_PRIVATE_ENDPOINTS
+              value: {{ .Values.a2a.allowPrivateEndpoints | quote }}
+            {{- if .Values.a2a.remoteAgents }}
+            - name: ORLOJ_A2A_REMOTE_AGENTS
+              value: {{ .Values.a2a.remoteAgents | toJson | quote }}
+            {{- end }}
+            - name: ORLOJ_A2A_RATE_LIMIT_ENABLED
+              value: {{ .Values.a2a.rateLimit.enabled | quote }}
+            - name: ORLOJ_A2A_RATE_LIMIT_RPM
+              value: {{ .Values.a2a.rateLimit.requestsPerMinute | quote }}
+            - name: ORLOJ_A2A_RATE_LIMIT_MAX_SUBSCRIBE
+              value: {{ .Values.a2a.rateLimit.maxConcurrentSubscriptions | quote }}
+            {{- end }}
             # --- CRD conflict policy ---
             - name: ORLOJ_CRD_CONFLICT_POLICY
               value: {{ .Values.crdConflictPolicy | default "warn" | quote }}

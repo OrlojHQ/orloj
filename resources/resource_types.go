@@ -383,6 +383,7 @@ type ToolSpec struct {
 	McpToolName      string            `json:"mcp_tool_name,omitempty" yaml:"mcp_tool_name,omitempty"`
 	Cli              ToolCliSpec       `json:"cli,omitempty" yaml:"cli,omitempty"`
 	Wasm             ToolWasmSpec      `json:"wasm,omitempty" yaml:"wasm,omitempty"`
+	A2A              ToolA2ASpec       `json:"a2a,omitempty" yaml:"a2a,omitempty"`
 	Capabilities     []string          `json:"capabilities,omitempty" yaml:"capabilities,omitempty"`
 	OperationClasses []string          `json:"operation_classes,omitempty" yaml:"operation_classes,omitempty"`
 	RiskLevel        string            `json:"risk_level,omitempty" yaml:"risk_level,omitempty"`
@@ -399,6 +400,13 @@ type ToolWasmSpec struct {
 	Fuel            uint64 `json:"fuel,omitempty" yaml:"fuel,omitempty"`
 	EnableWASI      bool   `json:"enable_wasi" yaml:"enable_wasi"`
 	ImagePullSecret string `json:"image_pull_secret,omitempty" yaml:"image_pull_secret,omitempty"`
+}
+
+// ToolA2ASpec configures per-tool A2A remote agent invocation.
+type ToolA2ASpec struct {
+	AgentURL        string `json:"agent_url,omitempty" yaml:"agent_url,omitempty"`
+	ProtocolVersion string `json:"protocol_version,omitempty" yaml:"protocol_version,omitempty"`
+	PreferStreaming  bool   `json:"prefer_streaming,omitempty" yaml:"prefer_streaming,omitempty"`
 }
 
 // ContainerResources defines per-tool or per-McpServer container resource
@@ -509,10 +517,10 @@ func (t *Tool) Normalize() error {
 		toolType = "http"
 	}
 	switch toolType {
-	case "http", "external", "grpc", "webhook-callback", "mcp", "wasm", "cli":
+	case "http", "external", "grpc", "webhook-callback", "mcp", "wasm", "cli", "a2a":
 		t.Spec.Type = toolType
 	default:
-		return fmt.Errorf("invalid spec.type %q: expected http, external, grpc, webhook-callback, mcp, wasm, or cli", t.Spec.Type)
+		return fmt.Errorf("invalid spec.type %q: expected http, external, grpc, webhook-callback, mcp, wasm, cli, or a2a", t.Spec.Type)
 	}
 	t.Spec.McpServerRef = strings.TrimSpace(t.Spec.McpServerRef)
 	t.Spec.McpToolName = strings.TrimSpace(t.Spec.McpToolName)
@@ -576,6 +584,13 @@ func (t *Tool) Normalize() error {
 		if t.Spec.Wasm.Fuel == 0 {
 			t.Spec.Wasm.Fuel = 1_000_000
 		}
+	}
+	if toolType == "a2a" {
+		t.Spec.A2A.AgentURL = strings.TrimSpace(t.Spec.A2A.AgentURL)
+		if t.Spec.A2A.AgentURL == "" {
+			return fmt.Errorf("spec.a2a.agent_url is required when spec.type is a2a")
+		}
+		t.Spec.A2A.ProtocolVersion = strings.TrimSpace(t.Spec.A2A.ProtocolVersion)
 	}
 	normalizedCaps := make([]string, 0, len(t.Spec.Capabilities))
 	seenCaps := make(map[string]struct{}, len(t.Spec.Capabilities))

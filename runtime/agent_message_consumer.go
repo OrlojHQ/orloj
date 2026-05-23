@@ -81,6 +81,7 @@ type AgentMessageConsumerOptions struct {
 	Policies            AgentPolicyLookup
 	ContextAdapters     ContextAdapterGetter
 	KubernetesToolRT    ToolRuntime
+	A2AToolRuntime      ToolRuntime
 	AgentK8sRuntime     *KubernetesAgentRuntime
 	OnStepEvent         func(taskName, namespace string, evt AgentStepEvent)
 	DebugLogger         *log.Logger
@@ -130,6 +131,7 @@ type AgentMessageConsumerManager struct {
 	policies        AgentPolicyLookup
 	contextAdapters ContextAdapterGetter
 	kubernetesTools ToolRuntime
+	a2aTools        ToolRuntime
 	agentK8sRuntime *KubernetesAgentRuntime
 	onStepEvent     func(taskName, namespace string, evt AgentStepEvent)
 	mu              sync.Mutex
@@ -198,6 +200,7 @@ func NewAgentMessageConsumerManager(
 		policies:        opts.Policies,
 		contextAdapters: opts.ContextAdapters,
 		kubernetesTools: opts.KubernetesToolRT,
+		a2aTools:        opts.A2AToolRuntime,
 		agentK8sRuntime: opts.AgentK8sRuntime,
 		onStepEvent:     opts.OnStepEvent,
 		extensions:      NormalizeExtensions(opts.Extensions),
@@ -594,6 +597,9 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 	ConfigureGRPCRuntime(toolRT, m.secretResolver, ns)
 	ConfigureWebhookCallbackRuntime(toolRT, m.secretResolver, ns)
 	ConfigureWasmRuntime(toolRT, m.wasmRT, ns)
+	if m.a2aTools != nil {
+		ConfigureA2ARuntime(toolRT, m.a2aTools, ns)
+	}
 	if m.kubernetesTools != nil {
 		ConfigureKubernetesRuntime(toolRT, m.kubernetesTools, ns)
 	}

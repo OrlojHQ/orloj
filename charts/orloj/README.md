@@ -83,6 +83,22 @@ helm upgrade orloj ./charts/orloj \
   --set worker.logLevel=debug
 ```
 
+## A2A Protocol
+
+| Value | Default | Description |
+|---|---|---|
+| `a2a.enabled` | `false` | Enable A2A protocol endpoints and tool type |
+| `a2a.publicBaseURL` | `""` | Public URL for Agent Card `url` fields |
+| `a2a.protocolVersion` | `""` | A2A protocol version to advertise |
+| `a2a.cardCacheTTL` | `"5m"` | TTL for cached remote Agent Cards |
+| `a2a.allowPrivateEndpoints` | `false` | Allow outbound requests to private IPs |
+| `a2a.remoteAgents` | `[]` | Static list of remote A2A agents |
+| `a2a.rateLimit.enabled` | `true` | Enable rate limiting for A2A endpoints |
+| `a2a.rateLimit.requestsPerMinute` | `30` | Max requests per minute per IP |
+| `a2a.rateLimit.maxConcurrentSubscriptions` | `10` | Max concurrent SSE connections |
+
+See [`values.yaml`](values.yaml) for the full A2A configuration reference.
+
 ## Production checklist
 
 - Set `auth.mode=native` and provide `auth.setupToken`
