@@ -41,7 +41,19 @@ type AgentSystemSpec struct {
 	Graph            map[string]GraphEdge  `json:"graph,omitempty" yaml:"graph,omitempty"`
 	CompletionReview *ReviewCheckpointSpec `json:"completion_review,omitempty" yaml:"completion_review,omitempty"`
 	ContextAdapter   string                `json:"context_adapter,omitempty" yaml:"context_adapter,omitempty"`
+	A2A              AgentSystemA2ASpec    `json:"a2a,omitempty" yaml:"a2a,omitempty"`
 }
+
+type AgentSystemA2ASpec struct {
+	Enabled bool   `json:"enabled,omitempty" yaml:"enabled,omitempty"`
+	Auth    string `json:"auth,omitempty" yaml:"auth,omitempty"`
+}
+
+// A2AAuthPublic means unauthenticated callers may invoke this system.
+const A2AAuthPublic = "public"
+
+// A2AAuthBearer means a valid bearer token is required (default).
+const A2AAuthBearer = "bearer"
 
 type GraphEdge struct {
 	// Legacy single-hop edge. Preserved for backward compatibility.
@@ -272,6 +284,15 @@ func (a *AgentSystem) Normalize() error {
 		}
 	}
 
+	switch strings.ToLower(strings.TrimSpace(a.Spec.A2A.Auth)) {
+	case "", A2AAuthBearer:
+		a.Spec.A2A.Auth = ""
+	case A2AAuthPublic:
+		a.Spec.A2A.Auth = A2AAuthPublic
+	default:
+		return fmt.Errorf("unsupported spec.a2a.auth value %q (expected %q or %q)", a.Spec.A2A.Auth, A2AAuthPublic, A2AAuthBearer)
+	}
+
 	if a.Spec.ContextAdapter != "" {
 		a.Spec.ContextAdapter = strings.TrimSpace(a.Spec.ContextAdapter)
 	}
@@ -373,9 +394,9 @@ type Tool struct {
 }
 
 type ToolSpec struct {
-	Type             string            `json:"type,omitempty" yaml:"type,omitempty"`
-	Endpoint         string            `json:"endpoint,omitempty" yaml:"endpoint,omitempty"`
-	Description      string            `json:"description,omitempty" yaml:"description,omitempty"`
+	Type        string `json:"type,omitempty" yaml:"type,omitempty"`
+	Endpoint    string `json:"endpoint,omitempty" yaml:"endpoint,omitempty"`
+	Description string `json:"description,omitempty" yaml:"description,omitempty"`
 	// +kubebuilder:validation:Schemaless
 	// +kubebuilder:pruning:PreserveUnknownFields
 	InputSchema      map[string]any    `json:"input_schema,omitempty" yaml:"input_schema,omitempty"`
@@ -406,7 +427,7 @@ type ToolWasmSpec struct {
 type ToolA2ASpec struct {
 	AgentURL        string `json:"agent_url,omitempty" yaml:"agent_url,omitempty"`
 	ProtocolVersion string `json:"protocol_version,omitempty" yaml:"protocol_version,omitempty"`
-	PreferStreaming  bool   `json:"prefer_streaming,omitempty" yaml:"prefer_streaming,omitempty"`
+	PreferStreaming bool   `json:"prefer_streaming,omitempty" yaml:"prefer_streaming,omitempty"`
 }
 
 // ContainerResources defines per-tool or per-McpServer container resource

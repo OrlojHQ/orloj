@@ -54,7 +54,7 @@ For **multiple** distinct tokens with different roles (reader vs admin-style acc
 export ORLOJ_API_TOKENS='reader-bot:reader-token-here:reader,automation-bot:automation-token-here:admin'
 ```
 
-Format is comma-separated `name:token:role` entries. Legacy `token:role` entries are still accepted for backward compatibility. When `ORLOJ_API_TOKENS` is set, it populates the token map and a single `ORLOJ_API_TOKEN` is only used if that list is empty (see `loadAuthConfig` in `api/authz.go`).
+Format is comma-separated `name:token:role` entries. Legacy `token:role` entries are still accepted for backward compatibility. A2A invoke-only tokens use `name:token:a2a:namespace/system|other-system` and can invoke only those A2A-enabled AgentSystems. When `ORLOJ_API_TOKENS` is set, it populates the token map and a single `ORLOJ_API_TOKEN` is only used if that list is empty (see `loadAuthConfig` in `api/authz.go`).
 
 For runtime-managed tokens (no server restart required), use:
 
@@ -63,6 +63,8 @@ orlojctl create token <name> --role <role>
 orlojctl get tokens
 orlojctl delete token <name>
 ```
+
+When creating an `a2a` role token through the API, include `a2a_agent_systems` with the allowed AgentSystem refs. Native-auth browser sessions are not accepted for A2A JSON-RPC; external A2A callers must use bearer tokens.
 
 ### 3. Configure clients (`orlojctl` and automation)
 
@@ -129,7 +131,14 @@ Outbound A2A requests (fetching remote Agent Cards and sending JSON-RPC calls) u
 
 ### Auth Enforcement
 
-Inbound A2A JSON-RPC requests are subject to the same authentication and authorization checks as other API endpoints. When `--auth-mode=native` is enabled, A2A callers must provide a valid bearer token.
+Inbound A2A JSON-RPC requests are subject to authentication based on the target AgentSystem's `spec.a2a.auth` policy:
+
+- **`bearer`** (default): requires a valid bearer token with `a2a`, `writer`, or `admin` role. Scoped `a2a` tokens can only invoke systems listed in their `a2a_agent_systems`. This is the same enforcement as other protected API endpoints.
+- **`public`**: allows unauthenticated A2A invoke for that specific system, even when instance-wide auth is configured. Control-plane APIs (`/v1/agents`, `/v1/tools`, etc.) remain protected. Invalid tokens are still rejected (401) — only missing tokens are permitted.
+
+This enables a common production pattern: admin secret for `orlojctl` / control-plane APIs, plus public unauthenticated A2A invoke for selected systems, all on the same `orlojd` instance.
+
+Agent Card discovery (GET) is always public regardless of `spec.a2a.auth`. Public systems' Agent Cards omit `authentication.schemes` so A2A clients know not to send tokens. The A2A registry (`GET /v1/a2a/agents`) shows only public systems to unauthenticated callers and all accessible systems to authenticated callers.
 
 ### Private Endpoint Risks
 

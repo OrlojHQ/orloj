@@ -2,7 +2,7 @@
 
 > **Stability: beta** -- Agent Cards are generated resources that follow the [A2A specification](https://github.com/a2aproject/A2A). The schema may evolve as the A2A spec matures.
 
-An Agent Card is a JSON document that describes an Orloj agent's A2A identity, capabilities, skills, and endpoint. Cards are auto-generated from agent metadata and served at well-known discovery URLs.
+An Agent Card is a JSON document that describes an Orloj AgentSystem's A2A identity, capabilities, skills, and endpoint. Cards are auto-generated from AgentSystem metadata and its agents' tools.
 
 Agent Cards are not stored resources -- they are computed on request from the agent's current state.
 
@@ -10,8 +10,8 @@ Agent Cards are not stored resources -- they are computed on request from the ag
 
 | URL | Description |
 |-----|-------------|
-| `GET /.well-known/agent-card.json` | Default agent card |
-| `GET /v1/agents/{name}/.well-known/agent-card.json` | Card for a specific agent |
+| `GET /.well-known/agent-card.json` | Root card when exactly one AgentSystem is A2A-enabled |
+| `GET /v1/agent-systems/{name}/.well-known/agent-card.json` | Card for a specific AgentSystem |
 
 Both endpoints are public (no authentication required). Cards contain only metadata, not secrets.
 
@@ -21,7 +21,7 @@ Both endpoints are public (no authentication required). Cards contain only metad
 |-------|------|----------|-------------|
 | `name` | string | Yes | Human-readable agent name. Derived from `metadata.name`. |
 | `description` | string | No | Agent description. From `metadata.annotations["orloj.dev/description"]` or a prompt summary. |
-| `url` | string (URI) | Yes | A2A JSON-RPC endpoint URL. Constructed from `a2a.publicBaseURL` + agent path. |
+| `url` | string (URI) | Yes | A2A JSON-RPC endpoint URL. Constructed from `a2a.publicBaseURL` + AgentSystem path. |
 | `version` | string | No | Agent version. From `metadata.labels["orloj.dev/version"]` if present. |
 | `protocolVersion` | string | No | A2A protocol version. From `a2a.protocolVersion` config. |
 | `capabilities` | object | No | See [Capabilities](#capabilities). |
@@ -70,7 +70,7 @@ How Orloj resources map to Agent Card fields:
 |------------|--------|
 | `name` | `Agent.metadata.name` |
 | `description` | `Agent.metadata.annotations["orloj.dev/description"]`, or prompt excerpt |
-| `url` | `a2a.publicBaseURL` + `/v1/agents/{name}/a2a` |
+| `url` | `a2a.publicBaseURL` + `/v1/agent-systems/{name}/a2a` |
 | `protocolVersion` | `a2a.protocolVersion` server config |
 | `capabilities.streaming` | Server SSE support enabled |
 | `capabilities.pushNotifications` | TaskWebhook controller active |
@@ -81,29 +81,29 @@ How Orloj resources map to Agent Card fields:
 
 ## Example Card
 
-For an agent defined as:
+For an AgentSystem defined as:
 
 ```yaml
 apiVersion: orloj.dev/v1
-kind: Agent
+kind: AgentSystem
 metadata:
-  name: research-agent
+  name: research-system
   annotations:
     orloj.dev/description: "AI research assistant for academic papers"
 spec:
-  model_ref: openai-default
-  tools:
-    - web_search
-    - arxiv_search
+  agents:
+    - research-agent
+  a2a:
+    enabled: true
 ```
 
-The generated card (at `GET /v1/agents/research-agent/.well-known/agent-card.json`):
+The generated card (at `GET /v1/agent-systems/research-system/.well-known/agent-card.json`):
 
 ```json
 {
-  "name": "research-agent",
+  "name": "research-system",
   "description": "AI research assistant for academic papers",
-  "url": "https://orloj.example.com/v1/agents/research-agent/a2a",
+  "url": "https://orloj.example.com/v1/agent-systems/research-system/a2a",
   "protocolVersion": "0.2",
   "capabilities": {
     "streaming": true,

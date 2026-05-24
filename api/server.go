@@ -9,9 +9,9 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"sync/atomic"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -27,13 +27,13 @@ import (
 
 // Stores groups typed state stores used by the API server.
 type Stores struct {
-	Agents        *store.AgentStore
-	AgentSystems  *store.AgentSystemStore
-	ModelEPs      *store.ModelEndpointStore
-	Tools         *store.ToolStore
-	Secrets       *store.SecretStore
-	SealedSecrets *store.SealedSecretStore
-	SealingKeys   *store.SealingKeyStore
+	Agents          *store.AgentStore
+	AgentSystems    *store.AgentSystemStore
+	ModelEPs        *store.ModelEndpointStore
+	Tools           *store.ToolStore
+	Secrets         *store.SecretStore
+	SealedSecrets   *store.SealedSecretStore
+	SealingKeys     *store.SealingKeyStore
 	Memories        *store.MemoryStore
 	ContextAdapters *store.ContextAdapterStore
 	Policies        *store.AgentPolicyStore
@@ -44,51 +44,51 @@ type Stores struct {
 	Tasks           *store.TaskStore
 	TaskSchedules   *store.TaskScheduleStore
 	TaskWebhooks    *store.TaskWebhookStore
-	WebhookDedupe *store.WebhookDedupeStore
-	Workers       *store.WorkerStore
-	McpServers    *store.McpServerStore
-	EvalDatasets  *store.EvalDatasetStore
-	EvalRuns      *store.EvalRunStore
-	LocalAdmins   *store.LocalAdminStore
-	APITokens     *store.APITokenStore
-	AuthSessions  *store.AuthSessionStore
+	WebhookDedupe   *store.WebhookDedupeStore
+	Workers         *store.WorkerStore
+	McpServers      *store.McpServerStore
+	EvalDatasets    *store.EvalDatasetStore
+	EvalRuns        *store.EvalRunStore
+	LocalAdmins     *store.LocalAdminStore
+	APITokens       *store.APITokenStore
+	AuthSessions    *store.AuthSessionStore
 }
 
 // ServerOptions configures optional extension points.
 type ServerOptions struct {
-	Authorizer         RequestAuthorizer
-	ResourceAuthorizer ResourceAuthorizer // optional authorization hook
-	Extensions         agentruntime.Extensions
-	AuthMode           AuthMode
-	SessionTTL         time.Duration
-	UIBasePath         string // URL path prefix for the web console (default "/")
-	TrustedProxies     string // comma-separated CIDRs whose forwarding headers are trusted
+	Authorizer               RequestAuthorizer
+	ResourceAuthorizer       ResourceAuthorizer // optional authorization hook
+	Extensions               agentruntime.Extensions
+	AuthMode                 AuthMode
+	SessionTTL               time.Duration
+	UIBasePath               string // URL path prefix for the web console (default "/")
+	TrustedProxies           string // comma-separated CIDRs whose forwarding headers are trusted
 	ContainerResourceCeiling resources.ContainerResourceCeiling
-	CRDConflictPolicy  string // "off", "warn" (default), or "reject"
+	CRDConflictPolicy        string // "off", "warn" (default), or "reject"
 }
 
 // Server exposes CRUD endpoints for control plane resources.
 type Server struct {
-	stores             Stores
-	runtime            *agentruntime.Manager
-	logger             *log.Logger
-	mux                *http.ServeMux
-	authorizer         RequestAuthorizer
-	resourceAuthorizer ResourceAuthorizer // optional authorization hook
-	authMode           AuthMode
-	sessionTTL         time.Duration
-	bus                eventbus.Bus
-	extensions         agentruntime.Extensions
-	memoryBackends     *agentruntime.PersistentMemoryBackendRegistry
-	authRateLimiter    *authRateLimiter
-	requestRateLimiter *rate.Limiter // per-server; avoids test suites sharing one process-global bucket
-	trustedProxies     []*net.IPNet
-	uiBasePath         string
+	stores                   Stores
+	runtime                  *agentruntime.Manager
+	logger                   *log.Logger
+	mux                      *http.ServeMux
+	authorizer               RequestAuthorizer
+	resourceAuthorizer       ResourceAuthorizer // optional authorization hook
+	authMode                 AuthMode
+	sessionTTL               time.Duration
+	bus                      eventbus.Bus
+	extensions               agentruntime.Extensions
+	memoryBackends           *agentruntime.PersistentMemoryBackendRegistry
+	authRateLimiter          *authRateLimiter
+	requestRateLimiter       *rate.Limiter // per-server; avoids test suites sharing one process-global bucket
+	trustedProxies           []*net.IPNet
+	uiBasePath               string
 	containerResourceCeiling resources.ContainerResourceCeiling
-	crdConflictPolicy  string
-	a2aConfig           *A2AConfig
-	a2aRateLimiter      *ipRateLimiter
-	a2aSubscribeCount   atomic.Int32
+	crdConflictPolicy        string
+	a2aConfig                *A2AConfig
+	a2aRateLimiter           *ipRateLimiter
+	a2aSubscribeCount        atomic.Int32
 }
 
 func NewServer(stores Stores, runtime *agentruntime.Manager, logger *log.Logger) *Server {
@@ -159,10 +159,23 @@ func NewServerWithOptions(stores Stores, runtime *agentruntime.Manager, logger *
 	}
 	extensions := agentruntime.NormalizeExtensions(opts.Extensions)
 	authorizer := opts.Authorizer
-	if authMode == AuthModeOff && authModeExplicit {
-		authorizer = noAuthAuthorizer{}
-	} else if authorizer == nil {
-		authorizer = newTokenAuthorizerWithStoreFromEnv(stores.APITokens)
+	if authorizer == nil {
+		if authMode == AuthModeOff && authModeExplicit {
+			// auth-mode=off with no injected authorizer: stay open unless env/DB
+			// tokens are configured (ORLOJ_API_TOKEN, ORLOJ_API_TOKENS, /v1/tokens).
+			tokenAuth := newTokenAuthorizerWithStoreFromEnv(stores.APITokens)
+			if ta, ok := tokenAuth.(tokenAuthorizer); ok {
+				if enabled, statusCode, _ := ta.authEnabled(); enabled && statusCode == 0 {
+					authorizer = tokenAuth
+				} else {
+					authorizer = noAuthAuthorizer{}
+				}
+			} else {
+				authorizer = noAuthAuthorizer{}
+			}
+		} else {
+			authorizer = newTokenAuthorizerWithStoreFromEnv(stores.APITokens)
+		}
 	}
 	if authMode == AuthModeNative {
 		authorizer = newNativeModeAuthorizer(authorizer, stores.LocalAdmins, stores.AuthSessions, sessionTTL)
@@ -186,11 +199,11 @@ func NewServerWithOptions(stores Stores, runtime *agentruntime.Manager, logger *
 		authRateLimiter:    newAuthRateLimiter(trustedProxies, logger),
 		// 500 r/s sustained, burst 100 — same as previous package-global limiter, but per Server instance
 		// so concurrent httptest servers in tests do not share one token bucket.
-		requestRateLimiter: rate.NewLimiter(rate.Limit(500), 100),
-		trustedProxies:             trustedProxies,
-		uiBasePath:                 uiBase,
-		containerResourceCeiling:   opts.ContainerResourceCeiling,
-		crdConflictPolicy:          normalizeCRDConflictPolicy(opts.CRDConflictPolicy),
+		requestRateLimiter:       rate.NewLimiter(rate.Limit(500), 100),
+		trustedProxies:           trustedProxies,
+		uiBasePath:               uiBase,
+		containerResourceCeiling: opts.ContainerResourceCeiling,
+		crdConflictPolicy:        normalizeCRDConflictPolicy(opts.CRDConflictPolicy),
 	}
 	s.routes()
 	return s
@@ -449,7 +462,8 @@ func (s *Server) handleCapabilities(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(snapshot.GeneratedAt) == "" {
 		snapshot.GeneratedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	}
-	if s.a2aConfig != nil && s.a2aConfig.Enabled {
+	a2aSystems, _ := s.a2aEnabledSystems(r)
+	if s.a2aConfig != nil && len(a2aSystems) > 0 {
 		snapshot.Capabilities = append(snapshot.Capabilities,
 			agentruntime.Capability{ID: "a2a", Enabled: true, Description: "A2A protocol interoperability", Source: "config"},
 			agentruntime.Capability{ID: "a2a.streaming", Enabled: s.a2aConfig.StreamingEnabled, Description: "A2A streaming subscribe support", Source: "config"},
@@ -864,6 +878,14 @@ func (s *Server) handleAgentSystemByName(w http.ResponseWriter, r *http.Request)
 	name := strings.Trim(strings.TrimPrefix(r.URL.Path, "/v1/agent-systems/"), "/")
 	if name == "" {
 		http.Error(w, "agentsystem name is required", http.StatusBadRequest)
+		return
+	}
+	if strings.Contains(r.URL.Path, "/.well-known/agent-card.json") || strings.HasSuffix(r.URL.Path, "/.well-known/agent.json") {
+		s.handleAgentCard(w, r)
+		return
+	}
+	if strings.HasSuffix(r.URL.Path, "/a2a") {
+		s.handleA2AJSONRPC(w, r)
 		return
 	}
 	if strings.HasSuffix(name, "/status") {

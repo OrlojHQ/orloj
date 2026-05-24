@@ -142,6 +142,14 @@ func ParseAgentSystemManifest(data []byte) (AgentSystem, error) {
 				currentGraphEdgeIndex = -1
 				delegateNestedSection = ""
 				currentDelegateIndex = -1
+			case section == "spec" && key == "a2a":
+				subsection = "a2a"
+				currentGraphNode = ""
+				graphNodeSection = ""
+				edgeNestedSection = ""
+				currentGraphEdgeIndex = -1
+				delegateNestedSection = ""
+				currentDelegateIndex = -1
 			case section == "metadata" && key == "labels":
 				subsection = "labels"
 				currentGraphNode = ""
@@ -269,6 +277,13 @@ func ParseAgentSystemManifest(data []byte) (AgentSystem, error) {
 			}
 		case section == "spec" && subsection == "" && (key == "context_adapter" || key == "contextAdapter"):
 			out.Spec.ContextAdapter = value
+		case section == "spec" && subsection == "a2a":
+			switch key {
+			case "enabled":
+				out.Spec.A2A.Enabled = strings.EqualFold(value, "true") || value == "1"
+			case "auth":
+				out.Spec.A2A.Auth = value
+			}
 		case section == "spec" && subsection == "graph" && currentGraphNode != "":
 			node := out.Spec.Graph[currentGraphNode]
 			switch {
@@ -563,16 +578,16 @@ func ParseToolManifest(data []byte) (Tool, error) {
 					subsection = "wasm"
 					runtimeSubsection = ""
 				}
-		case "cli":
-			if section == "spec" {
-				subsection = "cli"
-				runtimeSubsection = ""
-			}
-		case "a2a":
-			if section == "spec" {
-				subsection = "a2a"
-				runtimeSubsection = ""
-			}
+			case "cli":
+				if section == "spec" {
+					subsection = "cli"
+					runtimeSubsection = ""
+				}
+			case "a2a":
+				if section == "spec" {
+					subsection = "a2a"
+					runtimeSubsection = ""
+				}
 			case "args":
 				if section == "spec" && subsection == "cli" {
 					runtimeSubsection = "args"
@@ -2320,15 +2335,15 @@ func ParseMcpServerManifest(data []byte) (McpServer, error) {
 				if section == "spec" {
 					subsection = "env"
 				}
-		case "auth":
-			if section == "spec" {
-				subsection = "auth"
-			}
-		case "scopes":
-			if section == "spec" && subsection == "auth" {
-				subsection = "auth_scopes"
-			}
-		case "tool_filter", "toolFilter":
+			case "auth":
+				if section == "spec" {
+					subsection = "auth"
+				}
+			case "scopes":
+				if section == "spec" && subsection == "auth" {
+					subsection = "auth_scopes"
+				}
+			case "tool_filter", "toolFilter":
 				if section == "spec" {
 					subsection = "tool_filter"
 				}
@@ -2348,18 +2363,18 @@ func ParseMcpServerManifest(data []byte) (McpServer, error) {
 				if section == "spec" {
 					subsection = "resources"
 				}
-		case "default_tool_runtime", "defaultToolRuntime":
-			if section == "spec" {
-				subsection = "default_tool_runtime"
-				if out.Spec.DefaultToolRuntime == nil {
-					out.Spec.DefaultToolRuntime = &ToolRuntimePolicy{}
+			case "default_tool_runtime", "defaultToolRuntime":
+				if section == "spec" {
+					subsection = "default_tool_runtime"
+					if out.Spec.DefaultToolRuntime == nil {
+						out.Spec.DefaultToolRuntime = &ToolRuntimePolicy{}
+					}
+				}
+			case "retry":
+				if section == "spec" && subsection == "default_tool_runtime" {
+					subsection = "default_tool_runtime_retry"
 				}
 			}
-		case "retry":
-			if section == "spec" && subsection == "default_tool_runtime" {
-				subsection = "default_tool_runtime_retry"
-			}
-		}
 			continue
 		}
 
@@ -2462,32 +2477,32 @@ func ParseMcpServerManifest(data []byte) (McpServer, error) {
 					last.MountPath = value
 				}
 			}
-	case section == "spec" && subsection == "default_tool_runtime":
-		if out.Spec.DefaultToolRuntime == nil {
-			out.Spec.DefaultToolRuntime = &ToolRuntimePolicy{}
+		case section == "spec" && subsection == "default_tool_runtime":
+			if out.Spec.DefaultToolRuntime == nil {
+				out.Spec.DefaultToolRuntime = &ToolRuntimePolicy{}
+			}
+			switch key {
+			case "timeout":
+				out.Spec.DefaultToolRuntime.Timeout = value
+			case "isolation_mode", "isolationMode":
+				out.Spec.DefaultToolRuntime.IsolationMode = value
+			}
+		case section == "spec" && subsection == "default_tool_runtime_retry":
+			if out.Spec.DefaultToolRuntime == nil {
+				out.Spec.DefaultToolRuntime = &ToolRuntimePolicy{}
+			}
+			switch key {
+			case "max_attempts", "maxAttempts":
+				v, _ := strconv.Atoi(value)
+				out.Spec.DefaultToolRuntime.Retry.MaxAttempts = v
+			case "backoff":
+				out.Spec.DefaultToolRuntime.Retry.Backoff = value
+			case "max_backoff", "maxBackoff":
+				out.Spec.DefaultToolRuntime.Retry.MaxBackoff = value
+			case "jitter":
+				out.Spec.DefaultToolRuntime.Retry.Jitter = value
+			}
 		}
-		switch key {
-		case "timeout":
-			out.Spec.DefaultToolRuntime.Timeout = value
-		case "isolation_mode", "isolationMode":
-			out.Spec.DefaultToolRuntime.IsolationMode = value
-		}
-	case section == "spec" && subsection == "default_tool_runtime_retry":
-		if out.Spec.DefaultToolRuntime == nil {
-			out.Spec.DefaultToolRuntime = &ToolRuntimePolicy{}
-		}
-		switch key {
-		case "max_attempts", "maxAttempts":
-			v, _ := strconv.Atoi(value)
-			out.Spec.DefaultToolRuntime.Retry.MaxAttempts = v
-		case "backoff":
-			out.Spec.DefaultToolRuntime.Retry.Backoff = value
-		case "max_backoff", "maxBackoff":
-			out.Spec.DefaultToolRuntime.Retry.MaxBackoff = value
-		case "jitter":
-			out.Spec.DefaultToolRuntime.Retry.Jitter = value
-		}
-	}
 	}
 
 	if err := out.Normalize(); err != nil {

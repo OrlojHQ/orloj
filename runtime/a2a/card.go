@@ -1,6 +1,7 @@
 package a2a
 
 import (
+	"net/url"
 	"strings"
 
 	"github.com/OrlojHQ/orloj/resources"
@@ -8,11 +9,12 @@ import (
 
 // CardGeneratorConfig controls Agent Card generation.
 type CardGeneratorConfig struct {
-	PublicBaseURL     string
+	PublicBaseURL    string
 	ProtocolVersion  string
 	StreamingEnabled bool
 	WebhooksEnabled  bool
 	AuthSchemes      []string
+	Namespace        string
 }
 
 // GenerateAgentCard builds an A2A Agent Card from an Orloj Agent and its tools.
@@ -26,7 +28,7 @@ func GenerateAgentCard(agent resources.Agent, tools []resources.Tool, config Car
 		desc = truncatePrompt(agent.Spec.Prompt, 200)
 	}
 
-	agentURL := strings.TrimSuffix(config.PublicBaseURL, "/") + "/v1/agents/" + name + "/a2a"
+	agentURL := appendNamespaceQuery(strings.TrimSuffix(config.PublicBaseURL, "/")+"/v1/agents/"+url.PathEscape(name)+"/a2a", config.Namespace)
 
 	card := AgentCard{
 		Name:            name,
@@ -71,7 +73,7 @@ func GenerateSystemCard(system resources.AgentSystem, agents []resources.Agent, 
 		desc = "Multi-agent system: " + name
 	}
 
-	agentURL := strings.TrimSuffix(config.PublicBaseURL, "/") + "/v1/agents/" + name + "/a2a"
+	agentURL := appendNamespaceQuery(strings.TrimSuffix(config.PublicBaseURL, "/")+"/v1/agent-systems/"+url.PathEscape(name)+"/a2a", config.Namespace)
 
 	card := AgentCard{
 		Name:            name,
@@ -118,6 +120,18 @@ func GenerateSystemCard(system resources.AgentSystem, agents []resources.Agent, 
 	}
 
 	return card
+}
+
+func appendNamespaceQuery(rawURL, namespace string) string {
+	namespace = resources.NormalizeNamespace(namespace)
+	if namespace == "" || namespace == resources.DefaultNamespace {
+		return rawURL
+	}
+	sep := "?"
+	if strings.Contains(rawURL, "?") {
+		sep = "&"
+	}
+	return rawURL + sep + "namespace=" + url.QueryEscape(namespace)
 }
 
 func truncatePrompt(prompt string, maxLen int) string {

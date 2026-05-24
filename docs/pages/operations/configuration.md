@@ -76,7 +76,6 @@ Example:
 
 | Variable | Used By | Flag Overrides | Purpose / Conditions |
 |---|---|---|---|
-| `ORLOJ_A2A_ENABLED` | `orlojd` | `--a2a-enabled` | Enable A2A protocol endpoints and `a2a` tool type. Default: `false`. |
 | `ORLOJ_A2A_PUBLIC_BASE_URL` | `orlojd` | `--a2a-public-base-url` | Public base URL used in Agent Card `url` fields. Required for externally-reachable cards. |
 | `ORLOJ_A2A_PROTOCOL_VERSION` | `orlojd` | `--a2a-protocol-version` | A2A protocol version string to advertise in Agent Cards. |
 | `ORLOJ_A2A_CARD_CACHE_TTL` | `orlojd`, `orlojworker` | `--a2a-card-cache-ttl` | Cache TTL for fetched remote Agent Cards. Default: `5m`. |

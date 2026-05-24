@@ -8,8 +8,10 @@ Orloj exposes A2A functionality via JSON-RPC 2.0 over HTTP. All requests are `PO
 
 | Endpoint | Auth | Description |
 |----------|------|-------------|
-| `POST /a2a` | Required | Shared JSON-RPC endpoint. Resolves target from params or defaults to the single configured agent. |
-| `POST /v1/agents/{name}/a2a` | Required | Per-agent JSON-RPC endpoint. Agent name in the path determines routing. |
+| `POST /a2a` | Bearer token when auth is enabled | Shared JSON-RPC endpoint. Resolves target from params or defaults to the single A2A-enabled AgentSystem. |
+| `POST /v1/agent-systems/{name}/a2a` | Bearer token when auth is enabled | Per-system JSON-RPC endpoint. AgentSystem name in the path determines routing. |
+
+Legacy `/v1/agents/{name}/a2a` paths are accepted as aliases for AgentSystem names.
 
 ## Request Format
 

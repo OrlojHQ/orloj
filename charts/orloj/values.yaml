@@ -288,8 +288,6 @@ worker:
 # A2A Protocol interoperability
 # ---------------------------------------------------------------------------
 a2a:
-  # -- Enable A2A protocol endpoints and tool type
-  enabled: false
   # -- Public base URL for Agent Card `url` fields (required when enabled)
   # Must be reachable by external A2A clients. Example: https://orloj.example.com
   publicBaseURL: ""
@@ -307,11 +305,11 @@ a2a:
   #   secretRef: partner-token
   # -- Rate limiting for A2A endpoints
   rateLimit:
-    # -- Enable rate limiting on A2A endpoints (default true when a2a.enabled)
+    # -- Enable rate limiting on A2A endpoints
     enabled: true
     # -- Requests per minute for unauthenticated callers
     requestsPerMinute: 30
-    # -- Max concurrent SSE subscribe connections per client
+    # -- Max concurrent SSE subscribe connections globally (server-wide)
     maxConcurrentSubscriptions: 10
 
 # ---------------------------------------------------------------------------

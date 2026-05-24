@@ -4,7 +4,7 @@ This guide walks through configuring Orloj to call external A2A agents as tools.
 
 ## Prerequisites
 
-- Orloj server (`orlojd`) running with A2A enabled (`--a2a-enabled`)
+- Orloj server (`orlojd`) running, with any inbound A2A exposure enabled per AgentSystem when needed
 - `orlojctl` available
 - A remote A2A agent endpoint (any A2A-compliant agent)
 
@@ -168,7 +168,7 @@ Response:
   "localAgents": [
     {
       "name": "research-agent",
-      "url": "https://orloj.example.com/v1/agents/research-agent/a2a",
+      "url": "https://orloj.example.com/v1/agent-systems/research-system/a2a",
       "capabilities": { "streaming": true }
     }
   ],

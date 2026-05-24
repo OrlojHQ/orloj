@@ -10,9 +10,11 @@ type authContextKey struct{}
 // AuthIdentity carries the authenticated caller's identity through the
 // request context for audit logging and downstream authorization.
 type AuthIdentity struct {
-	Name   string // token name (bearer) or username (session)
-	Role   string
-	Method string // "bearer", "session", "none"
+	Name            string // token name (bearer) or username (session)
+	Role            string
+	Method          string // "bearer", "session", "none"
+	A2AAgentSystems []string
+	AuthDisabled    bool // true when no auth is configured instance-wide
 }
 
 func withAuthIdentity(ctx context.Context, id AuthIdentity) context.Context {

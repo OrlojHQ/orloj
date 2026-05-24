@@ -8,6 +8,8 @@
 - `graph` (map[string]GraphEdge): per-node routing.
 - `context_adapter` (string): optional reference to a [ContextAdapter](./context-adapter.md) resource. When set, the adapter's tool sanitizes raw task input before the first agent runs.
 - `completion_review` (ReviewCheckpoint): optional final human review before the task is marked `Succeeded`.
+- `a2a.enabled` (bool): expose this AgentSystem through inbound A2A Agent Card discovery and JSON-RPC invocation. Omitted or `false` keeps the system off the A2A surface.
+- `a2a.auth` (string: `"public"` | `"bearer"`): controls whether A2A invoke requires authentication for this system. `"public"` allows unauthenticated callers; `"bearer"` (default when omitted) requires a valid API token when instance-wide auth is enabled. Public systems' Agent Cards omit `authentication.schemes` so A2A clients know not to send tokens.
 
 `GraphEdge` fields:
 

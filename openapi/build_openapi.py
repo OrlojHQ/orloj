@@ -27,6 +27,7 @@ SEC_READER = [{"bearerAuth": []}, {"sessionCookie": []}]
 SEC_WRITER = [{"bearerAuth": []}, {"sessionCookie": []}]
 SEC_ADMIN = [{"bearerAuth": []}, {"sessionCookie": []}]
 SEC_CTRL = [{"bearerAuth": []}, {"sessionCookie": []}]
+SEC_A2A = [{"bearerAuth": []}]
 
 
 def list_op(tag: str, list_ref: str) -> dict:
@@ -957,24 +958,25 @@ def build() -> dict:
             "tags": ["a2a"],
             "summary": "Get the default Agent Card",
             "description": (
-                "Returns the A2A Agent Card for the default agent or agent system. "
-                "Used by A2A clients for agent discovery."
+                "Returns the A2A Agent Card when exactly one AgentSystem has "
+                "spec.a2a.enabled=true. Use the registry or per-system card URLs when "
+                "multiple systems are exposed."
             ),
             "security": [],
             "responses": {
                 "200": {"description": "OK", "content": json_body(a2a_card_ref)},
-                "404": {"description": "No default agent configured", "content": text_plain_error()},
+                "404": {"description": "No single default AgentSystem available", "content": text_plain_error()},
                 "default": {"description": "Error", "content": text_plain_error()},
             },
         }
     }
-    paths["/v1/agents/{name}/.well-known/agent-card.json"] = {
+    system_card_get = {
         "get": {
             "tags": ["a2a"],
-            "summary": "Get Agent Card for a specific agent",
+            "summary": "Get Agent Card for a specific AgentSystem",
             "description": (
-                "Returns the A2A Agent Card for the named agent, including derived skills "
-                "and capabilities."
+                "Returns the A2A Agent Card for the named AgentSystem when "
+                "spec.a2a.enabled=true."
             ),
             "parameters": [
                 {
@@ -987,9 +989,17 @@ def build() -> dict:
             "security": [],
             "responses": {
                 "200": {"description": "OK", "content": json_body(a2a_card_ref)},
-                "404": {"description": "Agent not found", "content": text_plain_error()},
+                "404": {"description": "AgentSystem not found or not A2A-enabled", "content": text_plain_error()},
                 "default": {"description": "Error", "content": text_plain_error()},
             },
+        }
+    }
+    paths["/v1/agent-systems/{name}/.well-known/agent-card.json"] = system_card_get
+    paths["/v1/agents/{name}/.well-known/agent-card.json"] = {
+        "get": {
+            **system_card_get["get"],
+            "summary": "Get Agent Card for a specific AgentSystem (legacy path)",
+            "description": "Legacy alias for /v1/agent-systems/{name}/.well-known/agent-card.json.",
         }
     }
 
@@ -1000,7 +1010,7 @@ def build() -> dict:
             "JSON-RPC 2.0 endpoint implementing the A2A protocol. Supports methods: "
             "tasks/send, tasks/get, tasks/cancel, tasks/sendSubscribe."
         ),
-        "security": SEC_WRITER,
+        "security": SEC_A2A,
         "requestBody": {"required": True, "content": json_body(a2a_req_ref)},
         "responses": {
             "200": {"description": "JSON-RPC response", "content": json_body(a2a_resp_ref)},
@@ -1009,12 +1019,12 @@ def build() -> dict:
         },
     }
     paths["/a2a"] = {"post": a2a_rpc_post}
-    paths["/v1/agents/{name}/a2a"] = {
+    system_a2a_post = {
         "post": {
             **a2a_rpc_post,
-            "summary": "A2A JSON-RPC endpoint for a specific agent",
+            "summary": "A2A JSON-RPC endpoint for a specific AgentSystem",
             "description": (
-                "JSON-RPC 2.0 endpoint for the named agent. The agent name in the path "
+                "JSON-RPC 2.0 endpoint for the named AgentSystem. The system name in the path "
                 "determines routing; no target field is needed in request params."
             ),
             "parameters": [
@@ -1027,16 +1037,24 @@ def build() -> dict:
             ],
         }
     }
+    paths["/v1/agent-systems/{name}/a2a"] = system_a2a_post
+    paths["/v1/agents/{name}/a2a"] = {
+        "post": {
+            **system_a2a_post["post"],
+            "summary": "A2A JSON-RPC endpoint for a specific AgentSystem (legacy path)",
+            "description": "Legacy alias for /v1/agent-systems/{name}/a2a.",
+        }
+    }
 
     paths["/v1/a2a/agents"] = {
         "get": {
             "tags": ["a2a"],
             "summary": "List A2A agent registry",
             "description": (
-                "Returns locally exposed Agent Cards and configured remote agent entries "
-                "with cache metadata."
+                "Returns locally exposed A2A-enabled AgentSystem cards visible to the "
+                "bearer token plus configured remote agent entries with cache metadata."
             ),
-            "security": SEC_READER,
+            "security": SEC_A2A,
             "responses": {
                 "200": {"description": "OK", "content": json_body(a2a_registry_ref)},
                 "default": {"description": "Error", "content": text_plain_error()},

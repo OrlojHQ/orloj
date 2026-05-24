@@ -15,7 +15,7 @@ A2A support in Orloj has two directions:
 ```
 A2A Client
   → GET /.well-known/agent-card.json  (discovery)
-  → POST /a2a  or  /v1/agents/{name}/a2a  (JSON-RPC)
+  → POST /a2a  or  /v1/agent-systems/{name}/a2a  (JSON-RPC)
     → Orloj creates a Task, runs the AgentSystem
     → Returns A2A status updates and artifacts
 ```
@@ -35,18 +35,18 @@ Both directions reuse existing Orloj infrastructure: Tasks, auth, governance, we
 
 ## Agent Cards
 
-Every Orloj agent exposed via A2A publishes an **Agent Card** -- a JSON document describing the agent's name, capabilities, skills, authentication requirements, and endpoint URL.
+Every Orloj AgentSystem exposed via A2A publishes an **Agent Card** -- a JSON document describing the system's name, capabilities, skills, authentication requirements, and endpoint URL.
 
 Cards are generated automatically from the agent's metadata, tools, and runtime configuration:
 
-- **Name** and **description** come from `metadata.name` and `metadata.annotations["orloj.dev/description"]`.
+- **Name** and **description** come from the AgentSystem `metadata.name` and `metadata.annotations["orloj.dev/description"]`.
 - **Skills** are derived from the agent's attached tools, including each tool's `description` and `input_schema`.
 - **Capabilities** reflect runtime support: streaming (from task trace SSE), push notifications (from TaskWebhook support), and state transition history.
 - **Authentication** reflects the server's configured auth mode.
 
 Cards are served at:
-- `GET /.well-known/agent-card.json` -- default agent
-- `GET /v1/agents/{name}/.well-known/agent-card.json` -- specific agent
+- `GET /.well-known/agent-card.json` -- only when exactly one AgentSystem is A2A-enabled
+- `GET /v1/agent-systems/{name}/.well-known/agent-card.json` -- specific AgentSystem
 
 ## State Mapping
 
@@ -68,8 +68,8 @@ Orloj task output is converted to A2A artifacts, and trace/watch events are conv
 
 Two routing modes are supported for inbound A2A requests:
 
-1. **Per-agent endpoints** (recommended): `POST /v1/agents/{name}/a2a` -- the agent name is in the URL path. Each agent's card `url` field points to its per-agent endpoint.
-2. **Shared endpoint**: `POST /a2a` -- the target is resolved from request params. When a single agent system is configured, this endpoint defaults to it.
+1. **Per-system endpoints** (recommended): `POST /v1/agent-systems/{name}/a2a` -- the AgentSystem name is in the URL path. Each system's card `url` field points to its per-system endpoint.
+2. **Shared endpoint**: `POST /a2a` -- the target is resolved from request params. When a single AgentSystem is A2A-enabled, this endpoint defaults to it.
 
 ## Outbound: A2A Tools
 
@@ -82,17 +82,17 @@ Existing `spec.auth` profiles (bearer, API key, basic, OAuth2) work for authenti
 A2A endpoints participate in Orloj's existing security model:
 
 - **Agent Card discovery** endpoints are public (no auth required) -- cards contain only metadata, not secrets.
-- **JSON-RPC endpoints** require authentication (bearer token or session cookie), same as other API endpoints.
+- **JSON-RPC endpoints** enforce per-system auth via `spec.a2a.auth` (`"bearer"` by default, or `"public"` for unauthenticated access). All four methods (`tasks/send`, `tasks/get`, `tasks/cancel`, `tasks/sendSubscribe`) require a valid bearer token on `auth: bearer` systems. Native-auth browser sessions are not accepted for A2A invocation.
+- **Scoped `a2a` tokens** can invoke only the AgentSystems listed in their `a2a_agent_systems` scope and cannot read or mutate control-plane resources.
 - **Outbound calls** to remote agents use tool-level auth (`spec.auth`) and are subject to governance (AgentRole, ToolPermission, AgentPolicy).
 - **Private endpoint protection**: by default, outbound A2A calls to private/internal endpoints are blocked (`a2a.allowPrivateEndpoints` defaults to `false`).
 
 ## Configuration
 
-A2A is enabled via server configuration:
+A2A is enabled per AgentSystem with `spec.a2a.enabled: true`. Server configuration controls advertised URLs and outbound registry behavior:
 
 | Setting | Description |
 |---------|-------------|
-| `a2a.enabled` | Enable A2A protocol support |
 | `a2a.publicBaseURL` | Public base URL for Agent Card endpoint URLs |
 | `a2a.protocolVersion` | A2A protocol version to advertise |
 | `a2a.remoteAgents[]` | Pre-configured remote A2A agents for the registry |

@@ -180,11 +180,10 @@ spec:
               value: {{ .Values.cliToolAllowedCommands | quote }}
             {{- end }}
             # --- A2A Protocol ---
-            {{- if .Values.a2a.enabled }}
-            - name: ORLOJ_A2A_ENABLED
-              value: "true"
+            {{- if .Values.a2a.publicBaseURL }}
             - name: ORLOJ_A2A_PUBLIC_BASE_URL
               value: {{ .Values.a2a.publicBaseURL | quote }}
+            {{- end }}
             {{- if .Values.a2a.protocolVersion }}
             - name: ORLOJ_A2A_PROTOCOL_VERSION
               value: {{ .Values.a2a.protocolVersion | quote }}
@@ -203,7 +202,6 @@ spec:
               value: {{ .Values.a2a.rateLimit.requestsPerMinute | quote }}
             - name: ORLOJ_A2A_RATE_LIMIT_MAX_SUBSCRIBE
               value: {{ .Values.a2a.rateLimit.maxConcurrentSubscriptions | quote }}
-            {{- end }}
             # --- CRD conflict policy ---
             - name: ORLOJ_CRD_CONFLICT_POLICY
               value: {{ .Values.crdConflictPolicy | default "warn" | quote }}

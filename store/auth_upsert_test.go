@@ -1,6 +1,8 @@
 package store
 
 import (
+	"errors"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -127,6 +129,55 @@ func TestTokenStoreDuplicateHashRejected(t *testing.T) {
 	_, err = s.Create("tok-b", "samehash", "writer", now)
 	if err != ErrAPITokenExists {
 		t.Fatalf("expected ErrAPITokenExists for duplicate hash, got %v", err)
+	}
+}
+
+func TestTokenStoreCreateA2ATokenRequiresScopes(t *testing.T) {
+	s := NewAPITokenStore()
+	_, err := s.CreateWithA2AAgentSystems("a2a-token", "hash-a2a", "a2a", nil, time.Now().UTC())
+	if err == nil {
+		t.Fatal("expected error for a2a token without scopes")
+	}
+}
+
+func TestTokenStoreCreateA2ATokenStoresNormalizedScopes(t *testing.T) {
+	s := NewAPITokenStore()
+	now := time.Now().UTC()
+	record, err := s.CreateWithA2AAgentSystems(
+		"a2a-token",
+		"hash-a2a",
+		"a2a",
+		[]string{" team-b/report ", "default/research", "team-b/report", ""},
+		now,
+	)
+	if err != nil {
+		t.Fatalf("create a2a token failed: %v", err)
+	}
+	want := []string{"default/research", "team-b/report"}
+	if !reflect.DeepEqual(record.A2AAgentSystems, want) {
+		t.Fatalf("unexpected scopes: got=%v want=%v", record.A2AAgentSystems, want)
+	}
+
+	got, ok, err := s.GetByHash("hash-a2a")
+	if err != nil {
+		t.Fatalf("get token by hash failed: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected token by hash")
+	}
+	if got.Role != "a2a" {
+		t.Fatalf("expected role a2a, got %q", got.Role)
+	}
+	if !reflect.DeepEqual(got.A2AAgentSystems, want) {
+		t.Fatalf("unexpected stored scopes: got=%v want=%v", got.A2AAgentSystems, want)
+	}
+}
+
+func TestCreateUserRejectsA2ARole(t *testing.T) {
+	s := NewLocalAdminStore()
+	_, err := s.CreateUser("a2a-user", "$2a$10$fakehash1234567890abcdefghijklmnopqrstuvwxyz012345678", "a2a")
+	if !errors.Is(err, ErrInvalidAuthRole) {
+		t.Fatalf("expected ErrInvalidAuthRole for local a2a user, got %v", err)
 	}
 }
 

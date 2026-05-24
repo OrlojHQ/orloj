@@ -41,11 +41,11 @@ CLI quickstart:
   orlojctl init my-first-system
   orlojctl apply -f my-first-system/ --run
   orlojctl trace my-first-system-task
-{{- if .Values.a2a.enabled }}
+{{- if .Values.a2a.publicBaseURL }}
 
-A2A Protocol is enabled.
+A2A Protocol endpoints are configured. AgentSystems are exposed only when spec.a2a.enabled is true.
 - Agent Card: {{ .Values.a2a.publicBaseURL }}/.well-known/agent-card.json
-- Per-agent cards: {{ .Values.a2a.publicBaseURL }}/v1/agents/<name>/.well-known/agent-card.json
+- Per-system cards: {{ .Values.a2a.publicBaseURL }}/v1/agent-systems/<name>/.well-known/agent-card.json
 - JSON-RPC endpoint: {{ .Values.a2a.publicBaseURL }}/a2a
 - Registry: {{ .Values.a2a.publicBaseURL }}/v1/a2a/agents
 

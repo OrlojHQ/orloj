@@ -28,7 +28,7 @@ spec:
     - host: {{ .host | quote }}
       http:
         paths:
-          {{- if $.Values.a2a.enabled }}
+          {{- if $.Values.a2a.publicBaseURL }}
           - path: /.well-known
             pathType: Prefix
             backend:

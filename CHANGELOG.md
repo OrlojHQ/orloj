@@ -9,7 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **A2A protocol support**: expose agents as discoverable A2A agents via Agent Cards, accept inbound A2A task requests (JSON-RPC), call external A2A agents as `type: a2a` tools, and maintain a configured registry of remote agents. Includes Agent Card generation from agents/systems, `POST /a2a` and per-agent `POST /v1/agents/{name}/a2a` JSON-RPC endpoints, `GET /.well-known/agent-card.json` discovery, `GET /v1/a2a/agents` registry endpoint, Orloj/A2A task state mapping, outbound A2A client with SSRF protection, A2A-specific Prometheus metrics, `orlojctl a2a card` and `orlojctl a2a test` CLI commands, React SPA A2A Registry page, Helm chart `a2a.*` values, and comprehensive documentation.
+- **A2A protocol support**: expose selected AgentSystems as discoverable A2A agents via `spec.a2a.enabled`, accept inbound A2A task requests (JSON-RPC), call external A2A agents as `type: a2a` tools, and maintain a configured registry of remote agents. Includes Agent Card generation from systems, `POST /a2a` and per-system `POST /v1/agent-systems/{name}/a2a` JSON-RPC endpoints, `GET /.well-known/agent-card.json` discovery, auth-filtered `GET /v1/a2a/agents` registry endpoint, scoped API-token role `a2a`, Orloj/A2A task state mapping, outbound A2A client with SSRF protection, A2A-specific Prometheus metrics, `orlojctl a2a card` and `orlojctl a2a test` CLI commands, React SPA A2A Registry page, Helm chart `a2a.*` values, and comprehensive documentation.
+- **Per-system A2A invoke auth**: new `spec.a2a.auth` field on AgentSystem (`"public"` or `"bearer"`, default `"bearer"`) allows individual systems to accept unauthenticated A2A invoke while the control plane remains token-protected. Public systems' Agent Cards omit `authentication.schemes`, and the A2A registry shows public systems to unauthenticated callers.
+
+### Fixed
+
+- **A2A: `tasks/get` and `tasks/cancel` auth bypass on bearer systems**: unauthenticated callers could read task output and cancel tasks on `spec.a2a.auth: bearer` systems if they knew the A2A task ID. The permissive `a2aIdentityAllowsSystem` gate now enforces the same bearer requirement as `tasks/send` and `tasks/sendSubscribe`.
+- **A2A: `tasks/sendSubscribe` namespace mismatch**: subscribe created tasks in the request query-param namespace (defaulting to `"default"`) instead of using the target AgentSystem's namespace, causing task lookup misses for non-default namespaces.
+- **A2A: `--api-key` flag not wired into authorizer**: running `orlojd --api-key secret` without the `ORLOJ_API_TOKEN` env var left auth open while Agent Cards advertised bearer. The flag value is now propagated to the env before server init.
+- **A2A: `tasks/get`/`tasks/cancel` cross-system task ID collision**: `findTaskByA2AID` searched all tasks globally by label. When invoked via a per-system URL (`/v1/agent-systems/{name}/a2a`), the lookup is now scoped to the target system.
+- **A2A: `tasks/get`/`tasks/cancel` missing task ID validation**: get and cancel accepted empty `params.id`. Empty IDs are now rejected consistently across all four JSON-RPC methods.
+- **A2A: subscribe SSE write errors ignored**: heartbeat and status writes did not check for errors, allowing the poll loop to spin briefly after client disconnect. Write failures now terminate the stream immediately and record `client_disconnected` in telemetry.
+- **A2A: cancel reason unbounded**: `params.reason` on `tasks/cancel` had no length limit and was stored verbatim. Now capped at 1024 characters with rune-safe truncation.
+- **Helm CRD drift**: `charts/orloj/templates/operator-crds.yaml` was missing the `spec.a2a.auth` field present in `config/crd/bases/orloj.dev_agentsystems.yaml`.
+- **CLI: `orlojctl a2a card` ignored `--namespace` flag**: the namespace flag was not applied to the card fetch URL. Non-default namespace systems now resolve correctly.
+- **Docs: stale A2A security description**: `docs/pages/concepts/a2a-interoperability.md` incorrectly stated that JSON-RPC endpoints require global bearer auth; updated to describe per-system `spec.a2a.auth` model.
 
 ### Changed
 

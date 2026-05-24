@@ -87,7 +87,6 @@ helm upgrade orloj ./charts/orloj \
 
 | Value | Default | Description |
 |---|---|---|
-| `a2a.enabled` | `false` | Enable A2A protocol endpoints and tool type |
 | `a2a.publicBaseURL` | `""` | Public URL for Agent Card `url` fields |
 | `a2a.protocolVersion` | `""` | A2A protocol version to advertise |
 | `a2a.cardCacheTTL` | `"5m"` | TTL for cached remote Agent Cards |

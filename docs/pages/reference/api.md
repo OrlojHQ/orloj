@@ -258,13 +258,13 @@ Returns a server-sent event stream of resource changes. Events include the resou
 
 ## A2A Endpoints
 
-When A2A protocol support is enabled (`--a2a-enabled`), the following endpoints are available:
+AgentSystems opt in to inbound A2A with `spec.a2a.enabled: true`. Enabled systems are available through:
 
-- `GET /.well-known/agent-card.json` — System-wide Agent Card describing all published agents.
-- `GET /v1/agents/{name}/.well-known/agent-card.json` — Per-agent Agent Card.
-- `POST /a2a` — Shared JSON-RPC 2.0 endpoint for A2A task operations.
-- `POST /v1/agents/{name}/a2a` — Per-agent JSON-RPC endpoint scoped to a single agent.
-- `GET /v1/a2a/agents` — Registry listing of all A2A-capable agents (local and remote).
+- `GET /.well-known/agent-card.json` — root Agent Card when exactly one AgentSystem is A2A-enabled.
+- `GET /v1/agent-systems/{name}/.well-known/agent-card.json` — per-system Agent Card.
+- `POST /a2a` — shared JSON-RPC 2.0 endpoint for A2A task operations.
+- `POST /v1/agent-systems/{name}/a2a` — JSON-RPC endpoint scoped to one AgentSystem.
+- `GET /v1/a2a/agents` — registry listing A2A-enabled systems visible to the bearer token plus remote entries.
 
 See [A2A Interoperability](../concepts/a2a-interoperability.md) for protocol details.
 

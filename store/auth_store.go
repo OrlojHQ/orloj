@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -14,7 +15,6 @@ import (
 	"sync"
 	"time"
 )
-
 
 var (
 	ErrAuthUserExists     = errors.New("auth user already exists")
@@ -28,6 +28,13 @@ var (
 		"writer":     {},
 		"reader":     {},
 		"controller": {},
+	}
+	allowedAPITokenRoleValues = map[string]struct{}{
+		"admin":      {},
+		"writer":     {},
+		"reader":     {},
+		"controller": {},
+		"a2a":        {},
 	}
 )
 
@@ -44,6 +51,56 @@ func normalizeAuthRoleWithDefault(role, defaultRole string) (string, error) {
 
 func normalizeAuthRole(role string) (string, error) {
 	return normalizeAuthRoleWithDefault(role, "")
+}
+
+func normalizeAPITokenRoleWithDefault(role, defaultRole string) (string, error) {
+	r := strings.ToLower(strings.TrimSpace(role))
+	if r == "" {
+		r = strings.ToLower(strings.TrimSpace(defaultRole))
+	}
+	if _, ok := allowedAPITokenRoleValues[r]; !ok {
+		return "", fmt.Errorf("%w: %q", ErrInvalidAuthRole, strings.TrimSpace(role))
+	}
+	return r, nil
+}
+
+func normalizeA2AAgentSystems(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		v := strings.TrimSpace(value)
+		if v == "" {
+			continue
+		}
+		key := strings.ToLower(v)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, v)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func encodeA2AAgentSystems(values []string) string {
+	raw, err := json.Marshal(normalizeA2AAgentSystems(values))
+	if err != nil {
+		return "[]"
+	}
+	return string(raw)
+}
+
+func decodeA2AAgentSystems(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	var values []string
+	if err := json.Unmarshal([]byte(raw), &values); err != nil {
+		return nil
+	}
+	return normalizeA2AAgentSystems(values)
 }
 
 func normalizeLocalUsername(username string) string {
@@ -723,11 +780,12 @@ func (s *AuthSessionStore) DeleteExpired(now time.Time) error {
 }
 
 type APITokenRecord struct {
-	Name      string
-	Role      string
-	TokenHash string
-	CreatedAt string
-	UpdatedAt string
+	Name            string
+	Role            string
+	TokenHash       string
+	CreatedAt       string
+	UpdatedAt       string
+	A2AAgentSystems []string
 }
 
 type APITokenStore struct {
@@ -749,6 +807,10 @@ func normalizeTokenName(name string) string {
 }
 
 func (s *APITokenStore) Create(name, tokenHash, role string, now time.Time) (APITokenRecord, error) {
+	return s.CreateWithA2AAgentSystems(name, tokenHash, role, nil, now)
+}
+
+func (s *APITokenStore) CreateWithA2AAgentSystems(name, tokenHash, role string, a2aAgentSystems []string, now time.Time) (APITokenRecord, error) {
 	name = normalizeTokenName(name)
 	tokenHash = strings.TrimSpace(tokenHash)
 	if name == "" {
@@ -757,20 +819,28 @@ func (s *APITokenStore) Create(name, tokenHash, role string, now time.Time) (API
 	if tokenHash == "" {
 		return APITokenRecord{}, fmt.Errorf("token hash is required")
 	}
-	r, err := normalizeAuthRoleWithDefault(role, "reader")
+	r, err := normalizeAPITokenRoleWithDefault(role, "reader")
 	if err != nil {
 		return APITokenRecord{}, err
+	}
+	scopes := normalizeA2AAgentSystems(a2aAgentSystems)
+	if r == "a2a" && len(scopes) == 0 {
+		return APITokenRecord{}, fmt.Errorf("a2a_agent_systems is required for role %q", r)
+	}
+	if r != "a2a" {
+		scopes = nil
 	}
 	if now.IsZero() {
 		now = time.Now().UTC()
 	}
 	if s.db != nil {
 		_, err := s.db.Exec(
-			`INSERT INTO auth_api_tokens(name, token_hash, role, created_at, updated_at)
-			 VALUES($1, $2, $3, NOW(), NOW())`,
+			`INSERT INTO auth_api_tokens(name, token_hash, role, a2a_agent_systems, created_at, updated_at)
+			 VALUES($1, $2, $3, $4, NOW(), NOW())`,
 			name,
 			tokenHash,
 			r,
+			encodeA2AAgentSystems(scopes),
 		)
 		if err != nil {
 			msg := strings.ToLower(err.Error())
@@ -800,11 +870,12 @@ func (s *APITokenStore) Create(name, tokenHash, role string, now time.Time) (API
 		}
 	}
 	record := APITokenRecord{
-		Name:      name,
-		Role:      r,
-		TokenHash: tokenHash,
-		CreatedAt: now.UTC().Format(time.RFC3339Nano),
-		UpdatedAt: now.UTC().Format(time.RFC3339Nano),
+		Name:            name,
+		Role:            r,
+		TokenHash:       tokenHash,
+		CreatedAt:       now.UTC().Format(time.RFC3339Nano),
+		UpdatedAt:       now.UTC().Format(time.RFC3339Nano),
+		A2AAgentSystems: scopes,
 	}
 	s.tokens[name] = record
 	return record, nil
@@ -819,13 +890,14 @@ func (s *APITokenStore) Get(name string) (APITokenRecord, bool, error) {
 		var (
 			record             APITokenRecord
 			createdAt, updated time.Time
+			scopesJSON         string
 		)
 		err := s.db.QueryRow(
-			`SELECT name, token_hash, role, created_at, updated_at
+			`SELECT name, token_hash, role, a2a_agent_systems, created_at, updated_at
 			 FROM auth_api_tokens
 			 WHERE name = $1`,
 			name,
-		).Scan(&record.Name, &record.TokenHash, &record.Role, &createdAt, &updated)
+		).Scan(&record.Name, &record.TokenHash, &record.Role, &scopesJSON, &createdAt, &updated)
 		if err == sql.ErrNoRows {
 			return APITokenRecord{}, false, nil
 		}
@@ -834,6 +906,7 @@ func (s *APITokenStore) Get(name string) (APITokenRecord, bool, error) {
 		}
 		record.CreatedAt = createdAt.UTC().Format(time.RFC3339Nano)
 		record.UpdatedAt = updated.UTC().Format(time.RFC3339Nano)
+		record.A2AAgentSystems = decodeA2AAgentSystems(scopesJSON)
 		return record, true, nil
 	}
 
@@ -855,13 +928,14 @@ func (s *APITokenStore) GetByHash(tokenHash string) (APITokenRecord, bool, error
 		var (
 			record             APITokenRecord
 			createdAt, updated time.Time
+			scopesJSON         string
 		)
 		err := s.db.QueryRow(
-			`SELECT name, token_hash, role, created_at, updated_at
+			`SELECT name, token_hash, role, a2a_agent_systems, created_at, updated_at
 			 FROM auth_api_tokens
 			 WHERE token_hash = $1`,
 			tokenHash,
-		).Scan(&record.Name, &record.TokenHash, &record.Role, &createdAt, &updated)
+		).Scan(&record.Name, &record.TokenHash, &record.Role, &scopesJSON, &createdAt, &updated)
 		if err == sql.ErrNoRows {
 			return APITokenRecord{}, false, nil
 		}
@@ -870,6 +944,7 @@ func (s *APITokenStore) GetByHash(tokenHash string) (APITokenRecord, bool, error
 		}
 		record.CreatedAt = createdAt.UTC().Format(time.RFC3339Nano)
 		record.UpdatedAt = updated.UTC().Format(time.RFC3339Nano)
+		record.A2AAgentSystems = decodeA2AAgentSystems(scopesJSON)
 		return record, true, nil
 	}
 
@@ -886,7 +961,7 @@ func (s *APITokenStore) GetByHash(tokenHash string) (APITokenRecord, bool, error
 func (s *APITokenStore) List() ([]APITokenRecord, error) {
 	if s.db != nil {
 		rows, err := s.db.Query(`
-			SELECT name, token_hash, role, created_at, updated_at
+			SELECT name, token_hash, role, a2a_agent_systems, created_at, updated_at
 			FROM auth_api_tokens
 			ORDER BY name ASC`)
 		if err != nil {
@@ -898,12 +973,14 @@ func (s *APITokenStore) List() ([]APITokenRecord, error) {
 			var (
 				record             APITokenRecord
 				createdAt, updated time.Time
+				scopesJSON         string
 			)
-			if err := rows.Scan(&record.Name, &record.TokenHash, &record.Role, &createdAt, &updated); err != nil {
+			if err := rows.Scan(&record.Name, &record.TokenHash, &record.Role, &scopesJSON, &createdAt, &updated); err != nil {
 				return nil, err
 			}
 			record.CreatedAt = createdAt.UTC().Format(time.RFC3339Nano)
 			record.UpdatedAt = updated.UTC().Format(time.RFC3339Nano)
+			record.A2AAgentSystems = decodeA2AAgentSystems(scopesJSON)
 			out = append(out, record)
 		}
 		if err := rows.Err(); err != nil {
