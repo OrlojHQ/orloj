@@ -86,20 +86,36 @@ components:
       required: [name, role]
       properties:
         name: { type: string }
-        role: { type: string }
+        role:
+          type: string
+          enum: [admin, writer, reader, controller, a2a]
+        a2a_agent_systems:
+          type: array
+          description: Required when role is `a2a`; AgentSystem refs this token may invoke. Bare names resolve in the default namespace.
+          items: { type: string }
     TokenMetadata:
       type: object
       properties:
         name: { type: string }
-        role: { type: string }
+        role:
+          type: string
+          enum: [admin, writer, reader, controller, a2a]
         created_at: { type: string }
+        a2a_agent_systems:
+          type: array
+          items: { type: string }
     TokenCreateResponse:
       type: object
       properties:
         name: { type: string }
-        role: { type: string }
+        role:
+          type: string
+          enum: [admin, writer, reader, controller, a2a]
         created_at: { type: string }
         token: { type: string }
+        a2a_agent_systems:
+          type: array
+          items: { type: string }
     TokenListResponse:
       type: object
       properties:

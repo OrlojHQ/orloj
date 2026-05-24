@@ -27,17 +27,21 @@ func newA2ACommand() *cobra.Command {
 
 func newA2ACardCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "card <agent-name>",
-		Short: "Preview the generated Agent Card for an agent",
+		Use:   "card <agent-system-name>",
+		Short: "Preview the generated Agent Card for an AgentSystem",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			server := resolveServer(cmd)
 			name := strings.TrimSpace(args[0])
 			if name == "" {
-				return errors.New("agent name is required")
+				return errors.New("agentsystem name is required")
 			}
 
-			cardURL := strings.TrimRight(server, "/") + "/v1/agents/" + url.PathEscape(name) + "/.well-known/agent-card.json"
+			if ns := resolveNamespace(cmd); ns != "" && !strings.Contains(name, "/") {
+				name = ns + "/" + name
+			}
+
+			cardURL := strings.TrimRight(server, "/") + "/v1/agent-systems/" + url.PathEscape(name) + "/.well-known/agent-card.json"
 			resp, err := http.Get(cardURL)
 			if err != nil {
 				return fmt.Errorf("fetch agent card failed: %w", err)

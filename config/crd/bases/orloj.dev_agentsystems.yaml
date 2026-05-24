@@ -46,6 +46,13 @@ spec:
             type: object
           spec:
             properties:
+              a2a:
+                properties:
+                  auth:
+                    type: string
+                  enabled:
+                    type: boolean
+                type: object
               agents:
                 items:
                   type: string

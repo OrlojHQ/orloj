@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -36,8 +37,9 @@ type IdentityAuthorizer interface {
 }
 
 type tokenPrincipal struct {
-	Name string
-	Role string
+	Name            string
+	Role            string
+	A2AAgentSystems []string
 }
 
 type authConfig struct {
@@ -63,11 +65,47 @@ func normalizeAPIRole(role, fallback string) (string, bool) {
 		r = strings.ToLower(strings.TrimSpace(fallback))
 	}
 	switch r {
-	case "admin", "writer", "reader", "controller":
+	case "admin", "writer", "reader", "controller", "a2a":
 		return r, true
 	default:
 		return "", false
 	}
+}
+
+func normalizeA2AAgentSystemRefs(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		v := strings.TrimSpace(value)
+		if v == "" {
+			continue
+		}
+		if strings.Contains(v, "/") {
+			parts := strings.SplitN(v, "/", 2)
+			v = store.ScopedName(parts[0], parts[1])
+		} else {
+			v = store.ScopedName(resources.DefaultNamespace, v)
+		}
+		key := strings.ToLower(v)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, v)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func parseA2AAgentSystemRefs(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	fields := strings.FieldsFunc(raw, func(r rune) bool {
+		return r == '|' || r == ';'
+	})
+	return normalizeA2AAgentSystemRefs(fields)
 }
 
 func parseTokenEnvConfig() map[string]tokenPrincipal {
@@ -84,9 +122,10 @@ func parseTokenEnvConfig() map[string]tokenPrincipal {
 			}
 			parts := strings.Split(raw, ":")
 			var (
-				name  string
-				token string
-				role  string
+				name            string
+				token           string
+				role            string
+				a2aAgentSystems []string
 			)
 			switch len(parts) {
 			case 2:
@@ -96,6 +135,15 @@ func parseTokenEnvConfig() map[string]tokenPrincipal {
 				name = strings.TrimSpace(parts[0])
 				token = strings.TrimSpace(parts[1])
 				role = strings.TrimSpace(parts[2])
+				if name == "" {
+					skipped++
+					continue
+				}
+			case 4:
+				name = strings.TrimSpace(parts[0])
+				token = strings.TrimSpace(parts[1])
+				role = strings.TrimSpace(parts[2])
+				a2aAgentSystems = parseA2AAgentSystemRefs(parts[3])
 				if name == "" {
 					skipped++
 					continue
@@ -113,10 +161,14 @@ func parseTokenEnvConfig() map[string]tokenPrincipal {
 				skipped++
 				continue
 			}
-			tokens[hashToken(token)] = tokenPrincipal{Name: name, Role: normalizedRole}
+			if normalizedRole == "a2a" && len(a2aAgentSystems) == 0 {
+				skipped++
+				continue
+			}
+			tokens[hashToken(token)] = tokenPrincipal{Name: name, Role: normalizedRole, A2AAgentSystems: a2aAgentSystems}
 		}
 		if skipped > 0 {
-			log.Printf("WARNING: ORLOJ_API_TOKENS: %d malformed entries skipped (expected token:role or name:token:role)", skipped)
+			log.Printf("WARNING: ORLOJ_API_TOKENS: %d malformed entries skipped (expected token:role, name:token:role, or name:token:a2a:namespace/name|other)", skipped)
 		}
 		if len(tokens) == 0 && len(pairs) > 0 {
 			log.Fatalf("ORLOJ_API_TOKENS is set but all %d entries are malformed — refusing to start with auth disabled", len(pairs))
@@ -178,7 +230,11 @@ func (a tokenAuthorizer) resolveTokenPrincipal(token string) (tokenPrincipal, bo
 	if !valid {
 		return tokenPrincipal{}, false, http.StatusInternalServerError, "auth store role invalid"
 	}
-	return tokenPrincipal{Name: strings.TrimSpace(record.Name), Role: role}, true, 0, ""
+	return tokenPrincipal{
+		Name:            strings.TrimSpace(record.Name),
+		Role:            role,
+		A2AAgentSystems: normalizeA2AAgentSystemRefs(record.A2AAgentSystems),
+	}, true, 0, ""
 }
 
 // NewAPIKeyAuthorizer returns an authorizer that validates a single API key
@@ -197,6 +253,39 @@ func NewAPIKeyAuthorizer(key string) RequestAuthorizer {
 func (a tokenAuthorizer) Authorize(r *http.Request, requiredRole string) (bool, int, string) {
 	allowed, statusCode, message, _ := a.AuthorizeWithIdentity(r, requiredRole)
 	return allowed, statusCode, message
+}
+
+// TryResolveIdentity attempts to extract and validate a bearer token from the
+// request without rejecting missing tokens. Returns the resolved identity
+// (Method:"bearer") when a valid token is present, a "none" identity when no
+// token is sent or auth is globally disabled, and an error status when a token
+// is present but invalid. Used by A2A invoke/registry paths where the handler
+// decides per-system policy.
+func (a tokenAuthorizer) TryResolveIdentity(r *http.Request) (AuthIdentity, int, string) {
+	enabled, statusCode, message := a.authEnabled()
+	if statusCode > 0 {
+		return AuthIdentity{}, statusCode, message
+	}
+	if !enabled {
+		return AuthIdentity{Method: "none", AuthDisabled: true}, 0, ""
+	}
+	token := bearerToken(r.Header.Get("Authorization"))
+	if token == "" {
+		return AuthIdentity{Method: "none"}, 0, ""
+	}
+	principal, ok, pStatus, pMessage := a.resolveTokenPrincipal(token)
+	if pStatus > 0 {
+		return AuthIdentity{}, pStatus, pMessage
+	}
+	if !ok {
+		return AuthIdentity{}, http.StatusUnauthorized, "invalid token"
+	}
+	return AuthIdentity{
+		Name:            principal.Name,
+		Role:            principal.Role,
+		Method:          "bearer",
+		A2AAgentSystems: principal.A2AAgentSystems,
+	}, 0, ""
 }
 
 func (a tokenAuthorizer) AuthorizeWithIdentity(r *http.Request, requiredRole string) (bool, int, string, AuthIdentity) {
@@ -225,9 +314,10 @@ func (a tokenAuthorizer) AuthorizeWithIdentity(r *http.Request, requiredRole str
 		return false, http.StatusForbidden, "forbidden", AuthIdentity{}
 	}
 	return true, 0, "", AuthIdentity{
-		Name:   principal.Name,
-		Role:   principal.Role,
-		Method: "bearer",
+		Name:            principal.Name,
+		Role:            principal.Role,
+		Method:          "bearer",
+		A2AAgentSystems: principal.A2AAgentSystems,
 	}
 }
 
@@ -261,6 +351,38 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+
+		// A2A invoke and registry paths use optional auth: resolve identity
+		// if a token is present, but don't reject missing tokens. The handler
+		// enforces per-system policy (public vs bearer).
+		if required == "a2a_invoke" {
+			authorizer := s.authorizer
+			if authorizer == nil {
+				authorizer = newTokenAuthorizerWithStoreFromEnv(s.stores.APITokens)
+			}
+			if ta, ok := authorizer.(tokenAuthorizer); ok {
+				identity, statusCode, message := ta.TryResolveIdentity(r)
+				if statusCode > 0 {
+					http.Error(w, strings.TrimSpace(message), statusCode)
+					return
+				}
+				if identity.Method != "bearer" && identity.Method != "none" {
+					http.Error(w, "A2A requires bearer token authentication", http.StatusUnauthorized)
+					return
+				}
+				ctx := withAuthIdentity(r.Context(), identity)
+				rw := &statusCaptureResponseWriter{ResponseWriter: w}
+				next.ServeHTTP(rw, r.WithContext(ctx))
+				if rw.statusCode == 0 {
+					rw.statusCode = http.StatusOK
+				}
+				s.emitBearerRequestAudit(r.WithContext(ctx), rw.statusCode, identity)
+				return
+			}
+			// Fallback for non-tokenAuthorizer: use standard "a2a" role check.
+			required = "a2a"
+		}
+
 		authorizer := s.authorizer
 		if authorizer == nil {
 			authorizer = newTokenAuthorizerWithStoreFromEnv(s.stores.APITokens)
@@ -290,11 +412,13 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 		if strings.TrimSpace(identity.Method) == "" {
 			identity.Method = "bearer"
 		}
+		if isA2AInvokeRequest(r.URL.Path, r.Method) && !strings.EqualFold(identity.Method, "bearer") && !strings.EqualFold(identity.Method, "none") {
+			http.Error(w, "A2A requires bearer token authentication", http.StatusUnauthorized)
+			return
+		}
 
 		ctx := withAuthIdentity(r.Context(), identity)
 		reqWithIdentity := r.WithContext(ctx)
-		// Extension point: a custom authorizer can enforce per-namespace,
-		// per-resource, or per-user policies here. Nil by default.
 		if s.resourceAuthorizer != nil {
 			ns := requestNamespace(reqWithIdentity)
 			resType, resName := resourceInfoFromPath(reqWithIdentity.URL.Path)
@@ -389,6 +513,12 @@ func requiredRoleForRequest(r *http.Request, uiBasePath string) string {
 	if path == "/metrics" {
 		return "reader"
 	}
+	if isA2ACardPath(path, method) {
+		return ""
+	}
+	if isA2ARegistryPath(path, method) || isA2AInvokeRequest(path, method) {
+		return "a2a_invoke"
+	}
 	if isUIPath(path, uiBasePath) {
 		return ""
 	}
@@ -425,6 +555,38 @@ func requiredRoleForRequest(r *http.Request, uiBasePath string) string {
 		}
 	}
 	return "writer"
+}
+
+func isA2ARegistryPath(path, method string) bool {
+	return strings.EqualFold(method, http.MethodGet) && strings.TrimSpace(path) == "/v1/a2a/agents"
+}
+
+func isA2ACardPath(path, method string) bool {
+	if !strings.EqualFold(method, http.MethodGet) && !strings.EqualFold(method, http.MethodHead) {
+		return false
+	}
+	path = strings.TrimSpace(path)
+	if path == "/.well-known/agent-card.json" || path == "/.well-known/agent.json" {
+		return true
+	}
+	if strings.HasPrefix(path, "/v1/agents/") || strings.HasPrefix(path, "/v1/agent-systems/") {
+		return strings.Contains(path, "/.well-known/agent-card.json") || strings.HasSuffix(path, "/.well-known/agent.json")
+	}
+	return false
+}
+
+func isA2AInvokeRequest(path, method string) bool {
+	if !strings.EqualFold(method, http.MethodPost) {
+		return false
+	}
+	path = strings.TrimSpace(path)
+	if path == "/a2a" {
+		return true
+	}
+	if strings.HasPrefix(path, "/v1/agents/") || strings.HasPrefix(path, "/v1/agent-systems/") {
+		return strings.HasSuffix(path, "/a2a")
+	}
+	return false
 }
 
 // toolMutationRequiresAdmin inspects an in-flight /v1/tools mutation body and
@@ -483,7 +645,8 @@ func toolMutationRequiresAdmin(r *http.Request) bool {
 //
 // Role hierarchy (highest to lowest):
 //   - admin:      full access to all endpoints
-//   - writer:     read + write (satisfies both "reader" and "writer" requirements)
+//   - writer:     read + write + A2A invoke
+//   - a2a:        A2A invoke only
 //   - controller: read + status-patch (satisfies "reader" and "controller" requirements)
 //   - reader:     read-only (satisfies only "reader" requirements)
 //
@@ -502,6 +665,8 @@ func roleAllows(actual, required string) bool {
 		return actual == "writer"
 	case "controller":
 		return actual == "controller"
+	case "a2a":
+		return actual == "a2a" || actual == "writer"
 	default:
 		return false
 	}

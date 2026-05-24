@@ -88,6 +88,28 @@ spec:
 	}
 }
 
+func TestParseAgentSystemManifestA2AYAML(t *testing.T) {
+	raw := []byte(`
+apiVersion: orloj.dev/v1
+kind: AgentSystem
+metadata:
+  name: a2a-system
+spec:
+  a2a:
+    enabled: true
+  agents:
+    - planner
+`)
+
+	system, err := ParseAgentSystemManifest(raw)
+	if err != nil {
+		t.Fatalf("parse agent system failed: %v", err)
+	}
+	if !system.Spec.A2A.Enabled {
+		t.Fatal("expected spec.a2a.enabled=true")
+	}
+}
+
 func TestFilterRoutesForOutputNoConditionsPassThrough(t *testing.T) {
 	routes := []GraphRoute{
 		{To: "a"},

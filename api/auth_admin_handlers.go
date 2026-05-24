@@ -14,21 +14,24 @@ import (
 )
 
 type createTokenRequest struct {
-	Name string `json:"name"`
-	Role string `json:"role"`
+	Name            string   `json:"name"`
+	Role            string   `json:"role"`
+	A2AAgentSystems []string `json:"a2a_agent_systems,omitempty"`
 }
 
 type tokenMetadataResponse struct {
-	Name      string `json:"name"`
-	Role      string `json:"role"`
-	CreatedAt string `json:"created_at"`
+	Name            string   `json:"name"`
+	Role            string   `json:"role"`
+	CreatedAt       string   `json:"created_at"`
+	A2AAgentSystems []string `json:"a2a_agent_systems,omitempty"`
 }
 
 type tokenCreateResponse struct {
-	Name      string `json:"name"`
-	Role      string `json:"role"`
-	CreatedAt string `json:"created_at"`
-	Token     string `json:"token"`
+	Name            string   `json:"name"`
+	Role            string   `json:"role"`
+	CreatedAt       string   `json:"created_at"`
+	Token           string   `json:"token"`
+	A2AAgentSystems []string `json:"a2a_agent_systems,omitempty"`
 }
 
 type tokenListResponse struct {
@@ -70,9 +73,10 @@ func (s *Server) handleTokens(w http.ResponseWriter, r *http.Request) {
 		resp := tokenListResponse{Items: make([]tokenMetadataResponse, 0, len(records))}
 		for _, record := range records {
 			resp.Items = append(resp.Items, tokenMetadataResponse{
-				Name:      record.Name,
-				Role:      record.Role,
-				CreatedAt: record.CreatedAt,
+				Name:            record.Name,
+				Role:            record.Role,
+				CreatedAt:       record.CreatedAt,
+				A2AAgentSystems: record.A2AAgentSystems,
 			})
 		}
 		writeJSON(w, http.StatusOK, resp)
@@ -96,7 +100,8 @@ func (s *Server) handleTokens(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "failed to generate token", http.StatusInternalServerError)
 			return
 		}
-		record, err := s.stores.APITokens.Create(req.Name, hashToken(rawToken), req.Role, time.Now().UTC())
+		a2aAgentSystems := normalizeA2AAgentSystemRefs(req.A2AAgentSystems)
+		record, err := s.stores.APITokens.CreateWithA2AAgentSystems(req.Name, hashToken(rawToken), req.Role, a2aAgentSystems, time.Now().UTC())
 		if err != nil {
 			switch {
 			case errors.Is(err, store.ErrAPITokenExists):
@@ -110,10 +115,11 @@ func (s *Server) handleTokens(w http.ResponseWriter, r *http.Request) {
 		}
 		s.emitAdminAudit(auditReq, "token.create", "api-token", record.Name, fmt.Sprintf("created API token %q with role %s", record.Name, record.Role))
 		writeJSON(w, http.StatusCreated, tokenCreateResponse{
-			Name:      record.Name,
-			Role:      record.Role,
-			CreatedAt: record.CreatedAt,
-			Token:     rawToken,
+			Name:            record.Name,
+			Role:            record.Role,
+			CreatedAt:       record.CreatedAt,
+			Token:           rawToken,
+			A2AAgentSystems: record.A2AAgentSystems,
 		})
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

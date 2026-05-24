@@ -398,7 +398,7 @@ export async function getA2AAgents(): Promise<import("./types").A2ARegistryRespo
 export async function getAgentCard(name: string): Promise<import("./types").AgentCard> {
   const { apiBase } = getConnection();
   const base = apiBase.replace(/\/$/, "");
-  return request<import("./types").AgentCard>(`${base}/v1/agents/${encodeURIComponent(name)}/.well-known/agent-card.json`);
+  return request<import("./types").AgentCard>(`${base}/v1/agent-systems/${encodeURIComponent(name)}/.well-known/agent-card.json`);
 }
 
 export async function changeLocalAuthPassword(

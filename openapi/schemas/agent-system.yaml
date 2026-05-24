@@ -57,6 +57,20 @@ components:
         ttl: { type: string }
         allow_request_changes: { type: boolean, default: true }
         max_review_cycles: { type: integer, minimum: 1, default: 3 }
+    AgentSystemA2ASpec:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: Expose this AgentSystem through inbound A2A discovery and JSON-RPC invocation.
+        auth:
+          type: string
+          enum: [public, bearer]
+          default: bearer
+          description: >-
+            Controls whether A2A invoke requires authentication for this system.
+            "public" allows unauthenticated invoke; "bearer" (default) requires
+            a valid API token when instance-wide auth is enabled.
     GraphEdge:
       type: object
       properties:
@@ -92,6 +106,8 @@ components:
         completion_review:
           description: Optional final human review checkpoint before the task transitions to Succeeded.
           $ref: "#/components/schemas/ReviewCheckpointSpec"
+        a2a:
+          $ref: "#/components/schemas/AgentSystemA2ASpec"
     AgentSystemStatus:
       type: object
       properties:

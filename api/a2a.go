@@ -1,21 +1,25 @@
 package api
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/runtime/a2a"
+	"github.com/OrlojHQ/orloj/store"
 	"github.com/OrlojHQ/orloj/telemetry"
 )
 
 // A2AConfig holds server-side A2A configuration.
 type A2AConfig struct {
-	Enabled                bool
 	PublicBaseURL          string
 	ProtocolVersion        string
 	StreamingEnabled       bool
@@ -31,25 +35,24 @@ func (s *Server) handleWellKnownAgentCard(w http.ResponseWriter, r *http.Request
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if s.a2aConfig == nil || !s.a2aConfig.Enabled {
-		http.Error(w, "A2A protocol is not enabled", http.StatusNotFound)
-		return
-	}
-
-	agents, err := s.stores.Agents.List(r.Context())
+	systems, err := s.a2aEnabledSystems(r)
 	if err != nil {
-		http.Error(w, "failed to list agents", http.StatusInternalServerError)
+		http.Error(w, "failed to list agent systems", http.StatusInternalServerError)
 		return
 	}
-	if len(agents) == 0 {
-		http.Error(w, "no agents configured", http.StatusNotFound)
+	if len(systems) != 1 {
+		http.Error(w, "A2A root card is available only when exactly one AgentSystem is enabled", http.StatusNotFound)
 		return
 	}
 
 	tools, _ := s.stores.Tools.List(r.Context())
+	agents, _ := s.stores.Agents.List(r.Context())
 
-	config := s.buildCardConfig()
-	card := a2a.GenerateAgentCard(agents[0], tools, config)
+	config := s.buildCardConfig(systems[0].Metadata.Namespace)
+	if systems[0].Spec.A2A.Auth == resources.A2AAuthPublic {
+		config.AuthSchemes = nil
+	}
+	card := a2a.GenerateSystemCard(systems[0], agentsForSystem(systems[0], agents), tools, config)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "public, max-age=300")
@@ -62,71 +65,31 @@ func (s *Server) handleAgentCard(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if s.a2aConfig == nil || !s.a2aConfig.Enabled {
-		http.Error(w, "A2A protocol is not enabled", http.StatusNotFound)
-		return
-	}
-
 	path := r.URL.Path
-	name := extractAgentNameFromCardPath(path)
+	name := extractA2ASystemNameFromPath(path)
 	if name == "" {
-		http.Error(w, "agent name required", http.StatusBadRequest)
+		http.Error(w, "agentsystem name required", http.StatusBadRequest)
 		return
 	}
 
-	agents, err := s.stores.Agents.List(r.Context())
+	system, ok, err := s.a2aEnabledSystemByName(r, name)
 	if err != nil {
-		http.Error(w, "failed to list agents", http.StatusInternalServerError)
+		http.Error(w, "failed to get agentsystem", http.StatusInternalServerError)
 		return
 	}
-
-	var agent *resources.Agent
-	for i := range agents {
-		if agents[i].Metadata.Name == name {
-			agent = &agents[i]
-			break
-		}
-	}
-
-	if agent == nil {
-		systems, err := s.stores.AgentSystems.List(r.Context())
-		if err == nil {
-			for _, sys := range systems {
-				if sys.Metadata.Name == name {
-					tools, _ := s.stores.Tools.List(r.Context())
-					var sysAgents []resources.Agent
-					for _, agentName := range sys.Spec.Agents {
-						for i := range agents {
-							if agents[i].Metadata.Name == agentName {
-								sysAgents = append(sysAgents, agents[i])
-							}
-						}
-					}
-					config := s.buildCardConfig()
-					card := a2a.GenerateSystemCard(sys, sysAgents, tools, config)
-					w.Header().Set("Content-Type", "application/json")
-					w.Header().Set("Cache-Control", "public, max-age=300")
-					json.NewEncoder(w).Encode(card)
-					return
-				}
-			}
-		}
-		http.Error(w, "agent not found", http.StatusNotFound)
+	if !ok {
+		http.Error(w, "agentsystem not found", http.StatusNotFound)
 		return
 	}
 
 	tools, _ := s.stores.Tools.List(r.Context())
-	var agentTools []resources.Tool
-	for _, t := range tools {
-		for _, tn := range agent.Spec.Tools {
-			if t.Metadata.Name == tn {
-				agentTools = append(agentTools, t)
-			}
-		}
-	}
+	agents, _ := s.stores.Agents.List(r.Context())
 
-	config := s.buildCardConfig()
-	card := a2a.GenerateAgentCard(*agent, agentTools, config)
+	config := s.buildCardConfig(system.Metadata.Namespace)
+	if system.Spec.A2A.Auth == resources.A2AAuthPublic {
+		config.AuthSchemes = nil
+	}
+	card := a2a.GenerateSystemCard(system, agentsForSystem(system, agents), tools, config)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "public, max-age=300")
@@ -139,11 +102,6 @@ func (s *Server) handleA2AJSONRPC(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if s.a2aConfig == nil || !s.a2aConfig.Enabled {
-		writeA2AError(w, nil, a2a.ErrCodeInternal, "A2A protocol is not enabled")
-		return
-	}
-
 	if s.a2aRateLimiter != nil && !s.a2aRateLimiter.Allow(r) {
 		writeA2AError(w, nil, a2a.ErrCodeInternal, "rate limit exceeded")
 		return
@@ -166,27 +124,27 @@ func (s *Server) handleA2AJSONRPC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	agentName := extractAgentNameFromA2APath(r.URL.Path)
+	systemName := extractA2ASystemNameFromPath(r.URL.Path)
 
 	switch req.Method {
 	case a2a.MethodTaskSend:
-		s.handleA2ATaskSend(w, r, req, agentName)
+		s.handleA2ATaskSend(w, r, req, systemName)
 	case a2a.MethodTaskGet:
-		s.handleA2ATaskGet(w, r, req)
+		s.handleA2ATaskGet(w, r, req, systemName)
 	case a2a.MethodTaskCancel:
-		s.handleA2ATaskCancel(w, r, req)
+		s.handleA2ATaskCancel(w, r, req, systemName)
 	case a2a.MethodTaskSubscribe:
-		s.handleA2ATaskSubscribe(w, r, req, agentName)
+		s.handleA2ATaskSubscribe(w, r, req, systemName)
 	default:
 		writeA2AError(w, req.ID, a2a.ErrCodeMethodNotFound, fmt.Sprintf("unknown method: %s", req.Method))
 	}
 }
 
-func (s *Server) handleA2ATaskSend(w http.ResponseWriter, r *http.Request, req a2a.JSONRPCRequest, agentName string) {
+func (s *Server) handleA2ATaskSend(w http.ResponseWriter, r *http.Request, req a2a.JSONRPCRequest, systemName string) {
 	start := time.Now()
 	status := "ok"
 	defer func() {
-		telemetry.RecordA2AInbound(a2a.MethodTaskSend, status, agentName, time.Since(start).Seconds())
+		telemetry.RecordA2AInbound(a2a.MethodTaskSend, status, systemName, time.Since(start).Seconds())
 	}()
 
 	paramsBytes, err := json.Marshal(req.Params)
@@ -209,7 +167,7 @@ func (s *Server) handleA2ATaskSend(w http.ResponseWriter, r *http.Request, req a
 		return
 	}
 
-	system := agentName
+	system := strings.TrimSpace(systemName)
 	if system == "" {
 		if params.Metadata != nil {
 			if agent, ok := params.Metadata["agent"]; ok {
@@ -220,19 +178,41 @@ func (s *Server) handleA2ATaskSend(w http.ResponseWriter, r *http.Request, req a
 		}
 	}
 	if system == "" {
-		agents, err := s.stores.Agents.List(r.Context())
-		if err == nil && len(agents) == 1 {
-			system = agents[0].Metadata.Name
+		defaultSystem, ok, err := s.defaultA2ASystem(r)
+		if err != nil {
+			status = "error"
+			writeA2AError(w, req.ID, a2a.ErrCodeInternal, "failed to resolve target agentsystem")
+			return
+		}
+		if ok {
+			system = defaultSystem.Metadata.Name
 		}
 	}
 	if system == "" {
 		status = "error"
-		writeA2AError(w, req.ID, a2a.ErrCodeInvalidParams, "target agent must be specified via URL path or request metadata")
+		writeA2AError(w, req.ID, a2a.ErrCodeInvalidParams, "target AgentSystem must be specified via URL path or request metadata")
 		return
 	}
 
-	namespace := resolveNamespace(r)
-	task := a2a.CreateOrlojTaskFromA2A(params, system, namespace)
+	target, ok, err := s.a2aEnabledSystemByName(r, system)
+	if err != nil {
+		status = "error"
+		writeA2AError(w, req.ID, a2a.ErrCodeInternal, "failed to resolve target agentsystem")
+		return
+	}
+	if !ok {
+		status = "error"
+		writeA2AError(w, req.ID, a2a.ErrCodeAgentNotFound, "target AgentSystem is not A2A-enabled")
+		return
+	}
+	if !a2aAuthorizeInvoke(w, r, req.ID, target) {
+		status = "error"
+		return
+	}
+
+	namespace := resources.NormalizeNamespace(target.Metadata.Namespace)
+	task := a2a.CreateOrlojTaskFromA2A(params, target.Metadata.Name, namespace)
+	task.Metadata.Name = a2aInternalTaskName(target, params.ID)
 
 	if _, err := s.stores.Tasks.Upsert(r.Context(), task); err != nil {
 		status = "error"
@@ -244,11 +224,11 @@ func (s *Server) handleA2ATaskSend(w http.ResponseWriter, r *http.Request, req a
 	writeA2AResult(w, req.ID, result)
 }
 
-func (s *Server) handleA2ATaskGet(w http.ResponseWriter, r *http.Request, req a2a.JSONRPCRequest) {
+func (s *Server) handleA2ATaskGet(w http.ResponseWriter, r *http.Request, req a2a.JSONRPCRequest, systemName string) {
 	start := time.Now()
 	status := "ok"
 	defer func() {
-		telemetry.RecordA2AInbound(a2a.MethodTaskGet, status, "", time.Since(start).Seconds())
+		telemetry.RecordA2AInbound(a2a.MethodTaskGet, status, systemName, time.Since(start).Seconds())
 	}()
 
 	paramsBytes, err := json.Marshal(req.Params)
@@ -265,8 +245,19 @@ func (s *Server) handleA2ATaskGet(w http.ResponseWriter, r *http.Request, req a2
 		return
 	}
 
-	task, err := s.findTaskByA2AID(r, params.ID)
+	if params.ID == "" {
+		status = "error"
+		writeA2AError(w, req.ID, a2a.ErrCodeInvalidParams, "task id is required")
+		return
+	}
+
+	task, err := s.findTaskByA2AID(r, params.ID, systemName)
 	if err != nil {
+		status = "error"
+		writeA2AError(w, req.ID, a2a.ErrCodeTaskNotFound, "task not found")
+		return
+	}
+	if !s.a2aIdentityAllowsTask(r, task) {
 		status = "error"
 		writeA2AError(w, req.ID, a2a.ErrCodeTaskNotFound, "task not found")
 		return
@@ -276,11 +267,11 @@ func (s *Server) handleA2ATaskGet(w http.ResponseWriter, r *http.Request, req a2
 	writeA2AResult(w, req.ID, result)
 }
 
-func (s *Server) handleA2ATaskCancel(w http.ResponseWriter, r *http.Request, req a2a.JSONRPCRequest) {
+func (s *Server) handleA2ATaskCancel(w http.ResponseWriter, r *http.Request, req a2a.JSONRPCRequest, systemName string) {
 	start := time.Now()
 	status := "ok"
 	defer func() {
-		telemetry.RecordA2AInbound(a2a.MethodTaskCancel, status, "", time.Since(start).Seconds())
+		telemetry.RecordA2AInbound(a2a.MethodTaskCancel, status, systemName, time.Since(start).Seconds())
 	}()
 
 	paramsBytes, err := json.Marshal(req.Params)
@@ -297,8 +288,19 @@ func (s *Server) handleA2ATaskCancel(w http.ResponseWriter, r *http.Request, req
 		return
 	}
 
-	task, err := s.findTaskByA2AID(r, params.ID)
+	if params.ID == "" {
+		status = "error"
+		writeA2AError(w, req.ID, a2a.ErrCodeInvalidParams, "task id is required")
+		return
+	}
+
+	task, err := s.findTaskByA2AID(r, params.ID, systemName)
 	if err != nil {
+		status = "error"
+		writeA2AError(w, req.ID, a2a.ErrCodeTaskNotFound, "task not found")
+		return
+	}
+	if !s.a2aIdentityAllowsTask(r, task) {
 		status = "error"
 		writeA2AError(w, req.ID, a2a.ErrCodeTaskNotFound, "task not found")
 		return
@@ -307,6 +309,12 @@ func (s *Server) handleA2ATaskCancel(w http.ResponseWriter, r *http.Request, req
 	reason := params.Reason
 	if reason == "" {
 		reason = "cancelled via A2A"
+	}
+	if len(reason) > 1024 {
+		reason = reason[:1024]
+		for !utf8.ValidString(reason) {
+			reason = reason[:len(reason)-1]
+		}
 	}
 
 	if task.Metadata.Labels == nil {
@@ -327,11 +335,11 @@ func (s *Server) handleA2ATaskCancel(w http.ResponseWriter, r *http.Request, req
 	writeA2AResult(w, req.ID, result)
 }
 
-func (s *Server) handleA2ATaskSubscribe(w http.ResponseWriter, r *http.Request, req a2a.JSONRPCRequest, agentName string) {
+func (s *Server) handleA2ATaskSubscribe(w http.ResponseWriter, r *http.Request, req a2a.JSONRPCRequest, systemName string) {
 	start := time.Now()
 	status := "ok"
 	defer func() {
-		telemetry.RecordA2AInbound(a2a.MethodTaskSubscribe, status, agentName, time.Since(start).Seconds())
+		telemetry.RecordA2AInbound(a2a.MethodTaskSubscribe, status, systemName, time.Since(start).Seconds())
 	}()
 
 	paramsBytes, err := json.Marshal(req.Params)
@@ -348,7 +356,13 @@ func (s *Server) handleA2ATaskSubscribe(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	system := agentName
+	if params.ID == "" {
+		status = "error"
+		writeA2AError(w, req.ID, a2a.ErrCodeInvalidParams, "task id is required")
+		return
+	}
+
+	system := strings.TrimSpace(systemName)
 	if system == "" && params.Metadata != nil {
 		if agent, ok := params.Metadata["agent"]; ok {
 			system = agent
@@ -357,14 +371,35 @@ func (s *Server) handleA2ATaskSubscribe(w http.ResponseWriter, r *http.Request, 
 		}
 	}
 	if system == "" {
-		agents, err := s.stores.Agents.List(r.Context())
-		if err == nil && len(agents) == 1 {
-			system = agents[0].Metadata.Name
+		defaultSystem, ok, err := s.defaultA2ASystem(r)
+		if err != nil {
+			status = "error"
+			writeA2AError(w, req.ID, a2a.ErrCodeInternal, "failed to resolve target agentsystem")
+			return
+		}
+		if ok {
+			system = defaultSystem.Metadata.Name
 		}
 	}
 	if system == "" {
 		status = "error"
-		writeA2AError(w, req.ID, a2a.ErrCodeInvalidParams, "target agent required")
+		writeA2AError(w, req.ID, a2a.ErrCodeInvalidParams, "target AgentSystem required")
+		return
+	}
+
+	target, ok, err := s.a2aEnabledSystemByName(r, system)
+	if err != nil {
+		status = "error"
+		writeA2AError(w, req.ID, a2a.ErrCodeInternal, "failed to resolve target agentsystem")
+		return
+	}
+	if !ok {
+		status = "error"
+		writeA2AError(w, req.ID, a2a.ErrCodeAgentNotFound, "target AgentSystem is not A2A-enabled")
+		return
+	}
+	if !a2aAuthorizeInvoke(w, r, req.ID, target) {
+		status = "error"
 		return
 	}
 
@@ -394,8 +429,9 @@ func (s *Server) handleA2ATaskSubscribe(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	namespace := resolveNamespace(r)
-	task := a2a.CreateOrlojTaskFromA2A(params, system, namespace)
+	namespace := resources.NormalizeNamespace(target.Metadata.Namespace)
+	task := a2a.CreateOrlojTaskFromA2A(params, target.Metadata.Name, namespace)
+	task.Metadata.Name = a2aInternalTaskName(target, params.ID)
 
 	if _, err := s.stores.Tasks.Upsert(r.Context(), task); err != nil {
 		status = "error"
@@ -407,11 +443,14 @@ func (s *Server) handleA2ATaskSubscribe(w http.ResponseWriter, r *http.Request, 
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
-	telemetry.A2AActiveSubscriptions.WithLabelValues(agentName).Inc()
-	defer telemetry.A2AActiveSubscriptions.WithLabelValues(agentName).Dec()
+	telemetry.A2AActiveSubscriptions.WithLabelValues(target.Metadata.Name).Inc()
+	defer telemetry.A2AActiveSubscriptions.WithLabelValues(target.Metadata.Name).Dec()
 
 	initialResult := a2a.OrlojTaskToA2AResult(task)
-	sendSSEEvent(w, flusher, "status", initialResult)
+	if sendSSEEvent(w, flusher, "status", initialResult) != nil {
+		status = "client_disconnected"
+		return
+	}
 
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
@@ -422,9 +461,13 @@ func (s *Server) handleA2ATaskSubscribe(w http.ResponseWriter, r *http.Request, 
 	for {
 		select {
 		case <-r.Context().Done():
+			status = "client_disconnected"
 			return
 		case <-heartbeat.C:
-			fmt.Fprintf(w, ": heartbeat\n\n")
+			if _, err := fmt.Fprintf(w, ": heartbeat\n\n"); err != nil {
+				status = "client_disconnected"
+				return
+			}
 			flusher.Flush()
 		case <-ticker.C:
 			current, ok, err := s.stores.Tasks.Get(r.Context(), taskKey)
@@ -432,7 +475,10 @@ func (s *Server) handleA2ATaskSubscribe(w http.ResponseWriter, r *http.Request, 
 				return
 			}
 			result := a2a.OrlojTaskToA2AResult(current)
-			sendSSEEvent(w, flusher, "status", result)
+			if sendSSEEvent(w, flusher, "status", result) != nil {
+				status = "client_disconnected"
+				return
+			}
 			if a2a.IsTerminal(result.Status.State) {
 				return
 			}
@@ -446,33 +492,38 @@ func (s *Server) handleA2ARegistry(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if s.a2aConfig == nil || !s.a2aConfig.Enabled {
-		http.Error(w, "A2A protocol is not enabled", http.StatusNotFound)
-		return
-	}
-
 	var localCards []a2a.AgentCard
 
-	agents, err := s.stores.Agents.List(r.Context())
-	if err == nil {
+	systems, err := s.a2aEnabledSystems(r)
+	if err != nil {
+		http.Error(w, "failed to list agent systems", http.StatusInternalServerError)
+		return
+	}
+	if len(systems) > 0 {
+		agents, _ := s.stores.Agents.List(r.Context())
 		tools, _ := s.stores.Tools.List(r.Context())
-		config := s.buildCardConfig()
-		for _, agent := range agents {
-			var agentTools []resources.Tool
-			for _, t := range tools {
-				for _, tn := range agent.Spec.Tools {
-					if t.Metadata.Name == tn {
-						agentTools = append(agentTools, t)
-					}
-				}
+
+		identity, hasIdentity := AuthIdentityFromRequest(r)
+		unauthenticated := !hasIdentity || (strings.EqualFold(identity.Method, "none") && !identity.AuthDisabled)
+
+		for _, system := range systems {
+			if unauthenticated && system.Spec.A2A.Auth != resources.A2AAuthPublic {
+				continue
 			}
-			card := a2a.GenerateAgentCard(agent, agentTools, config)
+			if !unauthenticated && !a2aIdentityAllowsSystem(r, system) && system.Spec.A2A.Auth != resources.A2AAuthPublic {
+				continue
+			}
+			config := s.buildCardConfig(system.Metadata.Namespace)
+			if system.Spec.A2A.Auth == resources.A2AAuthPublic {
+				config.AuthSchemes = nil
+			}
+			card := a2a.GenerateSystemCard(system, agentsForSystem(system, agents), tools, config)
 			localCards = append(localCards, card)
 		}
 	}
 
 	var remoteAgents []a2a.RemoteAgentEntry
-	if s.a2aConfig.Registry != nil {
+	if s.a2aConfig != nil && s.a2aConfig.Registry != nil {
 		remoteAgents = s.a2aConfig.Registry.List()
 	}
 
@@ -484,47 +535,217 @@ func (s *Server) handleA2ARegistry(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-func (s *Server) buildCardConfig() a2a.CardGeneratorConfig {
+func (s *Server) buildCardConfig(namespace string) a2a.CardGeneratorConfig {
 	if s.a2aConfig == nil {
-		return a2a.CardGeneratorConfig{}
+		return a2a.CardGeneratorConfig{Namespace: resources.NormalizeNamespace(namespace)}
 	}
 	return a2a.CardGeneratorConfig{
 		PublicBaseURL:    s.a2aConfig.PublicBaseURL,
-		ProtocolVersion: s.a2aConfig.ProtocolVersion,
+		ProtocolVersion:  s.a2aConfig.ProtocolVersion,
 		StreamingEnabled: s.a2aConfig.StreamingEnabled,
-		AuthSchemes:     s.a2aConfig.AuthSchemes,
+		AuthSchemes:      s.a2aConfig.AuthSchemes,
+		Namespace:        resources.NormalizeNamespace(namespace),
 	}
 }
 
-func (s *Server) findTaskByA2AID(r *http.Request, a2aTaskID string) (resources.Task, error) {
+func (s *Server) a2aEnabledSystems(r *http.Request) ([]resources.AgentSystem, error) {
+	systems, err := s.stores.AgentSystems.List(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	namespace := requestNamespace(r)
+	out := make([]resources.AgentSystem, 0, len(systems))
+	for _, system := range systems {
+		if !system.Spec.A2A.Enabled {
+			continue
+		}
+		if !strings.EqualFold(resources.NormalizeNamespace(system.Metadata.Namespace), namespace) {
+			continue
+		}
+		out = append(out, system)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return store.ScopedName(out[i].Metadata.Namespace, out[i].Metadata.Name) < store.ScopedName(out[j].Metadata.Namespace, out[j].Metadata.Name)
+	})
+	return out, nil
+}
+
+func (s *Server) a2aEnabledSystemByName(r *http.Request, name string) (resources.AgentSystem, bool, error) {
+	ref := scopedNameForRequest(r, name)
+	if strings.Contains(strings.TrimSpace(name), "/") {
+		parts := strings.SplitN(strings.TrimSpace(name), "/", 2)
+		ref = store.ScopedName(parts[0], parts[1])
+	}
+	system, ok, err := s.stores.AgentSystems.Get(r.Context(), ref)
+	if err != nil || !ok {
+		return resources.AgentSystem{}, false, err
+	}
+	if !system.Spec.A2A.Enabled {
+		return resources.AgentSystem{}, false, nil
+	}
+	return system, true, nil
+}
+
+func (s *Server) defaultA2ASystem(r *http.Request) (resources.AgentSystem, bool, error) {
+	systems, err := s.a2aEnabledSystems(r)
+	if err != nil || len(systems) != 1 {
+		return resources.AgentSystem{}, false, err
+	}
+	return systems[0], true, nil
+}
+
+func agentsForSystem(system resources.AgentSystem, agents []resources.Agent) []resources.Agent {
+	agentsByName := make(map[string]resources.Agent, len(agents))
+	for _, agent := range agents {
+		agentsByName[store.ScopedName(agent.Metadata.Namespace, agent.Metadata.Name)] = agent
+	}
+	out := make([]resources.Agent, 0, len(system.Spec.Agents))
+	for _, agentName := range system.Spec.Agents {
+		key := store.ScopedName(system.Metadata.Namespace, agentName)
+		if agent, ok := agentsByName[key]; ok {
+			out = append(out, agent)
+			continue
+		}
+		key = store.ScopedName(resources.DefaultNamespace, agentName)
+		if agent, ok := agentsByName[key]; ok {
+			out = append(out, agent)
+		}
+	}
+	return out
+}
+
+// a2aAuthorizeInvoke is the single centralized auth gate for A2A invoke.
+// It checks the system's auth policy and, for bearer-required systems,
+// validates the caller's identity and scope. Returns true if the request
+// is authorized; writes an appropriate JSON-RPC error and returns false
+// otherwise.
+func a2aAuthorizeInvoke(w http.ResponseWriter, r *http.Request, reqID any, system resources.AgentSystem) bool {
+	if system.Spec.A2A.Auth == resources.A2AAuthPublic {
+		return true
+	}
+	identity, ok := AuthIdentityFromRequest(r)
+	if !ok {
+		writeA2AError(w, reqID, a2a.ErrCodeAgentNotFound, "target AgentSystem is not available")
+		return false
+	}
+	if identity.AuthDisabled {
+		return true
+	}
+	if strings.EqualFold(identity.Method, "none") {
+		writeA2AError(w, reqID, a2a.ErrCodeAgentNotFound, "target AgentSystem is not available")
+		return false
+	}
+	if !strings.EqualFold(identity.Method, "bearer") {
+		writeA2AError(w, reqID, a2a.ErrCodeAgentNotFound, "target AgentSystem is not available")
+		return false
+	}
+	if !a2aIdentityAllowsSystem(r, system) {
+		writeA2AError(w, reqID, a2a.ErrCodeAgentNotFound, "target AgentSystem is not available")
+		return false
+	}
+	return true
+}
+
+func a2aIdentityAllowsSystem(r *http.Request, system resources.AgentSystem) bool {
+	identity, ok := AuthIdentityFromRequest(r)
+	if !ok {
+		return system.Spec.A2A.Auth == resources.A2AAuthPublic
+	}
+	if strings.EqualFold(identity.Method, "none") {
+		return identity.AuthDisabled || system.Spec.A2A.Auth == resources.A2AAuthPublic
+	}
+	if strings.EqualFold(identity.Role, "admin") || strings.EqualFold(identity.Role, "writer") {
+		return true
+	}
+	if !strings.EqualFold(identity.Role, "a2a") {
+		return false
+	}
+	target := strings.ToLower(store.ScopedName(system.Metadata.Namespace, system.Metadata.Name))
+	for _, allowed := range normalizeA2AAgentSystemRefs(identity.A2AAgentSystems) {
+		if strings.ToLower(allowed) == target {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Server) a2aIdentityAllowsTask(r *http.Request, task resources.Task) bool {
+	system, ok, err := s.stores.AgentSystems.Get(r.Context(), store.ScopedName(task.Metadata.Namespace, task.Spec.System))
+	if err != nil || !ok || !system.Spec.A2A.Enabled {
+		return false
+	}
+	if system.Spec.A2A.Auth == resources.A2AAuthPublic {
+		return true
+	}
+	return a2aIdentityAllowsSystem(r, system)
+}
+
+func a2aInternalTaskName(system resources.AgentSystem, externalID string) string {
+	ref := store.ScopedName(system.Metadata.Namespace, system.Metadata.Name)
+	sum := sha256.Sum256([]byte(ref + "\x00" + externalID))
+	suffix := sanitizeA2ANamePart(externalID)
+	if suffix == "" {
+		suffix = "task"
+	}
+	if len(suffix) > 48 {
+		suffix = suffix[:48]
+	}
+	return fmt.Sprintf("a2a-%x-%s", sum[:6], suffix)
+}
+
+func sanitizeA2ANamePart(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	var b strings.Builder
+	lastDash := false
+	for _, r := range value {
+		ok := (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
+		if ok {
+			b.WriteRune(r)
+			lastDash = false
+			continue
+		}
+		if !lastDash {
+			b.WriteByte('-')
+			lastDash = true
+		}
+	}
+	return strings.Trim(b.String(), "-")
+}
+
+func (s *Server) findTaskByA2AID(r *http.Request, a2aTaskID string, systemFilter ...string) (resources.Task, error) {
 	tasks, err := s.stores.Tasks.List(r.Context())
 	if err != nil {
 		return resources.Task{}, err
 	}
+	filter := ""
+	if len(systemFilter) > 0 {
+		filter = strings.TrimSpace(systemFilter[0])
+	}
 	for _, task := range tasks {
 		if task.Metadata.Labels != nil && task.Metadata.Labels[a2a.LabelA2ATaskID] == a2aTaskID {
-			return task, nil
+			if filter != "" && task.Spec.System != filter {
+				continue
+			}
+			if s.a2aIdentityAllowsTask(r, task) {
+				return task, nil
+			}
 		}
 	}
 	return resources.Task{}, fmt.Errorf("task not found")
 }
 
-func extractAgentNameFromCardPath(path string) string {
-	path = strings.TrimPrefix(path, "/v1/agents/")
-	parts := strings.SplitN(path, "/", 2)
-	if len(parts) > 0 {
-		return strings.TrimSpace(parts[0])
-	}
-	return ""
-}
-
-func extractAgentNameFromA2APath(path string) string {
-	if !strings.HasPrefix(path, "/v1/agents/") {
-		return ""
-	}
-	path = strings.TrimPrefix(path, "/v1/agents/")
-	if idx := strings.Index(path, "/a2a"); idx >= 0 {
-		return strings.TrimSpace(path[:idx])
+func extractA2ASystemNameFromPath(path string) string {
+	for _, prefix := range []string{"/v1/agent-systems/", "/v1/agents/"} {
+		if strings.HasPrefix(path, prefix) {
+			path = strings.TrimPrefix(path, prefix)
+			parts := strings.SplitN(path, "/", 2)
+			if len(parts) > 0 {
+				if decoded, err := url.PathUnescape(parts[0]); err == nil {
+					return strings.TrimSpace(decoded)
+				}
+				return strings.TrimSpace(parts[0])
+			}
+		}
 	}
 	return ""
 }
@@ -560,11 +781,14 @@ func writeA2AResult(w http.ResponseWriter, id any, result any) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-func sendSSEEvent(w http.ResponseWriter, flusher http.Flusher, eventType string, data any) {
+func sendSSEEvent(w http.ResponseWriter, flusher http.Flusher, eventType string, data any) error {
 	jsonData, err := json.Marshal(data)
 	if err != nil {
-		return
+		return err
 	}
-	fmt.Fprintf(w, "event: %s\ndata: %s\n\n", eventType, string(jsonData))
+	if _, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", eventType, string(jsonData)); err != nil {
+		return err
+	}
 	flusher.Flush()
+	return nil
 }

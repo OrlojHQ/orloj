@@ -292,11 +292,10 @@ Agent Jobs use deterministic names based on the task, agent, and attempt number.
 
 ## A2A Protocol
 
-To enable A2A protocol support in a Helm deployment, set the `a2a.*` values:
+To configure public A2A Agent Card URLs in a Helm deployment, set the A2A public base URL. Individual AgentSystems are exposed with `spec.a2a.enabled: true`.
 
 ```bash
 helm upgrade orloj ./charts/orloj --namespace orloj --reuse-values \
-  --set a2a.enabled=true \
   --set a2a.publicBaseURL=https://orloj.example.com
 ```
 

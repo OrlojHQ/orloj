@@ -5781,8 +5781,8 @@ paths:
       tags:
       - a2a
       summary: Get the default Agent Card
-      description: Returns the A2A Agent Card for the default agent or agent system.
-        Used by A2A clients for agent discovery.
+      description: Returns the A2A Agent Card when exactly one AgentSystem has spec.a2a.enabled=true.
+        Use the registry or per-system card URLs when multiple systems are exposed.
       security: []
       responses:
         '200':
@@ -5792,7 +5792,7 @@ paths:
               schema:
                 "$ref": "./schemas/a2a.yaml#/components/schemas/AgentCard"
         '404':
-          description: No default agent configured
+          description: No single default AgentSystem available
           content:
             text/plain:
               schema:
@@ -5803,13 +5803,12 @@ paths:
             text/plain:
               schema:
                 "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
-  "/v1/agents/{name}/.well-known/agent-card.json":
+  "/v1/agent-systems/{name}/.well-known/agent-card.json":
     get:
       tags:
       - a2a
-      summary: Get Agent Card for a specific agent
-      description: Returns the A2A Agent Card for the named agent, including derived
-        skills and capabilities.
+      summary: Get Agent Card for a specific AgentSystem
+      description: Returns the A2A Agent Card for the named AgentSystem when spec.a2a.enabled=true.
       parameters:
       - name: name
         in: path
@@ -5825,7 +5824,39 @@ paths:
               schema:
                 "$ref": "./schemas/a2a.yaml#/components/schemas/AgentCard"
         '404':
-          description: Agent not found
+          description: AgentSystem not found or not A2A-enabled
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/agents/{name}/.well-known/agent-card.json":
+    get:
+      tags:
+      - a2a
+      summary: Get Agent Card for a specific AgentSystem (legacy path)
+      description: Legacy alias for /v1/agent-systems/{name}/.well-known/agent-card.json.
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/a2a.yaml#/components/schemas/AgentCard"
+        '404':
+          description: AgentSystem not found or not A2A-enabled
           content:
             text/plain:
               schema:
@@ -5842,10 +5873,11 @@ paths:
       - a2a
       summary: A2A JSON-RPC endpoint
       description: 'JSON-RPC 2.0 endpoint implementing the A2A protocol. Supports
-        methods: tasks/send, tasks/get, tasks/cancel, tasks/sendSubscribe.'
+        methods: tasks/send, tasks/get, tasks/cancel, tasks/sendSubscribe. Auth
+        depends on the target AgentSystem spec.a2a.auth policy (public or bearer).'
       security:
+      - {}
       - bearerAuth: []
-      - sessionCookie: []
       requestBody:
         required: true
         content:
@@ -5871,16 +5903,58 @@ paths:
             text/plain:
               schema:
                 "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/agent-systems/{name}/a2a":
+    post:
+      tags:
+      - a2a
+      summary: A2A JSON-RPC endpoint for a specific AgentSystem
+      description: JSON-RPC 2.0 endpoint for the named AgentSystem. The system name
+        in the path determines routing; no target field is needed in request params.
+        Auth depends on the target AgentSystem spec.a2a.auth policy (public or bearer).
+      security:
+      - {}
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/a2a.yaml#/components/schemas/A2AJsonRpcRequest"
+      responses:
+        '200':
+          description: JSON-RPC response
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/a2a.yaml#/components/schemas/A2AJsonRpcResponse"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
   "/v1/agents/{name}/a2a":
     post:
       tags:
       - a2a
-      summary: A2A JSON-RPC endpoint for a specific agent
-      description: JSON-RPC 2.0 endpoint for the named agent. The agent name in the
-        path determines routing; no target field is needed in request params.
+      summary: A2A JSON-RPC endpoint for a specific AgentSystem (legacy path)
+      description: Legacy alias for /v1/agent-systems/{name}/a2a. Auth depends on
+        the target AgentSystem spec.a2a.auth policy (public or bearer).
       security:
+      - {}
       - bearerAuth: []
-      - sessionCookie: []
       requestBody:
         required: true
         content:
@@ -5917,11 +5991,12 @@ paths:
       tags:
       - a2a
       summary: List A2A agent registry
-      description: Returns locally exposed Agent Cards and configured remote agent
-        entries with cache metadata.
+      description: Returns locally exposed A2A-enabled AgentSystem cards visible to
+        the caller. Unauthenticated requests see only public systems; authenticated
+        requests see public systems plus systems the token is scoped to.
       security:
+      - {}
       - bearerAuth: []
-      - sessionCookie: []
       responses:
         '200':
           description: OK

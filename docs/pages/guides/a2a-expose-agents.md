@@ -1,6 +1,6 @@
-# Expose Agents via A2A
+# Expose AgentSystems via A2A
 
-This guide walks through enabling A2A protocol support so external A2A clients can discover and interact with your Orloj agents.
+This guide walks through exposing selected Orloj AgentSystems to external A2A clients.
 
 ## Prerequisites
 
@@ -10,28 +10,31 @@ This guide walks through enabling A2A protocol support so external A2A clients c
 
 If you have not set up Orloj yet, follow the [Install](../getting-started/install.md) and [Quickstart](../getting-started/quickstart.md) guides first.
 
-## Step 1: Enable A2A
+## Step 1: Expose an AgentSystem
 
-Enable A2A support and set the public base URL that external clients will use to reach your Orloj instance.
+Add `spec.a2a.enabled: true` to each AgentSystem that should be reachable through A2A. Systems without this block remain internal.
 
-With server flags:
-
-```bash
-orlojd --a2a-enabled --a2a-public-base-url https://orloj.example.com
+```yaml
+apiVersion: orloj.dev/v1
+kind: AgentSystem
+metadata:
+  name: research-system
+spec:
+  agents:
+    - research-agent
+  a2a:
+    enabled: true
 ```
 
-Or via environment variables:
+Set the public base URL so generated Agent Cards point at the externally reachable host:
 
 ```bash
-export ORLOJ_A2A_ENABLED=true
-export ORLOJ_A2A_PUBLIC_BASE_URL=https://orloj.example.com
+orlojd --a2a-public-base-url https://orloj.example.com
 ```
-
-The `publicBaseURL` is used to construct the `url` field in generated Agent Cards. It must be reachable by external A2A clients.
 
 ## Step 2: Verify the Default Agent Card
 
-Once A2A is enabled, the server exposes Agent Cards at well-known URLs. Verify with curl:
+If exactly one AgentSystem is A2A-enabled, the root well-known URL returns its card:
 
 ```bash
 curl -s http://localhost:8080/.well-known/agent-card.json | jq .
@@ -41,9 +44,9 @@ Expected output:
 
 ```json
 {
-  "name": "my-agent",
+  "name": "research-system",
   "description": "Research assistant with web search capabilities",
-  "url": "https://orloj.example.com/v1/agents/my-agent/a2a",
+  "url": "https://orloj.example.com/v1/agent-systems/research-system/a2a",
   "protocolVersion": "0.2",
   "capabilities": {
     "streaming": true,
@@ -64,10 +67,10 @@ Expected output:
 }
 ```
 
-For a specific agent:
+For a specific AgentSystem:
 
 ```bash
-curl -s http://localhost:8080/v1/agents/research-agent/.well-known/agent-card.json | jq .
+curl -s http://localhost:8080/v1/agent-systems/research-system/.well-known/agent-card.json | jq .
 ```
 
 ## Step 3: Test Inbound Task Creation
@@ -75,7 +78,7 @@ curl -s http://localhost:8080/v1/agents/research-agent/.well-known/agent-card.js
 Send an A2A `tasks/send` request to create a task:
 
 ```bash
-curl -s -X POST http://localhost:8080/a2a \
+curl -s -X POST http://localhost:8080/v1/agent-systems/research-system/a2a \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $ORLOJ_TOKEN" \
   -d '{
@@ -117,16 +120,16 @@ The response contains an A2A task with a status:
 }
 ```
 
-## Step 4: Per-Agent Endpoints
+## Step 4: Multiple Systems
 
-For multi-agent deployments, use per-agent A2A endpoints. Each agent gets its own card and JSON-RPC endpoint:
+For deployments with multiple exposed systems, use per-system cards and endpoints:
 
 ```bash
 # Discovery
-curl -s http://localhost:8080/v1/agents/research-agent/.well-known/agent-card.json
+curl -s http://localhost:8080/v1/agent-systems/research-system/.well-known/agent-card.json
 
 # Task submission
-curl -s -X POST http://localhost:8080/v1/agents/research-agent/a2a \
+curl -s -X POST http://localhost:8080/v1/agent-systems/research-system/a2a \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $ORLOJ_TOKEN" \
   -d '{
@@ -143,14 +146,14 @@ curl -s -X POST http://localhost:8080/v1/agents/research-agent/a2a \
   }'
 ```
 
-The per-agent card's `url` field points to `https://orloj.example.com/v1/agents/research-agent/a2a`, so A2A clients that discover the card know where to send requests.
+The per-system card's `url` field points to `https://orloj.example.com/v1/agent-systems/research-system/a2a`, so A2A clients that discover the card know where to send requests.
 
 ## Step 5: Streaming Subscribe
 
 For long-running tasks, use `tasks/sendSubscribe` to receive streaming updates via SSE:
 
 ```bash
-curl -s -N -X POST http://localhost:8080/v1/agents/research-agent/a2a \
+curl -s -N -X POST http://localhost:8080/v1/agent-systems/research-system/a2a \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $ORLOJ_TOKEN" \
   -d '{
@@ -174,30 +177,51 @@ The server responds with a stream of SSE events containing status updates and ar
 When an A2A request arrives:
 
 1. The JSON-RPC method is parsed and validated.
-2. The target agent is resolved from the URL path (per-agent) or request params (shared endpoint).
+2. The target AgentSystem is resolved from the URL path or request params (shared endpoint).
 3. An Orloj Task is created with A2A metadata labels.
 4. The AgentSystem executes the task using the normal Orloj pipeline.
 5. Task status transitions are mapped to A2A states and returned in the response.
 6. For `tasks/sendSubscribe`, the task's trace/watch SSE stream is converted to A2A streaming events.
 
-## Agent Card Customization
+## Per-System Auth Policy
 
-Agent Cards are auto-generated, but you can influence the output with annotations:
+By default, A2A invoke requires a bearer token when instance-wide auth is configured. To allow unauthenticated callers to invoke a specific system, set `spec.a2a.auth: public`:
 
 ```yaml
 apiVersion: orloj.dev/v1
-kind: Agent
+kind: AgentSystem
 metadata:
-  name: research-agent
+  name: public-assistant
+spec:
+  agents:
+    - assistant-agent
+  a2a:
+    enabled: true
+    auth: public
+```
+
+This is useful when you want admin tokens for the control plane (`/v1/agents`, `/v1/tools`, etc.) but need a public-facing A2A endpoint for external clients. Invalid tokens are still rejected — only missing tokens are permitted on public systems.
+
+Public systems' Agent Cards omit `authentication.schemes`, so A2A clients that discover the card know not to send tokens. The A2A registry (`GET /v1/a2a/agents`) shows public systems to unauthenticated callers.
+
+To require auth (the default), omit `auth` or set `spec.a2a.auth: bearer`.
+
+## Agent Card Customization
+
+Agent Cards are auto-generated from the AgentSystem and its agents, but you can influence the output with annotations:
+
+```yaml
+apiVersion: orloj.dev/v1
+kind: AgentSystem
+metadata:
+  name: research-system
   annotations:
     orloj.dev/description: "AI research assistant specializing in academic papers"
 spec:
-  model_ref: openai-default
-  prompt: |
-    You are a research assistant. Search for and summarize academic papers.
-  tools:
-    - web_search
-    - arxiv_search
+  agents:
+    - research-agent
+  a2a:
+    enabled: true
 ```
 
 The `orloj.dev/description` annotation overrides the description in the generated card.
