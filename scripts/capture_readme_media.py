@@ -19,6 +19,15 @@ def _wait_for_text(page, text: str, timeout_ms: int = 15000) -> None:
     page.wait_for_selector(f"text={text}", timeout=timeout_ms)
 
 
+def _click_tab(page, name: str | re.Pattern[str]) -> None:
+    """Click a tab by accessible name (role=tab in current UI, button in older builds)."""
+    tab = page.get_by_role("tab", name=name)
+    if tab.count() > 0:
+        tab.first.click()
+        return
+    page.get_by_role("button", name=name).first.click()
+
+
 def _ensure_demo_cursor(page) -> None:
     page.evaluate(
         """
@@ -173,9 +182,11 @@ def _open_system_topology_via_ui(page, system_name: str) -> None:
         else:
             page.get_by_text(system_name).first.click()
     _wait_for_text(page, system_name)
-    tab = page.get_by_role("button", name="Resource Tree")
-    if tab.count() > 0:
-        tab.first.click()
+    tree_tab = page.get_by_role("tab", name="Resource Tree")
+    if tree_tab.count() == 0:
+        tree_tab = page.get_by_role("button", name="Resource Tree")
+    if tree_tab.count() > 0:
+        tree_tab.first.click()
     page.wait_for_selector(".graph-view", timeout=15000)
 
 
@@ -189,7 +200,16 @@ def _capture_system_topology(page, base_url: str, namespace: str, system_name: s
 
 
 def _capture_task_graph(page, base_url: str, namespace: str, task_name: str, out_dir: Path) -> None:
-    page.goto(f"{base_url}/", wait_until="domcontentloaded")
+    _capture_task_detail_views(page, base_url, namespace, task_name, out_dir)
+
+
+def _capture_task_trace_logs(page, base_url: str, namespace: str, task_name: str, out_dir: Path) -> None:
+    # Kept for compatibility; task trace capture is combined with graph capture.
+    pass
+
+
+def _capture_task_detail_views(page, base_url: str, namespace: str, task_name: str, out_dir: Path) -> None:
+    page.goto(f"{base_url}/", wait_until="domcontentloaded", timeout=60000)
     _wait_for_text(page, "Dashboard")
     _set_namespace(page, namespace)
     _open_task_detail_via_ui(page, task_name)
@@ -199,17 +219,13 @@ def _capture_task_graph(page, base_url: str, namespace: str, task_name: str, out
         page.screenshot(path=str(out_dir / "_debug-task-page.png"), full_page=True)
         (out_dir / "_debug-task-page.html").write_text(page.content(), encoding="utf-8")
         raise
-    page.get_by_role("button", name="Graph").click()
+    _click_tab(page, "Graph")
     page.wait_for_timeout(1600)
     page.screenshot(path=str(out_dir / "task-detail-graph.png"), full_page=False)
 
-
-def _capture_task_trace_logs(page, base_url: str, namespace: str, task_name: str, out_dir: Path) -> None:
-    page.goto(f"{base_url}/", wait_until="domcontentloaded")
-    _wait_for_text(page, "Dashboard")
-    _set_namespace(page, namespace)
-    _open_task_detail_via_ui(page, task_name)
-    trace_tab = page.get_by_role("button", name=re.compile(r"^Trace"))
+    trace_tab = page.get_by_role("tab", name=re.compile(r"^Trace"))
+    if trace_tab.count() == 0:
+        trace_tab = page.get_by_role("button", name=re.compile(r"^Trace"))
     if trace_tab.count() > 0:
         trace_tab.first.click()
     else:
@@ -217,7 +233,6 @@ def _capture_task_trace_logs(page, base_url: str, namespace: str, task_name: str
     try:
         page.wait_for_selector(".trace-view", timeout=10000)
     except PlaywrightTimeoutError:
-        # Keep capture deterministic even when trace data is sparse.
         page.wait_for_timeout(1200)
     page.screenshot(path=str(out_dir / "task-trace-logs.png"), full_page=False)
 
@@ -282,7 +297,7 @@ def _capture_lifecycle_gif(
                 remaining -= step
 
         # 1) Dashboard
-        page.goto(f"{base_url}/", wait_until="domcontentloaded")
+        page.goto(f"{base_url}/", wait_until="domcontentloaded", timeout=60000)
         _wait_for_text(page, "Dashboard")
         _set_namespace(page, namespace)
         _move_demo_cursor(page, 54, 84, settle_ms=220)
@@ -304,11 +319,15 @@ def _capture_lifecycle_gif(
         else:
             _demo_click(page, page.get_by_text(system_name), recorder=lambda ms: record_for(ms))
         _wait_for_text(page, system_name)
-        _demo_click(
-            page,
-            page.get_by_role("button", name="Resource Tree"),
-            recorder=lambda ms: record_for(ms),
-        )
+        resource_tree = page.get_by_role("tab", name="Resource Tree")
+        if resource_tree.count() == 0:
+            resource_tree = page.get_by_role("button", name="Resource Tree")
+        if resource_tree.count() > 0:
+            _demo_click(
+                page,
+                resource_tree.first,
+                recorder=lambda ms: record_for(ms),
+            )
         record_for(1100)
 
         # 4) Click task node in topology -> open task detail
@@ -326,7 +345,9 @@ def _capture_lifecycle_gif(
         record_for(1000)
 
         # 5) Trace tab
-        trace_tab = page.get_by_role("button", name=re.compile(r"^Trace"))
+        trace_tab = page.get_by_role("tab", name=re.compile(r"^Trace"))
+        if trace_tab.count() == 0:
+            trace_tab = page.get_by_role("button", name=re.compile(r"^Trace"))
         if trace_tab.count() > 0:
             _demo_click(page, trace_tab.first, recorder=lambda ms: record_for(ms))
         else:
@@ -334,7 +355,10 @@ def _capture_lifecycle_gif(
         record_for(950)
 
         # 6) YAML tab
-        _demo_click(page, page.get_by_role("button", name="YAML"), recorder=lambda ms: record_for(ms))
+        yaml_tab = page.get_by_role("tab", name="YAML")
+        if yaml_tab.count() == 0:
+            yaml_tab = page.get_by_role("button", name="YAML")
+        _demo_click(page, yaml_tab.first, recorder=lambda ms: record_for(ms))
         record_for(1350)
 
         _make_gif(frames, out_dir / "task-run-lifecycle.gif", frame_durations)
@@ -367,13 +391,12 @@ def main() -> int:
 
         task_for_static = args.reference_task
         try:
-            _capture_task_graph(page, args.base_url, args.namespace, task_for_static, out_dir)
-            _capture_task_trace_logs(page, args.base_url, args.namespace, task_for_static, out_dir)
+            _capture_task_detail_views(page, args.base_url, args.namespace, task_for_static, out_dir)
         except PlaywrightTimeoutError:
+            if not args.gif_task:
+                raise
             # Fallback when local namespace/profile differs from expected defaults.
-            task_for_static = args.gif_task
-            _capture_task_graph(page, args.base_url, args.namespace, task_for_static, out_dir)
-            _capture_task_trace_logs(page, args.base_url, args.namespace, task_for_static, out_dir)
+            _capture_task_detail_views(page, args.base_url, args.namespace, args.gif_task, out_dir)
 
         gif_task = args.gif_task or args.reference_task
         _capture_lifecycle_gif(
