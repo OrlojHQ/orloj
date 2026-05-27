@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-05-26
+
 ### Added
 
 - **A2A protocol support**: expose selected AgentSystems as discoverable A2A agents via `spec.a2a.enabled`, accept inbound A2A task requests (JSON-RPC), call external A2A agents as `type: a2a` tools, and maintain a configured registry of remote agents. Includes Agent Card generation from systems, `POST /a2a` and per-system `POST /v1/agent-systems/{name}/a2a` JSON-RPC endpoints, `GET /.well-known/agent-card.json` discovery, auth-filtered `GET /v1/a2a/agents` registry endpoint, scoped API-token role `a2a`, Orloj/A2A task state mapping, outbound A2A client with SSRF protection, A2A-specific Prometheus metrics, `orlojctl a2a card` and `orlojctl a2a test` CLI commands, React SPA A2A Registry page, Helm chart `a2a.*` values, and comprehensive documentation.
@@ -28,7 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **UI: Gold/bronze design system**: replaced green accent palette with a warm gold (#F5B041) and bronze (#D68930) theme across all surfaces, sidebar, cards, and graph nodes. Updated dark and light theme CSS variables for a premium modern feel.
+- **UI: Control plane dashboard**: redesigned home page with a bento layout, lifecycle summary cards, resource quick links, and a live task trace feed.
 - **UI: Agent system detail page**: redesigned from tab-based layout to a single-page bento-box dashboard featuring a System Health Horizon banner (task success rate with sparkline, API reachability, workers online), full-width topology view with glowing gold edges and pulsing running nodes, and a three-column bottom grid (system definitions, recent tasks, task trace timeline).
+- **Docs: README Orloj in Action media**: refreshed screenshots and lifecycle GIF in `docs/public/readme/` for the updated web console.
 
 ## [0.16.1] - 2026-05-21
 
@@ -485,7 +489,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Homebrew tap distribution (`OrlojHQ/orloj`)
 - Blueprint scaffolding via `orlojctl init`
 
-[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.16.1...HEAD
+[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.17.0...HEAD
+[0.17.0]: https://github.com/OrlojHQ/orloj/compare/v0.16.1...v0.17.0
 [0.16.1]: https://github.com/OrlojHQ/orloj/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/OrlojHQ/orloj/compare/v0.15.0...v0.16.0
 [0.15.0]: https://github.com/OrlojHQ/orloj/compare/v0.14.1...v0.15.0

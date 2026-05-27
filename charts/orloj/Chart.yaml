@@ -3,7 +3,7 @@ name: orloj
 description: The full stack for agentic systems — deploy, orchestrate, govern, and observe multi-agent workflows on Kubernetes.
 type: application
 version: 0.1.0
-appVersion: "v0.16.1"
+appVersion: "v0.17.0"
 home: https://orloj.dev
 sources:
   - https://github.com/OrlojHQ/orloj
