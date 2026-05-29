@@ -74,7 +74,7 @@ These are **known and accepted** in the current design. Operators must mitigate 
 
 ## Verifying the model
 
-The controls above are exercised by CI (build/test/vet, govulncheck, CodeQL, gitleaks, Trivy) and by conformance tests for sandbox defaults and SSRF enforcement. Re-run the [gap analysis](../../../COMPLIANCE-GAP-ANALYSIS.md) and these scans when the architecture changes.
+The controls above are exercised by CI (build/test/vet, govulncheck, CodeQL, gitleaks, Trivy) and by conformance tests for sandbox defaults and SSRF enforcement. Re-run these scans when the architecture changes.
 
 ## Related docs
 
