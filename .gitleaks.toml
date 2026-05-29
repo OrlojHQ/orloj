@@ -1,0 +1,15 @@
+title = "orloj gitleaks config"
+
+# Extend the upstream default ruleset; only add Orloj-specific allowlists here.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Orloj test fixtures and generated artifacts"
+paths = [
+  # Go tests intentionally contain fake credentials, tokens, and redaction fixtures.
+  '''(?:^|/).*_test\.go$''',
+  # Conformance and integration testdata.
+  '''(?:^|/)testing/''',
+  '''(?:^|/)runtime/conformance/''',
+]
