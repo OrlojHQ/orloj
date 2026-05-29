@@ -15,8 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - **Documented audit-logging and multi-tenant guidance**: `docs/pages/operations/security.md` now states that audit logging is operator-supplied (with retention/integrity guidance and a reference sink).
-- **Dependency update**: bumped `golang.org/x/net` to v0.55.0 to address GO-2026-5026 (Punycode label validation in `idna`).
-- **Dependency updates**: bumped `github.com/jackc/pgx/v5` to v5.9.0 (CVE-2026-33816) and `go.opentelemetry.io/otel` to v1.43.0 (CVE-2026-39883).
+- **Dependency updates**: bumped Go modules (AWS SDK, pgx, NATS, pgvector, wazero, OpenTelemetry, gRPC), Alpine 3.23 runtime images, GitHub Actions pins, and frontend packages (React 19, Vite 8). Vocs 2.x deferred — requires a separate docs migration.
 
 ## [0.17.0] - 2026-05-26
 
