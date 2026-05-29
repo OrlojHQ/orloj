@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Reference structured audit sink**: `agentruntime.SlogAuditSink` (`runtime/audit_sink_slog.go`) writes audit events as structured JSON via `log/slog`. Wire it through `Extensions.Audit` to get a durable audit trail; audit logging remains off (no-op) by default. See [Audit Logging](docs/pages/operations/security.md#audit-logging).
+- **Threat model documentation**: new `docs/pages/operations/threat-model.md` consolidating trust boundaries, attacker model, controls, and operator-owned residual risks.
+
+### Security
+
+- **Documented audit-logging and multi-tenant guidance**: `docs/pages/operations/security.md` now states that audit logging is operator-supplied (with retention/integrity guidance and a reference sink).
+
 ## [0.17.0] - 2026-05-26
 
 ### Added

@@ -19,6 +19,22 @@ Namespaces are an **organizational boundary**, not a security boundary. Any auth
 
 For deployments that require per-namespace or per-resource authorization, the server exposes a `ResourceAuthorizer` extension point (see `ServerOptions.ResourceAuthorizer` in `api/auth_context.go`). A custom authorization layer can implement this interface to enforce fine-grained policies based on the caller's identity, the target namespace, resource type, and HTTP method. This hook is nil by default and all requests that pass the role check are permitted.
 
+### Multi-tenant authorization (Enterprise)
+
+Fine-grained, per-namespace tenant isolation — mapping principals to the namespaces they may access, with separation of duties between tenants — is provided by **Orloj Enterprise**, which ships a managed `ResourceAuthorizer` implementation along with SSO/SCIM identity mapping and audit integration. Contact the Orloj team for access.
+
+Self-hosters on the open-source build can implement the `ResourceAuthorizer` interface themselves. The hook receives the caller's identity, HTTP method, resource type, namespace, and name, and returns an allow/deny decision:
+
+```go
+type ResourceAuthorizer interface {
+    AuthorizeResource(r *http.Request, method, resourceType, namespace, name string) (allowed bool, statusCode int, message string)
+}
+```
+
+A minimal policy reads the authenticated identity (`api.AuthIdentityFromRequest`), permits `admin`-role callers cluster-wide, and otherwise checks the caller against an allowed-namespace set. Wire your implementation in via `ServerOptions.ResourceAuthorizer`; it is nil by default, so all requests that pass the built-in role check are permitted.
+
+For true multi-tenant isolation, combine namespace authorization with separate API tokens per tenant, network policies between workloads, and per-tenant secret scoping.
+
 ## Control plane API tokens
 
 The HTTP API (including `orlojctl`) authenticates automation with **`Authorization: Bearer <token>`** when you enable token validation on the server. Orloj **does not** mint or email API keys: the **operator** chooses a secret string, configures it on `orlojd`, and distributes the **same** value to people and CI that need API access.
@@ -441,6 +457,37 @@ Auth failures produce distinct error codes (`auth_invalid` for HTTP 401, `auth_f
 ### Auth Audit Trail
 
 Every tool invocation records `tool_auth_profile` and `tool_auth_secret_ref` (the secret name, not the resolved value) in the task trace. Use these fields for audit queries and compliance reporting.
+
+## Audit Logging
+
+Orloj emits normalized audit events for security-relevant operations — admin token/user CRUD, approval decisions (`approved`, `denied`, `expired`, `changes_requested`) with reviewer identity, and other governed runtime actions. Each event carries a timestamp, component, action, outcome, principal, and the affected resource.
+
+**Audit logging is off by default.** The runtime uses a no-op `AuditSink`, so unless you wire a sink, these events are produced but not persisted anywhere durable. This is intentional — Orloj does not assume a particular log destination — but it means **operators must opt in to retain an audit trail**.
+
+### Reference: structured audit sink
+
+A reference sink, `SlogAuditSink` (`runtime/audit_sink_slog.go`), writes audit events as structured JSON via `log/slog`. Wire it through `Extensions`:
+
+```go
+ext := agentruntime.Extensions{
+    Audit: agentruntime.NewSlogAuditSink(nil), // JSON to stdout
+}
+
+server := api.NewServer(api.ServerOptions{
+    Extensions: ext,
+    // ... other options
+})
+```
+
+Passing a custom `*slog.Logger` lets you direct records to a file or a collector. For production, forward these records to durable, append-only, access-controlled storage (e.g., a SIEM or log pipeline) rather than relying on container stdout alone.
+
+### Retention and integrity guidance
+
+- **Retain** audit records for at least as long as your compliance regime requires (commonly 1 year; longer for regulated environments).
+- **Protect integrity:** ship audit records off-host to write-once or append-only storage so a compromised node cannot rewrite its own trail.
+- **Restrict access** to audit storage to a separate role from the operators whose actions are being logged (separation of duties).
+- **Validate redaction during drills:** confirm raw secret values never appear in audit records or traces.
+- **Alert** on anomalous patterns (spikes in denials, approval overrides, admin token creation).
 
 ## Risk-Tier Routing and Approvals
 
