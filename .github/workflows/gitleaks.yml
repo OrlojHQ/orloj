@@ -1,0 +1,50 @@
+name: gitleaks
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  schedule:
+    # Weekly full-history scan to catch secrets in older commits.
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+# We run the open-source gitleaks binary directly (MIT licensed, free) rather
+# than the gitleaks-action wrapper, which requires a paid GITLEAKS_LICENSE for
+# GitHub organizations. The binary has no such restriction.
+env:
+  GITLEAKS_VERSION: "8.30.1"
+  GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+
+jobs:
+  scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          # Full history so the scheduled scan covers all commits, not just the latest.
+          fetch-depth: 0
+
+      - name: Install gitleaks
+        run: |
+          set -euo pipefail
+          url="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSL "$url" -o gitleaks.tar.gz
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
+      # Working-tree scan: the gate on every push/PR. Exits non-zero on any finding.
+      - name: Scan working tree
+        run: gitleaks dir . --redact --verbose --exit-code 1
+
+      # Full git-history scan: heavier, runs only on the weekly schedule.
+      - name: Scan full git history
+        if: github.event_name == 'schedule'
+        run: gitleaks git . --redact --verbose --exit-code 1

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Reference structured audit sink**: `agentruntime.SlogAuditSink` (`runtime/audit_sink_slog.go`) writes audit events as structured JSON via `log/slog`. Wire it through `Extensions.Audit` to get a durable audit trail; audit logging remains off (no-op) by default. See [Audit Logging](docs/pages/operations/security.md#audit-logging).
+- **Threat model documentation**: new `docs/pages/operations/threat-model.md` consolidating trust boundaries, attacker model, controls, and operator-owned residual risks.
+
+### Security
+
+- **Documented audit-logging and multi-tenant guidance**: `docs/pages/operations/security.md` now states that audit logging is operator-supplied (with retention/integrity guidance and a reference sink).
+- **Dependency update**: bumped `golang.org/x/net` to v0.55.0 to address GO-2026-5026 (Punycode label validation in `idna`).
+- **Dependency updates**: bumped `github.com/jackc/pgx/v5` to v5.9.0 (CVE-2026-33816) and `go.opentelemetry.io/otel` to v1.43.0 (CVE-2026-39883).
+
 ## [0.17.0] - 2026-05-26
 
 ### Added

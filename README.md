@@ -311,6 +311,12 @@ orlojworker \
   --agent-message-consume
 ```
 
+## Security
+
+Orloj is built secure-by-default: fail-closed governance, tool sandboxing, SSRF protection, encrypted secrets, and release images signed with SBOMs and build provenance. CI runs dependency, static-analysis (CodeQL), secret, and container scanning on every change.
+
+These controls are designed to align with the [NIST SSDF](https://csrc.nist.gov/projects/ssdf) and map to ISO/IEC 27002 and NIST CSF control families. Orloj is not currently certified against any standard (ISO 27001 / SOC 2 are organizational certifications, not code certifications). See the [Security](https://docs.orloj.dev/operations/security) and [Threat Model](https://docs.orloj.dev/operations/threat-model) docs, and report vulnerabilities via [SECURITY.md](SECURITY.md).
+
 ## What Orloj Is Not
 
 |                               |                                                                                                                                                 |
