@@ -31,11 +31,11 @@ jobs:
       security-events: write
     steps:
       - name: Checkout
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       # Dependency/manifest vulnerability scan (Go modules, package.json, etc.).
       - name: Trivy filesystem scan (SARIF)
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # 0.36.0
         with:
           scan-type: fs
           scanners: vuln,secret
@@ -45,7 +45,7 @@ jobs:
           ignore-unfixed: true
 
       - name: Upload filesystem SARIF
-        uses: github/codeql-action/upload-sarif@03e4368ac7daa2bd82b3e85262f3bf87ee112f57 # v3
+        uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa # v4.36.0
         if: always()
         with:
           sarif_file: trivy-fs.sarif
@@ -53,7 +53,7 @@ jobs:
 
       # Dockerfile misconfiguration scan (root user, missing healthcheck, etc.).
       - name: Trivy Dockerfile config scan (SARIF)
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # 0.36.0
         with:
           scan-type: config
           scan-ref: Dockerfile
@@ -62,7 +62,7 @@ jobs:
           severity: CRITICAL,HIGH
 
       - name: Upload Dockerfile config SARIF
-        uses: github/codeql-action/upload-sarif@03e4368ac7daa2bd82b3e85262f3bf87ee112f57 # v3
+        uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa # v4.36.0
         if: always()
         with:
           sarif_file: trivy-config.sarif
@@ -70,7 +70,7 @@ jobs:
 
       # Gate the PR on fixable CRITICAL/HIGH dependency CVEs.
       - name: Trivy filesystem gate
-        uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # 0.35.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # 0.36.0
         with:
           scan-type: fs
           scanners: vuln
