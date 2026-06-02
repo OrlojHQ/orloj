@@ -26,6 +26,18 @@ func normalizeListCursor(after, requestNS string) string {
 	return store.ScopedName(resources.NormalizeNamespace(requestNS), after)
 }
 
+// boundedSelectorPageLimit applies defaults and maxPaginationLimit for
+// label-selector list pages so slice capacity is not user-controlled.
+func boundedSelectorPageLimit(limit int) int {
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > maxPaginationLimit {
+		return maxPaginationLimit
+	}
+	return limit
+}
+
 // scopedListContinue returns a continue token when more pages may exist.
 func scopedListContinue(limit int, lastScannedKey string, hasMore bool) string {
 	if limit > 0 && hasMore && lastScannedKey != "" {
@@ -80,15 +92,13 @@ func fetchListPageWithSelector[T any](
 		return items, cont, nil
 	}
 
-	if limit <= 0 {
-		limit = 100
-	}
-	result := make([]T, 0, limit)
+	pageLimit := boundedSelectorPageLimit(limit)
+	result := make([]T, 0, pageLimit)
 	cursor := after
 	lastScanned := ""
 	hasMore := false
-	for len(result) < limit {
-		batchSize := limit * 2
+	for len(result) < pageLimit {
+		batchSize := pageLimit * 2
 		if batchSize <= 0 {
 			batchSize = 100
 		}
@@ -106,12 +116,12 @@ func fetchListPageWithSelector[T any](
 				continue
 			}
 			result = append(result, item)
-			if len(result) >= limit {
+			if len(result) >= pageLimit {
 				hasMore = true
 				break
 			}
 		}
-		if len(result) >= limit {
+		if len(result) >= pageLimit {
 			break
 		}
 		cursor = scopedResourceKey(getMeta(batch[len(batch)-1]))
@@ -130,7 +140,7 @@ func fetchListPageWithSelector[T any](
 	if lastScanned == "" {
 		lastScanned = scopedResourceKey(getMeta(result[len(result)-1]))
 	}
-	return result, scopedListContinue(limit, lastScanned, true), nil
+	return result, scopedListContinue(pageLimit, lastScanned, true), nil
 }
 
 func writeListPageError(w http.ResponseWriter, err error) bool {
