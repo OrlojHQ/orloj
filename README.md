@@ -35,24 +35,24 @@ Orloj is not a single runtime component. It spans the layers teams need to devel
 
 ![The Orloj Agent Stack](docs/public/readme/orloj-agent-stack.svg)
 
-| Stack Layer                      | What Orloj Provides                                                                                                      |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| **Interfaces**                   | YAML manifests, `orlojctl`, REST API, SDKs, Kubernetes CRDs, and web console.                                            |
-| **Agent Definitions**            | `Agent`, `AgentSystem`, prompts, graph topology, roles, execution contracts, and runtime bounds.                         |
-| **Execution Runtime**            | Sequential and message-driven execution, workers, leases, heartbeats, retries, idempotency keys, and dead-letter states. |
-| **Model & Context Layer**        | `ModelEndpoint`, `ContextAdapter`, provider routing, fallback models, secrets, token budgets, and `Memory`.              |
+| Stack Layer                      | What Orloj Provides                                                                                                                      |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| **Interfaces**                   | YAML manifests, `orlojctl`, REST API, SDKs, Kubernetes CRDs, and web console.                                                            |
+| **Agent Definitions**            | `Agent`, `AgentSystem`, prompts, graph topology, roles, execution contracts, and runtime bounds.                                         |
+| **Execution Runtime**            | Sequential and message-driven execution, workers, leases, heartbeats, retries, idempotency keys, and dead-letter states.                 |
+| **Model & Context Layer**        | `ModelEndpoint`, `ContextAdapter`, provider routing, fallback models, secrets, token budgets, and `Memory`.                              |
 | **Tool & Integration Layer**     | HTTP, gRPC, external services, webhook callbacks, `McpServer` discovery, CLI, WASM, A2A interop, auth, isolation, timeouts, and retries. |
-| **Governance & Human Review**    | `AgentPolicy`, `AgentRole`, `ToolPermission`, `ToolApproval`, and `TaskApproval`.                                        |
-| **Observability & Operations**   | Traces, logs, messages, task history, watch streams, events, Prometheus metrics, OpenTelemetry spans, and UI views.      |
-| **State & Deployment Substrate** | In-memory and Postgres state, NATS JetStream messaging, Docker Compose, VPS deployments, Kubernetes paths, and CRD GitOps. |
+| **Governance & Human Review**    | `AgentPolicy`, `AgentRole`, `ToolPermission`, `ToolApproval`, and `TaskApproval`.                                                        |
+| **Observability & Operations**   | Traces, logs, messages, task history, watch streams, events, Prometheus metrics, OpenTelemetry spans, and UI views.                      |
+| **State & Deployment Substrate** | In-memory and Postgres state, NATS JetStream messaging, Docker Compose, VPS deployments, Kubernetes paths, and CRD GitOps.               |
 
 ## How The Stack Operates
 
-|                                                                                                                       |                                                                                                                              |                                                                                                                      |
-| --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+|                                                                                                                                 |                                                                                                                              |                                                                                                                      |
+| ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | **Declare:** Write YAML resources for agents, systems, tools, model endpoints, memory, tasks, secrets, evaluations, and policy. | **Reconcile:** Controllers validate resources, update status, discover MCP tools, manage schedules, and drive state forward. | **Schedule:** Tasks target an AgentSystem and are assigned to workers based on capacity and requirements.            |
-| **Claim:** Workers claim tasks with leases, renew heartbeats, and allow takeover when ownership expires.              | **Execute:** Bounded agent loops route model calls, invoke tools, use memory, and pass messages through the graph.           | **Govern:** Policies, roles, tool permissions, ToolApprovals, and TaskApprovals fail closed during runtime.          |
-| **Observe:** Every run records trace events, task history, messages, logs, metrics, and optional OpenTelemetry spans. | **Scale:** Start local with an embedded worker, then move to Postgres, NATS JetStream, and distributed workers.              | **Operate:** Use the CLI, REST API, watch streams, web console, Prometheus metrics, and standard deployment targets. |
+| **Claim:** Workers claim tasks with leases, renew heartbeats, and allow takeover when ownership expires.                        | **Execute:** Bounded agent loops route model calls, invoke tools, use memory, and pass messages through the graph.           | **Govern:** Policies, roles, tool permissions, ToolApprovals, and TaskApprovals fail closed during runtime.          |
+| **Observe:** Every run records trace events, task history, messages, logs, metrics, and optional OpenTelemetry spans.           | **Scale:** Start local with an embedded worker, then move to Postgres, NATS JetStream, and distributed workers.              | **Operate:** Use the CLI, REST API, watch streams, web console, Prometheus metrics, and standard deployment targets. |
 
 ## Orloj Is Right For You If
 
@@ -78,21 +78,21 @@ Orloj is not a single runtime component. It spans the layers teams need to devel
 
 ## What Is In The Stack
 
-| Layer          | Resources and Runtime Behavior                                                                                                                 |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Agents**     | `Agent` resources define prompts, model refs, fallback models, tools, roles, memory access, execution contracts, and bounds.                   |
-| **Systems**    | `AgentSystem` resources compose agents into graphs with edges, conditional routing, fan-out, fan-in, delegation, and human review checkpoints. |
-| **Tasks**      | `Task` resources execute an AgentSystem and track phase, output, attempts, leases, messages, joins, delegation, trace, history, and blockers.  |
-| **Models**     | `ModelEndpoint` resources route calls to OpenAI, Anthropic, AWS Bedrock, Azure OpenAI, Ollama, mock, and OpenAI-compatible providers.          |
-| **Context**    | `ContextAdapter` resources sanitize or transform raw task input before an AgentSystem starts.                                                 |
-| **Tools**      | `Tool` resources support HTTP, external services, gRPC, webhook callbacks, MCP, CLI, WASM, and A2A with runtime policy and auth.               |
-| **Integrations** | `McpServer` resources connect external MCP servers and materialize discovered tools.                                                        |
-| **Memory**     | `Memory` resources back task-scoped and persistent memory through in-memory, pgvector, or HTTP providers.                                      |
-| **Secrets**    | `Secret` resources hold runtime credentials, while `SealedSecret` resources support git-safe encrypted secret manifests.                      |
-| **Triggers**   | `TaskSchedule` and `TaskWebhook` resources create Tasks from cron schedules and signed HTTP events.                                            |
-| **Governance** | `AgentPolicy`, `AgentRole`, `ToolPermission`, `ToolApproval`, and `TaskApproval` enforce model, tool, and review controls at runtime.          |
-| **Evaluation** | `EvalDataset` and `EvalRun` resources test agent systems against golden data and compare runs.                                                |
-| **Workers**    | `Worker` resources declare capacity, region, supported models, GPU support, heartbeat, and current task load.                                  |
+| Layer            | Resources and Runtime Behavior                                                                                                                 |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Agents**       | `Agent` resources define prompts, model refs, fallback models, tools, roles, memory access, execution contracts, and bounds.                   |
+| **Systems**      | `AgentSystem` resources compose agents into graphs with edges, conditional routing, fan-out, fan-in, delegation, and human review checkpoints. |
+| **Tasks**        | `Task` resources execute an AgentSystem and track phase, output, attempts, leases, messages, joins, delegation, trace, history, and blockers.  |
+| **Models**       | `ModelEndpoint` resources route calls to OpenAI, Anthropic, AWS Bedrock, Azure OpenAI, Ollama, mock, and OpenAI-compatible providers.          |
+| **Context**      | `ContextAdapter` resources sanitize or transform raw task input before an AgentSystem starts.                                                  |
+| **Tools**        | `Tool` resources support HTTP, external services, gRPC, webhook callbacks, MCP, CLI, WASM, and A2A with runtime policy and auth.               |
+| **Integrations** | `McpServer` resources connect external MCP servers and materialize discovered tools.                                                           |
+| **Memory**       | `Memory` resources back task-scoped and persistent memory through in-memory, pgvector, or HTTP providers.                                      |
+| **Secrets**      | `Secret` resources hold runtime credentials, while `SealedSecret` resources support git-safe encrypted secret manifests.                       |
+| **Triggers**     | `TaskSchedule` and `TaskWebhook` resources create Tasks from cron schedules and signed HTTP events.                                            |
+| **Governance**   | `AgentPolicy`, `AgentRole`, `ToolPermission`, `ToolApproval`, and `TaskApproval` enforce model, tool, and review controls at runtime.          |
+| **Evaluation**   | `EvalDataset` and `EvalRun` resources test agent systems against golden data and compare runs.                                                 |
+| **Workers**      | `Worker` resources declare capacity, region, supported models, GPU support, heartbeat, and current task load.                                  |
 
 ## Example: An Agent System As Code
 
@@ -284,13 +284,13 @@ Open the console at [http://127.0.0.1:8080/](http://127.0.0.1:8080/).
 
 Local development can run in one process. Production can split the Orloj server and workers:
 
-|                      |                                                                                          |
-| -------------------- | ---------------------------------------------------------------------------------------- |
-| **Local**            | `orlojd --storage-backend=memory --embedded-worker`                                      |
-| **Persistent**       | `orlojd --storage-backend=postgres` with Postgres-backed resource state.                 |
-| **Distributed**      | `orlojd` plus one or more `orlojworker` processes with message-driven execution.         |
-| **Durable handoffs** | `--agent-message-bus-backend=nats-jetstream` for runtime agent messages.                 |
-| **Observability**    | `/metrics`, OpenTelemetry export, task traces, logs, message views, and the web console. |
+|                      |                                                                                                  |
+| -------------------- | ------------------------------------------------------------------------------------------------ |
+| **Local**            | `orlojd --storage-backend=memory --embedded-worker`                                              |
+| **Persistent**       | `orlojd --storage-backend=postgres` with Postgres-backed resource state.                         |
+| **Distributed**      | `orlojd` plus one or more `orlojworker` processes with message-driven execution.                 |
+| **Durable handoffs** | `--agent-message-bus-backend=nats-jetstream` for runtime agent messages.                         |
+| **Observability**    | `/metrics`, OpenTelemetry export, task traces, logs, message views, and the web console.         |
 | **GitOps**           | Optional Kubernetes CRD operator syncs Orloj resource definitions from Kubernetes into Postgres. |
 
 Configure `ORLOJ_POSTGRES_DSN` before using the Postgres examples. Configure `ORLOJ_NATS_URL` or
@@ -329,18 +329,18 @@ These controls are designed to align with the [NIST SSDF](https://csrc.nist.gov/
 
 ## Docs And Examples
 
-|                                                                         |                                                                                |
-| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| [5-minute tutorial](https://docs.orloj.dev/guides/five-minute-tutorial) | Scaffold, configure a model key, and run a first agent system.                 |
-| [Architecture](https://docs.orloj.dev/concepts/architecture)            | Server, workers, governance, execution modes, and reliability characteristics. |
-| [Starter blueprints](https://docs.orloj.dev/guides/starter-blueprints)  | Pipeline, hierarchical, and swarm-loop topologies.                             |
-| [Governance guide](https://docs.orloj.dev/guides/setup-governance)      | Policies, roles, tool permissions, and runtime enforcement.                    |
-| [MCP servers](https://docs.orloj.dev/guides/connect-mcp-server)         | Connect MCP servers and auto-discover tools.                                   |
-| [A2A interoperability](https://docs.orloj.dev/concepts/a2a-interoperability) | Expose agents as A2A endpoints and call remote A2A agents as tools.       |
-| [Agent evaluation](https://docs.orloj.dev/guides/run-agent-evaluation)  | Run datasets, score outputs, and compare agent system changes.                 |
-| [Kubernetes CRD operator](https://docs.orloj.dev/deploy/kubernetes-operator) | Manage Orloj resources with Kubernetes CRDs and GitOps workflows.          |
-| [Deploy and operate](https://docs.orloj.dev/deploy/)                    | Local, VPS, Kubernetes, remote CLI access, and production configuration.       |
-| Examples                                                                | Resource samples, blueprints, and use-case bundles.                            |
+|                                                                              |                                                                                |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| [5-minute tutorial](https://docs.orloj.dev/guides/five-minute-tutorial)      | Scaffold, configure a model key, and run a first agent system.                 |
+| [Architecture](https://docs.orloj.dev/concepts/architecture)                 | Server, workers, governance, execution modes, and reliability characteristics. |
+| [Starter blueprints](https://docs.orloj.dev/guides/starter-blueprints)       | Pipeline, hierarchical, and swarm-loop topologies.                             |
+| [Governance guide](https://docs.orloj.dev/guides/setup-governance)           | Policies, roles, tool permissions, and runtime enforcement.                    |
+| [MCP servers](https://docs.orloj.dev/guides/connect-mcp-server)              | Connect MCP servers and auto-discover tools.                                   |
+| [A2A interoperability](https://docs.orloj.dev/concepts/a2a-interoperability) | Expose agents as A2A endpoints and call remote A2A agents as tools.            |
+| [Agent evaluation](https://docs.orloj.dev/guides/run-agent-evaluation)       | Run datasets, score outputs, and compare agent system changes.                 |
+| [Kubernetes CRD operator](https://docs.orloj.dev/deploy/kubernetes-operator) | Manage Orloj resources with Kubernetes CRDs and GitOps workflows.              |
+| [Deploy and operate](https://docs.orloj.dev/deploy/)                         | Local, VPS, Kubernetes, remote CLI access, and production configuration.       |
+| Examples                                                                     | Resource samples, blueprints, and use-case bundles.                            |
 
 Useful CLI entry points:
 
@@ -371,4 +371,6 @@ Helpful starting points:
 
 ## License
 
-Apache License 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+Apache License 2.0. See [LICENSE](LICENSE), [NOTICE](NOTICE), and [TRADEMARKS.md](TRADEMARKS.md).
+
+Optional attribution is welcome — for example, a “Powered by Orloj” link in a UI footer, docs, or about page. See [TRADEMARKS.md](TRADEMARKS.md) for allowed uses and badge assets.

@@ -52,10 +52,15 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     -ldflags="-s -w -X github.com/OrlojHQ/orloj/internal/version.Version=${VERSION} -X github.com/OrlojHQ/orloj/internal/version.Commit=${COMMIT} -X github.com/OrlojHQ/orloj/internal/version.Date=${DATE}" \
     -o /out/orloj-operator ./cmd/orloj-operator
 
+# --- Legal/attribution docs bundled in runtime images ---
+FROM scratch AS orloj-legal
+COPY LICENSE NOTICE TRADEMARKS.md /usr/share/doc/orloj/
+
 # --- Runtime images (default final stage: orlojd) ---
 FROM alpine:3.23@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11 AS orlojworker
 RUN apk add --no-cache ca-certificates tzdata wget docker-cli \
     && adduser -D -u 10001 appuser
+COPY --from=orloj-legal /usr/share/doc/orloj /usr/share/doc/orloj
 COPY --from=build-orlojworker /out/orlojworker /usr/local/bin/app
 USER appuser
 ENTRYPOINT ["/usr/local/bin/app"]
@@ -63,6 +68,7 @@ ENTRYPOINT ["/usr/local/bin/app"]
 FROM alpine:3.23@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11 AS orloj-operator
 RUN apk add --no-cache ca-certificates tzdata \
     && adduser -D -u 10001 appuser
+COPY --from=orloj-legal /usr/share/doc/orloj /usr/share/doc/orloj
 COPY --from=build-operator /out/orloj-operator /usr/local/bin/app
 USER appuser
 ENTRYPOINT ["/usr/local/bin/app"]
@@ -70,6 +76,7 @@ ENTRYPOINT ["/usr/local/bin/app"]
 FROM alpine:3.23@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11 AS orlojd
 RUN apk add --no-cache ca-certificates tzdata wget docker-cli \
     && adduser -D -u 10001 appuser
+COPY --from=orloj-legal /usr/share/doc/orloj /usr/share/doc/orloj
 COPY --from=build-orlojd /out/orlojd /usr/local/bin/app
 USER appuser
 ENTRYPOINT ["/usr/local/bin/app"]

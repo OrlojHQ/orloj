@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Release attribution**: official Docker images and GoReleaser release archives now include `LICENSE`, `NOTICE`, and `TRADEMARKS.md`; README/TRADEMARKS clarify redistribution, optional “Powered by Orloj” attribution, and branding expectations.
 - **Pagination cursors** now emit scoped `namespace/name` continue tokens (bare `?after=` values remain accepted).
 - **Container CLI tools** default to the operator-configured container network (`none` by default) instead of implicit `bridge` access.
 
