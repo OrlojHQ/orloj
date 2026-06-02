@@ -17,7 +17,7 @@ components:
       properties:
         continue:
           type: string
-          description: Cursor for next page (last item name); empty if none.
+          description: Cursor for next page as scoped namespace/name of the last scanned item; bare names from older clients are still accepted as ?after= values.
     PlainTextError:
       type: string
       description: Error body when Content-Type is text/plain.

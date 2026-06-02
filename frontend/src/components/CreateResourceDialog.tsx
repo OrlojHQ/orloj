@@ -1,10 +1,12 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { YamlEditor } from "./YamlEditor";
 import { useCreateResource } from "../api/hooks";
 import { toast } from "./Toast";
 import type { ResourceKind } from "../api/types";
 import { getModelEndpointDraftWarnings } from "./modelEndpointDraftWarnings";
+import { useAppStore } from "../store";
+import { applyTemplateNamespace, ensureRequestNamespace } from "../utils/requestNamespace";
 
 const TEMPLATES: Record<string, string> = {
   Agent: JSON.stringify({
@@ -39,7 +41,7 @@ const TEMPLATES: Record<string, string> = {
     spec: {
       type: "wasm",
       wasm: {
-        module: "path/to/tool.wasm",
+        module: "my-tool.wasm",
         entrypoint: "run",
         max_memory_bytes: 67108864,
         fuel: 1000000,
@@ -211,6 +213,14 @@ const TEMPLATES: Record<string, string> = {
   }, null, 2),
 };
 
+function fallbackTemplate(kind: ResourceKind): string {
+  return JSON.stringify(
+    { apiVersion: "orloj.dev/v1", kind, metadata: { name: "", namespace: "default" }, spec: {} },
+    null,
+    2,
+  );
+}
+
 interface CreateResourceDialogProps {
   kind: ResourceKind;
   open: boolean;
@@ -218,18 +228,28 @@ interface CreateResourceDialogProps {
 }
 
 export function CreateResourceDialog({ kind, open, onClose }: CreateResourceDialogProps) {
-  const [yaml, setYaml] = useState(TEMPLATES[kind] ?? JSON.stringify({ apiVersion: "orloj.dev/v1", kind, metadata: { name: "", namespace: "default" }, spec: {} }, null, 2));
+  const namespace = useAppStore((s) => s.namespace);
+  const [yaml, setYaml] = useState(() =>
+    applyTemplateNamespace(TEMPLATES[kind] ?? fallbackTemplate(kind), namespace),
+  );
   const createMutation = useCreateResource(kind);
   const draftWarnings = useMemo(
     () => (kind === "ModelEndpoint" ? getModelEndpointDraftWarnings(yaml) : []),
     [kind, yaml],
   );
 
+  useEffect(() => {
+    if (!open) return;
+    const ns = useAppStore.getState().namespace;
+    setYaml(applyTemplateNamespace(TEMPLATES[kind] ?? fallbackTemplate(kind), ns));
+  }, [open, kind]);
+
   if (!open) return null;
 
   const handleCreate = async () => {
     try {
-      const body = JSON.parse(yaml);
+      const parsed = JSON.parse(yaml) as { metadata?: { namespace?: string } };
+      const body = ensureRequestNamespace(parsed, namespace);
       await createMutation.mutateAsync(body);
       toast("success", `${kind} created successfully`);
       onClose();

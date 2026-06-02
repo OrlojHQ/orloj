@@ -304,6 +304,17 @@ func (r *ContainerToolRuntime) callHTTP(ctx context.Context, tool string, spec r
 			map[string]string{"tool": tool},
 		)
 	}
+	if err := ValidateEndpointURL(endpoint, false); err != nil {
+		return "", NewToolError(
+			ToolStatusError,
+			ToolCodeRuntimePolicyInvalid,
+			ToolReasonRuntimePolicyInvalid,
+			false,
+			fmt.Sprintf("tool=%s container endpoint blocked: %s", tool, err),
+			err,
+			map[string]string{"tool": tool},
+		)
+	}
 
 	containerEnv := map[string]string{}
 	hasAuth := false
@@ -428,7 +439,7 @@ func (r *ContainerToolRuntime) callCLI(ctx context.Context, tool string, spec re
 func (r *ContainerToolRuntime) containerCLIRunArgs(cli resources.ToolCliSpec, image string, command string, args []string, env map[string]string) []string {
 	network := strings.TrimSpace(cli.Network)
 	if network == "" {
-		network = "bridge"
+		network = strings.TrimSpace(r.config.Network)
 	}
 	dockerArgs := []string{
 		"run", "--rm", "-i",

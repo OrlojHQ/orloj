@@ -44,25 +44,11 @@ type webhookDeliveryResponse struct {
 func (s *Server) handleTaskWebhooks(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		items, err := s.stores.TaskWebhooks.List(r.Context())
-		if writeStoreFetchError(w, err) { return }
-		ns, hasNS := namespaceFilter(r)
-		selector, err := labelSelectorFilter(r)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+		items, cont, err := fetchListPage(r.Context(), r, s.stores.TaskWebhooks.ListCursor, func(item resources.TaskWebhook) resources.ObjectMeta { return item.Metadata })
+		if writeListPageError(w, err) {
 			return
 		}
-		if hasNS || len(selector) > 0 {
-			filtered := make([]resources.TaskWebhook, 0, len(items))
-			for _, item := range items {
-				if !matchMetadataFilters(item.Metadata, ns, hasNS, selector) {
-					continue
-				}
-				filtered = append(filtered, item)
-			}
-			items = filtered
-		}
-		writeJSON(w, http.StatusOK, resources.TaskWebhookList{Items: items})
+		writeJSON(w, http.StatusOK, resources.TaskWebhookList{ListMeta: resources.ListMeta{Continue: cont}, Items: items})
 	case http.MethodPost:
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -297,16 +283,11 @@ func (s *Server) handleWebhookDelivery(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) findTaskWebhookByEndpointID(ctx context.Context, endpointID string) (resources.TaskWebhook, bool) {
-	items, err := s.stores.TaskWebhooks.List(ctx)
-	if err != nil {
+	item, ok, err := s.stores.TaskWebhooks.GetByEndpointID(ctx, endpointID)
+	if err != nil || !ok {
 		return resources.TaskWebhook{}, false
 	}
-	for _, item := range items {
-		if strings.TrimSpace(item.Status.EndpointID) == strings.TrimSpace(endpointID) {
-			return item, true
-		}
-	}
-	return resources.TaskWebhook{}, false
+	return item, true
 }
 
 func (s *Server) resolveWebhookSecret(ctx context.Context, hook resources.TaskWebhook) ([]byte, error) {

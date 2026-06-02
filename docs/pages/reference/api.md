@@ -28,6 +28,10 @@ This page summarizes key HTTP endpoints and behavior contracts.
 
 Namespace defaults to `default` and can be overridden with `?namespace=<ns>`.
 
+On create and update requests, `metadata.namespace` in the request body must match the effective request namespace (from `?namespace=` or the default). A mismatch returns `400 Bad Request`. When creating resources in a non-default namespace, pass `?namespace=<ns>` on the request URL and set the same value in the manifest body (or omit it and let the server apply the query namespace).
+
+Mutation requests (`POST`, `PUT`, `PATCH`) must use a supported `Content-Type` (`application/json`, `application/yaml`, `application/x-yaml`, or `text/yaml`). Other values return `415 Unsupported Media Type`. Requests with no `Content-Type` header are accepted for backward compatibility.
+
 `GET /v1/sealing-key/public` is cluster-scoped and returns the active public key used to create `SealedSecret` manifests. It returns `503` when no active sealing key is available.
 
 ## Capabilities
@@ -227,19 +231,20 @@ All list endpoints support cursor-based pagination via query parameters:
 | Parameter | Description |
 |---|---|
 | `limit` | Maximum number of items to return (1–1000). |
-| `after` | Cursor token — the `metadata.name` of the last item from the previous page. Returns items with names lexicographically after this value. |
+| `after` | Cursor token from the previous page's `continue` field. Accepts scoped `namespace/name` tokens (preferred) or bare names (legacy; scoped to the request namespace). Returns items lexicographically after this cursor. |
 | `namespace` | Filter by namespace. |
+| `labelSelector` | Comma-separated `key=value` pairs; label filtering is applied before the page is finalized so each page contains up to `limit` matching items. |
 
 When more results are available, the response includes a `continue` field:
 
 ```json
 {
-  "continue": "task-00042",
+  "continue": "production/task-00042",
   "items": [ ... ]
 }
 ```
 
-Pass `continue` as the `after` parameter in the next request to fetch the next page. When `continue` is absent or empty, there are no more results.
+Pass `continue` as the `after` parameter in the next request to fetch the next page. When `continue` is absent or empty, there are no more results. Bare-name cursors from older clients (e.g. `"task-00042"`) are still accepted and scoped to the request namespace.
 
 Offset-based pagination (`?offset=N`) is supported for backward compatibility on the Tasks endpoint but is deprecated in favor of `?after=`.
 
@@ -250,6 +255,11 @@ GET /v1/agents/watch
 ```
 
 Returns a server-sent event stream of resource changes. Events include the resource kind, name, and the change type (created, updated, deleted).
+
+Watch streams are bounded:
+
+- **Max duration:** 30 minutes per connection. The server sends a final `close` event and terminates the stream when the limit is reached.
+- **Connection limits:** concurrent watch connections are capped globally and per client IP. Excess connections receive `429 Too Many Requests` or `503 Service Unavailable`.
 
 ## Concurrency Semantics
 

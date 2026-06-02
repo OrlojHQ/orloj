@@ -23,13 +23,16 @@ go run ./cmd/orlojd -h
 | `--debug` | `false` | Enable debug logging. | Equivalent to `--log-level=debug`; takes precedence over `--log-level`. |
 | `--addr` | `:8080` | Server listen address. | n/a |
 | `--ui-path` | `/` | Base URL path for the web console. | Env fallback: `ORLOJ_UI_PATH`. Set to a subpath (e.g. `/console/`) when sharing a hostname via reverse proxy. |
-| `--api-key` | empty | Bearer token auth key. | Env fallback: `ORLOJ_API_TOKEN`; see also `ORLOJ_API_TOKENS`. |
+| `--cors-allowed-origins` | empty | Comma-separated CORS allowed origins. | Env fallback: `ORLOJ_CORS_ALLOWED_ORIGINS`. Empty means same-origin only. |
+| `--tls-cert-file` | empty | TLS certificate file for HTTPS. | Env fallback: `ORLOJ_TLS_CERT_FILE`. Requires `--tls-key-file`. |
+| `--tls-key-file` | empty | TLS private key file for HTTPS. | Env fallback: `ORLOJ_TLS_KEY_FILE`. Requires `--tls-cert-file`. |
+| `--api-key` | empty | Bearer token auth key. | Env fallback: `ORLOJ_API_TOKEN`; see also `ORLOJ_API_TOKENS`. Prefer env over flag (flag values are visible in process listings). |
 | `--auth-mode` | `off` | API auth mode. | `off|native|sso` (`sso` unavailable in this distribution). |
 | `--auth-session-ttl` | `24h` | Session TTL for local auth mode. | Env fallback: `ORLOJ_AUTH_SESSION_TTL`. |
 | `--auth-reset-admin-username` | empty | One-shot admin reset username. | Env fallback: `ORLOJ_AUTH_RESET_ADMIN_USERNAME`. |
-| `--auth-reset-admin-password` | empty | One-shot admin reset password and exit. | Env fallback: `ORLOJ_AUTH_RESET_ADMIN_PASSWORD`. |
+| `--auth-reset-admin-password` | empty | One-shot admin reset password and exit. | Env fallback: `ORLOJ_AUTH_RESET_ADMIN_PASSWORD`. Prefer env over flag. |
 | `--trusted-proxies` | empty | Comma-separated CIDRs of reverse proxies whose `X-Forwarded-For` / `X-Real-IP` headers are trusted for client IP extraction. | Env fallback: `ORLOJ_TRUSTED_PROXIES`. Required for correct per-client auth rate limiting behind a proxy. See [Security — Trusted proxy configuration](../operations/security.md#trusted-proxy-configuration). |
-| `--secret-encryption-key` | empty | AES-256-GCM key for Secret encryption at rest. | Env fallback: `ORLOJ_SECRET_ENCRYPTION_KEY`. On `orlojd`, also wraps the DB-stored `SealedSecret` private key. |
+| `--secret-encryption-key` | empty | AES-256-GCM key for Secret encryption at rest. | Env fallback: `ORLOJ_SECRET_ENCRYPTION_KEY`. Prefer env over flag. On `orlojd`, also wraps the DB-stored `SealedSecret` private key. |
 | `--storage-backend` | `memory` | State backend. | `memory|postgres`. |
 | `--postgres-dsn` | empty | Postgres DSN. | Required when `--storage-backend=postgres`; env `ORLOJ_POSTGRES_DSN`. |
 | `--sql-driver` | `pgx` | `database/sql` driver for Postgres backend. | Postgres backend only. |

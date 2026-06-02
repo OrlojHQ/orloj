@@ -235,7 +235,7 @@ metadata:
 spec:
   type: wasm
   wasm:
-    module: /opt/orloj/tools/my-tool.wasm
+    module: my-tool.wasm
     entrypoint: run
     max_memory_bytes: 67108864   # 64 MB (default)
     fuel: 1000000                # Execution step limit (default: 1M)
@@ -258,7 +258,7 @@ orlojctl apply -f my-wasm-tool.yaml
 
 | Field | Default | Description |
 |---|---|---|
-| `module` | *(required)* | Local path, HTTPS URL, or OCI artifact reference (`oci://...`) to the `.wasm` module. |
+| `module` | *(required)* | Relative path under `--tool-wasm-cache-dir`, HTTPS URL, or OCI artifact reference (`oci://...`) to the `.wasm` module. |
 | `entrypoint` | `run` | Exported function name to invoke. |
 | `max_memory_bytes` | `67108864` (64 MB) | Maximum WASM linear memory. Host-enforced. |
 | `fuel` | `1000000` (1M) | Execution fuel limit. Prevents runaway modules. Host-enforced. |
@@ -269,13 +269,13 @@ orlojctl apply -f my-wasm-tool.yaml
 
 The `module` field accepts three formats:
 
-- **Local path** (existing): `/opt/orloj/tools/echo.wasm`
-- **HTTPS URL**: `https://artifacts.example.com/tools/echo-v1.2.wasm`
+- **Local path** (relative): `my-tool.wasm` or `tools/echo.wasm` — resolved under `--tool-wasm-cache-dir` (default `~/.orloj/wasm-cache`). Absolute paths, `..` segments, and paths outside the cache directory are rejected.
+- **HTTPS URL**: `https://artifacts.example.com/tools/echo-v1.2.wasm` — plain `http://` URLs are not supported.
 - **OCI reference**: `oci://ghcr.io/orloj-tools/echo:v1.2`
 
-Remote modules (HTTPS and OCI) are fetched once and cached on disk in `--tool-wasm-cache-dir` (default `~/.orloj/wasm-cache`), keyed by SHA-256 of the reference. Subsequent invocations use the cached copy.
+Remote modules (HTTPS and OCI) are fetched once and cached on disk in `--tool-wasm-cache-dir`, keyed by SHA-256 of the reference. Subsequent invocations use the cached copy.
 
-For local paths, the `module` path must be accessible to the `orlojd` / `orlojworker` process. In a containerized deployment, mount the `.wasm` file into the pod.
+For local paths, copy or mount the `.wasm` file into `--tool-wasm-cache-dir` (or a subdirectory). In a containerized deployment, mount the cache directory or place modules under it at startup.
 
 #### Private OCI registries
 

@@ -24,6 +24,10 @@ CREATE INDEX IF NOT EXISTS idx_tool_permissions_tool_ref
 
 -- Add foreign key on task_logs so orphaned rows are cleaned up automatically
 -- when a task is deleted, and so we can drop the SELECT existence check.
-ALTER TABLE task_logs
-    ADD CONSTRAINT fk_task_logs_task_name
-    FOREIGN KEY (task_name) REFERENCES tasks(name) ON DELETE CASCADE;
+DO $$ BEGIN
+    ALTER TABLE task_logs
+        ADD CONSTRAINT fk_task_logs_task_name
+        FOREIGN KEY (task_name) REFERENCES tasks(name) ON DELETE CASCADE;
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;

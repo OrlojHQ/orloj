@@ -86,7 +86,7 @@ func writeStoreError(w http.ResponseWriter, err error) {
 		http.Error(w, err.Error(), http.StatusConflict)
 		return
 	}
-	http.Error(w, err.Error(), http.StatusBadRequest)
+	http.Error(w, "invalid store request", http.StatusBadRequest)
 }
 
 // writeStoreFetchError writes a 503 Service Unavailable if err is non-nil and
@@ -96,7 +96,7 @@ func writeStoreFetchError(w http.ResponseWriter, err error) bool {
 	if err == nil {
 		return false
 	}
-	http.Error(w, "store unavailable: "+err.Error(), http.StatusServiceUnavailable)
+	http.Error(w, "store unavailable", http.StatusServiceUnavailable)
 	return true
 }
 

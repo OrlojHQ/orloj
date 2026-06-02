@@ -2,6 +2,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { get as apiGet, listAll } from "../api/client";
 import { resourceKey } from "../api/hooks";
 import { RESOURCE_ENDPOINTS, type ResourceKind, type Worker } from "../api/types";
+import { ensureRequestNamespace } from "../utils/requestNamespace";
 
 export type MutateUpdateArgs = {
   name: string;
@@ -24,8 +25,9 @@ export async function saveDetailYamlWithFreshRv<T extends HasMeta>(opts: {
   body: unknown;
   mutate: (args: MutateUpdateArgs) => Promise<T>;
   mutateExtras?: { namespace?: string };
+  requestNamespace?: string;
 }): Promise<T> {
-  const { queryClient, detailQueryKey, fetchFresh, routeName, body, mutate, mutateExtras } = opts;
+  const { queryClient, detailQueryKey, fetchFresh, routeName, body, mutate, mutateExtras, requestNamespace } = opts;
   const qk = [...detailQueryKey];
   await queryClient.cancelQueries({ queryKey: qk });
   const fresh = await queryClient.fetchQuery({
@@ -36,9 +38,10 @@ export async function saveDetailYamlWithFreshRv<T extends HasMeta>(opts: {
   const doc = body as T;
   const liveRv = fresh.metadata.resourceVersion ?? doc.metadata?.resourceVersion ?? "";
   const merged = { ...doc, metadata: { ...doc.metadata, resourceVersion: liveRv } } as T;
+  const payload = requestNamespace ? ensureRequestNamespace(merged, requestNamespace) : merged;
   const updated = await mutate({
     name: routeName,
-    body: merged,
+    body: payload,
     rv: liveRv,
     ...mutateExtras,
   });
@@ -67,7 +70,8 @@ export async function saveNamespacedResourceYaml<T extends HasMeta>(
     routeName,
     body,
     mutate,
-    mutateExtras,
+    mutateExtras: { ...mutateExtras, namespace: mutateExtras?.namespace ?? namespace },
+    requestNamespace: namespace,
   });
 }
 
@@ -94,9 +98,10 @@ export async function saveWorkerYaml(
   const liveRv = fresh.metadata.resourceVersion ?? doc.metadata?.resourceVersion ?? "";
   const merged = { ...doc, metadata: { ...doc.metadata, resourceVersion: liveRv } };
   const ns = fresh.metadata.namespace?.trim() || "default";
+  const payload = ensureRequestNamespace(merged, ns);
   const updated = await mutate({
     name: routeName,
-    body: merged,
+    body: payload,
     rv: liveRv,
     namespace: ns,
   });

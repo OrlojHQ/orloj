@@ -14,7 +14,7 @@ func TestModelEndpointCRUDAndNamespaceScoping(t *testing.T) {
 	server := newTestServer(t)
 	defer server.Close()
 
-	postJSON(t, server.URL+"/v1/model-endpoints", resources.ModelEndpoint{
+	postJSON(t, server.URL+"/v1/model-endpoints?namespace=team-a", resources.ModelEndpoint{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "ModelEndpoint",
 		Metadata: resources.ObjectMeta{
@@ -23,7 +23,7 @@ func TestModelEndpointCRUDAndNamespaceScoping(t *testing.T) {
 		},
 		Spec: resources.ModelEndpointSpec{Provider: "openai", DefaultModel: "gpt-4o-mini"},
 	})
-	postJSON(t, server.URL+"/v1/model-endpoints", resources.ModelEndpoint{
+	postJSON(t, server.URL+"/v1/model-endpoints?namespace=team-b", resources.ModelEndpoint{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "ModelEndpoint",
 		Metadata: resources.ObjectMeta{

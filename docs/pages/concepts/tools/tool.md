@@ -28,7 +28,7 @@ metadata:
 spec:
   type: wasm
   wasm:
-    module: path/to/echo.wasm
+    module: echo.wasm
     entrypoint: run
     max_memory_bytes: 16777216
     fuel: 100000
@@ -201,9 +201,11 @@ WASM tools run as WebAssembly modules inside an embedded [wazero](https://wazero
 
 WASM tools communicate over stdin/stdout using a JSON contract (v1). The host writes the request to the module's stdin and reads a JSON response from stdout. This provides memory-safe, sandboxed execution with no filesystem or network access unless WASI is explicitly enabled.
 
+Local `module` paths must be **relative** and resolve under `--tool-wasm-cache-dir` (default `~/.orloj/wasm-cache`). Absolute paths, `..` segments, and plain `http://` URLs are rejected; use `https://` or `oci://` for remote modules.
+
 ### Per-Tool Configuration
 
-Each WASM tool declares its module and resource limits in `spec.wasm`. The `module` field accepts a local path, HTTPS URL, or OCI artifact reference:
+Each WASM tool declares its module and resource limits in `spec.wasm`. The `module` field accepts a relative path under `--tool-wasm-cache-dir`, an HTTPS URL, or an OCI artifact reference:
 
 ```yaml
 apiVersion: orloj.dev/v1
@@ -213,7 +215,7 @@ metadata:
 spec:
   type: wasm
   wasm:
-    module: path/to/echo.wasm        # Local path, HTTPS URL, or oci://... reference
+    module: echo.wasm                 # Relative path under --tool-wasm-cache-dir, or HTTPS / oci:// URL
     entrypoint: run                    # Exported function (default: run)
     max_memory_bytes: 67108864         # 64 MB (default)
     fuel: 1000000                      # Execution fuel limit (default: 1M)

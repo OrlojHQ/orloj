@@ -5,21 +5,81 @@
 -- Name length limit (253 matches Kubernetes naming convention)
 -- ---------------------------------------------------------------------------
 
-ALTER TABLE agents           ADD CONSTRAINT chk_agents_name_len           CHECK (length(name) <= 253);
-ALTER TABLE agent_systems    ADD CONSTRAINT chk_agent_systems_name_len    CHECK (length(name) <= 253);
-ALTER TABLE model_endpoints  ADD CONSTRAINT chk_model_endpoints_name_len  CHECK (length(name) <= 253);
-ALTER TABLE tools            ADD CONSTRAINT chk_tools_name_len            CHECK (length(name) <= 253);
-ALTER TABLE secrets          ADD CONSTRAINT chk_secrets_name_len          CHECK (length(name) <= 253);
-ALTER TABLE memories         ADD CONSTRAINT chk_memories_name_len         CHECK (length(name) <= 253);
-ALTER TABLE agent_policies   ADD CONSTRAINT chk_agent_policies_name_len   CHECK (length(name) <= 253);
-ALTER TABLE agent_roles      ADD CONSTRAINT chk_agent_roles_name_len      CHECK (length(name) <= 253);
-ALTER TABLE tool_permissions ADD CONSTRAINT chk_tool_permissions_name_len CHECK (length(name) <= 253);
-ALTER TABLE tool_approvals   ADD CONSTRAINT chk_tool_approvals_name_len   CHECK (length(name) <= 253);
-ALTER TABLE tasks            ADD CONSTRAINT chk_tasks_name_len            CHECK (length(name) <= 253);
-ALTER TABLE task_schedules   ADD CONSTRAINT chk_task_schedules_name_len   CHECK (length(name) <= 253);
-ALTER TABLE task_webhooks    ADD CONSTRAINT chk_task_webhooks_name_len    CHECK (length(name) <= 253);
-ALTER TABLE workers          ADD CONSTRAINT chk_workers_name_len          CHECK (length(name) <= 253);
-ALTER TABLE mcp_servers      ADD CONSTRAINT chk_mcp_servers_name_len      CHECK (length(name) <= 253);
+DO $$ BEGIN
+    ALTER TABLE agents           ADD CONSTRAINT chk_agents_name_len           CHECK (length(name) <= 253);
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+    ALTER TABLE agent_systems    ADD CONSTRAINT chk_agent_systems_name_len    CHECK (length(name) <= 253);
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+    ALTER TABLE model_endpoints  ADD CONSTRAINT chk_model_endpoints_name_len  CHECK (length(name) <= 253);
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+    ALTER TABLE tools            ADD CONSTRAINT chk_tools_name_len            CHECK (length(name) <= 253);
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+    ALTER TABLE secrets          ADD CONSTRAINT chk_secrets_name_len          CHECK (length(name) <= 253);
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+    ALTER TABLE memories         ADD CONSTRAINT chk_memories_name_len         CHECK (length(name) <= 253);
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+    ALTER TABLE agent_policies   ADD CONSTRAINT chk_agent_policies_name_len   CHECK (length(name) <= 253);
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+    ALTER TABLE agent_roles      ADD CONSTRAINT chk_agent_roles_name_len      CHECK (length(name) <= 253);
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+    ALTER TABLE tool_permissions ADD CONSTRAINT chk_tool_permissions_name_len CHECK (length(name) <= 253);
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+    ALTER TABLE tool_approvals   ADD CONSTRAINT chk_tool_approvals_name_len   CHECK (length(name) <= 253);
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+    ALTER TABLE tasks            ADD CONSTRAINT chk_tasks_name_len            CHECK (length(name) <= 253);
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+    ALTER TABLE task_schedules   ADD CONSTRAINT chk_task_schedules_name_len   CHECK (length(name) <= 253);
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+    ALTER TABLE task_webhooks    ADD CONSTRAINT chk_task_webhooks_name_len    CHECK (length(name) <= 253);
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+    ALTER TABLE workers          ADD CONSTRAINT chk_workers_name_len          CHECK (length(name) <= 253);
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+DO $$ BEGIN
+    ALTER TABLE mcp_servers      ADD CONSTRAINT chk_mcp_servers_name_len      CHECK (length(name) <= 253);
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ---------------------------------------------------------------------------
 -- Normalize mcp_servers default from 'Pending' to '' (matches all other tables;

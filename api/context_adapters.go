@@ -14,35 +14,9 @@ import (
 func (s *Server) handleContextAdapters(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		limit, _ := paginationParams(r)
-		after := cursorParam(r)
-		ns, hasNS := namespaceFilter(r)
-		nsFilter := ""
-		if hasNS {
-			nsFilter = ns
-		}
-		items, err := s.stores.ContextAdapters.ListCursor(r.Context(), limit, after, nsFilter)
-		if writeStoreFetchError(w, err) {
+		items, cont, err := fetchListPage(r.Context(), r, s.stores.ContextAdapters.ListCursor, func(item resources.ContextAdapter) resources.ObjectMeta { return item.Metadata })
+		if writeListPageError(w, err) {
 			return
-		}
-		cont := listContinue(limit, len(items), "")
-		if len(items) > 0 {
-			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
-		}
-		selector, err := labelSelectorFilter(r)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if len(selector) > 0 {
-			filtered := make([]resources.ContextAdapter, 0, len(items))
-			for _, item := range items {
-				if !matchMetadataFilters(item.Metadata, "", false, selector) {
-					continue
-				}
-				filtered = append(filtered, item)
-			}
-			items = filtered
 		}
 		writeJSON(w, http.StatusOK, resources.ContextAdapterList{ListMeta: resources.ListMeta{Continue: cont}, Items: items})
 	case http.MethodPost:

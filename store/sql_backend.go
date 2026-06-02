@@ -197,16 +197,7 @@ func listFromTableCursor[T any](ctx context.Context, db dbExecer, table string, 
 		limit = defaultListLimit
 	}
 
-	// afterName arrives as unscoped metadata.name from the API continue
-	// token, but the name column stores scoped keys (namespace/name). Scope
-	// it so the cursor comparison is against the same key format.
-	if afterName != "" && !strings.Contains(afterName, "/") {
-		if namespace != "" {
-			afterName = scopedName(namespace, afterName)
-		} else {
-			afterName = scopedName(resources.DefaultNamespace, afterName)
-		}
-	}
+	afterName = normalizeStoreListCursor(afterName, namespace)
 
 	var rows *sql.Rows
 	var err error
@@ -676,6 +667,25 @@ func upsertTaskWebhookSQL(ctx context.Context, db dbExecer, name string, item re
 		string(payload),
 	)
 	return err
+}
+
+func getTaskWebhookByEndpointIDSQL(ctx context.Context, db dbExecer, endpointID string) (resources.TaskWebhook, bool, error) {
+	var raw string
+	err := db.QueryRowContext(ctx,
+		`SELECT payload FROM task_webhooks WHERE payload->'status'->>'endpointID' = $1 LIMIT 1`,
+		endpointID,
+	).Scan(&raw)
+	if err == sql.ErrNoRows {
+		return resources.TaskWebhook{}, false, nil
+	}
+	if err != nil {
+		return resources.TaskWebhook{}, false, err
+	}
+	var item resources.TaskWebhook
+	if err := json.Unmarshal([]byte(raw), &item); err != nil {
+		return resources.TaskWebhook{}, false, err
+	}
+	return item, true, nil
 }
 
 func upsertWorkerSQL(ctx context.Context, db dbExecer, name string, item resources.Worker) error {
@@ -1243,23 +1253,37 @@ func setAgentJobInputSQL(ctx context.Context, db *sql.DB, name string, input map
 	if err != nil {
 		return fmt.Errorf("marshal agent job input: %w", err)
 	}
-	_, err = db.ExecContext(ctx,
+	result, err := db.ExecContext(ctx,
 		`UPDATE tasks SET
 		     payload = jsonb_set(
 		         jsonb_set(
 		             jsonb_set(
-		                 payload,
-		                 '{status,agentJobInput}', $2::jsonb
+		                 jsonb_set(
+		                     payload,
+		                     '{status,agentJobInput}', $2::jsonb
+		                 ),
+		                 '{status,agentJobAgent}', to_jsonb($3::text)
 		             ),
-		             '{status,agentJobAgent}', to_jsonb($3::text)
+		             '{status,agentJobMessageID}', to_jsonb($4::text)
 		         ),
-		         '{status,agentJobMessageID}', to_jsonb($4::text)
+		         '{metadata,resourceVersion}',
+		         to_jsonb(((payload->'metadata'->>'resourceVersion')::bigint + 1)::text)
 		     ),
 		     updated_at = NOW()
 		 WHERE name = $1`,
 		name, string(inputJSON), agent, messageID,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return fmt.Errorf("task %q not found", name)
+	}
+	return nil
 }
 
 func setAgentJobResultSQL(ctx context.Context, db *sql.DB, name string, result *resources.AgentJobResult) error {
@@ -1267,14 +1291,28 @@ func setAgentJobResultSQL(ctx context.Context, db *sql.DB, name string, result *
 	if err != nil {
 		return fmt.Errorf("marshal agent job result: %w", err)
 	}
-	_, err = db.ExecContext(ctx,
+	execResult, err := db.ExecContext(ctx,
 		`UPDATE tasks SET
-		     payload = jsonb_set(payload, '{status,agentJobResult}', $2::jsonb),
+		     payload = jsonb_set(
+		         jsonb_set(payload, '{status,agentJobResult}', $2::jsonb),
+		         '{metadata,resourceVersion}',
+		         to_jsonb(((payload->'metadata'->>'resourceVersion')::bigint + 1)::text)
+		     ),
 		     updated_at = NOW()
 		 WHERE name = $1`,
 		name, string(resultJSON),
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	affected, err := execResult.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return fmt.Errorf("task %q not found", name)
+	}
+	return nil
 }
 
 func getAgentJobResultSQL(ctx context.Context, db *sql.DB, name string) (*resources.AgentJobResult, error) {
@@ -1296,18 +1334,32 @@ func getAgentJobResultSQL(ctx context.Context, db *sql.DB, name string) (*resour
 }
 
 func clearAgentJobFieldsSQL(ctx context.Context, db *sql.DB, name string) error {
-	_, err := db.ExecContext(ctx,
+	result, err := db.ExecContext(ctx,
 		`UPDATE tasks SET
-		     payload = payload
-		         #- '{status,agentJobInput}'
-		         #- '{status,agentJobAgent}'
-		         #- '{status,agentJobMessageID}'
-		         #- '{status,agentJobResult}',
+		     payload = jsonb_set(
+		         payload
+		             #- '{status,agentJobInput}'
+		             #- '{status,agentJobAgent}'
+		             #- '{status,agentJobMessageID}'
+		             #- '{status,agentJobResult}',
+		         '{metadata,resourceVersion}',
+		         to_jsonb(((payload->'metadata'->>'resourceVersion')::bigint + 1)::text)
+		     ),
 		     updated_at = NOW()
 		 WHERE name = $1`,
 		name,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return fmt.Errorf("task %q not found", name)
+	}
+	return nil
 }
 
 // ---------------------------------------------------------------------------

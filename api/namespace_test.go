@@ -13,7 +13,7 @@ func TestNamespaceScopedResourceLookup(t *testing.T) {
 	server := newTestServer(t)
 	defer server.Close()
 
-	postJSON(t, server.URL+"/v1/tools", resources.Tool{
+	postJSON(t, server.URL+"/v1/tools?namespace=team-a", resources.Tool{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Tool",
 		Metadata: resources.ObjectMeta{
@@ -22,7 +22,7 @@ func TestNamespaceScopedResourceLookup(t *testing.T) {
 		},
 		Spec: resources.ToolSpec{Type: "http", Endpoint: "https://a.example"},
 	})
-	postJSON(t, server.URL+"/v1/tools", resources.Tool{
+	postJSON(t, server.URL+"/v1/tools?namespace=team-b", resources.Tool{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Tool",
 		Metadata: resources.ObjectMeta{

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"strings"
 	"time"
 
@@ -201,8 +202,12 @@ func (r *GRPCToolRuntime) Call(ctx context.Context, tool string, input string) (
 	} else {
 		transportCreds = grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{MinVersion: tls.VersionTLS12}))
 	}
+	safeDialer := SafeDialer(false)
 	dialOpts := []grpc.DialOption{
 		transportCreds,
+		grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
+			return safeDialer.DialContext(ctx, "tcp", addr)
+		}),
 		grpc.WithDefaultCallOptions(grpc.ForceCodec(jsonCodec{})),
 	}
 

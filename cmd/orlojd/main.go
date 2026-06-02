@@ -106,7 +106,10 @@ func main() {
 	agentMessageStreamName := flag.String("agent-message-stream-name", env("ORLOJ_AGENT_MESSAGE_STREAM", "ORLOJ_AGENT_MESSAGES"), "JetStream stream name for runtime agent messages")
 	agentMessageHistoryMax := flag.Int("agent-message-history-max", 2048, "in-memory runtime agent message history capacity")
 	agentMessageDedupeWindow := flag.Duration("agent-message-dedupe-window", 2*time.Minute, "in-memory runtime agent message dedupe window")
-	secretEncryptionKeyRaw := flag.String("secret-encryption-key", env("ORLOJ_SECRET_ENCRYPTION_KEY", ""), "256-bit AES key (hex or base64) for encrypting Secret resource data at rest")
+	secretEncryptionKeyRaw := flag.String("secret-encryption-key", env("ORLOJ_SECRET_ENCRYPTION_KEY", ""), "256-bit AES key (hex or base64) for encrypting Secret resource data at rest (prefer ORLOJ_SECRET_ENCRYPTION_KEY env var)")
+	corsAllowedOrigins := flag.String("cors-allowed-origins", env("ORLOJ_CORS_ALLOWED_ORIGINS", ""), "comma-separated CORS allowed origins (empty = same-origin only; env: ORLOJ_CORS_ALLOWED_ORIGINS)")
+	tlsCertFile := flag.String("tls-cert-file", env("ORLOJ_TLS_CERT_FILE", ""), "TLS certificate file for HTTPS (env: ORLOJ_TLS_CERT_FILE)")
+	tlsKeyFile := flag.String("tls-key-file", env("ORLOJ_TLS_KEY_FILE", ""), "TLS private key file for HTTPS (env: ORLOJ_TLS_KEY_FILE)")
 	storageBackend := flag.String("storage-backend", "memory", "state backend: memory|postgres")
 	postgresDSN := flag.String("postgres-dsn", os.Getenv("ORLOJ_POSTGRES_DSN"), "postgres DSN (required when --storage-backend=postgres)")
 	sqlDriver := flag.String("sql-driver", "pgx", "database/sql driver name used for --storage-backend=postgres")
@@ -114,6 +117,10 @@ func main() {
 	postgresMaxIdleConns := flag.Int("postgres-max-idle-conns", 10, "max idle postgres connections")
 	postgresConnMaxLifetime := flag.Duration("postgres-conn-max-lifetime", 30*time.Minute, "max lifetime of postgres connections")
 	flag.Parse()
+
+	warnIfSecretFlagSet("api-key", "ORLOJ_API_TOKEN")
+	warnIfSecretFlagSet("secret-encryption-key", "ORLOJ_SECRET_ENCRYPTION_KEY")
+	warnIfSecretFlagSet("auth-reset-admin-password", "ORLOJ_AUTH_RESET_ADMIN_PASSWORD")
 
 	if *showVersion {
 		fmt.Println(version.String())
@@ -442,6 +449,7 @@ func main() {
 		SessionTTL:     *authSessionTTL,
 		UIBasePath:     *uiPath,
 		TrustedProxies: *trustedProxies,
+		CORSAllowedOrigins: parseCSVList(*corsAllowedOrigins),
 		ContainerResourceCeiling: resources.ContainerResourceCeiling{
 			MaxMemory:    *toolContainerMaxMemory,
 			MaxCPUs:      *toolContainerMaxCPUs,
@@ -602,10 +610,41 @@ func main() {
 	}()
 
 	logger.Printf("API server listening on %s", *addr)
-	if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	if strings.TrimSpace(*tlsCertFile) != "" || strings.TrimSpace(*tlsKeyFile) != "" {
+		if strings.TrimSpace(*tlsCertFile) == "" || strings.TrimSpace(*tlsKeyFile) == "" {
+			fatalLogger.Fatalf("both --tls-cert-file and --tls-key-file are required for TLS")
+		}
+		if err := httpServer.ListenAndServeTLS(*tlsCertFile, *tlsKeyFile); err != nil && err != http.ErrServerClosed {
+			fatalLogger.Fatalf("server error: %v", err)
+		}
+	} else if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		fatalLogger.Fatalf("server error: %v", err)
 	}
 	wg.Wait()
+}
+
+func warnIfSecretFlagSet(flagName, envName string) {
+	set := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == flagName {
+			set = true
+		}
+	})
+	if set {
+		log.Printf("WARNING: secret %q was passed via CLI flag; prefer env var %s to avoid exposure in process listings", flagName, envName)
+	}
+}
+
+func parseCSVList(raw string) []string {
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
 
 func runLocalAdminPasswordReset(stores *startup.StoreSet, username, password string) error {

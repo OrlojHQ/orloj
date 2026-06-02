@@ -20,20 +20,9 @@ import (
 func (s *Server) handleEvalDatasets(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		limit, _ := paginationParams(r)
-		after := cursorParam(r)
-		ns, hasNS := namespaceFilter(r)
-		nsFilter := ""
-		if hasNS {
-			nsFilter = ns
-		}
-		items, err := s.stores.EvalDatasets.ListCursor(r.Context(), limit, after, nsFilter)
-		if writeStoreFetchError(w, err) {
+		items, cont, err := fetchListPage(r.Context(), r, s.stores.EvalDatasets.ListCursor, func(item resources.EvalDataset) resources.ObjectMeta { return item.Metadata })
+		if writeListPageError(w, err) {
 			return
-		}
-		cont := listContinue(limit, len(items), "")
-		if len(items) > 0 {
-			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
 		}
 		writeJSON(w, http.StatusOK, resources.EvalDatasetList{ListMeta: resources.ListMeta{Continue: cont}, Items: items})
 	case http.MethodPost:
@@ -183,20 +172,9 @@ func (s *Server) handleEvalDatasetStatus(w http.ResponseWriter, r *http.Request,
 func (s *Server) handleEvalRuns(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		limit, _ := paginationParams(r)
-		after := cursorParam(r)
-		ns, hasNS := namespaceFilter(r)
-		nsFilter := ""
-		if hasNS {
-			nsFilter = ns
-		}
-		items, err := s.stores.EvalRuns.ListCursor(r.Context(), limit, after, nsFilter)
-		if writeStoreFetchError(w, err) {
+		items, cont, err := fetchListPage(r.Context(), r, s.stores.EvalRuns.ListCursor, func(item resources.EvalRun) resources.ObjectMeta { return item.Metadata })
+		if writeListPageError(w, err) {
 			return
-		}
-		cont := listContinue(limit, len(items), "")
-		if len(items) > 0 {
-			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
 		}
 		writeJSON(w, http.StatusOK, resources.EvalRunList{ListMeta: resources.ListMeta{Continue: cont}, Items: items})
 	case http.MethodPost:

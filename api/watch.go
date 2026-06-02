@@ -1,7 +1,9 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -111,6 +113,13 @@ func (s *Server) watchEvents(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "event bus unavailable", http.StatusServiceUnavailable)
 		return
 	}
+	ctx, cancel, ok := s.acquireWatchStream(w, r)
+	if !ok {
+		return
+	}
+	defer cancel()
+	r = r.WithContext(ctx)
+
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
@@ -138,6 +147,10 @@ func (s *Server) watchEvents(w http.ResponseWriter, r *http.Request) {
 	for {
 		select {
 		case <-r.Context().Done():
+			if errors.Is(r.Context().Err(), context.DeadlineExceeded) {
+				_ = writeSSE(w, "close", map[string]string{"reason": "max_watch_duration_reached"})
+				flusher.Flush()
+			}
 			return
 		case evt, ok := <-stream:
 			if !ok {
@@ -156,7 +169,42 @@ func (s *Server) watchEvents(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+const (
+	watchMaxDuration         = 30 * time.Minute
+	watchMaxConcurrentGlobal = 1000
+)
+
+func (s *Server) acquireWatchStream(w http.ResponseWriter, r *http.Request) (context.Context, context.CancelFunc, bool) {
+	if s != nil && s.watchRateLimiter != nil && !s.watchRateLimiter.Allow(r) {
+		http.Error(w, "too many watch connections from this client", http.StatusTooManyRequests)
+		return nil, nil, false
+	}
+	if s != nil && watchMaxConcurrentGlobal > 0 {
+		cur := s.watchSubscribeCount.Add(1)
+		if int(cur) > watchMaxConcurrentGlobal {
+			s.watchSubscribeCount.Add(-1)
+			http.Error(w, "too many concurrent watch connections", http.StatusServiceUnavailable)
+			return nil, nil, false
+		}
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), watchMaxDuration)
+	if s != nil && watchMaxConcurrentGlobal > 0 {
+		origCancel := cancel
+		cancel = func() {
+			origCancel()
+			s.watchSubscribeCount.Add(-1)
+		}
+	}
+	return ctx, cancel, true
+}
+
 func (s *Server) watchResourceStream(w http.ResponseWriter, r *http.Request, kind string, snapshot func() []watchRecord) {
+	ctx, cancel, ok := s.acquireWatchStream(w, r)
+	if !ok {
+		return
+	}
+	defer cancel()
+	r = r.WithContext(ctx)
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
@@ -204,6 +252,10 @@ func (s *Server) watchResourceStream(w http.ResponseWriter, r *http.Request, kin
 	for {
 		select {
 		case <-r.Context().Done():
+			if errors.Is(r.Context().Err(), context.DeadlineExceeded) {
+				_ = writeSSE(w, "close", map[string]string{"reason": "max_watch_duration_reached"})
+				flusher.Flush()
+			}
 			return
 		case evt := <-stream:
 			record, ok := watchRecordFromResource(evt.Data)
@@ -277,6 +329,10 @@ func (s *Server) watchResourceStreamPolling(
 	for {
 		select {
 		case <-r.Context().Done():
+			if errors.Is(r.Context().Err(), context.DeadlineExceeded) {
+				_ = writeSSE(w, "close", map[string]string{"reason": "max_watch_duration_reached"})
+				flusher.Flush()
+			}
 			return
 		case <-poll.C:
 			if err := sendWatchSnapshot(w, snapshot(), seen, sinceRV, nameFilter, namespaceFilterValue, hasNamespaceFilter); err != nil {
