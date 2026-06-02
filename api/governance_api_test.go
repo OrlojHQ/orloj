@@ -16,7 +16,7 @@ func TestAgentRoleCRUDAndNamespaceScoping(t *testing.T) {
 	server := newTestServer(t)
 	defer server.Close()
 
-	postJSON(t, server.URL+"/v1/agent-roles", resources.AgentRole{
+	postJSON(t, server.URL+"/v1/agent-roles?namespace=team-a", resources.AgentRole{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentRole",
 		Metadata: resources.ObjectMeta{
@@ -25,7 +25,7 @@ func TestAgentRoleCRUDAndNamespaceScoping(t *testing.T) {
 		},
 		Spec: resources.AgentRoleSpec{Permissions: []string{"tool:web_search:invoke"}},
 	})
-	postJSON(t, server.URL+"/v1/agent-roles", resources.AgentRole{
+	postJSON(t, server.URL+"/v1/agent-roles?namespace=team-b", resources.AgentRole{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "AgentRole",
 		Metadata: resources.ObjectMeta{

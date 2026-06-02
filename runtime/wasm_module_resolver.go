@@ -86,7 +86,10 @@ const (
 // ClassifyModuleRef determines the source type of a module reference.
 func ClassifyModuleRef(ref string) ModuleSource {
 	ref = strings.TrimSpace(ref)
-	if strings.HasPrefix(ref, "https://") || strings.HasPrefix(ref, "http://") {
+	if strings.HasPrefix(ref, "http://") {
+		return ModuleSourceLocal
+	}
+	if strings.HasPrefix(ref, "https://") {
 		return ModuleSourceHTTPS
 	}
 	if strings.HasPrefix(ref, "oci://") {
@@ -103,10 +106,13 @@ func (r *WASMModuleResolver) Resolve(ctx context.Context, moduleRef string, imag
 	if moduleRef == "" {
 		return "", fmt.Errorf("empty module reference")
 	}
+	if strings.HasPrefix(moduleRef, "http://") {
+		return "", fmt.Errorf("plaintext http:// module references are not supported; use https:// or a relative local path")
+	}
 
 	switch ClassifyModuleRef(moduleRef) {
 	case ModuleSourceLocal:
-		return moduleRef, nil
+		return r.resolveLocal(moduleRef)
 	case ModuleSourceHTTPS:
 		return r.resolveHTTPS(ctx, moduleRef)
 	case ModuleSourceOCI:
@@ -143,6 +149,31 @@ func (r *WASMModuleResolver) cacheHit(ref string) (string, bool) {
 		return path, true
 	}
 	return "", false
+}
+
+func (r *WASMModuleResolver) resolveLocal(moduleRef string) (string, error) {
+	if strings.Contains(moduleRef, "..") {
+		return "", fmt.Errorf("local module path %q contains path traversal", moduleRef)
+	}
+	if filepath.IsAbs(moduleRef) {
+		return "", fmt.Errorf("local module path %q must be relative", moduleRef)
+	}
+	clean := filepath.Clean(moduleRef)
+	if clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("local module path %q escapes base directory", moduleRef)
+	}
+	absBase, err := filepath.Abs(r.cacheDir)
+	if err != nil {
+		return "", fmt.Errorf("resolve wasm cache dir: %w", err)
+	}
+	absPath, err := filepath.Abs(filepath.Join(absBase, clean))
+	if err != nil {
+		return "", fmt.Errorf("resolve local module path: %w", err)
+	}
+	if absPath != absBase && !strings.HasPrefix(absPath, absBase+string(filepath.Separator)) {
+		return "", fmt.Errorf("local module path %q is outside wasm cache directory", moduleRef)
+	}
+	return absPath, nil
 }
 
 func (r *WASMModuleResolver) resolveHTTPS(ctx context.Context, rawURL string) (string, error) {

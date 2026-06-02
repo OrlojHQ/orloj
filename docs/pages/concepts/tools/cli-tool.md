@@ -124,10 +124,22 @@ CLI tools default to `container` isolation. The operator provides a container im
 - `--read-only` filesystem
 - `--cap-drop=ALL`
 - `--security-opt no-new-privileges`
-- `--network bridge` (configurable via `cli.network`)
+- `--network none` by default (inherits `--tool-container-network`; configurable per tool via `cli.network`)
 - Resource limits from `cli.resources` (per-tool) or the global worker config (`--tool-container-memory`, `--tool-container-cpus`, `--tool-container-pids-limit`)
 
-Set `cli.network: none` for tools that do not need outbound network access:
+Set `cli.network: bridge` when the binary needs outbound network access (e.g., `kubectl`, `gh`, `curl`):
+
+```yaml
+cli:
+  command: gh
+  image: ghcr.io/cli/cli:2.50
+  network: bridge
+  env_from:
+    - name: GITHUB_TOKEN
+      secretRef: gh-api-token
+```
+
+Tools that do not need network access (e.g., `jq`, `yq`) can leave `cli.network` unset or set it explicitly to `none`:
 
 ```yaml
 cli:

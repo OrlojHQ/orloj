@@ -17,7 +17,7 @@ func TestClassifyModuleRef(t *testing.T) {
 		{"/opt/tools/echo.wasm", ModuleSourceLocal},
 		{"relative/path.wasm", ModuleSourceLocal},
 		{"https://example.com/tool.wasm", ModuleSourceHTTPS},
-		{"http://example.com/tool.wasm", ModuleSourceHTTPS},
+		{"http://example.com/tool.wasm", ModuleSourceLocal},
 		{"oci://ghcr.io/orloj/echo:v1", ModuleSourceOCI},
 		{"", ModuleSourceLocal},
 	}
@@ -40,20 +40,24 @@ func TestResolverLocalPassthrough(t *testing.T) {
 		t.Fatalf("NewWASMModuleResolver: %v", err)
 	}
 
-	localPath := "/opt/tools/echo.wasm"
-	got, err := resolver.Resolve(context.Background(), localPath, "")
+	localName := "echo.wasm"
+	if err := os.WriteFile(filepath.Join(cacheDir, localName), []byte("wasm"), 0o644); err != nil {
+		t.Fatalf("write local module: %v", err)
+	}
+	got, err := resolver.Resolve(context.Background(), localName, "")
 	if err != nil {
 		t.Fatalf("Resolve local: %v", err)
 	}
-	if got != localPath {
-		t.Errorf("Resolve local = %q, want %q", got, localPath)
+	want := filepath.Join(cacheDir, localName)
+	if got != want {
+		t.Errorf("Resolve local = %q, want %q", got, want)
 	}
 }
 
 func TestResolverHTTPSFetch(t *testing.T) {
 	wasmContent := []byte("fake wasm content for testing")
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/wasm")
 		w.Write(wasmContent)
 	}))
@@ -68,7 +72,7 @@ func TestResolverHTTPSFetch(t *testing.T) {
 		t.Fatalf("NewWASMModuleResolver: %v", err)
 	}
 	resolver.skipURLCheck = true
-	resolver.httpClient = &http.Client{}
+	resolver.httpClient = server.Client()
 
 	path, err := resolver.Resolve(context.Background(), server.URL+"/tool.wasm", "")
 	if err != nil {
@@ -89,7 +93,7 @@ func TestResolverHTTPSFetch(t *testing.T) {
 
 func TestResolverHTTPSCacheHit(t *testing.T) {
 	callCount := 0
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
 		w.Write([]byte("wasm bytes"))
 	}))
@@ -104,7 +108,7 @@ func TestResolverHTTPSCacheHit(t *testing.T) {
 		t.Fatalf("NewWASMModuleResolver: %v", err)
 	}
 	resolver.skipURLCheck = true
-	resolver.httpClient = &http.Client{}
+	resolver.httpClient = server.Client()
 
 	url := server.URL + "/tool.wasm"
 
@@ -247,6 +251,43 @@ func TestResolverEmptyRef(t *testing.T) {
 	_, err = resolver.Resolve(context.Background(), "", "")
 	if err == nil {
 		t.Error("expected error for empty ref, got nil")
+	}
+}
+
+func TestResolverRejectsHTTPModuleRef(t *testing.T) {
+	cacheDir := t.TempDir()
+	resolver, err := NewWASMModuleResolver(WASMModuleResolverConfig{CacheDir: cacheDir})
+	if err != nil {
+		t.Fatalf("NewWASMModuleResolver: %v", err)
+	}
+
+	_, err = resolver.Resolve(context.Background(), "http://example.com/tool.wasm", "")
+	if err == nil {
+		t.Fatal("expected error for http:// ref, got nil")
+	}
+}
+
+func TestResolverRejectsAbsoluteLocalPath(t *testing.T) {
+	resolver, err := NewWASMModuleResolver(WASMModuleResolverConfig{CacheDir: t.TempDir()})
+	if err != nil {
+		t.Fatalf("NewWASMModuleResolver: %v", err)
+	}
+	_, err = resolver.Resolve(context.Background(), "/opt/tools/echo.wasm", "")
+	if err == nil {
+		t.Fatal("expected error for absolute local path, got nil")
+	}
+}
+
+func TestResolverRejectsPathTraversal(t *testing.T) {
+	resolver, err := NewWASMModuleResolver(WASMModuleResolverConfig{CacheDir: t.TempDir()})
+	if err != nil {
+		t.Fatalf("NewWASMModuleResolver: %v", err)
+	}
+	for _, ref := range []string{"../escape.wasm", "tools/../../escape.wasm"} {
+		_, err = resolver.Resolve(context.Background(), ref, "")
+		if err == nil {
+			t.Fatalf("expected error for path traversal ref %q, got nil", ref)
+		}
 	}
 }
 

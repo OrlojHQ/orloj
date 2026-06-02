@@ -289,7 +289,7 @@ spec:
 spec:
   type: wasm
   wasm:
-    module: /opt/orloj/tools/my-tool.wasm
+    module: my-tool.wasm
     enable_wasi: true
   runtime:
     isolation_mode: wasm

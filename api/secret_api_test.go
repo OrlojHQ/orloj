@@ -14,7 +14,7 @@ func TestSecretCRUDAndNamespaceScoping(t *testing.T) {
 	server := newTestServer(t)
 	defer server.Close()
 
-	postJSON(t, server.URL+"/v1/secrets", resources.Secret{
+	postJSON(t, server.URL+"/v1/secrets?namespace=team-a", resources.Secret{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Secret",
 		Metadata: resources.ObjectMeta{
@@ -27,7 +27,7 @@ func TestSecretCRUDAndNamespaceScoping(t *testing.T) {
 			},
 		},
 	})
-	postJSON(t, server.URL+"/v1/secrets", resources.Secret{
+	postJSON(t, server.URL+"/v1/secrets?namespace=team-b", resources.Secret{
 		APIVersion: "orloj.dev/v1",
 		Kind:       "Secret",
 		Metadata: resources.ObjectMeta{

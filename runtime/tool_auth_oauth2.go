@@ -15,9 +15,11 @@ import (
 // OAuth2TokenCache caches access tokens obtained via the client_credentials grant.
 // Tokens are keyed by tokenURL+clientID and evicted on expiry or explicit eviction.
 type OAuth2TokenCache struct {
-	mu      sync.Mutex
-	entries map[string]*oauth2CacheEntry
-	client  HTTPDoer
+	mu       sync.Mutex
+	entries  map[string]*oauth2CacheEntry
+	order    []string
+	maxSize  int
+	client   HTTPDoer
 }
 
 type oauth2CacheEntry struct {
@@ -39,6 +41,7 @@ func NewOAuth2TokenCache(client HTTPDoer) *OAuth2TokenCache {
 	}
 	return &OAuth2TokenCache{
 		entries: make(map[string]*oauth2CacheEntry),
+		maxSize: 256,
 		client:  client,
 	}
 }
@@ -74,13 +77,43 @@ func (c *OAuth2TokenCache) GetToken(ctx context.Context, tokenURL, clientID, cli
 	}
 
 	c.mu.Lock()
-	c.entries[key] = &oauth2CacheEntry{
+	c.setLocked(key, &oauth2CacheEntry{
 		accessToken: token,
 		expiresAt:   time.Now().Add(ttl),
-	}
+	})
 	c.mu.Unlock()
 
 	return token, nil
+}
+
+func (c *OAuth2TokenCache) setLocked(key string, entry *oauth2CacheEntry) {
+	if _, ok := c.entries[key]; !ok {
+		c.order = append(c.order, key)
+	}
+	c.entries[key] = entry
+	c.pruneExpiredLocked()
+	for c.maxSize > 0 && len(c.entries) > c.maxSize && len(c.order) > 0 {
+		oldest := c.order[0]
+		c.order = c.order[1:]
+		delete(c.entries, oldest)
+	}
+}
+
+func (c *OAuth2TokenCache) pruneExpiredLocked() {
+	now := time.Now()
+	kept := c.order[:0]
+	for _, key := range c.order {
+		entry, ok := c.entries[key]
+		if !ok {
+			continue
+		}
+		if now.Before(entry.expiresAt) {
+			kept = append(kept, key)
+			continue
+		}
+		delete(c.entries, key)
+	}
+	c.order = kept
 }
 
 // Evict removes a cached token, forcing a fresh exchange on next GetToken.
@@ -122,7 +155,7 @@ func (c *OAuth2TokenCache) exchange(ctx context.Context, tokenURL, clientID, cli
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", 0, fmt.Errorf("oauth2 token endpoint returned HTTP %d: %s", resp.StatusCode, compactBody(string(body)))
+		return "", 0, fmt.Errorf("oauth2 token endpoint returned HTTP %d: %s", resp.StatusCode, RedactSensitive(compactBody(string(body))))
 	}
 
 	var tokenResp oauth2TokenResponse

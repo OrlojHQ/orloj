@@ -102,7 +102,7 @@ REAL_APPROVAL_GATE_TIMEOUT_SECONDS ?= 240
 REAL_GATE_POLL_INTERVAL_SECONDS ?= 2
 REAL_SCHEDULE_TIMEOUT_SECONDS ?= 120
 
-.PHONY: build help install-controller-gen generate-crds test-operator ui-install ui-dev ui-build \
+.PHONY: build help install-controller-gen generate-crds test lint test-operator ui-install ui-dev ui-build \
 	real-help real-tool-stub real-repeat \
 	real-delete-task real-delete-tool-approvals-in-ns real-capture \
 	real-apply real-apply-all \
@@ -129,6 +129,12 @@ REAL_SCHEDULE_TIMEOUT_SECONDS ?= 120
 
 build:
 	go build ./cmd/...
+
+test:
+	go test ./... -count=1 -timeout 120s
+
+lint:
+	go vet ./...
 
 install-controller-gen:
 	go install sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION)

@@ -57,6 +57,9 @@ Example:
 | `ORLOJ_API_TOKEN` | `orlojd`, `orlojctl`, `orloj-alertcheck` | `--api-key` (server), `--api-token` (client/checker) | Bearer token fallback for API auth. |
 | `ORLOJ_API_TOKENS` | `orlojd` | none | Multi-token auth map (`name:token:role` entries; legacy `token:role` supported). |
 | `ORLOJ_UI_PATH` | `orlojd` | `--ui-path` | Base URL path for the web console (default `/`). |
+| `ORLOJ_CORS_ALLOWED_ORIGINS` | `orlojd` | `--cors-allowed-origins` | Comma-separated CORS allowed origins. Empty means same-origin only. |
+| `ORLOJ_TLS_CERT_FILE` | `orlojd` | `--tls-cert-file` | TLS certificate file for native HTTPS. Requires `ORLOJ_TLS_KEY_FILE`. |
+| `ORLOJ_TLS_KEY_FILE` | `orlojd` | `--tls-key-file` | TLS private key file for native HTTPS. Requires `ORLOJ_TLS_CERT_FILE`. |
 | `ORLOJ_AUTH_MODE` | `orlojd` | `--auth-mode` | API auth mode (`off`, `native`, `sso`; `sso` unavailable in this distribution). |
 | `ORLOJ_AUTH_SESSION_TTL` | `orlojd` | `--auth-session-ttl` | Session TTL for native auth mode. |
 | `ORLOJ_AUTH_RESET_ADMIN_USERNAME` | `orlojd` | `--auth-reset-admin-username` | One-shot local admin reset username. |

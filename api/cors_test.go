@@ -6,6 +6,23 @@ import (
 	"testing"
 )
 
+func TestServerHandlerWithCORS(t *testing.T) {
+	server := NewServer(Stores{}, nil, nil)
+	server.corsAllowedOrigins = []string{"https://app.example"}
+
+	req := httptest.NewRequest(http.MethodOptions, "/v1/tools", nil)
+	req.Header.Set("Origin", "https://app.example")
+	rr := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 for OPTIONS preflight, got %d", rr.Code)
+	}
+	if rr.Header().Get("Access-Control-Allow-Origin") != "https://app.example" {
+		t.Fatalf("expected CORS header on Handler(), got %q", rr.Header().Get("Access-Control-Allow-Origin"))
+	}
+}
+
 func TestWithCORS_AllowedOriginSetsHeaders(t *testing.T) {
 	nextCalled := false
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

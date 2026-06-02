@@ -59,10 +59,10 @@ Store the output in your secrets manager, Kubernetes Secret, or password manager
 
 ### 2. Configure the server
 
-Pick **one** of these (same token string you generated):
+Pick **one** of these (same token string you generated). **Prefer environment variables** over CLI flags — values passed via `--api-key`, `--secret-encryption-key`, or `--auth-reset-admin-password` are visible in process listings (`ps`) and the server logs a warning when a secret flag is used.
 
-- **Flag:** `orlojd --api-key='<token>'`
-- **Environment:** `ORLOJ_API_TOKEN='<token>'` (also read when `--api-key` is unset; see server help)
+- **Environment (recommended):** `ORLOJ_API_TOKEN='<token>'`
+- **Flag:** `orlojd --api-key='<token>'` (env fallback when unset; see server help)
 
 For **multiple** distinct tokens with different roles (reader vs admin-style access), use:
 
@@ -280,7 +280,9 @@ When `--agent-k8s-enabled=true`, each agent in a multi-agent task runs as an eph
 
 ### CLI Tool Isolation
 
-CLI tools (`spec.type: cli`) default to `container` isolation regardless of risk level. Unlike HTTP container isolation, CLI containers use **bridge networking** by default because the binary itself is the network client (e.g., `kubectl` reaches the K8s API, `gh` reaches GitHub).
+CLI tools (`spec.type: cli`) default to `container` isolation regardless of risk level. Container network mode inherits the operator's `--tool-container-network` setting, which defaults to **`none`** (same as HTTP container tools). This keeps CLI tools network-isolated unless the operator or tool spec opts in.
+
+Tools that call external APIs (e.g., `kubectl`, `gh`, `aws`) must set `spec.cli.network: bridge` (or another appropriate mode) explicitly.
 
 **Security properties:**
 
@@ -291,7 +293,7 @@ CLI tools (`spec.type: cli`) default to `container` isolation regardless of risk
 - **Argv length limit**: `--cli-tool-max-argv-length` (default 4096 bytes) prevents oversized argument lists.
 - **`spec.auth` rejected**: CLI tools must use `env_from` for credentials; setting `spec.auth` produces a validation error to prevent silent misconfiguration.
 
-Operators can restrict per-tool networking with `spec.cli.network: none` for tools that do not need outbound access (e.g., `jq`, `yq`).
+Set `spec.cli.network: bridge` (or another mode) when a CLI tool needs outbound network access. Leave it unset or set `none` for tools that operate on stdin/stdout only (e.g., `jq`, `yq`).
 
 ## Secret Handling
 
@@ -330,12 +332,14 @@ When using the Postgres storage backend, enable encryption at rest for `Secret` 
 # Generate a key (hex-encoded, 64 characters)
 openssl rand -hex 32
 
-# Pass via flag
+# Pass via environment variable (recommended)
+export ORLOJ_SECRET_ENCRYPTION_KEY=<hex-key>
+orlojd ...
+orlojworker ...
+
+# Or via flag (logs a warning; prefer env in production)
 orlojd --secret-encryption-key=<hex-key> ...
 orlojworker --secret-encryption-key=<hex-key> ...
-
-# Or via environment variable
-export ORLOJ_SECRET_ENCRYPTION_KEY=<hex-key>
 ```
 
 When enabled, all `Secret.spec.data` values are encrypted with AES-256-GCM before being written to the database and decrypted transparently on read. This protects secrets against direct database access, backup exposure, and log/dump leaks.

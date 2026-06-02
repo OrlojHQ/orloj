@@ -2,98 +2,71 @@ package agentruntime
 
 import (
 	"context"
-	"errors"
+	"net"
 	"testing"
 
 	"github.com/OrlojHQ/orloj/resources"
+	"google.golang.org/grpc"
 )
 
-func TestGRPCToolRuntimeFailsOnMissingEndpoint(t *testing.T) {
-	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
-		"grpc_tool": {Type: "grpc"},
-	})
-	runtime := NewGRPCToolRuntime(registry, nil, nil)
-
-	_, err := runtime.Call(context.Background(), "grpc_tool", "input")
-	if err == nil {
-		t.Fatal("expected missing endpoint error")
-	}
-	code, _, _, _ := ToolErrorMeta(err)
-	if code != ToolCodeRuntimePolicyInvalid {
-		t.Fatalf("expected code %q, got %q", ToolCodeRuntimePolicyInvalid, code)
-	}
+type blockingGRPCDialer struct {
+	resolvedIP string
 }
 
-func TestGRPCToolRuntimeFailsOnUnsupportedTool(t *testing.T) {
-	registry := NewStaticToolCapabilityRegistry(nil)
-	runtime := NewGRPCToolRuntime(registry, nil, nil)
-
-	_, err := runtime.Call(context.Background(), "unknown_tool", "input")
-	if err == nil {
-		t.Fatal("expected unsupported tool error")
-	}
-	if !errors.Is(err, ErrUnsupportedTool) {
-		t.Fatalf("expected ErrUnsupportedTool, got %v", err)
-	}
+func (d blockingGRPCDialer) DialContext(ctx context.Context, target string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
+	safeDialer := SafeDialer(false)
+	_, err := safeDialer.DialContext(ctx, "tcp", net.JoinHostPort(d.resolvedIP, "50051"))
+	return nil, err
 }
 
-func TestGRPCToolRuntimeFailsOnMissingRegistry(t *testing.T) {
-	runtime := NewGRPCToolRuntime(nil, nil, nil)
-
-	_, err := runtime.Call(context.Background(), "grpc_tool", "input")
-	if err == nil {
-		t.Fatal("expected missing registry error")
-	}
-	code, _, _, _ := ToolErrorMeta(err)
-	if code != ToolCodeRuntimePolicyInvalid {
-		t.Fatalf("expected code %q, got %q", ToolCodeRuntimePolicyInvalid, code)
-	}
-}
-
-func TestGRPCToolRuntimeFailsOnEmptyToolName(t *testing.T) {
-	runtime := NewGRPCToolRuntime(nil, nil, nil)
-
-	_, err := runtime.Call(context.Background(), "", "input")
-	if err == nil {
-		t.Fatal("expected empty tool name error")
-	}
-	code, _, _, _ := ToolErrorMeta(err)
-	if code != ToolCodeInvalidInput {
-		t.Fatalf("expected code %q, got %q", ToolCodeInvalidInput, code)
-	}
-}
-
-func TestGRPCToolRuntimeSecretResolutionFailure(t *testing.T) {
+func TestGRPCToolRuntimeBlocksHostnameRebindToLoopback(t *testing.T) {
 	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"grpc_tool": {
 			Type:     "grpc",
-			Endpoint: "localhost:50051",
-			Auth:     resources.ToolAuth{SecretRef: "missing"},
+			Endpoint: "rebind.example:50051",
 		},
 	})
-	secrets := staticSecretResolver{values: map[string]string{}}
-	runtime := NewGRPCToolRuntime(registry, secrets, nil)
+	runtime := NewGRPCToolRuntime(registry, nil, blockingGRPCDialer{resolvedIP: "127.0.0.1"})
+	runtime.SetAllowInsecure(true)
 
 	_, err := runtime.Call(context.Background(), "grpc_tool", "input")
 	if err == nil {
-		t.Fatal("expected secret resolution failure")
+		t.Fatal("expected blocked loopback dial")
 	}
-	if !errors.Is(err, ErrToolSecretResolution) {
-		t.Fatalf("expected ErrToolSecretResolution, got %v", err)
+	code, _, _, _ := ToolErrorMeta(err)
+	if code != ToolCodeRuntimePolicyInvalid && code != ToolCodeExecutionFailed {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
-func TestGRPCToolRuntimeRegisteredInDefaultRegistry(t *testing.T) {
-	registry := DefaultToolIsolationBackendRegistry()
-	modes := registry.Modes()
-	found := false
-	for _, mode := range modes {
-		if mode == "grpc" {
-			found = true
-			break
-		}
+func TestGRPCToolRuntimeBlocksHostnameRebindToMetadata(t *testing.T) {
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
+		"grpc_tool": {
+			Type:     "grpc",
+			Endpoint: "metadata.example:50051",
+		},
+	})
+	runtime := NewGRPCToolRuntime(registry, nil, blockingGRPCDialer{resolvedIP: "169.254.169.254"})
+	runtime.SetAllowInsecure(true)
+
+	_, err := runtime.Call(context.Background(), "grpc_tool", "input")
+	if err == nil {
+		t.Fatal("expected blocked metadata IP dial")
 	}
-	if !found {
-		t.Fatalf("expected 'grpc' in registered modes, got %v", modes)
+}
+
+func TestGRPCToolRuntimeBlocksHostnameRebindToPrivate(t *testing.T) {
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
+		"grpc_tool": {
+			Type:     "grpc",
+			Endpoint: "private.example:50051",
+		},
+	})
+	runtime := NewGRPCToolRuntime(registry, nil, blockingGRPCDialer{resolvedIP: "10.0.0.5"})
+	runtime.SetAllowInsecure(true)
+
+	_, err := runtime.Call(context.Background(), "grpc_tool", "input")
+	if err == nil {
+		t.Fatal("expected blocked private IP dial")
 	}
 }

@@ -9,7 +9,7 @@ COPY frontend/ ./
 RUN bun run build
 
 # --- Go module cache ---
-FROM golang:1.26-alpine AS base
+FROM golang:1.26.3-alpine@sha256:91eda9776261207ea25fd06b5b7fed8d397dd2c0a283e77f2ab6e91bfa71079d AS base
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
@@ -53,21 +53,21 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     -o /out/orloj-operator ./cmd/orloj-operator
 
 # --- Runtime images (default final stage: orlojd) ---
-FROM alpine:3.23 AS orlojworker
+FROM alpine:3.23@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11 AS orlojworker
 RUN apk add --no-cache ca-certificates tzdata wget docker-cli \
     && adduser -D -u 10001 appuser
 COPY --from=build-orlojworker /out/orlojworker /usr/local/bin/app
 USER appuser
 ENTRYPOINT ["/usr/local/bin/app"]
 
-FROM alpine:3.23 AS orloj-operator
+FROM alpine:3.23@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11 AS orloj-operator
 RUN apk add --no-cache ca-certificates tzdata \
     && adduser -D -u 10001 appuser
 COPY --from=build-operator /out/orloj-operator /usr/local/bin/app
 USER appuser
 ENTRYPOINT ["/usr/local/bin/app"]
 
-FROM alpine:3.23 AS orlojd
+FROM alpine:3.23@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11 AS orlojd
 RUN apk add --no-cache ca-certificates tzdata wget docker-cli \
     && adduser -D -u 10001 appuser
 COPY --from=build-orlojd /out/orlojd /usr/local/bin/app

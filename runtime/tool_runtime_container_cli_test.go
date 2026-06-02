@@ -40,7 +40,7 @@ func TestContainerToolRuntimeCallCLI(t *testing.T) {
 	}
 }
 
-func TestContainerToolRuntimeCallCLIDefaultsBridgeNetwork(t *testing.T) {
+func TestContainerToolRuntimeCallCLIDefaultsOperatorNetwork(t *testing.T) {
 	runner := &captureContainerRunner{stdout: "ok"}
 	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"net-tool": {
@@ -59,12 +59,12 @@ func TestContainerToolRuntimeCallCLIDefaultsBridgeNetwork(t *testing.T) {
 	}
 	found := false
 	for i, arg := range runner.args {
-		if arg == "--network" && i+1 < len(runner.args) && runner.args[i+1] == "bridge" {
+		if arg == "--network" && i+1 < len(runner.args) && runner.args[i+1] == "none" {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("expected --network bridge in docker args, got %v", runner.args)
+		t.Fatalf("expected --network none in docker args, got %v", runner.args)
 	}
 }
 

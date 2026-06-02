@@ -63,7 +63,7 @@ orlojctl eval finalize <name>
 ## Global Auth and Server Resolution
 
 - Global auth flag: `--api-token <token>`
-- Global namespace flag: `--namespace <ns>` or `-n <ns>` (applies default namespace to namespace-aware commands)
+- Global namespace flag: `--namespace <ns>` or `-n <ns>` (sets the request namespace for API calls; must match `metadata.namespace` in manifest bodies on create/update)
 - Version command: `orlojctl version` (also `-version`, `--version`)
 - Token precedence:
   1. `--api-token`
@@ -83,9 +83,11 @@ orlojctl eval finalize <name>
 | `-f` | none | Path to a manifest file or directory (required). |
 | `--run` | `false` | Include runnable `Task` manifests when `-f` points to a directory. |
 | `--dry-run` | `false` | Preview create/update/no-op actions without persisting. |
-| `--namespace` | global namespace (if set) | Optional namespace override for manifests lacking `metadata.namespace`. |
+| `--namespace` | global namespace (if set) | Request namespace for applied manifests. Must match `metadata.namespace` in each manifest body. |
 | `-n` | global namespace (if set) | Shorthand for `--namespace`. |
 | `--server` | resolved server | API server URL. |
+
+When applying to a non-default namespace, pass `--namespace <ns>` and ensure each manifest's `metadata.namespace` matches (or omit it and let the server apply the request namespace). A body/query mismatch returns `400 Bad Request` from the API.
 
 - **File:** applies that manifest.
 - **Directory:** walks recursively (skips `.git` dirs) and evaluates every `.yaml`, `.yml`, and `.json` file in sorted path order.
@@ -349,7 +351,7 @@ Shows a unified diff between live state and the provided manifest(s), using norm
 |---|---|---|
 | `-f` | none | Path to manifest file or directory (required). |
 | `--run` | `false` | Include runnable tasks when diffing directories. |
-| `--namespace` | global namespace (if set) | Optional namespace override for manifests lacking `metadata.namespace`. |
+| `--namespace` | global namespace (if set) | Request namespace for diffed manifests. Must match `metadata.namespace` in each manifest body. |
 | `-n` | global namespace (if set) | Shorthand for `--namespace`. |
 | `--server` | resolved server | API server URL. |
 

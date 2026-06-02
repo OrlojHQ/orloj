@@ -32,3 +32,22 @@ func normalizeLookupName(name string) string {
 func ScopedName(namespace, name string) string {
 	return scopedName(namespace, name)
 }
+
+// IsScopedName reports whether name is already in namespace/name form.
+func IsScopedName(name string) bool {
+	parts := strings.SplitN(strings.TrimSpace(name), "/", 2)
+	return len(parts) == 2 && strings.TrimSpace(parts[0]) != "" && strings.TrimSpace(parts[1]) != ""
+}
+
+func normalizeStoreListCursor(afterName, namespace string) string {
+	if afterName == "" {
+		return ""
+	}
+	if IsScopedName(afterName) {
+		return afterName
+	}
+	if namespace != "" {
+		return scopedName(namespace, afterName)
+	}
+	return scopedName(resources.DefaultNamespace, afterName)
+}

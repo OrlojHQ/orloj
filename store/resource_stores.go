@@ -22,7 +22,8 @@ func cursorFilter[T any](items []T, getName func(T) string, getNamespace func(T)
 	}
 	result := make([]T, 0)
 	for _, item := range items {
-		if after != "" && getName(item) <= after {
+		scopedKey := scopedName(getNamespace(item), getName(item))
+		if after != "" && scopedKey <= after {
 			continue
 		}
 		if namespace != "" && !strings.EqualFold(getNamespace(item), namespace) {
@@ -1997,6 +1998,24 @@ func (s *TaskWebhookStore) Get(ctx context.Context, name string) (resources.Task
 	defer s.mu.RUnlock()
 	item, ok := s.items[key]
 	return item, ok, nil
+}
+
+func (s *TaskWebhookStore) GetByEndpointID(ctx context.Context, endpointID string) (resources.TaskWebhook, bool, error) {
+	endpointID = strings.TrimSpace(endpointID)
+	if endpointID == "" {
+		return resources.TaskWebhook{}, false, nil
+	}
+	if s.db != nil {
+		return getTaskWebhookByEndpointIDSQL(ctx, s.db, endpointID)
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, item := range s.items {
+		if strings.TrimSpace(item.Status.EndpointID) == endpointID {
+			return item, true, nil
+		}
+	}
+	return resources.TaskWebhook{}, false, nil
 }
 
 func (s *TaskWebhookStore) List(ctx context.Context) ([]resources.TaskWebhook, error) {

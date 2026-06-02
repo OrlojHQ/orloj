@@ -65,6 +65,7 @@ type ServerOptions struct {
 	TrustedProxies           string // comma-separated CIDRs whose forwarding headers are trusted
 	ContainerResourceCeiling resources.ContainerResourceCeiling
 	CRDConflictPolicy        string // "off", "warn" (default), or "reject"
+	CORSAllowedOrigins       []string
 }
 
 // Server exposes CRUD endpoints for control plane resources.
@@ -89,6 +90,9 @@ type Server struct {
 	a2aConfig                *A2AConfig
 	a2aRateLimiter           *ipRateLimiter
 	a2aSubscribeCount        atomic.Int32
+	corsAllowedOrigins       []string
+	watchSubscribeCount      atomic.Int32
+	watchRateLimiter         *ipRateLimiter
 }
 
 func NewServer(stores Stores, runtime *agentruntime.Manager, logger *log.Logger) *Server {
@@ -204,6 +208,8 @@ func NewServerWithOptions(stores Stores, runtime *agentruntime.Manager, logger *
 		uiBasePath:               uiBase,
 		containerResourceCeiling: opts.ContainerResourceCeiling,
 		crdConflictPolicy:        normalizeCRDConflictPolicy(opts.CRDConflictPolicy),
+		corsAllowedOrigins:       append([]string(nil), opts.CORSAllowedOrigins...),
+		watchRateLimiter:         newIPRateLimiter(rate.Limit(30), 30, trustedProxies),
 	}
 	s.routes()
 	return s
@@ -286,7 +292,12 @@ func (s *Server) withRateLimit(next http.Handler) http.Handler {
 func (s *Server) UIBasePath() string { return s.uiBasePath }
 
 func (s *Server) Handler() http.Handler {
-	return withRequestTimeout(s.withRateLimit(s.withBodyLimit(s.withAuth(s.mux))))
+	chain := s.withAuth(s.mux)
+	chain = s.withContentTypeCheck(chain)
+	chain = s.withBodyLimit(chain)
+	chain = s.withRateLimit(chain)
+	chain = withCORS(s.corsAllowedOrigins, chain)
+	return withRequestTimeout(chain)
 }
 
 // normalizeUIBasePath ensures the path has a leading and trailing slash.
@@ -720,35 +731,9 @@ func (s *Server) createOrUpdateAgent(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) listAgents(w http.ResponseWriter, r *http.Request) {
-	limit, _ := paginationParams(r)
-	after := cursorParam(r)
-	ns, hasNS := namespaceFilter(r)
-	nsFilter := ""
-	if hasNS {
-		nsFilter = ns
-	}
-	agents, err := s.stores.Agents.ListCursor(r.Context(), limit, after, nsFilter)
-	if writeStoreFetchError(w, err) {
+	agents, cont, err := fetchListPage(r.Context(), r, s.stores.Agents.ListCursor, func(a resources.Agent) resources.ObjectMeta { return a.Metadata })
+	if writeListPageError(w, err) {
 		return
-	}
-	cont := listContinue(limit, len(agents), "")
-	if len(agents) > 0 {
-		cont = listContinue(limit, len(agents), agents[len(agents)-1].Metadata.Name)
-	}
-	selector, err := labelSelectorFilter(r)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	if len(selector) > 0 {
-		filtered := make([]resources.Agent, 0, len(agents))
-		for _, agent := range agents {
-			if !matchMetadataFilters(agent.Metadata, "", false, selector) {
-				continue
-			}
-			filtered = append(filtered, agent)
-		}
-		agents = filtered
 	}
 	for i := range agents {
 		agents[i] = s.withRuntimeStatus(agents[i])
@@ -770,8 +755,7 @@ func (s *Server) getAgent(w http.ResponseWriter, ctx context.Context, key, name 
 
 func (s *Server) deleteAgent(w http.ResponseWriter, r *http.Request, key, name string) {
 	existing, ok, err := s.stores.Agents.Get(r.Context(), key)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if writeStoreFetchError(w, err) {
 		return
 	}
 	if !ok {
@@ -805,35 +789,9 @@ func (s *Server) getAgentLogs(w http.ResponseWriter, ctx context.Context, key, n
 func (s *Server) handleAgentSystems(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		limit, _ := paginationParams(r)
-		after := cursorParam(r)
-		ns, hasNS := namespaceFilter(r)
-		nsFilter := ""
-		if hasNS {
-			nsFilter = ns
-		}
-		items, err := s.stores.AgentSystems.ListCursor(r.Context(), limit, after, nsFilter)
-		if writeStoreFetchError(w, err) {
+		items, cont, err := fetchListPage(r.Context(), r, s.stores.AgentSystems.ListCursor, func(item resources.AgentSystem) resources.ObjectMeta { return item.Metadata })
+		if writeListPageError(w, err) {
 			return
-		}
-		cont := listContinue(limit, len(items), "")
-		if len(items) > 0 {
-			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
-		}
-		selector, err := labelSelectorFilter(r)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if len(selector) > 0 {
-			filtered := make([]resources.AgentSystem, 0, len(items))
-			for _, item := range items {
-				if !matchMetadataFilters(item.Metadata, "", false, selector) {
-					continue
-				}
-				filtered = append(filtered, item)
-			}
-			items = filtered
 		}
 		writeJSON(w, http.StatusOK, resources.AgentSystemList{ListMeta: resources.ListMeta{Continue: cont}, Items: items})
 	case http.MethodPost:
@@ -983,35 +941,9 @@ func (s *Server) handleAgentSystemByName(w http.ResponseWriter, r *http.Request)
 func (s *Server) handleModelEndpoints(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		limit, _ := paginationParams(r)
-		after := cursorParam(r)
-		ns, hasNS := namespaceFilter(r)
-		nsFilter := ""
-		if hasNS {
-			nsFilter = ns
-		}
-		items, err := s.stores.ModelEPs.ListCursor(r.Context(), limit, after, nsFilter)
-		if writeStoreFetchError(w, err) {
+		items, cont, err := fetchListPage(r.Context(), r, s.stores.ModelEPs.ListCursor, func(item resources.ModelEndpoint) resources.ObjectMeta { return item.Metadata })
+		if writeListPageError(w, err) {
 			return
-		}
-		cont := listContinue(limit, len(items), "")
-		if len(items) > 0 {
-			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
-		}
-		selector, err := labelSelectorFilter(r)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if len(selector) > 0 {
-			filtered := make([]resources.ModelEndpoint, 0, len(items))
-			for _, item := range items {
-				if !matchMetadataFilters(item.Metadata, "", false, selector) {
-					continue
-				}
-				filtered = append(filtered, item)
-			}
-			items = filtered
 		}
 		writeJSON(w, http.StatusOK, resources.ModelEndpointList{ListMeta: resources.ListMeta{Continue: cont}, Items: items})
 	case http.MethodPost:
@@ -1153,35 +1085,9 @@ func (s *Server) handleModelEndpointByName(w http.ResponseWriter, r *http.Reques
 func (s *Server) handleTools(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		limit, _ := paginationParams(r)
-		after := cursorParam(r)
-		ns, hasNS := namespaceFilter(r)
-		nsFilter := ""
-		if hasNS {
-			nsFilter = ns
-		}
-		items, err := s.stores.Tools.ListCursor(r.Context(), limit, after, nsFilter)
-		if writeStoreFetchError(w, err) {
+		items, cont, err := fetchListPage(r.Context(), r, s.stores.Tools.ListCursor, func(item resources.Tool) resources.ObjectMeta { return item.Metadata })
+		if writeListPageError(w, err) {
 			return
-		}
-		cont := listContinue(limit, len(items), "")
-		if len(items) > 0 {
-			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
-		}
-		selector, err := labelSelectorFilter(r)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if len(selector) > 0 {
-			filtered := make([]resources.Tool, 0, len(items))
-			for _, item := range items {
-				if !matchMetadataFilters(item.Metadata, "", false, selector) {
-					continue
-				}
-				filtered = append(filtered, item)
-			}
-			items = filtered
 		}
 		writeJSON(w, http.StatusOK, resources.ToolList{ListMeta: resources.ListMeta{Continue: cont}, Items: items})
 	case http.MethodPost:
@@ -1331,35 +1237,9 @@ func (s *Server) handleToolByName(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleSecrets(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		limit, _ := paginationParams(r)
-		after := cursorParam(r)
-		ns, hasNS := namespaceFilter(r)
-		nsFilter := ""
-		if hasNS {
-			nsFilter = ns
-		}
-		items, err := s.stores.Secrets.ListCursor(r.Context(), limit, after, nsFilter)
-		if writeStoreFetchError(w, err) {
+		items, cont, err := fetchListPage(r.Context(), r, s.stores.Secrets.ListCursor, func(item resources.Secret) resources.ObjectMeta { return item.Metadata })
+		if writeListPageError(w, err) {
 			return
-		}
-		cont := listContinue(limit, len(items), "")
-		if len(items) > 0 {
-			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
-		}
-		selector, err := labelSelectorFilter(r)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if len(selector) > 0 {
-			filtered := make([]resources.Secret, 0, len(items))
-			for _, item := range items {
-				if !matchMetadataFilters(item.Metadata, "", false, selector) {
-					continue
-				}
-				filtered = append(filtered, item)
-			}
-			items = filtered
 		}
 		for i := range items {
 			redactSecretData(&items[i])
@@ -1516,35 +1396,9 @@ func redactSecretData(secret *resources.Secret) {
 func (s *Server) handleMemories(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		limit, _ := paginationParams(r)
-		after := cursorParam(r)
-		ns, hasNS := namespaceFilter(r)
-		nsFilter := ""
-		if hasNS {
-			nsFilter = ns
-		}
-		items, err := s.stores.Memories.ListCursor(r.Context(), limit, after, nsFilter)
-		if writeStoreFetchError(w, err) {
+		items, cont, err := fetchListPage(r.Context(), r, s.stores.Memories.ListCursor, func(item resources.Memory) resources.ObjectMeta { return item.Metadata })
+		if writeListPageError(w, err) {
 			return
-		}
-		cont := listContinue(limit, len(items), "")
-		if len(items) > 0 {
-			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
-		}
-		selector, err := labelSelectorFilter(r)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if len(selector) > 0 {
-			filtered := make([]resources.Memory, 0, len(items))
-			for _, item := range items {
-				if !matchMetadataFilters(item.Metadata, "", false, selector) {
-					continue
-				}
-				filtered = append(filtered, item)
-			}
-			items = filtered
 		}
 		writeJSON(w, http.StatusOK, resources.MemoryList{ListMeta: resources.ListMeta{Continue: cont}, Items: items})
 	case http.MethodPost:
@@ -1751,35 +1605,9 @@ func (s *Server) handleMemoryEntries(w http.ResponseWriter, r *http.Request, nam
 func (s *Server) handlePolicies(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		limit, _ := paginationParams(r)
-		after := cursorParam(r)
-		ns, hasNS := namespaceFilter(r)
-		nsFilter := ""
-		if hasNS {
-			nsFilter = ns
-		}
-		items, err := s.stores.Policies.ListCursor(r.Context(), limit, after, nsFilter)
-		if writeStoreFetchError(w, err) {
+		items, cont, err := fetchListPage(r.Context(), r, s.stores.Policies.ListCursor, func(item resources.AgentPolicy) resources.ObjectMeta { return item.Metadata })
+		if writeListPageError(w, err) {
 			return
-		}
-		cont := listContinue(limit, len(items), "")
-		if len(items) > 0 {
-			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
-		}
-		selector, err := labelSelectorFilter(r)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if len(selector) > 0 {
-			filtered := make([]resources.AgentPolicy, 0, len(items))
-			for _, item := range items {
-				if !matchMetadataFilters(item.Metadata, "", false, selector) {
-					continue
-				}
-				filtered = append(filtered, item)
-			}
-			items = filtered
 		}
 		writeJSON(w, http.StatusOK, resources.AgentPolicyList{ListMeta: resources.ListMeta{Continue: cont}, Items: items})
 	case http.MethodPost:
@@ -1921,35 +1749,9 @@ func (s *Server) handlePolicyByName(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAgentRoles(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		limit, _ := paginationParams(r)
-		after := cursorParam(r)
-		ns, hasNS := namespaceFilter(r)
-		nsFilter := ""
-		if hasNS {
-			nsFilter = ns
-		}
-		items, err := s.stores.AgentRoles.ListCursor(r.Context(), limit, after, nsFilter)
-		if writeStoreFetchError(w, err) {
+		items, cont, err := fetchListPage(r.Context(), r, s.stores.AgentRoles.ListCursor, func(item resources.AgentRole) resources.ObjectMeta { return item.Metadata })
+		if writeListPageError(w, err) {
 			return
-		}
-		cont := listContinue(limit, len(items), "")
-		if len(items) > 0 {
-			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
-		}
-		selector, err := labelSelectorFilter(r)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if len(selector) > 0 {
-			filtered := make([]resources.AgentRole, 0, len(items))
-			for _, item := range items {
-				if !matchMetadataFilters(item.Metadata, "", false, selector) {
-					continue
-				}
-				filtered = append(filtered, item)
-			}
-			items = filtered
 		}
 		writeJSON(w, http.StatusOK, resources.AgentRoleList{ListMeta: resources.ListMeta{Continue: cont}, Items: items})
 	case http.MethodPost:
@@ -2064,35 +1866,9 @@ func (s *Server) handleAgentRoleByName(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleToolPermissions(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		limit, _ := paginationParams(r)
-		after := cursorParam(r)
-		ns, hasNS := namespaceFilter(r)
-		nsFilter := ""
-		if hasNS {
-			nsFilter = ns
-		}
-		items, err := s.stores.ToolPerms.ListCursor(r.Context(), limit, after, nsFilter)
-		if writeStoreFetchError(w, err) {
+		items, cont, err := fetchListPage(r.Context(), r, s.stores.ToolPerms.ListCursor, func(item resources.ToolPermission) resources.ObjectMeta { return item.Metadata })
+		if writeListPageError(w, err) {
 			return
-		}
-		cont := listContinue(limit, len(items), "")
-		if len(items) > 0 {
-			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
-		}
-		selector, err := labelSelectorFilter(r)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if len(selector) > 0 {
-			filtered := make([]resources.ToolPermission, 0, len(items))
-			for _, item := range items {
-				if !matchMetadataFilters(item.Metadata, "", false, selector) {
-					continue
-				}
-				filtered = append(filtered, item)
-			}
-			items = filtered
 		}
 		writeJSON(w, http.StatusOK, resources.ToolPermissionList{ListMeta: resources.ListMeta{Continue: cont}, Items: items})
 	case http.MethodPost:
@@ -2207,35 +1983,9 @@ func (s *Server) handleToolPermissionByName(w http.ResponseWriter, r *http.Reque
 func (s *Server) handleToolApprovals(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		limit, _ := paginationParams(r)
-		after := cursorParam(r)
-		ns, hasNS := namespaceFilter(r)
-		nsFilter := ""
-		if hasNS {
-			nsFilter = ns
-		}
-		items, err := s.stores.ToolApprovals.ListCursor(r.Context(), limit, after, nsFilter)
-		if writeStoreFetchError(w, err) {
+		items, cont, err := fetchListPage(r.Context(), r, s.stores.ToolApprovals.ListCursor, func(item resources.ToolApproval) resources.ObjectMeta { return item.Metadata })
+		if writeListPageError(w, err) {
 			return
-		}
-		cont := listContinue(limit, len(items), "")
-		if len(items) > 0 {
-			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
-		}
-		selector, err := labelSelectorFilter(r)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if len(selector) > 0 {
-			filtered := make([]resources.ToolApproval, 0, len(items))
-			for _, item := range items {
-				if !matchMetadataFilters(item.Metadata, "", false, selector) {
-					continue
-				}
-				filtered = append(filtered, item)
-			}
-			items = filtered
 		}
 		writeJSON(w, http.StatusOK, resources.ToolApprovalList{ListMeta: resources.ListMeta{Continue: cont}, Items: items})
 	case http.MethodPost:
@@ -2384,35 +2134,9 @@ func (s *Server) handleToolApprovalDecision(w http.ResponseWriter, r *http.Reque
 func (s *Server) handleTaskApprovals(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		limit, _ := paginationParams(r)
-		after := cursorParam(r)
-		ns, hasNS := namespaceFilter(r)
-		nsFilter := ""
-		if hasNS {
-			nsFilter = ns
-		}
-		items, err := s.stores.TaskApprovals.ListCursor(r.Context(), limit, after, nsFilter)
-		if writeStoreFetchError(w, err) {
+		items, cont, err := fetchListPage(r.Context(), r, s.stores.TaskApprovals.ListCursor, func(item resources.TaskApproval) resources.ObjectMeta { return item.Metadata })
+		if writeListPageError(w, err) {
 			return
-		}
-		cont := listContinue(limit, len(items), "")
-		if len(items) > 0 {
-			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
-		}
-		selector, err := labelSelectorFilter(r)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if len(selector) > 0 {
-			filtered := make([]resources.TaskApproval, 0, len(items))
-			for _, item := range items {
-				if !matchMetadataFilters(item.Metadata, "", false, selector) {
-					continue
-				}
-				filtered = append(filtered, item)
-			}
-			items = filtered
 		}
 		writeJSON(w, http.StatusOK, resources.TaskApprovalList{ListMeta: resources.ListMeta{Continue: cont}, Items: items})
 	case http.MethodPost:
@@ -2556,25 +2280,23 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		limit, offset := paginationParams(r)
-		after := cursorParam(r)
+		after := normalizeListCursor(cursorParam(r), requestNamespace(r))
+		if after != "" || offset == 0 {
+			items, cont, err := fetchListPage(r.Context(), r, s.stores.Tasks.ListCursor, func(item resources.Task) resources.ObjectMeta { return item.Metadata })
+			if writeListPageError(w, err) {
+				return
+			}
+			writeJSON(w, http.StatusOK, resources.TaskList{ListMeta: resources.ListMeta{Continue: cont}, Items: items})
+			return
+		}
 		ns, hasNS := namespaceFilter(r)
 		nsFilter := ""
 		if hasNS {
 			nsFilter = ns
 		}
-		var items []resources.Task
-		var err error
-		if after != "" {
-			items, err = s.stores.Tasks.ListCursor(r.Context(), limit, after, nsFilter)
-		} else {
-			items, err = s.stores.Tasks.ListPaged(r.Context(), limit, offset, nsFilter)
-		}
+		items, err := s.stores.Tasks.ListPaged(r.Context(), limit, offset, nsFilter)
 		if writeStoreFetchError(w, err) {
 			return
-		}
-		cont := listContinue(limit, len(items), "")
-		if len(items) > 0 {
-			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
 		}
 		selector, err := labelSelectorFilter(r)
 		if err != nil {
@@ -2591,7 +2313,7 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 			}
 			items = filtered
 		}
-		writeJSON(w, http.StatusOK, resources.TaskList{ListMeta: resources.ListMeta{Continue: cont}, Items: items})
+		writeJSON(w, http.StatusOK, resources.TaskList{Items: items})
 	case http.MethodPost:
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -2812,35 +2534,9 @@ func (s *Server) getTaskLogs(w http.ResponseWriter, ctx context.Context, key, na
 func (s *Server) handleTaskSchedules(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		limit, _ := paginationParams(r)
-		after := cursorParam(r)
-		ns, hasNS := namespaceFilter(r)
-		nsFilter := ""
-		if hasNS {
-			nsFilter = ns
-		}
-		items, err := s.stores.TaskSchedules.ListCursor(r.Context(), limit, after, nsFilter)
-		if writeStoreFetchError(w, err) {
+		items, cont, err := fetchListPage(r.Context(), r, s.stores.TaskSchedules.ListCursor, func(item resources.TaskSchedule) resources.ObjectMeta { return item.Metadata })
+		if writeListPageError(w, err) {
 			return
-		}
-		cont := listContinue(limit, len(items), "")
-		if len(items) > 0 {
-			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
-		}
-		selector, err := labelSelectorFilter(r)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if len(selector) > 0 {
-			filtered := make([]resources.TaskSchedule, 0, len(items))
-			for _, item := range items {
-				if !matchMetadataFilters(item.Metadata, "", false, selector) {
-					continue
-				}
-				filtered = append(filtered, item)
-			}
-			items = filtered
 		}
 		writeJSON(w, http.StatusOK, resources.TaskScheduleList{ListMeta: resources.ListMeta{Continue: cont}, Items: items})
 	case http.MethodPost:
@@ -2974,35 +2670,9 @@ func (s *Server) handleTaskScheduleByName(w http.ResponseWriter, r *http.Request
 func (s *Server) handleWorkers(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		limit, _ := paginationParams(r)
-		after := cursorParam(r)
-		ns, hasNS := namespaceFilter(r)
-		nsFilter := ""
-		if hasNS {
-			nsFilter = ns
-		}
-		items, err := s.stores.Workers.ListCursor(r.Context(), limit, after, nsFilter)
-		if writeStoreFetchError(w, err) {
+		items, cont, err := fetchListPage(r.Context(), r, s.stores.Workers.ListCursor, func(item resources.Worker) resources.ObjectMeta { return item.Metadata })
+		if writeListPageError(w, err) {
 			return
-		}
-		cont := listContinue(limit, len(items), "")
-		if len(items) > 0 {
-			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
-		}
-		selector, err := labelSelectorFilter(r)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if len(selector) > 0 {
-			filtered := make([]resources.Worker, 0, len(items))
-			for _, item := range items {
-				if !matchMetadataFilters(item.Metadata, "", false, selector) {
-					continue
-				}
-				filtered = append(filtered, item)
-			}
-			items = filtered
 		}
 		writeJSON(w, http.StatusOK, resources.WorkerList{ListMeta: resources.ListMeta{Continue: cont}, Items: items})
 	case http.MethodPost:
@@ -3147,35 +2817,9 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 func (s *Server) handleMcpServers(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		limit, _ := paginationParams(r)
-		after := cursorParam(r)
-		ns, hasNS := namespaceFilter(r)
-		nsFilter := ""
-		if hasNS {
-			nsFilter = ns
-		}
-		items, err := s.stores.McpServers.ListCursor(r.Context(), limit, after, nsFilter)
-		if writeStoreFetchError(w, err) {
+		items, cont, err := fetchListPage(r.Context(), r, s.stores.McpServers.ListCursor, func(item resources.McpServer) resources.ObjectMeta { return item.Metadata })
+		if writeListPageError(w, err) {
 			return
-		}
-		cont := listContinue(limit, len(items), "")
-		if len(items) > 0 {
-			cont = listContinue(limit, len(items), items[len(items)-1].Metadata.Name)
-		}
-		selector, err := labelSelectorFilter(r)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if len(selector) > 0 {
-			filtered := make([]resources.McpServer, 0, len(items))
-			for _, item := range items {
-				if !matchMetadataFilters(item.Metadata, "", false, selector) {
-					continue
-				}
-				filtered = append(filtered, item)
-			}
-			items = filtered
 		}
 		writeJSON(w, http.StatusOK, resources.McpServerList{ListMeta: resources.ListMeta{Continue: cont}, Items: items})
 	case http.MethodPost:

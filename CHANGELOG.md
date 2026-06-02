@@ -9,11 +9,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Reference structured audit sink**: `agentruntime.SlogAuditSink` (`runtime/audit_sink_slog.go`) writes audit events as structured JSON via `log/slog`. Wire it through `Extensions.Audit` to get a durable audit trail; audit logging remains off (no-op) by default. See [Audit Logging](docs/pages/operations/security.md#audit-logging).
-- **Threat model documentation**: new `docs/pages/operations/threat-model.md` consolidating trust boundaries, attacker model, controls, and operator-owned residual risks.
+- **`orlojd` CORS configuration**: `--cors-allowed-origins` / `ORLOJ_CORS_ALLOWED_ORIGINS` enables cross-origin API access; defaults to same-origin only.
+- **`orlojd` native TLS**: `--tls-cert-file` / `--tls-key-file` (or `ORLOJ_TLS_CERT_FILE` / `ORLOJ_TLS_KEY_FILE`) for HTTPS without a terminating proxy.
+- **Makefile convenience targets**: `make test` and `make lint`.
+
+### Changed
+
+- **Pagination cursors** now emit scoped `namespace/name` continue tokens (bare `?after=` values remain accepted).
+- **Container CLI tools** default to the operator-configured container network (`none` by default) instead of implicit `bridge` access.
+
+### Fixed
+
+- **gRPC tool runtime SSRF**: outbound gRPC dials now route through `SafeDialer`, blocking DNS-rebind to private/metadata IPs at connection time.
+- **Container HTTP tool endpoints** are validated with `ValidateEndpointURL` before sandbox execution.
+- **Namespace authorization**: mutation requests reject `metadata.namespace` values that do not match the effective request namespace.
+- **Label-filtered list pagination** no longer returns under-filled pages or empty pages with a non-empty `continue` token.
+- **SSE resource watches** enforce a 30-minute max duration and cap concurrent watch connections globally and per client IP.
+- **Store error responses** no longer leak internal driver/connection details to API clients.
+- **WASM module resolver** rejects plaintext `http://` module refs and blocks local path traversal outside the cache directory.
+- **OAuth2 token cache** is bounded with LRU eviction; token-endpoint error bodies are redacted.
+- **Postgres migrations** use a pinned connection for advisory locking; constraint migrations are idempotent on re-run.
+- **Task webhook delivery lookup** uses an indexed `GetByEndpointID` store method instead of a full-table scan.
+- **Agent job SQL updates** increment `resourceVersion` to avoid clobbering concurrent task writes.
+- **Unsupported mutation Content-Type** requests receive `415 Unsupported Media Type`.
 
 ### Security
 
+- **Go toolchain** bumped to 1.26.3 across `go.mod`, CI, and Docker builds.
+- **Docker base images** pinned by digest (`golang:1.26.3-alpine`, `alpine:3.23`).
+- **Secret CLI flags** (`--api-key`, `--secret-encryption-key`, `--auth-reset-admin-password`) log a warning when used; prefer env vars to avoid `ps` exposure.
+- **Reference structured audit sink**: `agentruntime.SlogAuditSink` (`runtime/audit_sink_slog.go`) writes audit events as structured JSON via `log/slog`. Wire it through `Extensions.Audit` to get a durable audit trail; audit logging remains off (no-op) by default. See [Audit Logging](docs/pages/operations/security.md#audit-logging).
+- **Threat model documentation**: new `docs/pages/operations/threat-model.md` consolidating trust boundaries, attacker model, controls, and operator-owned residual risks.
 - **Documented audit-logging and multi-tenant guidance**: `docs/pages/operations/security.md` now states that audit logging is operator-supplied (with retention/integrity guidance and a reference sink).
 - **Dependency updates**: bumped Go modules (AWS SDK, pgx, NATS, pgvector, wazero, OpenTelemetry, gRPC), Alpine 3.23 runtime images, GitHub Actions pins, and frontend packages (React 19, Vite 8). Vocs 2.x deferred — requires a separate docs migration.
 

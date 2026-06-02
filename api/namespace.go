@@ -44,8 +44,8 @@ func cursorParam(r *http.Request) string {
 }
 
 // listContinue returns the cursor value for the next page. If the returned
-// slice has exactly limit items, the last item's name is used as the continue
-// token; otherwise the empty string signals "no more pages".
+// slice has exactly limit items, the last item's scoped namespace/name is used
+// as the continue token; otherwise the empty string signals "no more pages".
 func listContinue(limit, count int, lastName string) string {
 	if limit > 0 && count >= limit {
 		return lastName
@@ -84,8 +84,7 @@ func applyRequestNamespace(r *http.Request, meta *resources.ObjectMeta) error {
 	if strings.TrimSpace(meta.Namespace) == "" {
 		meta.Namespace = ns
 	}
-	requested := strings.TrimSpace(r.URL.Query().Get("namespace"))
-	if requested != "" && !strings.EqualFold(meta.Namespace, ns) {
+	if !strings.EqualFold(meta.Namespace, ns) {
 		return fmt.Errorf("metadata.namespace %q does not match request namespace %q", meta.Namespace, ns)
 	}
 	if strings.TrimSpace(meta.Namespace) == "" {
