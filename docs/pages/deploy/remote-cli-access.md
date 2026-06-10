@@ -106,9 +106,38 @@ Shape matches the CLI (field names are JSON):
 
 You can hand-edit this file if you prefer; invalid JSON will cause `orlojctl` to error on load.
 
+## `orlojctl auth login` (native mode)
+
+When the server runs **`--auth-mode=native`**, you can authenticate the CLI directly with your username and password instead of manually configuring tokens:
+
+```bash
+orlojctl config set-profile production --profile-server https://orloj.example.com
+orlojctl config use production
+orlojctl auth login
+# Username: admin
+# Password: ********
+# logged in as admin (role=admin) on https://orloj.example.com
+# token saved to profile "production"
+```
+
+This calls `POST /v1/auth/cli-token` on the server, which validates your credentials and mints a new bearer token. The token is automatically saved to the active profile in `config.json`.
+
+You can also pass credentials non-interactively (useful in CI):
+
+```bash
+orlojctl auth login -u admin -p "$MY_PASSWORD"
+```
+
+After login, all subsequent commands use the saved bearer token. Run `orlojctl auth whoami` to verify.
+
 ## Local UI auth vs API tokens
 
-If you use **`--auth-mode=native`**, the web UI uses an **admin username/password** and **session cookies**. That is separate from API access: **`orlojctl` and automation should use the bearer token** configured with `ORLOJ_API_TOKEN` / `--api-key` on the server, not the UI password. See [Control plane API tokens](../operations/security.md#control-plane-api-tokens) and [CLI reference: orlojctl](../reference/cli.md#orlojctl).
+If you use **`--auth-mode=native`**, the web UI uses an **admin username/password** and **session cookies**. The CLI uses **bearer tokens**. You can obtain a CLI token in two ways:
+
+1. **`orlojctl auth login`** — authenticates with your username/password and saves a token to the active profile (recommended).
+2. **Manual token configuration** — an operator generates a token with `ORLOJ_API_TOKEN` / `--api-key` on the server, and you configure it with `--token-env` or `--token` in a profile.
+
+See [Control plane API tokens](../operations/security.md#control-plane-api-tokens) and [CLI reference: orlojctl](../reference/cli.md#orlojctl).
 
 ## Related docs
 

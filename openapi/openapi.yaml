@@ -6162,6 +6162,53 @@ paths:
             text/plain:
               schema:
                 "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/auth/cli-token":
+    post:
+      tags:
+      - auth
+      summary: Authenticate with username/password and obtain a CLI bearer token
+      description: |
+        Validates credentials against the native user store and mints a new API
+        bearer token for CLI use. Only available when the server runs in native
+        auth mode.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/common.yaml#/components/schemas/AuthCLITokenRequest"
+      responses:
+        '201':
+          description: Token created
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/AuthCLITokenResponse"
+        '400':
+          description: Bad request (non-native mode or missing fields)
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '401':
+          description: Invalid credentials
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '429':
+          description: Rate limited
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
   "/v1/auth/logout":
     post:
       tags:

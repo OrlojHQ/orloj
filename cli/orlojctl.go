@@ -2042,7 +2042,100 @@ func newAuthCommand() *cobra.Command {
 			return cmd.Help()
 		},
 	}
-	cmd.AddCommand(newAuthWhoamiCommand())
+	cmd.AddCommand(newAuthWhoamiCommand(), newAuthLoginCommand())
+	return cmd
+}
+
+func newAuthLoginCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "login",
+		Short: "Authenticate and store a CLI token in the active profile",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			server := resolveServer(cmd)
+			username, _ := cmd.Flags().GetString("username")
+			password, _ := cmd.Flags().GetString("password")
+
+			username = strings.TrimSpace(username)
+			if username == "" {
+				fmt.Print("Username: ")
+				scanner := bufio.NewScanner(os.Stdin)
+				if scanner.Scan() {
+					username = strings.TrimSpace(scanner.Text())
+				}
+				if username == "" {
+					return errors.New("username is required")
+				}
+			}
+
+			if password == "" {
+				fmt.Print("Password: ")
+				raw, err := readPassword()
+				if err != nil {
+					return fmt.Errorf("read password: %w", err)
+				}
+				fmt.Println()
+				password = string(raw)
+			}
+			if strings.TrimSpace(password) == "" {
+				return errors.New("password is required")
+			}
+
+			payload, _ := json.Marshal(map[string]string{
+				"username": username,
+				"password": password,
+			})
+			loginURL := strings.TrimRight(server, "/") + "/v1/auth/cli-token"
+			resp, err := http.Post(loginURL, "application/json", bytes.NewReader(payload))
+			if err != nil {
+				return fmt.Errorf("login request failed: %w", err)
+			}
+			defer resp.Body.Close()
+			body, _ := io.ReadAll(resp.Body)
+			if resp.StatusCode == http.StatusUnauthorized {
+				return errors.New("invalid credentials")
+			}
+			if resp.StatusCode >= 300 {
+				return fmt.Errorf("login failed: %s", bytes.TrimSpace(body))
+			}
+
+			var result struct {
+				Name     string `json:"name"`
+				Role     string `json:"role"`
+				Token    string `json:"token"`
+				Username string `json:"username"`
+			}
+			if err := json.Unmarshal(body, &result); err != nil {
+				return fmt.Errorf("decode login response: %w", err)
+			}
+
+			cfg, err := loadOrlojctlConfig()
+			if err != nil {
+				return fmt.Errorf("load config: %w", err)
+			}
+			profileName := strings.TrimSpace(cfg.CurrentProfile)
+			if profileName == "" {
+				profileName = "default"
+			}
+			pe := cfg.Profiles[profileName]
+			pe.Token = strings.TrimSpace(result.Token)
+			if strings.TrimSpace(pe.Server) == "" {
+				pe.Server = strings.TrimRight(strings.TrimSpace(server), "/")
+			}
+			cfg.Profiles[profileName] = pe
+			cfg.CurrentProfile = profileName
+			if err := saveOrlojctlConfig(cfg); err != nil {
+				return fmt.Errorf("save config: %w", err)
+			}
+			resolvedCliConfig = cfg
+
+			fmt.Printf("logged in as %s (role=%s) on %s\n", result.Username, result.Role, server)
+			fmt.Printf("token saved to profile %q\n", profileName)
+			return nil
+		},
+	}
+	cmd.Flags().StringP("username", "u", "", "username (prompted if omitted)")
+	cmd.Flags().StringP("password", "p", "", "password (prompted if omitted)")
 	return cmd
 }
 
