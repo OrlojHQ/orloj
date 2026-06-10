@@ -4,12 +4,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 const fallbackServer = "http://127.0.0.1:8080"
@@ -188,14 +192,40 @@ func newConfigGetCommand() *cobra.Command {
 			fmt.Printf("current_profile: %q\n", cfg.CurrentProfile)
 			if cfg.CurrentProfile != "" {
 				if pe, ok := cfg.Profiles[cfg.CurrentProfile]; ok {
-					fmt.Printf("  server: %s\n", pe.Server)
-					if strings.TrimSpace(pe.Token) != "" {
-						fmt.Printf("  token: (set)\n")
-					} else {
-						fmt.Printf("  token: (not set)\n")
+					serverSource := "profile"
+					effectiveServer := pe.Server
+					if v := strings.TrimSpace(os.Getenv("ORLOJCTL_SERVER")); v != "" {
+						effectiveServer = v
+						serverSource = "env ORLOJCTL_SERVER"
+					} else if v := strings.TrimSpace(os.Getenv("ORLOJ_SERVER")); v != "" {
+						effectiveServer = v
+						serverSource = "env ORLOJ_SERVER"
 					}
-					if strings.TrimSpace(pe.TokenEnv) != "" {
-						fmt.Printf("  token_env: %s\n", pe.TokenEnv)
+					if effectiveServer == "" {
+						effectiveServer = fallbackServer
+						serverSource = "default"
+					}
+					fmt.Printf("  server: %s (from %s)\n", effectiveServer, serverSource)
+
+					tokenSource := ""
+					if strings.TrimSpace(pe.Token) != "" {
+						tokenSource = "profile token"
+					} else if strings.TrimSpace(pe.TokenEnv) != "" {
+						if strings.TrimSpace(os.Getenv(pe.TokenEnv)) != "" {
+							tokenSource = "env " + pe.TokenEnv
+						} else {
+							tokenSource = "env " + pe.TokenEnv + " (empty!)"
+						}
+					}
+					if v := strings.TrimSpace(os.Getenv("ORLOJCTL_API_TOKEN")); v != "" {
+						tokenSource = "env ORLOJCTL_API_TOKEN (overrides profile)"
+					} else if v := strings.TrimSpace(os.Getenv("ORLOJ_API_TOKEN")); v != "" {
+						tokenSource = "env ORLOJ_API_TOKEN (overrides profile)"
+					}
+					if tokenSource == "" {
+						fmt.Printf("  token: (not set)\n")
+					} else {
+						fmt.Printf("  token: (set, from %s)\n", tokenSource)
 					}
 				} else {
 					fmt.Printf("  (profile %q not found in profiles)\n", cfg.CurrentProfile)
@@ -209,7 +239,11 @@ func newConfigGetCommand() *cobra.Command {
 				}
 				sort.Strings(names)
 				for _, name := range names {
-					fmt.Printf("  - %s\n", name)
+					marker := " "
+					if name == cfg.CurrentProfile {
+						marker = "*"
+					}
+					fmt.Printf("  %s %s\n", marker, name)
 				}
 			}
 			return nil
@@ -231,7 +265,8 @@ func newConfigUseCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if _, ok := cfg.Profiles[name]; !ok {
+			pe, ok := cfg.Profiles[name]
+			if !ok {
 				return fmt.Errorf("unknown profile %q (use config set-profile first)", name)
 			}
 			cfg.CurrentProfile = name
@@ -240,6 +275,10 @@ func newConfigUseCommand() *cobra.Command {
 			}
 			resolvedCliConfig = cfg
 			fmt.Printf("active profile: %s\n", name)
+			if strings.TrimSpace(pe.Server) != "" {
+				fmt.Printf("  server: %s\n", pe.Server)
+			}
+			probeProfileAuth(cfg)
 			return nil
 		},
 	}
@@ -289,4 +328,71 @@ func newConfigSetProfileCommand() *cobra.Command {
 	cmd.Flags().String("token", "", "bearer token (prefer --token-env for secrets)")
 	cmd.Flags().String("token-env", "", "read token from this environment variable at runtime")
 	return cmd
+}
+
+func readPassword() ([]byte, error) {
+	return term.ReadPassword(int(syscall.Stdin))
+}
+
+// probeProfileAuth does a best-effort check against /v1/auth/me to show
+// whether the active profile's credentials are valid. It prints a status line
+// or a warning if auth fails. Errors are non-fatal.
+func probeProfileAuth(cfg *orlojctlConfig) {
+	server := defaultServerResolved(cfg)
+	if server == "" {
+		return
+	}
+	token := strings.TrimSpace(os.Getenv("ORLOJCTL_API_TOKEN"))
+	if token == "" {
+		token = strings.TrimSpace(os.Getenv("ORLOJ_API_TOKEN"))
+	}
+	if token == "" {
+		token = tokenFromProfile(cfg)
+	}
+	client := &http.Client{Timeout: 5 * time.Second}
+	if strings.TrimSpace(token) != "" {
+		client.Transport = &authProbeTransport{token: token}
+	}
+	resp, err := client.Get(strings.TrimRight(server, "/") + "/v1/auth/me")
+	if err != nil {
+		fmt.Printf("  auth: unable to reach server (%v)\n", err)
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		fmt.Printf("  auth: server returned %d\n", resp.StatusCode)
+		return
+	}
+	var me struct {
+		Authenticated bool   `json:"authenticated"`
+		Name          string `json:"name"`
+		Username      string `json:"username"`
+		Role          string `json:"role"`
+		Method        string `json:"method"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&me); err != nil {
+		return
+	}
+	if !me.Authenticated || strings.TrimSpace(me.Role) == "" {
+		fmt.Printf("  auth: not authenticated. Run 'orlojctl auth login' to authenticate.\n")
+		return
+	}
+	name := strings.TrimSpace(me.Name)
+	if name == "" {
+		name = strings.TrimSpace(me.Username)
+	}
+	if name == "" {
+		name = "unknown"
+	}
+	fmt.Printf("  auth: %s (role=%s, method=%s)\n", name, me.Role, me.Method)
+}
+
+type authProbeTransport struct {
+	token string
+}
+
+func (t *authProbeTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req = req.Clone(req.Context())
+	req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(t.token))
+	return http.DefaultTransport.RoundTrip(req)
 }

@@ -44,6 +44,7 @@ orlojctl health [-o table|json|yaml]
 orlojctl status [-o table|json|yaml]
 orlojctl completion bash|zsh|fish
 orlojctl auth whoami [--server URL]
+orlojctl auth login [-u <username>] [-p <password>] [--server URL]
 orlojctl admin create-user <username> --role <role>
 orlojctl admin list-users
 orlojctl admin delete-user <username>
@@ -505,6 +506,18 @@ Returns the currently authenticated identity from `/v1/auth/me`.
 |---|---|---|
 | `--server` | resolved server | API server URL. |
 
+## `orlojctl auth login`
+
+Authenticate against a native-mode server and save a bearer token to the active profile. Prompts interactively for username and password if not provided via flags.
+
+| Flag | Default | Description |
+|---|---|---|
+| `-u`, `--username` | (prompted) | Username to authenticate with. |
+| `-p`, `--password` | (prompted) | Password (prefer interactive prompt over flags for security). |
+| `--server` | resolved server | API server URL. |
+
+On success the minted token is written into the active profile's `token` field in `config.json`. Subsequent commands automatically use it.
+
 ## `orlojctl admin create-user`
 
 | Flag | Default | Description |
@@ -543,8 +556,8 @@ Returns the currently authenticated identity from `/v1/auth/me`.
 Other config subcommands:
 
 - `orlojctl config path`: print config file path
-- `orlojctl config get`: print current config/profile data
-- `orlojctl config use <name>`: switch active profile
+- `orlojctl config get`: print current config/profile data with resolution sources (shows whether server/token come from env, profile, or defaults)
+- `orlojctl config use <name>`: switch active profile (probes auth status on the target server)
 
 ## `orlojctl init`
 

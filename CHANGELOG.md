@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **`orlojctl auth login`**: new CLI command that authenticates with username/password against a native-mode server and saves a bearer token to the active profile. Eliminates the need to manually configure API tokens for CLI access.
+- **`POST /v1/auth/cli-token`**: new API endpoint that accepts credentials and returns a bearer token for CLI use (native auth mode only).
+- **`orlojctl config use` auth probe**: switching profiles now checks `/v1/auth/me` and prints whether the profile's credentials are valid, warning if unauthenticated.
+- **`orlojctl config get` resolution sources**: now shows where the effective server and token are coming from (profile, env var, or default), making env-override issues visible.
 - **`orlojd` CORS configuration**: `--cors-allowed-origins` / `ORLOJ_CORS_ALLOWED_ORIGINS` enables cross-origin API access; defaults to same-origin only.
 - **`orlojd` native TLS**: `--tls-cert-file` / `--tls-key-file` (or `ORLOJ_TLS_CERT_FILE` / `ORLOJ_TLS_KEY_FILE`) for HTTPS without a terminating proxy.
 - **Makefile convenience targets**: `make test` and `make lint`.

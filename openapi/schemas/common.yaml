@@ -70,6 +70,20 @@ components:
         username: { type: string }
         password: { type: string }
         setup_token: { type: string }
+    AuthCLITokenRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string }
+        password: { type: string }
+    AuthCLITokenResponse:
+      type: object
+      properties:
+        name: { type: string, description: "Generated token name" }
+        role: { type: string, description: "Role inherited from the user account" }
+        token: { type: string, description: "Bearer token value (shown only once)" }
+        username: { type: string, description: "Authenticated username" }
+        created_at: { type: string, format: date-time }
     AuthChangePasswordRequest:
       type: object
       properties:

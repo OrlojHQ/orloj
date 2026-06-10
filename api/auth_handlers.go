@@ -4,6 +4,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -422,6 +423,74 @@ func authorizeWithIdentity(authorizer RequestAuthorizer, r *http.Request, requir
 		}
 	}
 	return allowed, statusCode, message, identity
+}
+
+// handleAuthCLIToken authenticates with username+password and returns a new
+// API bearer token for CLI use. This avoids the session/cookie dance and lets
+// `orlojctl auth login` obtain a token in one step.
+func (s *Server) handleAuthCLIToken(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !s.authRateLimiter.allow(r) {
+		http.Error(w, "too many authentication attempts", http.StatusTooManyRequests)
+		return
+	}
+	if s.authMode != AuthModeNative {
+		http.Error(w, "cli-token endpoint is only available in native auth mode", http.StatusBadRequest)
+		return
+	}
+
+	var req authRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	req.Username = strings.TrimSpace(req.Username)
+	if req.Username == "" {
+		http.Error(w, "username is required", http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(req.Password) == "" {
+		http.Error(w, "password is required", http.StatusBadRequest)
+		return
+	}
+
+	user, ok, err := s.stores.LocalAdmins.GetByUsername(req.Username)
+	if err != nil {
+		http.Error(w, "auth store error", http.StatusInternalServerError)
+		return
+	}
+	if !ok {
+		http.Error(w, "invalid credentials", http.StatusUnauthorized)
+		return
+	}
+	ok, err = store.VerifyPasswordHash(user.PasswordHash, req.Password)
+	if err != nil || !ok {
+		http.Error(w, "invalid credentials", http.StatusUnauthorized)
+		return
+	}
+
+	tokenName := fmt.Sprintf("cli-%s-%d", user.Username, time.Now().UnixMilli())
+	rawToken, err := store.GenerateOpaqueCredential(32)
+	if err != nil {
+		http.Error(w, "failed to generate token", http.StatusInternalServerError)
+		return
+	}
+	record, err := s.stores.APITokens.Create(tokenName, hashToken(rawToken), user.Role, time.Now().UTC())
+	if err != nil {
+		http.Error(w, "failed to create token", http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]string{
+		"name":       record.Name,
+		"role":       record.Role,
+		"token":      rawToken,
+		"username":   user.Username,
+		"created_at": record.CreatedAt,
+	})
 }
 
 func (s *Server) authorizeAdminRequest(w http.ResponseWriter, r *http.Request) bool {
