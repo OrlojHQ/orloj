@@ -21,6 +21,7 @@ on:
 
 permissions:
   contents: read
+  security-events: write
 
 jobs:
   scan:
@@ -63,7 +64,7 @@ jobs:
 
       - name: Upload Dockerfile config SARIF
         uses: github/codeql-action/upload-sarif@7211b7c8077ea37d8641b6271f6a365a22a5fbfa # v4.36.0
-        if: always()
+        if: always() && hashFiles('trivy-config.sarif') != ''
         with:
           sarif_file: trivy-config.sarif
           category: trivy-config
