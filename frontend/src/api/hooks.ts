@@ -39,7 +39,7 @@ import { useAppStore } from "../store";
 const REFETCH_INTERVAL = 8000;
 /** Page size for resource lists that auto-fetch all pages via cursor. */
 const RESOURCE_LIST_PAGE_LIMIT = 200;
-/** Page size for the Tasks index (explicit “Load more”). */
+/** Page size for bounded task views (Dashboard and the Tasks index). */
 const TASK_LIST_PAGE_LIMIT = 50;
 
 function useNamespace() {
@@ -292,6 +292,7 @@ export function useTaskList(listOpts?: Pick<ResourceListOptions, "labelSelector"
   return {
     data,
     isLoading: infinite.isPending && infinite.isFetching,
+    isPending: infinite.isPending,
     isError: infinite.isError,
     error: infinite.error,
     refetch: infinite.refetch,

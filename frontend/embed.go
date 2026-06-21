@@ -26,11 +26,8 @@ func Handler(basePath string) http.Handler {
 	indexHTML := patchedIndex(subFS, basePath)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "no-store, max-age=0")
-		w.Header().Set("Pragma", "no-cache")
-		w.Header().Set("Expires", "0")
-
 		if indexHTML == nil {
+			setNoStoreHeaders(w)
 			http.Error(w, "frontend dist is not built; run `make ui-build` and rebuild orlojd", http.StatusServiceUnavailable)
 			return
 		}
@@ -40,15 +37,37 @@ func Handler(basePath string) http.Handler {
 		if clean != "" {
 			if f, err := subFS.Open(clean); err == nil {
 				_ = f.Close()
+				if isImmutableAsset(clean) {
+					setImmutableAssetHeaders(w)
+				} else {
+					setNoStoreHeaders(w)
+				}
 				fileServer.ServeHTTP(w, r)
 				return
 			}
 		}
 
 		// SPA fallback: serve the patched index.html for all other paths.
+		setNoStoreHeaders(w)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Write(indexHTML)
 	})
+}
+
+func isImmutableAsset(name string) bool {
+	return strings.HasPrefix(name, "assets/")
+}
+
+func setNoStoreHeaders(w http.ResponseWriter) {
+	w.Header().Set("Cache-Control", "no-store, max-age=0")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
+}
+
+func setImmutableAssetHeaders(w http.ResponseWriter) {
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	w.Header().Del("Pragma")
+	w.Header().Del("Expires")
 }
 
 // patchedIndex reads index.html from the embedded FS and injects a script
@@ -71,5 +90,3 @@ func patchedIndex(fsys fs.FS, basePath string) []byte {
 	}
 	return out
 }
-
-

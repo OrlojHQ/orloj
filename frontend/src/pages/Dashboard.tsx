@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import {
   useAgentSystems,
   useAgents,
-  useTasks,
+  useTaskList,
   useTaskSchedules,
   useTaskWebhooks,
   useWorkers,
@@ -61,7 +61,7 @@ function DashboardSkeleton() {
 export function Dashboard() {
   const systems = useAgentSystems();
   const agents = useAgents();
-  const tasks = useTasks();
+  const tasks = useTaskList();
   const taskSchedules = useTaskSchedules();
   const taskWebhooks = useTaskWebhooks();
   const workers = useWorkers();

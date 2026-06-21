@@ -199,7 +199,7 @@ function AppLayout({
         </main>
       </div>
       <ToastContainer />
-      <SearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} />
+      {searchOpen && <SearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} />}
     </div>
   );
 }
