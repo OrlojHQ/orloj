@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **Web console reload storm**: the global search dialog no longer fetches every resource list while closed, the dashboard uses the bounded task list instead of auto-loading every task page, and fingerprinted UI assets now use long-lived immutable cache headers while SPA routes remain no-store.
+- **Web console reload storm**: the global search dialog no longer fetches every resource list while closed, the dashboard uses the bounded task list instead of auto-loading every task page, resource-watch invalidation avoids refetching whole lists for single-resource updates, and fingerprinted UI assets now use long-lived immutable cache headers while SPA routes remain no-store.
 - **gRPC tool runtime SSRF**: outbound gRPC dials now route through `SafeDialer`, blocking DNS-rebind to private/metadata IPs at connection time.
 - **Container HTTP tool endpoints** are validated with `ValidateEndpointURL` before sandbox execution.
 - **Namespace authorization**: mutation requests reject `metadata.namespace` values that do not match the effective request namespace.

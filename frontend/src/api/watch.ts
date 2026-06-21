@@ -1,9 +1,17 @@
 import { useEffect, useRef } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { useAppStore } from "../store";
+
+type WatchResource = {
+  metadata?: {
+    name?: string;
+    namespace?: string;
+  };
+};
 
 type WatchEvent = {
   type: string;
+  resource?: WatchResource;
   object?: unknown;
 };
 
@@ -62,6 +70,40 @@ function createReconnectingSource(
   connect();
 }
 
+function watchedResourceKind(path: string): string | null {
+  if (path.startsWith("tasks")) return "Task";
+  if (path.startsWith("agents")) return "Agent";
+  if (path.startsWith("task-schedules")) return "TaskSchedule";
+  if (path.startsWith("task-webhooks")) return "TaskWebhook";
+  return null;
+}
+
+function isResourceMutation(eventType: string): boolean {
+  return eventType === "modified" || eventType === "updated" || eventType === "added" || eventType === "deleted";
+}
+
+function eventResource(evt: WatchEvent): WatchResource | undefined {
+  const candidate = evt.resource ?? evt.object;
+  if (!candidate || typeof candidate !== "object") return undefined;
+  return candidate as WatchResource;
+}
+
+function invalidateWatchedResource(qc: QueryClient, kind: string, namespace: string, evt: WatchEvent): void {
+  const eventType = (evt.type ?? "").toLowerCase();
+  if (!isResourceMutation(eventType)) return;
+
+  const meta = eventResource(evt)?.metadata;
+  const resourceNamespace = meta?.namespace?.trim() || namespace;
+  const resourceName = meta?.name?.trim();
+
+  if ((eventType === "modified" || eventType === "updated") && resourceName) {
+    void qc.invalidateQueries({ queryKey: [kind, resourceNamespace, resourceName], exact: true });
+    return;
+  }
+
+  void qc.invalidateQueries({ queryKey: [kind, resourceNamespace] });
+}
+
 export function useWatchInvalidation() {
   const qc = useQueryClient();
   const apiBase = useAppStore((s) => s.apiBase);
@@ -79,20 +121,9 @@ export function useWatchInvalidation() {
 
     for (const path of paths) {
       createReconnectingSource(apiBase, path, namespace, (evt) => {
-        const eventType = (evt.type ?? "").toLowerCase();
-        if (eventType === "modified" || eventType === "updated" || eventType === "added" || eventType === "deleted") {
-          if (path.startsWith("tasks")) {
-            qc.invalidateQueries({ queryKey: ["Task"] });
-          } else if (path.startsWith("agents")) {
-            qc.invalidateQueries({ queryKey: ["Agent"] });
-          } else if (path.startsWith("task-schedules")) {
-            qc.invalidateQueries({ queryKey: ["TaskSchedule"] });
-          } else if (path.startsWith("task-webhooks")) {
-            qc.invalidateQueries({ queryKey: ["TaskWebhook"] });
-          } else {
-            qc.invalidateQueries();
-          }
-        }
+        const kind = watchedResourceKind(path);
+        if (!kind) return;
+        invalidateWatchedResource(qc, kind, namespace, evt);
       }, abort.signal);
     }
 
