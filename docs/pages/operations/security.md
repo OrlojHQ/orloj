@@ -191,6 +191,8 @@ Private network addresses (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `fc0
 
 **Upgrading from earlier versions:** if you run an OpenAI-compatible server (vLLM, LM Studio, LocalAI, LiteLLM proxy, TGI, etc.) on localhost or a private network under `provider: openai-compatible`, add `spec.allowPrivate: true` to those `ModelEndpoint` resources before upgrading, or the gateway will fail at dial time with an error that names the resolved IP and the exact field to change.
 
+`Tool` resources of type `http` or `external` also default to public endpoints. Set `spec.allowPrivate: true` only for trusted private tool gateways. This permits private/internal addresses for that tool while keeping link-local, cloud metadata, and unspecified destinations blocked.
+
 ### MCP Server Security
 
 `McpServer` resources connect to external MCP (Model Context Protocol) servers that expose tools for agent use. Security considerations vary by transport:

@@ -394,9 +394,13 @@ type Tool struct {
 }
 
 type ToolSpec struct {
-	Type        string `json:"type,omitempty" yaml:"type,omitempty"`
-	Endpoint    string `json:"endpoint,omitempty" yaml:"endpoint,omitempty"`
-	Description string `json:"description,omitempty" yaml:"description,omitempty"`
+	Type     string `json:"type,omitempty" yaml:"type,omitempty"`
+	Endpoint string `json:"endpoint,omitempty" yaml:"endpoint,omitempty"`
+	// AllowPrivate permits trusted HTTP/external tool endpoints to connect to
+	// private/internal network addresses. Metadata, link-local, and unspecified
+	// addresses remain blocked by the runtime safe HTTP client.
+	AllowPrivate *bool  `json:"allowPrivate,omitempty" yaml:"allowPrivate,omitempty"`
+	Description  string `json:"description,omitempty" yaml:"description,omitempty"`
 	// +kubebuilder:validation:Schemaless
 	// +kubebuilder:pruning:PreserveUnknownFields
 	InputSchema      map[string]any    `json:"input_schema,omitempty" yaml:"input_schema,omitempty"`

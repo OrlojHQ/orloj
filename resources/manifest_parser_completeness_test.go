@@ -41,9 +41,9 @@ var skipPaths = map[string]map[string]bool{
 		"Metadata.CreatedAt":       true, // server-set on create
 	},
 	"Agent": {
-		"Spec.Model":                    true, // json:"-", internal
-		"Spec.Execution.OutputSchema":   true, // map[string]any, parsed via separate pass
-		"Status":                        true,
+		"Spec.Model":                  true, // json:"-", internal
+		"Spec.Execution.OutputSchema": true, // map[string]any, parsed via separate pass
+		"Status":                      true,
 	},
 	"Tool": {
 		"Spec.McpServerRef": true, // server-generated, not user-set
@@ -102,17 +102,17 @@ var skipPaths = map[string]map[string]bool{
 		"Status": true,
 	},
 	"TaskSchedule": {
-		"Status":                                  true,
-		"Spec.TaskRef":                            true, // mutually exclusive with task_template
+		"Status":       true,
+		"Spec.TaskRef": true, // mutually exclusive with task_template
 		"Spec.TaskTemplate.MessageRetry.NonRetryable": true, // list inside nested template — not wired yet
-		"Spec.TaskTemplate.Requirements":          true, // nested sub-object inside template — not wired yet
+		"Spec.TaskTemplate.Requirements":              true, // nested sub-object inside template — not wired yet
 	},
 	"TaskWebhook": {
-		"Status":                                  true,
-		"Spec.TaskRef":                            true, // mutually exclusive with task_template
+		"Status":       true,
+		"Spec.TaskRef": true, // mutually exclusive with task_template
 		"Spec.TaskTemplate.MessageRetry.NonRetryable": true,
-		"Spec.TaskTemplate.Requirements":          true,
-		"Spec.Idempotency.EventIDFromBody":        true, // mutually exclusive with event_id_header
+		"Spec.TaskTemplate.Requirements":              true,
+		"Spec.Idempotency.EventIDFromBody":            true, // mutually exclusive with event_id_header
 	},
 	"Task": {
 		"Status":            true,
@@ -281,6 +281,7 @@ metadata:
     env: test
 spec:
   type: cli
+  allowPrivate: true
   description: A CLI test tool
   risk_level: medium
   capabilities:
@@ -329,6 +330,7 @@ spec:
   type: http
   description: An HTTP test tool
   endpoint: https://example.com/tool
+  allowPrivate: true
   risk_level: medium
   capabilities:
     - web.search.invoke
@@ -360,6 +362,7 @@ metadata:
     env: test
 spec:
   type: wasm
+  allowPrivate: true
   description: A WASM test tool
   risk_level: medium
   capabilities:
@@ -390,6 +393,7 @@ metadata:
     env: test
 spec:
   type: a2a
+  allowPrivate: true
   description: An A2A test tool
   risk_level: medium
   capabilities:
@@ -850,7 +854,7 @@ func TestFixtureCoversAllResources(t *testing.T) {
 		"mcpserver":      true,
 		"agentpolicy":    true,
 		"agentrole":      true,
-		"toolpermission":  true,
+		"toolpermission": true,
 		"memory":         true,
 		"worker":         true,
 		"task":           true,

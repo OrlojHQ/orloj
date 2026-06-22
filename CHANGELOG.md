@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **HTTP and external tools** now honor per-tool `allowPrivate: true` when selecting the outbound safe HTTP client, allowing explicitly trusted private endpoints without enabling private access globally.
 - **gRPC tool runtime SSRF**: outbound gRPC dials now route through `SafeDialer`, blocking DNS-rebind to private/metadata IPs at connection time.
 - **Container HTTP tool endpoints** are validated with `ValidateEndpointURL` before sandbox execution.
 - **Namespace authorization**: mutation requests reject `metadata.namespace` values that do not match the effective request namespace.
