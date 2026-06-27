@@ -302,17 +302,47 @@ func (m *McpSessionManager) buildContainerStdioTransport(server resources.McpSer
 	}
 
 	var cleanupDir string
-	if len(resolved.Mounts) > 0 {
+	ensureCleanupDir := func() (string, error) {
+		if cleanupDir != "" {
+			return cleanupDir, nil
+		}
 		tmpDir, err := os.MkdirTemp("", "orloj-mcp-*")
 		if err != nil {
-			return nil, fmt.Errorf("create temp dir for secret mounts: %w", err)
+			return "", fmt.Errorf("create temp dir for mcp container metadata: %w", err)
 		}
 		cleanupDir = tmpDir
+		return cleanupDir, nil
+	}
+	cleanupBuildArtifacts := func() {
+		if cleanupDir != "" {
+			_ = os.RemoveAll(cleanupDir)
+		}
+		if creds != nil {
+			creds.Cleanup()
+		}
+	}
+
+	metadataDir, err := ensureCleanupDir()
+	if err != nil {
+		if creds != nil {
+			creds.Cleanup()
+		}
+		return nil, err
+	}
+	cidFile := filepath.Join(metadataDir, "container.cid")
+	dockerArgs = append(dockerArgs, "--cidfile", cidFile)
+
+	if len(resolved.Mounts) > 0 {
+		tmpDir, err := ensureCleanupDir()
+		if err != nil {
+			cleanupBuildArtifacts()
+			return nil, fmt.Errorf("create temp dir for secret mounts: %w", err)
+		}
 
 		for i, mount := range resolved.Mounts {
 			hostFile := filepath.Join(tmpDir, fmt.Sprintf("mount_%d", i))
 			if err := os.WriteFile(hostFile, []byte(mount.Content), 0600); err != nil {
-				_ = os.RemoveAll(tmpDir)
+				cleanupBuildArtifacts()
 				return nil, fmt.Errorf("write secret mount %q: %w", mount.ContainerPath, err)
 			}
 			dockerArgs = append(dockerArgs,
@@ -321,8 +351,18 @@ func (m *McpSessionManager) buildContainerStdioTransport(server resources.McpSer
 		}
 	}
 
-	for _, e := range resolved.EnvVars {
-		dockerArgs = append(dockerArgs, "-e", e)
+	if len(resolved.EnvVars) > 0 {
+		envDir, err := ensureCleanupDir()
+		if err != nil {
+			cleanupBuildArtifacts()
+			return nil, fmt.Errorf("create temp dir for env file: %w", err)
+		}
+		envFile := filepath.Join(envDir, "container.env")
+		if err := os.WriteFile(envFile, []byte(strings.Join(resolved.EnvVars, "\n")+"\n"), 0600); err != nil {
+			cleanupBuildArtifacts()
+			return nil, fmt.Errorf("write mcp env file: %w", err)
+		}
+		dockerArgs = append(dockerArgs, "--env-file", envFile)
 	}
 
 	if command != "" {
@@ -333,6 +373,11 @@ func (m *McpSessionManager) buildContainerStdioTransport(server resources.McpSer
 	dockerArgs = append(dockerArgs, server.Spec.Args...)
 
 	onClose := func() {
+		if cidBytes, err := os.ReadFile(cidFile); err == nil {
+			if cid := strings.TrimSpace(string(cidBytes)); cid != "" {
+				_ = exec.Command(runtimeBinary, "rm", "-f", cid).Run()
+			}
+		}
 		if cleanupDir != "" {
 			_ = os.RemoveAll(cleanupDir)
 		}
