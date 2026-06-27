@@ -525,9 +525,17 @@ func (m *McpSessionManager) buildHTTPTransport(ctx context.Context, server resou
 	if server.Spec.AllowPrivate != nil {
 		allowPrivate = *server.Spec.AllowPrivate
 	}
+	httpTimeout := 60 * time.Second
+	if server.Spec.DefaultToolRuntime != nil {
+		timeoutRaw := strings.TrimSpace(server.Spec.DefaultToolRuntime.Timeout)
+		if parsed, err := time.ParseDuration(timeoutRaw); err == nil && parsed > httpTimeout {
+			httpTimeout = parsed
+		}
+	}
 	return NewStreamableHTTPMcpTransport(StreamableHTTPMcpTransportConfig{
 		Endpoint:     server.Spec.Endpoint,
 		Headers:      headers,
+		Timeout:      httpTimeout,
 		AllowPrivate: allowPrivate,
 	}), nil
 }

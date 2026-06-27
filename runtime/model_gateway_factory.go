@@ -51,6 +51,12 @@ func newModelGatewayFromConfigWithRegistry(cfg ModelGatewayConfig, registry *Mod
 	if registry == nil {
 		return nil, fmt.Errorf("%w: model provider registry is not configured", ErrModelGatewayConfiguration)
 	}
+	if timeout, ok, err := modelGatewayTimeoutFromOptions(cfg.Options); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrModelGatewayConfiguration, err)
+	} else if ok {
+		cfg.Timeout = timeout
+	}
+
 	plugin, ok := registry.Lookup(provider)
 	if !ok {
 		return nil, fmt.Errorf("%w: unsupported provider %q", ErrModelGatewayConfiguration, cfg.Provider)
@@ -318,4 +324,17 @@ func normalizeModelProviderOptions(options map[string]string) map[string]string 
 		out[k] = strings.TrimSpace(value)
 	}
 	return out
+}
+
+func modelGatewayTimeoutFromOptions(options map[string]string) (time.Duration, bool, error) {
+	normalized := normalizeModelProviderOptions(options)
+	value := strings.TrimSpace(normalized["timeout"])
+	if value == "" {
+		return 0, false, nil
+	}
+	timeout, err := time.ParseDuration(value)
+	if err != nil || timeout <= 0 {
+		return 0, false, fmt.Errorf("invalid model endpoint timeout %q", value)
+	}
+	return timeout, true, nil
 }

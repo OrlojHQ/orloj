@@ -29,13 +29,18 @@ type StreamableHTTPMcpTransportConfig struct {
 	Endpoint     string
 	Headers      map[string]string
 	Client       HTTPDoer
+	Timeout      time.Duration
 	AllowPrivate bool // permit connections to private/internal IPs
 }
 
 func NewStreamableHTTPMcpTransport(cfg StreamableHTTPMcpTransportConfig) *StreamableHTTPMcpTransport {
 	client := cfg.Client
 	if client == nil {
-		client = SafeHTTPClient(cfg.AllowPrivate, 60*time.Second)
+		timeout := cfg.Timeout
+		if timeout <= 0 {
+			timeout = 60 * time.Second
+		}
+		client = SafeHTTPClient(cfg.AllowPrivate, timeout)
 	}
 	return &StreamableHTTPMcpTransport{
 		endpoint:     strings.TrimRight(cfg.Endpoint, "/"),
