@@ -46,6 +46,26 @@ func TestNewModelGatewayFromConfigOpenAICompatibleUnderscoreAlias(t *testing.T) 
 	}
 }
 
+func TestNewModelGatewayFromConfigOpenAICompatibleReasoningEffortOption(t *testing.T) {
+	gateway, err := NewModelGatewayFromConfig(ModelGatewayConfig{
+		Provider: "openai-compatible",
+		BaseURL:  "https://example.invalid/v1",
+		Options: map[string]string{
+			"reasoning_effort": "XHIGH",
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected openai-compatible gateway config to succeed, got %v", err)
+	}
+	openaiGateway, ok := gateway.(*OpenAIModelGateway)
+	if !ok {
+		t.Fatalf("expected *OpenAIModelGateway, got %T", gateway)
+	}
+	if openaiGateway.reasoningEffort != "xhigh" {
+		t.Fatalf("expected reasoning effort xhigh, got %q", openaiGateway.reasoningEffort)
+	}
+}
+
 func TestNewModelGatewayFromConfigAnthropicMissingKey(t *testing.T) {
 	_, err := NewModelGatewayFromConfig(ModelGatewayConfig{Provider: "anthropic"})
 	if err == nil {

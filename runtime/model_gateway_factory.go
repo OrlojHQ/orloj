@@ -100,6 +100,10 @@ func (p *openAIModelProviderPlugin) BuildGateway(cfg ModelGatewayConfig) (ModelG
 	if strings.TrimSpace(cfg.DefaultModel) != "" {
 		openaiCfg.DefaultModel = strings.TrimSpace(cfg.DefaultModel)
 	}
+	options := normalizeModelProviderOptions(cfg.Options)
+	if value, ok := modelProviderOption(options, "reasoning_effort", "reasoning.effort"); ok {
+		openaiCfg.ReasoningEffort = strings.ToLower(strings.TrimSpace(value))
+	}
 	if cfg.Timeout > 0 {
 		openaiCfg.Timeout = cfg.Timeout
 	}
@@ -128,6 +132,10 @@ func (p *openAICompatibleModelProviderPlugin) BuildGateway(cfg ModelGatewayConfi
 	}
 	if strings.TrimSpace(cfg.DefaultModel) != "" {
 		openaiCfg.DefaultModel = strings.TrimSpace(cfg.DefaultModel)
+	}
+	options := normalizeModelProviderOptions(cfg.Options)
+	if value, ok := modelProviderOption(options, "reasoning_effort", "reasoning.effort"); ok {
+		openaiCfg.ReasoningEffort = strings.ToLower(strings.TrimSpace(value))
 	}
 	if cfg.Timeout > 0 {
 		openaiCfg.Timeout = cfg.Timeout
@@ -309,6 +317,15 @@ func resolveGatewayHTTPClient(cfg ModelGatewayConfig) *http.Client {
 		return cfg.HTTPClient
 	}
 	return SafeModelGatewayHTTPClient(cfg.AllowPrivate, cfg.Timeout)
+}
+
+func modelProviderOption(options map[string]string, keys ...string) (string, bool) {
+	for _, key := range keys {
+		if value, ok := options[key]; ok && strings.TrimSpace(value) != "" {
+			return value, true
+		}
+	}
+	return "", false
 }
 
 func normalizeModelProviderOptions(options map[string]string) map[string]string {
