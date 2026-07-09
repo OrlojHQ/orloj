@@ -150,12 +150,14 @@ func NewWASMToolRuntime(cfg IsolatedToolRuntimeConfig, logger *log.Logger) (agen
 
 // KubernetesToolRuntimeConfig holds flag-level configuration for the K8s backend.
 type KubernetesToolRuntimeConfig struct {
-	Namespace      string
-	ServiceAccount string
-	JobTTLSeconds  int32
-	DefaultImage   string
+	Namespace       string
+	ServiceAccount  string
+	JobTTLSeconds   int32
+	DefaultImage    string
+	DefaultMemory   string
+	DefaultCPUs     string
 	SecretEnvPrefix string
-	Secrets        agentruntime.SecretResourceLookup
+	Secrets         agentruntime.SecretResourceLookup
 }
 
 // NewKubernetesToolRuntime creates a K8s Job-based tool runtime.
@@ -170,6 +172,8 @@ func NewKubernetesToolRuntime(cfg KubernetesToolRuntimeConfig, logger *log.Logge
 		ServiceAccount: strings.TrimSpace(cfg.ServiceAccount),
 		DefaultImage:   strings.TrimSpace(cfg.DefaultImage),
 		JobTTLSeconds:  cfg.JobTTLSeconds,
+		DefaultMemory:  strings.TrimSpace(cfg.DefaultMemory),
+		DefaultCPUs:    strings.TrimSpace(cfg.DefaultCPUs),
 	}
 
 	clientset, err := buildKubernetesClientset()
@@ -186,8 +190,9 @@ func NewKubernetesToolRuntime(cfg KubernetesToolRuntimeConfig, logger *log.Logge
 		if ns == "" {
 			ns = "(pod-namespace or default)"
 		}
-		logger.Printf("kubernetes tool isolation enabled namespace=%s service_account=%s job_ttl=%d default_image=%s",
-			ns, strings.TrimSpace(cfg.ServiceAccount), cfg.JobTTLSeconds, strings.TrimSpace(cfg.DefaultImage))
+		logger.Printf("kubernetes tool isolation enabled namespace=%s service_account=%s job_ttl=%d default_image=%s default_memory=%s default_cpus=%s",
+			ns, strings.TrimSpace(cfg.ServiceAccount), cfg.JobTTLSeconds, strings.TrimSpace(cfg.DefaultImage),
+			strings.TrimSpace(cfg.DefaultMemory), strings.TrimSpace(cfg.DefaultCPUs))
 	}
 	return rt, nil
 }
