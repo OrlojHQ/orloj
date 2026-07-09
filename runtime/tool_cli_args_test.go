@@ -47,13 +47,42 @@ func TestEvaluateCLIArgsDropsEmpty(t *testing.T) {
 	}
 }
 
-func TestEvaluateCLIArgsMissingKeyError(t *testing.T) {
-	_, err := evaluateCLIArgs(
+func TestEvaluateCLIArgsMissingKeyIsEmpty(t *testing.T) {
+	args, err := evaluateCLIArgs(
 		[]string{"cmd", "{{ .missing }}"},
 		`{"other": "value"}`,
 	)
-	if err == nil {
-		t.Fatal("expected error for missing template key")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(args) != 1 || args[0] != "cmd" {
+		t.Fatalf("expected missing key to drop empty arg, got %v", args)
+	}
+}
+
+func TestEvaluateCLIArgsOptionalIfMissing(t *testing.T) {
+	args, err := evaluateCLIArgs(
+		[]string{"get", "{{ .resource }}", "{{ if .name }}{{ .name }}{{ end }}", "-n", "{{ .namespace }}"},
+		`{"resource": "pods", "namespace": "compliance-agent"}`,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(args) != 4 || args[0] != "get" || args[1] != "pods" || args[2] != "-n" || args[3] != "compliance-agent" {
+		t.Fatalf("expected optional name dropped, got %v", args)
+	}
+}
+
+func TestEvaluateCLIArgsStaticIgnoresNonJSONInput(t *testing.T) {
+	args, err := evaluateCLIArgs(
+		[]string{"sh", "-c", "echo ok"},
+		`not-json free-form model text`,
+	)
+	if err != nil {
+		t.Fatalf("static argv should ignore non-JSON input: %v", err)
+	}
+	if len(args) != 3 || args[0] != "sh" {
+		t.Fatalf("unexpected args: %v", args)
 	}
 }
 
@@ -73,7 +102,7 @@ func TestEvaluateCLIArgsInvalidJSON(t *testing.T) {
 		`not-json`,
 	)
 	if err == nil {
-		t.Fatal("expected error for invalid JSON input")
+		t.Fatal("expected error for invalid JSON input when templates are present")
 	}
 }
 
