@@ -315,22 +315,28 @@ func main() {
 	taskController.SetIsolatedToolRuntime(isolatedToolRuntime)
 	taskController.SetWasmToolRuntime(wasmToolRuntime)
 	taskController.SetMcpRuntime(mcpSessionManager, stores.McpServers)
+	var k8sToolRT agentruntime.ToolRuntime
 	if *toolK8sEnabled {
 		k8sRT, k8sErr := startup.NewKubernetesToolRuntime(startup.KubernetesToolRuntimeConfig{
 			Namespace:       *toolK8sNamespace,
 			ServiceAccount:  *toolK8sServiceAccount,
 			JobTTLSeconds:   int32(*toolK8sJobTTL),
 			DefaultImage:    *toolK8sDefaultImage,
+			DefaultMemory:   *toolContainerMemory,
+			DefaultCPUs:     *toolContainerCPUs,
 			SecretEnvPrefix: *toolSecretEnvPrefix,
 			Secrets:         stores.Secrets,
 		}, logger)
 		if k8sErr != nil {
 			fatalLogger.Fatalf("failed to configure kubernetes tool runtime: %v", k8sErr)
 		}
+		k8sToolRT = k8sRT
 		taskController.SetKubernetesToolRuntime(k8sRT)
 	}
+	var agentK8sRT *agentruntime.KubernetesAgentRuntime
 	if *agentK8sEnabled {
-		agentK8sRT, agentK8sErr := startup.NewKubernetesAgentRuntime(startup.KubernetesAgentRuntimeConfig{
+		var agentK8sErr error
+		agentK8sRT, agentK8sErr = startup.NewKubernetesAgentRuntime(startup.KubernetesAgentRuntimeConfig{
 			Namespace:      *agentK8sNamespace,
 			ServiceAccount: *agentK8sServiceAccount,
 			Image:          *agentK8sImage,
@@ -568,6 +574,7 @@ func main() {
 						Policies:            stores.Policies,
 						ContextAdapters:     stores.ContextAdapters,
 						A2AToolRuntime:      a2aToolRT,
+						KubernetesToolRT:    k8sToolRT,
 						DebugLogger:         debugLogger,
 						OnStepEvent: func(taskName, namespace string, evt agentruntime.AgentStepEvent) {
 							if bus != nil {

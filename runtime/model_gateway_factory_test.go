@@ -3,6 +3,7 @@ package agentruntime
 import (
 	"errors"
 	"testing"
+	"time"
 )
 
 func TestNewModelGatewayFromConfigDefaultsToMock(t *testing.T) {
@@ -106,5 +107,45 @@ func TestNewModelGatewayFromConfigUnsupportedProvider(t *testing.T) {
 	}
 	if !errors.Is(err, ErrModelGatewayConfiguration) {
 		t.Fatalf("expected ErrModelGatewayConfiguration, got %v", err)
+	}
+}
+
+func TestAnthropicProviderKeepsDefaultTimeoutOverRouterDefault(t *testing.T) {
+	cfg := DefaultModelGatewayConfig()
+	cfg.Provider = "anthropic"
+	cfg.APIKey = "test-key"
+	// Router default is 30s; Anthropic should keep its 120s default for tool-heavy turns.
+	if cfg.Timeout != 30*time.Second {
+		t.Fatalf("expected router default timeout 30s, got %s", cfg.Timeout)
+	}
+
+	gateway, err := NewModelGatewayFromConfig(cfg)
+	if err != nil {
+		t.Fatalf("expected anthropic gateway, got %v", err)
+	}
+	ag, ok := gateway.(*AnthropicModelGateway)
+	if !ok {
+		t.Fatalf("expected *AnthropicModelGateway, got %T", gateway)
+	}
+	if ag.client == nil {
+		t.Fatal("expected HTTP client")
+	}
+	if ag.client.Timeout != 120*time.Second {
+		t.Fatalf("expected anthropic HTTP timeout 120s, got %s", ag.client.Timeout)
+	}
+}
+
+func TestAnthropicProviderHonorsLongerExplicitTimeout(t *testing.T) {
+	gateway, err := NewModelGatewayFromConfig(ModelGatewayConfig{
+		Provider: "anthropic",
+		APIKey:   "test-key",
+		Timeout:  5 * time.Minute,
+	})
+	if err != nil {
+		t.Fatalf("expected anthropic gateway, got %v", err)
+	}
+	ag := gateway.(*AnthropicModelGateway)
+	if ag.client.Timeout != 5*time.Minute {
+		t.Fatalf("expected explicit timeout 5m, got %s", ag.client.Timeout)
 	}
 }
