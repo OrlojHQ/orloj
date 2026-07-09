@@ -22,6 +22,12 @@ type KubernetesToolConfig struct {
 	ServiceAccount string
 	DefaultImage   string
 	JobTTLSeconds  int32
+	// DefaultMemory / DefaultCPUs apply when a Tool CR omits cli.resources.*.
+	// Memory accepts Docker-style units (128m, 1g) or Kubernetes IEC units
+	// (128Mi, 1Gi); Docker-style values are converted before the Job is created
+	// so Kubernetes does not treat "m" as millibytes.
+	DefaultMemory string
+	DefaultCPUs   string
 }
 
 func (c KubernetesToolConfig) normalized() KubernetesToolConfig {
@@ -329,29 +335,12 @@ func (r *KubernetesToolRuntime) buildJob(
 	var backoffLimit int32
 	ttl := cfg.JobTTLSeconds
 
-	resourceReqs := corev1.ResourceRequirements{}
-	if mem := strings.TrimSpace(spec.Cli.Resources.Memory); mem != "" {
-		if resourceReqs.Limits == nil {
-			resourceReqs.Limits = corev1.ResourceList{}
-		}
-		if resourceReqs.Requests == nil {
-			resourceReqs.Requests = corev1.ResourceList{}
-		}
-		q := resource.MustParse(mem)
-		resourceReqs.Limits[corev1.ResourceMemory] = q
-		resourceReqs.Requests[corev1.ResourceMemory] = q
-	}
-	if cpus := strings.TrimSpace(spec.Cli.Resources.CPUs); cpus != "" {
-		if resourceReqs.Limits == nil {
-			resourceReqs.Limits = corev1.ResourceList{}
-		}
-		if resourceReqs.Requests == nil {
-			resourceReqs.Requests = corev1.ResourceList{}
-		}
-		q := resource.MustParse(cpus)
-		resourceReqs.Limits[corev1.ResourceCPU] = q
-		resourceReqs.Requests[corev1.ResourceCPU] = q
-	}
+	resourceReqs := toolJobResourceRequirements(
+		spec.Cli.Resources.Memory,
+		spec.Cli.Resources.CPUs,
+		cfg.DefaultMemory,
+		cfg.DefaultCPUs,
+	)
 
 	var activeDeadline *int64
 	if timeout := strings.TrimSpace(spec.Runtime.Timeout); timeout != "" {
@@ -549,12 +538,72 @@ func ctx_is_canceled(err error) bool {
 	return err == context.Canceled
 }
 
-// wrapWithStdin builds a command that echoes stdin data into the real command via a shell heredoc.
+// toolJobResourceRequirements builds Pod resource requests/limits for a tool Job.
+// Memory accepts Docker-style units (256m, 1g) or Kubernetes IEC units (256Mi, 1Gi).
+// Docker-style values are converted to BinarySI quantities so Kubernetes does not
+// treat the "m" suffix as millibytes (which collapses SizeMemoryBackedVolumes
+// projected SA mounts to ~0 bytes and yields FailedMount ENOSPC).
+func toolJobResourceRequirements(mem, cpus, defaultMem, defaultCPUs string) corev1.ResourceRequirements {
+	reqs := corev1.ResourceRequirements{}
+	if resolved := firstNonEmptyTrimmed(mem, defaultMem); resolved != "" {
+		if q, err := parseToolMemoryQuantity(resolved); err == nil {
+			if reqs.Limits == nil {
+				reqs.Limits = corev1.ResourceList{}
+			}
+			if reqs.Requests == nil {
+				reqs.Requests = corev1.ResourceList{}
+			}
+			reqs.Limits[corev1.ResourceMemory] = q
+			reqs.Requests[corev1.ResourceMemory] = q
+		}
+	}
+	if resolved := firstNonEmptyTrimmed(cpus, defaultCPUs); resolved != "" {
+		if q, err := resource.ParseQuantity(resolved); err == nil {
+			if reqs.Limits == nil {
+				reqs.Limits = corev1.ResourceList{}
+			}
+			if reqs.Requests == nil {
+				reqs.Requests = corev1.ResourceList{}
+			}
+			reqs.Limits[corev1.ResourceCPU] = q
+			reqs.Requests[corev1.ResourceCPU] = q
+		}
+	}
+	return reqs
+}
+
+func parseToolMemoryQuantity(mem string) (resource.Quantity, error) {
+	bytes, err := resources.ParseMemoryBytes(mem)
+	if err != nil {
+		return resource.Quantity{}, err
+	}
+	return *resource.NewQuantity(bytes, resource.BinarySI), nil
+}
+
+func firstNonEmptyTrimmed(values ...string) string {
+	for _, v := range values {
+		if t := strings.TrimSpace(v); t != "" {
+			return t
+		}
+	}
+	return ""
+}
+
+// wrapWithStdin builds a command that pipes stdinData into the real command.
+// Each argv entry is single-quoted so multi-arg commands (e.g. sh -c "<script>")
+// stay intact; a naive strings.Join would make `sh -c` only see the first word.
 func wrapWithStdin(command []string, stdinData string) []string {
-	escaped := strings.ReplaceAll(stdinData, "'", "'\"'\"'")
-	inner := strings.Join(command, " ")
-	script := fmt.Sprintf("printf '%%s' '%s' | %s", escaped, inner)
+	escaped := shellSingleQuote(stdinData)
+	quoted := make([]string, len(command))
+	for i, arg := range command {
+		quoted[i] = shellSingleQuote(arg)
+	}
+	script := fmt.Sprintf("printf '%%s' %s | %s", escaped, strings.Join(quoted, " "))
 	return []string{"/bin/sh", "-c", script}
+}
+
+func shellSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
 }
 
 func sanitizeK8sName(name string) string {
