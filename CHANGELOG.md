@@ -41,8 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
-- **Go toolchain** bumped to 1.26.3 across `go.mod`, CI, and Docker builds.
-- **Docker base images** pinned by digest (`golang:1.26.3-alpine`, `alpine:3.23`).
+- **Go toolchain** bumped to 1.26.5 across `go.mod`, CI, and Docker builds (fixes GO-2026-5856 / CVE-2026-42505 in `crypto/tls`).
+- **Docker base images** pinned by digest (`golang:1.26.5-alpine`, `alpine:3.23`).
 - **Secret CLI flags** (`--api-key`, `--secret-encryption-key`, `--auth-reset-admin-password`) log a warning when used; prefer env vars to avoid `ps` exposure.
 - **Reference structured audit sink**: `agentruntime.SlogAuditSink` (`runtime/audit_sink_slog.go`) writes audit events as structured JSON via `log/slog`. Wire it through `Extensions.Audit` to get a durable audit trail; audit logging remains off (no-op) by default. See [Audit Logging](docs/pages/operations/security.md#audit-logging).
 - **Threat model documentation**: new `docs/pages/operations/threat-model.md` consolidating trust boundaries, attacker model, controls, and operator-owned residual risks.
