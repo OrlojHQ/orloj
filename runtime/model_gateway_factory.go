@@ -149,10 +149,17 @@ func (p *anthropicModelProviderPlugin) BuildGateway(cfg ModelGatewayConfig) (Mod
 	if strings.TrimSpace(cfg.DefaultModel) != "" {
 		anthropicCfg.DefaultModel = strings.TrimSpace(cfg.DefaultModel)
 	}
-	if cfg.Timeout > 0 {
+	// ModelRouter builds gateways with DefaultModelGatewayConfig.Timeout (30s).
+	// Anthropic tool-heavy turns routinely need longer; keep the Anthropic
+	// default (120s) unless the caller set an explicit longer timeout.
+	if cfg.Timeout > anthropicCfg.Timeout {
 		anthropicCfg.Timeout = cfg.Timeout
 	}
-	anthropicCfg.HTTPClient = resolveGatewayHTTPClient(cfg)
+	httpCfg := cfg
+	if httpCfg.HTTPClient == nil {
+		httpCfg.Timeout = anthropicCfg.Timeout
+	}
+	anthropicCfg.HTTPClient = resolveGatewayHTTPClient(httpCfg)
 
 	options := normalizeModelProviderOptions(cfg.Options)
 	if value, ok := options["anthropic_version"]; ok && strings.TrimSpace(value) != "" {
