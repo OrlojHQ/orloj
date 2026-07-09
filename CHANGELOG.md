@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Anthropic OAuth access tokens**: the Anthropic model gateway now sends `Authorization: Bearer` for credentials with the `sk-ant-oat` prefix (or an explicit `Bearer ` prefix), while standard API keys continue to use `x-api-key`. Same `ModelEndpoint` `auth.secretRef` works for both.
 - **`orlojctl auth login`**: new CLI command that authenticates with username/password against a native-mode server and saves a bearer token to the active profile. Eliminates the need to manually configure API tokens for CLI access.
 - **`POST /v1/auth/cli-token`**: new API endpoint that accepts credentials and returns a bearer token for CLI use (native auth mode only).
 - **`orlojctl config use` auth probe**: switching profiles now checks `/v1/auth/me` and prints whether the profile's credentials are valid, warning if unauthenticated.
