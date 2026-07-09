@@ -26,6 +26,9 @@
   - `openai`, `anthropic`, `azure-openai`: `auth.secretRef` is required.
   - `openai-compatible`: `auth.secretRef` is optional.
   - `ollama`: `auth.secretRef` is optional and usually omitted.
+- Anthropic credential types (same `auth.secretRef`):
+  - Standard API key (`sk-ant-api...`): sent as `x-api-key`.
+  - OAuth access token (`sk-ant-oat...`, or an explicit `Bearer ` prefix): sent as `Authorization: Bearer`.
 
 ## status
 
