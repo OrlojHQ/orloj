@@ -21,6 +21,8 @@ Each provider needs a Secret resource to hold its API key. The fastest way is th
 ```bash
 orlojctl create secret openai-api-key --from-literal value=sk-your-openai-key-here
 orlojctl create secret anthropic-api-key --from-literal value=sk-ant-your-anthropic-key-here
+# Anthropic OAuth access tokens (sk-ant-oat...) also work in the same secret —
+# Orloj sends Authorization: Bearer for those, and x-api-key for API keys.
 ```
 
 Alternatively, use YAML manifests with `orlojctl apply -f`:

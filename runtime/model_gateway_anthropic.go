@@ -45,7 +45,7 @@ type AnthropicModelGateway struct {
 func NewAnthropicModelGateway(cfg AnthropicModelGatewayConfig) (*AnthropicModelGateway, error) {
 	normalized := cfg.normalized()
 	if strings.TrimSpace(normalized.APIKey) == "" {
-		return nil, fmt.Errorf("anthropic api key is required")
+		return nil, fmt.Errorf("anthropic api key or oauth token is required")
 	}
 	if strings.TrimSpace(normalized.BaseURL) == "" {
 		return nil, fmt.Errorf("anthropic base URL is required")
@@ -67,6 +67,42 @@ func NewAnthropicModelGateway(cfg AnthropicModelGatewayConfig) (*AnthropicModelG
 		maxTokens:        normalized.maxTokens(),
 		client:           normalized.client(),
 	}, nil
+}
+
+// anthropicCredentialUsesBearer reports whether the credential should be sent
+// as Authorization: Bearer instead of x-api-key.
+//
+// Anthropic OAuth access tokens (prefix sk-ant-oat) are rejected by x-api-key
+// and must use Bearer. Operators may also store an already-prefixed
+// "Bearer <token>" value. Standard API keys (sk-ant-api...) keep x-api-key.
+func anthropicCredentialUsesBearer(credential string) bool {
+	credential = strings.TrimSpace(credential)
+	if credential == "" {
+		return false
+	}
+	lower := strings.ToLower(credential)
+	if strings.HasPrefix(lower, "bearer ") {
+		return true
+	}
+	return strings.HasPrefix(lower, "sk-ant-oat")
+}
+
+// setAnthropicAuthHeaders applies the correct Anthropic auth header for the
+// credential type. Mutually exclusive: never set both x-api-key and Bearer.
+func setAnthropicAuthHeaders(req *http.Request, credential string) {
+	credential = strings.TrimSpace(credential)
+	if req == nil || credential == "" {
+		return
+	}
+	if anthropicCredentialUsesBearer(credential) {
+		token := credential
+		if len(credential) >= 7 && strings.EqualFold(credential[:6], "bearer") && credential[6] == ' ' {
+			token = strings.TrimSpace(credential[7:])
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		return
+	}
+	req.Header.Set("x-api-key", credential)
 }
 
 func (c AnthropicModelGatewayConfig) normalized() AnthropicModelGatewayConfig {
@@ -159,7 +195,7 @@ func (g *AnthropicModelGateway) Complete(ctx context.Context, req ModelRequest) 
 		return ModelResponse{}, fmt.Errorf("build model request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("x-api-key", g.apiKey)
+	setAnthropicAuthHeaders(httpReq, g.apiKey)
 	httpReq.Header.Set("anthropic-version", g.anthropicVersion)
 
 	httpResp, err := g.client.Do(httpReq)

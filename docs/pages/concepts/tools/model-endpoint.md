@@ -46,6 +46,8 @@ spec:
     secretRef: anthropic-api-key
 ```
 
+Anthropic credentials may be either a standard API key (`sk-ant-api...`, sent as `x-api-key`) or an OAuth access token (`sk-ant-oat...`, sent as `Authorization: Bearer`). Store either value in the same `secretRef`; Orloj selects the header from the token prefix.
+
 **Azure OpenAI:**
 ```yaml
 spec:

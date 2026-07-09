@@ -29,6 +29,7 @@ func TestAnthropicModelGatewayCompleteSuccess(t *testing.T) {
 	}
 
 	var capturedAPIKey string
+	var capturedAuth string
 	var capturedVersion string
 	var capturedPath string
 	captured := capturedRequest{}
@@ -36,6 +37,7 @@ func TestAnthropicModelGatewayCompleteSuccess(t *testing.T) {
 	client := &http.Client{
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			capturedAPIKey = req.Header.Get("x-api-key")
+			capturedAuth = req.Header.Get("Authorization")
 			capturedVersion = req.Header.Get("anthropic-version")
 			capturedPath = req.URL.Path
 			body, err := io.ReadAll(req.Body)
@@ -90,6 +92,9 @@ func TestAnthropicModelGatewayCompleteSuccess(t *testing.T) {
 	if capturedAPIKey != "test-key" {
 		t.Fatalf("unexpected x-api-key header: %q", capturedAPIKey)
 	}
+	if capturedAuth != "" {
+		t.Fatalf("expected no Authorization header for API keys, got %q", capturedAuth)
+	}
 	if capturedVersion != "2023-06-01" {
 		t.Fatalf("unexpected anthropic-version header: %q", capturedVersion)
 	}
@@ -113,6 +118,88 @@ func TestAnthropicModelGatewayCompleteSuccess(t *testing.T) {
 	}
 	if !strings.Contains(captured.Messages[0].Content, "step=3") {
 		t.Fatalf("expected step in user content, got %q", captured.Messages[0].Content)
+	}
+}
+
+func TestAnthropicModelGatewayCompleteUsesOAuthBearer(t *testing.T) {
+	cases := []struct {
+		name       string
+		credential string
+		wantAuth   string
+	}{
+		{
+			name:       "oauth access token prefix",
+			credential: "sk-ant-oat01-example-token",
+			wantAuth:   "Bearer sk-ant-oat01-example-token",
+		},
+		{
+			name:       "already prefixed bearer",
+			credential: "Bearer sk-ant-oat01-example-token",
+			wantAuth:   "Bearer sk-ant-oat01-example-token",
+		},
+		{
+			name:       "lowercase bearer prefix",
+			credential: "bearer sk-ant-oat01-example-token",
+			wantAuth:   "Bearer sk-ant-oat01-example-token",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var capturedAPIKey string
+			var capturedAuth string
+			client := &http.Client{
+				Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+					capturedAPIKey = req.Header.Get("x-api-key")
+					capturedAuth = req.Header.Get("Authorization")
+					return &http.Response{
+						StatusCode: http.StatusOK,
+						Body:       io.NopCloser(strings.NewReader(`{"content":[{"type":"text","text":"ok"}],"usage":{"input_tokens":1,"output_tokens":1}}`)),
+						Header:     make(http.Header),
+					}, nil
+				}),
+				Timeout: time.Second,
+			}
+
+			cfg := DefaultAnthropicModelGatewayConfig()
+			cfg.APIKey = tc.credential
+			cfg.BaseURL = "https://example.invalid/v1"
+			cfg.HTTPClient = client
+
+			gateway, err := NewAnthropicModelGateway(cfg)
+			if err != nil {
+				t.Fatalf("new gateway failed: %v", err)
+			}
+			if _, err := gateway.Complete(context.Background(), ModelRequest{Model: "claude-test", Step: 1}); err != nil {
+				t.Fatalf("complete failed: %v", err)
+			}
+			if capturedAPIKey != "" {
+				t.Fatalf("expected no x-api-key for oauth credentials, got %q", capturedAPIKey)
+			}
+			if capturedAuth != tc.wantAuth {
+				t.Fatalf("unexpected Authorization header: got %q want %q", capturedAuth, tc.wantAuth)
+			}
+		})
+	}
+}
+
+func TestAnthropicCredentialUsesBearer(t *testing.T) {
+	cases := []struct {
+		in   string
+		want bool
+	}{
+		{"sk-ant-api03-abc", false},
+		{"test-key", false},
+		{"sk-ant-oat01-abc", true},
+		{"SK-ANT-OAT01-ABC", true},
+		{"Bearer tok", true},
+		{"bearer tok", true},
+		{"", false},
+	}
+	for _, tc := range cases {
+		if got := anthropicCredentialUsesBearer(tc.in); got != tc.want {
+			t.Fatalf("anthropicCredentialUsesBearer(%q)=%v want %v", tc.in, got, tc.want)
+		}
 	}
 }
 
