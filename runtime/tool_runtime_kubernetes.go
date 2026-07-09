@@ -589,12 +589,21 @@ func firstNonEmptyTrimmed(values ...string) string {
 	return ""
 }
 
-// wrapWithStdin builds a command that echoes stdin data into the real command via a shell heredoc.
+// wrapWithStdin builds a command that pipes stdinData into the real command.
+// Each argv entry is single-quoted so multi-arg commands (e.g. sh -c "<script>")
+// stay intact; a naive strings.Join would make `sh -c` only see the first word.
 func wrapWithStdin(command []string, stdinData string) []string {
-	escaped := strings.ReplaceAll(stdinData, "'", "'\"'\"'")
-	inner := strings.Join(command, " ")
-	script := fmt.Sprintf("printf '%%s' '%s' | %s", escaped, inner)
+	escaped := shellSingleQuote(stdinData)
+	quoted := make([]string, len(command))
+	for i, arg := range command {
+		quoted[i] = shellSingleQuote(arg)
+	}
+	script := fmt.Sprintf("printf '%%s' %s | %s", escaped, strings.Join(quoted, " "))
 	return []string{"/bin/sh", "-c", script}
+}
+
+func shellSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
 }
 
 func sanitizeK8sName(name string) string {

@@ -490,6 +490,23 @@ func TestKubernetesToolRuntimeBuildJobConvertsDockerMemory(t *testing.T) {
 	}
 }
 
+func TestWrapWithStdinQuotesMultiArgCommand(t *testing.T) {
+	got := wrapWithStdin([]string{"sh", "-c", "INPUT=$(cat); echo \"$INPUT\""}, `{"message":"hi"}`)
+	if len(got) != 3 || got[0] != "/bin/sh" || got[1] != "-c" {
+		t.Fatalf("unexpected wrapper argv: %v", got)
+	}
+	script := got[2]
+	if !strings.Contains(script, "| 'sh' '-c'") && !strings.Contains(script, "| 'sh' '-c' '") {
+		// Expect each original argv entry to be single-quoted.
+		if !strings.Contains(script, "'sh'") || !strings.Contains(script, "'-c'") {
+			t.Fatalf("expected quoted multi-arg command in script, got %q", script)
+		}
+	}
+	if strings.Contains(script, "| sh -c INPUT=") {
+		t.Fatalf("unquoted join would break sh -c: %q", script)
+	}
+}
+
 func TestSanitizeK8sName(t *testing.T) {
 	tests := []struct {
 		input    string
