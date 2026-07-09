@@ -343,9 +343,12 @@ toolIsolation:
   containerImage: "curlimages/curl:8.8.0"
   # -- Container network mode
   containerNetwork: none
-  # -- Default container memory limit
+  # -- Default container memory limit (Docker-style or Kubernetes units).
+  # Also used as the fallback memory limit for kubernetes tool Jobs when a Tool
+  # omits cli.resources.memory. Docker-style values (128m) are converted to
+  # BinarySI quantities before the Job is created.
   containerMemory: 128m
-  # -- Default container CPU limit
+  # -- Default container CPU limit (also kubernetes tool Job fallback)
   containerCpus: "0.50"
   # -- Default container PID limit
   containerPidsLimit: 64

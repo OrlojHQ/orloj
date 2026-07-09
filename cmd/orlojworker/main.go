@@ -239,6 +239,8 @@ func main() {
 				ServiceAccount:  *toolK8sServiceAccount,
 				JobTTLSeconds:   int32(*toolK8sJobTTL),
 				DefaultImage:    *toolK8sDefaultImage,
+				DefaultMemory:   *toolContainerMemory,
+				DefaultCPUs:     *toolContainerCPUs,
 				SecretEnvPrefix: *toolSecretEnvPrefix,
 				Secrets:         stores.Secrets,
 			}, logger)
@@ -350,6 +352,8 @@ func main() {
 			ServiceAccount:  *toolK8sServiceAccount,
 			JobTTLSeconds:   int32(*toolK8sJobTTL),
 			DefaultImage:    *toolK8sDefaultImage,
+			DefaultMemory:   *toolContainerMemory,
+			DefaultCPUs:     *toolContainerCPUs,
 			SecretEnvPrefix: *toolSecretEnvPrefix,
 			Secrets:         stores.Secrets,
 		}, logger)
