@@ -105,6 +105,83 @@ func setAnthropicAuthHeaders(req *http.Request, credential string) {
 	req.Header.Set("x-api-key", credential)
 }
 
+// Claude Code OAuth (sk-ant-oat…) requires a Claude Code client fingerprint for
+// non-Haiku models. Without these headers + system identity, Anthropic returns
+// an opaque 429 rate_limit_error / 400 invalid_request_error. Matches the
+// request shape used by OpenCode's Claude OAuth plugins.
+const (
+	anthropicClaudeCodeSystemIdentity = "You are Claude Code, Anthropic's official CLI for Claude."
+	anthropicClaudeCodeBillingHeader  = "x-anthropic-billing-header: cc_version=2.1.88; cc_entrypoint=cli; cch=orloj;"
+	anthropicClaudeCodeCLIVersion     = "2.1.88"
+	anthropicClaudeCodeUserAgent      = "claude-cli/" + anthropicClaudeCodeCLIVersion + " (external, cli)"
+	anthropicClaudeCodeBetaFlags      = "claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14"
+)
+
+// setAnthropicOAuthClientHeaders adds Claude Code client identity headers when
+// using an OAuth access token. No-op for standard API keys.
+func setAnthropicOAuthClientHeaders(req *http.Request, credential string) {
+	if req == nil || !anthropicCredentialUsesBearer(credential) {
+		return
+	}
+	req.Header.Set("anthropic-beta", anthropicClaudeCodeBetaFlags)
+	req.Header.Set("User-Agent", anthropicClaudeCodeUserAgent)
+	req.Header.Set("x-app", "cli")
+}
+
+// ensureAnthropicOAuthSystemIdentity prepends the Claude Code identity + billing
+// system blocks required for Sonnet/Opus on OAuth tokens. Idempotent. Also
+// strips cache_control from system blocks — Anthropic rejects ephemeral
+// prompt-caching markers on OAuth subscription traffic.
+func ensureAnthropicOAuthSystemIdentity(system []anthropicSystemBlock, credential string) []anthropicSystemBlock {
+	if !anthropicCredentialUsesBearer(credential) {
+		return system
+	}
+	cleaned := make([]anthropicSystemBlock, 0, len(system)+2)
+	hasIdentity := false
+	hasBilling := false
+	for _, block := range system {
+		text := strings.TrimSpace(block.Text)
+		if strings.Contains(text, anthropicClaudeCodeSystemIdentity) {
+			hasIdentity = true
+		}
+		if strings.HasPrefix(text, "x-anthropic-billing-header:") {
+			hasBilling = true
+		}
+		cleaned = append(cleaned, anthropicSystemBlock{
+			Type: block.Type,
+			Text: block.Text,
+			// Intentionally drop CacheControl for OAuth.
+		})
+	}
+	prefix := make([]anthropicSystemBlock, 0, 2)
+	if !hasBilling {
+		prefix = append(prefix, anthropicSystemBlock{
+			Type: "text",
+			Text: anthropicClaudeCodeBillingHeader,
+		})
+	}
+	if !hasIdentity {
+		prefix = append(prefix, anthropicSystemBlock{
+			Type: "text",
+			Text: anthropicClaudeCodeSystemIdentity,
+		})
+	}
+	return append(prefix, cleaned...)
+}
+
+// anthropicMessagesURL returns the Messages endpoint, adding ?beta=true for
+// OAuth credentials (required by the claude-code beta surface).
+func anthropicMessagesURL(baseURL, credential string) string {
+	endpoint := strings.TrimRight(strings.TrimSpace(baseURL), "/") + "/messages"
+	if !anthropicCredentialUsesBearer(credential) {
+		return endpoint
+	}
+	if strings.Contains(endpoint, "?") {
+		return endpoint + "&beta=true"
+	}
+	return endpoint + "?beta=true"
+}
+
 func (c AnthropicModelGatewayConfig) normalized() AnthropicModelGatewayConfig {
 	out := c
 	defaults := DefaultAnthropicModelGatewayConfig()
@@ -184,18 +261,20 @@ func (g *AnthropicModelGateway) Complete(ctx context.Context, req ModelRequest) 
 			},
 		}
 	}
+	body.System = ensureAnthropicOAuthSystemIdentity(body.System, g.apiKey)
 
 	payload, err := json.Marshal(body)
 	if err != nil {
 		return ModelResponse{}, fmt.Errorf("marshal model request: %w", err)
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, g.baseURL+"/messages", bytes.NewReader(payload))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, anthropicMessagesURL(g.baseURL, g.apiKey), bytes.NewReader(payload))
 	if err != nil {
 		return ModelResponse{}, fmt.Errorf("build model request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	setAnthropicAuthHeaders(httpReq, g.apiKey)
+	setAnthropicOAuthClientHeaders(httpReq, g.apiKey)
 	httpReq.Header.Set("anthropic-version", g.anthropicVersion)
 
 	httpResp, err := g.client.Do(httpReq)

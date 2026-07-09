@@ -148,10 +148,26 @@ func TestAnthropicModelGatewayCompleteUsesOAuthBearer(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var capturedAPIKey string
 			var capturedAuth string
+			var capturedBeta string
+			var capturedUA string
+			var capturedApp string
+			var capturedURL string
+			var capturedBody anthropicMessagesRequest
 			client := &http.Client{
 				Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 					capturedAPIKey = req.Header.Get("x-api-key")
 					capturedAuth = req.Header.Get("Authorization")
+					capturedBeta = req.Header.Get("anthropic-beta")
+					capturedUA = req.Header.Get("User-Agent")
+					capturedApp = req.Header.Get("x-app")
+					capturedURL = req.URL.String()
+					body, err := io.ReadAll(req.Body)
+					if err != nil {
+						return nil, err
+					}
+					if err := json.Unmarshal(body, &capturedBody); err != nil {
+						return nil, err
+					}
 					return &http.Response{
 						StatusCode: http.StatusOK,
 						Body:       io.NopCloser(strings.NewReader(`{"content":[{"type":"text","text":"ok"}],"usage":{"input_tokens":1,"output_tokens":1}}`)),
@@ -170,7 +186,11 @@ func TestAnthropicModelGatewayCompleteUsesOAuthBearer(t *testing.T) {
 			if err != nil {
 				t.Fatalf("new gateway failed: %v", err)
 			}
-			if _, err := gateway.Complete(context.Background(), ModelRequest{Model: "claude-test", Step: 1}); err != nil {
+			if _, err := gateway.Complete(context.Background(), ModelRequest{
+				Model:  "claude-sonnet-4-6",
+				Prompt: "You are a planner.",
+				Step:   1,
+			}); err != nil {
 				t.Fatalf("complete failed: %v", err)
 			}
 			if capturedAPIKey != "" {
@@ -179,7 +199,99 @@ func TestAnthropicModelGatewayCompleteUsesOAuthBearer(t *testing.T) {
 			if capturedAuth != tc.wantAuth {
 				t.Fatalf("unexpected Authorization header: got %q want %q", capturedAuth, tc.wantAuth)
 			}
+			if !strings.Contains(capturedBeta, "claude-code-20250219") || !strings.Contains(capturedBeta, "oauth-2025-04-20") {
+				t.Fatalf("expected claude-code oauth betas, got %q", capturedBeta)
+			}
+			if capturedUA != anthropicClaudeCodeUserAgent {
+				t.Fatalf("unexpected User-Agent: got %q want %q", capturedUA, anthropicClaudeCodeUserAgent)
+			}
+			if capturedApp != "cli" {
+				t.Fatalf("unexpected x-app: got %q want cli", capturedApp)
+			}
+			if !strings.Contains(capturedURL, "beta=true") {
+				t.Fatalf("expected ?beta=true on messages URL, got %q", capturedURL)
+			}
+			if len(capturedBody.System) < 3 {
+				t.Fatalf("expected billing+identity+prompt system blocks, got %+v", capturedBody.System)
+			}
+			if !strings.HasPrefix(capturedBody.System[0].Text, "x-anthropic-billing-header:") {
+				t.Fatalf("expected billing header first, got %q", capturedBody.System[0].Text)
+			}
+			if capturedBody.System[1].Text != anthropicClaudeCodeSystemIdentity {
+				t.Fatalf("expected Claude Code identity second, got %q", capturedBody.System[1].Text)
+			}
+			if capturedBody.System[2].Text != "You are a planner." {
+				t.Fatalf("expected original prompt third, got %q", capturedBody.System[2].Text)
+			}
 		})
+	}
+}
+
+func TestAnthropicModelGatewayCompleteAPIKeySkipsClaudeCodeFingerprint(t *testing.T) {
+	var capturedBeta string
+	var capturedUA string
+	var capturedURL string
+	var capturedBody anthropicMessagesRequest
+	client := &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			capturedBeta = req.Header.Get("anthropic-beta")
+			capturedUA = req.Header.Get("User-Agent")
+			capturedURL = req.URL.String()
+			body, err := io.ReadAll(req.Body)
+			if err != nil {
+				return nil, err
+			}
+			if err := json.Unmarshal(body, &capturedBody); err != nil {
+				return nil, err
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(`{"content":[{"type":"text","text":"ok"}],"usage":{"input_tokens":1,"output_tokens":1}}`)),
+				Header:     make(http.Header),
+			}, nil
+		}),
+		Timeout: time.Second,
+	}
+
+	cfg := DefaultAnthropicModelGatewayConfig()
+	cfg.APIKey = "sk-ant-api03-example"
+	cfg.BaseURL = "https://example.invalid/v1"
+	cfg.HTTPClient = client
+
+	gateway, err := NewAnthropicModelGateway(cfg)
+	if err != nil {
+		t.Fatalf("new gateway failed: %v", err)
+	}
+	if _, err := gateway.Complete(context.Background(), ModelRequest{
+		Model:  "claude-sonnet-4-6",
+		Prompt: "You are a planner.",
+		Step:   1,
+	}); err != nil {
+		t.Fatalf("complete failed: %v", err)
+	}
+	if capturedBeta != "" {
+		t.Fatalf("expected no anthropic-beta for API keys, got %q", capturedBeta)
+	}
+	if strings.Contains(capturedUA, "claude-cli/") {
+		t.Fatalf("expected no claude-cli User-Agent for API keys, got %q", capturedUA)
+	}
+	if strings.Contains(capturedURL, "beta=true") {
+		t.Fatalf("expected no beta=true for API keys, got %q", capturedURL)
+	}
+	if len(capturedBody.System) != 1 || capturedBody.System[0].Text != "You are a planner." {
+		t.Fatalf("expected unmodified system prompt for API keys, got %+v", capturedBody.System)
+	}
+}
+
+func TestEnsureAnthropicOAuthSystemIdentityIdempotent(t *testing.T) {
+	in := []anthropicSystemBlock{
+		{Type: "text", Text: anthropicClaudeCodeBillingHeader},
+		{Type: "text", Text: anthropicClaudeCodeSystemIdentity},
+		{Type: "text", Text: "real prompt"},
+	}
+	out := ensureAnthropicOAuthSystemIdentity(in, "sk-ant-oat01-token")
+	if len(out) != 3 {
+		t.Fatalf("expected no duplicate prefix, got %+v", out)
 	}
 }
 
