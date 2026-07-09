@@ -114,6 +114,11 @@ func (w *AgentWorker) Run(ctx context.Context) {
 
 	toolResultCache := make(map[string]string)
 	toolCalled := make(map[string]bool)
+	// Consecutive model failures used to spin through max_steps with no
+	// progress (timeout → continue → timeout). Cap retries so the task
+	// fails closed instead of hanging until the outer agent timeout.
+	const maxConsecutiveModelErrors = 3
+	consecutiveModelErrors := 0
 
 	normalizeContractMessage := func(message string) string {
 		message = strings.TrimSpace(message)
@@ -205,12 +210,28 @@ func (w *AgentWorker) Run(ctx context.Context) {
 			})
 		modelLatencyMS := time.Since(modelStart).Milliseconds()
 		if modelErr != nil {
+			consecutiveModelErrors++
 			if w.onEvent != nil {
-				w.onEvent(fmt.Sprintf("step=%d model_error=%v latency_ms=%d", step, modelErr, modelLatencyMS))
+				w.onEvent(fmt.Sprintf("step=%d model_error=%v latency_ms=%d consecutive_errors=%d", step, modelErr, modelLatencyMS, consecutiveModelErrors))
 			}
 			w.history = w.history[:len(w.history)-1]
+			if mge, retryable := IsModelGatewayError(modelErr); mge != nil && !retryable {
+				if w.onEvent != nil {
+					w.onEvent(fmt.Sprintf("step=%d model_error non-retryable status=%d; stopping", step, mge.StatusCode))
+					w.onEvent("worker stopped model error")
+				}
+				return
+			}
+			if consecutiveModelErrors >= maxConsecutiveModelErrors {
+				if w.onEvent != nil {
+					w.onEvent(fmt.Sprintf("step=%d model_error circuit open after %d consecutive failures; stopping", step, consecutiveModelErrors))
+					w.onEvent("worker stopped model error")
+				}
+				return
+			}
 			continue
 		}
+		consecutiveModelErrors = 0
 		if modelResp.Done && modelResp.Content == "" && len(modelResp.ToolCalls) == 0 {
 			if w.onEvent != nil {
 				w.onEvent(fmt.Sprintf("step=%d model signaled done with no output", step))
