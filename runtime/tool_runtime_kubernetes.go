@@ -78,8 +78,12 @@ func (c *defaultKubernetesJobClient) GetJob(ctx context.Context, namespace, name
 }
 
 func (c *defaultKubernetesJobClient) GetPodLogs(ctx context.Context, namespace, podName string) (string, error) {
+	// Bound log reads so a stalled apiserver stream cannot hang the agent loop
+	// for the full agent timeout (often 20m).
+	logCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
 	req := c.clientset.CoreV1().Pods(namespace).GetLogs(podName, &corev1.PodLogOptions{})
-	stream, err := req.Stream(ctx)
+	stream, err := req.Stream(logCtx)
 	if err != nil {
 		return "", err
 	}
@@ -454,21 +458,49 @@ func (r *KubernetesToolRuntime) waitForJobCompletion(ctx context.Context, tool, 
 	}
 	defer watcher.Stop()
 
+	// Poll as a backstop: watches can miss the terminal event when a Job
+	// completes between Create and Watch connect, and a silent watch never
+	// closes ResultChan — leaving the agent blocked until its outer timeout.
+	poll := time.NewTicker(2 * time.Second)
+	defer poll.Stop()
+
+	checkOnce := func() (done bool, checkErr error) {
+		job, getErr := r.client.GetJob(ctx, namespace, jobName)
+		if getErr != nil {
+			if ctx.Err() != nil {
+				return true, mapKubernetesContextError(tool, ctx.Err())
+			}
+			// Transient get failures are ignored; the next poll/watch event retries.
+			return false, nil
+		}
+		if result := checkJobStatus(tool, jobName, job); result != errJobStillRunning {
+			return true, result
+		}
+		return false, nil
+	}
+
+	if done, checkErr := checkOnce(); done {
+		return checkErr
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
 			return mapKubernetesContextError(tool, ctx.Err())
+		case <-poll.C:
+			if done, checkErr := checkOnce(); done {
+				return checkErr
+			}
 		case event, ok := <-watcher.ResultChan():
 			if !ok {
-				job, getErr := r.client.GetJob(ctx, namespace, jobName)
-				if getErr != nil {
-					return NewToolError(
-						ToolStatusError, ToolCodeExecutionFailed, ToolReasonBackendFailure, true,
-						fmt.Sprintf("kubernetes job watch closed and get failed for tool=%s job=%s", tool, jobName),
-						getErr, map[string]string{"tool": tool, "job": jobName, "isolation_mode": "kubernetes"},
-					)
+				if done, checkErr := checkOnce(); done {
+					return checkErr
 				}
-				return checkJobStatus(tool, jobName, job)
+				return NewToolError(
+					ToolStatusError, ToolCodeExecutionFailed, ToolReasonBackendFailure, true,
+					fmt.Sprintf("kubernetes job watch closed while job still running for tool=%s job=%s", tool, jobName),
+					nil, map[string]string{"tool": tool, "job": jobName, "isolation_mode": "kubernetes"},
+				)
 			}
 			if event.Type == watch.Deleted {
 				return NewToolError(
@@ -491,6 +523,9 @@ func (r *KubernetesToolRuntime) waitForJobCompletion(ctx context.Context, tool, 
 var errJobStillRunning = fmt.Errorf("job still running")
 
 func checkJobStatus(tool, jobName string, job *batchv1.Job) error {
+	if job == nil {
+		return errJobStillRunning
+	}
 	for _, cond := range job.Status.Conditions {
 		switch cond.Type {
 		case batchv1.JobComplete:

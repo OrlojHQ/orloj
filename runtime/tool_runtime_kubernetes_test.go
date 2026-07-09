@@ -211,6 +211,10 @@ func TestKubernetesToolRuntimeContextTimeout(t *testing.T) {
 
 	client := &fakeKubernetesJobClient{
 		watchCh: watchCh,
+		getJob: &batchv1.Job{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-job"},
+			Status:     batchv1.JobStatus{}, // still running
+		},
 	}
 
 	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
@@ -240,6 +244,50 @@ func TestKubernetesToolRuntimeContextTimeout(t *testing.T) {
 	}
 	if toolErr.Code != ToolCodeTimeout {
 		t.Errorf("expected code=%s, got %s", ToolCodeTimeout, toolErr.Code)
+	}
+}
+
+func TestKubernetesToolRuntimePollDetectsCompletionWithoutWatchEvent(t *testing.T) {
+	// Watch stays silent; Job is already Complete when polled via Get.
+	watchCh := make(chan watch.Event)
+	client := &fakeKubernetesJobClient{
+		watchCh: watchCh,
+		getJob: &batchv1.Job{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-job"},
+			Status: batchv1.JobStatus{
+				Conditions: []batchv1.JobCondition{{
+					Type:   batchv1.JobComplete,
+					Status: corev1.ConditionTrue,
+				}},
+			},
+		},
+		pods: []corev1.Pod{{ObjectMeta: metav1.ObjectMeta{Name: "test-pod"}}},
+		logs: "polled-ok",
+	}
+
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
+		"my-tool": {
+			Type: "cli",
+			Cli: resources.ToolCliSpec{
+				Image:   "alpine:latest",
+				Command: "echo",
+				Args:    []string{"hi"},
+			},
+		},
+	})
+
+	rt := NewKubernetesToolRuntimeWithClient(client, KubernetesToolConfig{}, nil)
+	rt = rt.WithRegistry(registry).(*KubernetesToolRuntime)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	out, err := rt.Call(ctx, "my-tool", `{}`)
+	if err != nil {
+		t.Fatalf("expected poll to observe completion, got %v", err)
+	}
+	if strings.TrimSpace(out) != "polled-ok" {
+		t.Fatalf("unexpected output %q", out)
 	}
 }
 
