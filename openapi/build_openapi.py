@@ -2,6 +2,7 @@
 """Regenerate openapi/openapi.yaml from structured path definitions."""
 from __future__ import annotations
 
+import copy
 import json
 import pathlib
 import subprocess
@@ -398,6 +399,208 @@ def build() -> dict:
                 "404": {"description": "Not found", "content": text_plain_error()},
                 "500": {"description": "Backend error", "content": text_plain_error()},
                 "503": {"description": "Store unavailable", "content": text_plain_error()},
+                "default": {"description": "Error", "content": text_plain_error()},
+            },
+        }
+    }
+
+    add_crud(
+        paths,
+        "/v1/context-adapters",
+        "context-adapters",
+        "./schemas/context-adapter.yaml#/components/schemas/ContextAdapterList",
+        "./schemas/context-adapter.yaml#/components/schemas/ContextAdapter",
+        with_status=False,
+    )
+
+    add_crud(
+        paths,
+        "/v1/eval-datasets",
+        "eval-datasets",
+        "./schemas/eval-dataset.yaml#/components/schemas/EvalDatasetList",
+        "./schemas/eval-dataset.yaml#/components/schemas/EvalDataset",
+        with_status=True,
+    )
+
+    add_crud(
+        paths,
+        "/v1/eval-runs",
+        "eval-runs",
+        "./schemas/eval-run.yaml#/components/schemas/EvalRunList",
+        "./schemas/eval-run.yaml#/components/schemas/EvalRun",
+        with_status=True,
+    )
+    eval_run_ref = "./schemas/eval-run.yaml#/components/schemas/EvalRun"
+    eval_result_ref = "./schemas/eval-run.yaml#/components/schemas/EvalSampleResult"
+    for action in ("start", "cancel", "finalize"):
+        paths[f"/v1/eval-runs/{{name}}/{action}"] = {
+            "post": {
+                "tags": ["eval-runs"],
+                "summary": f"{action.capitalize()} an eval run",
+                "security": SEC_WRITER,
+                "parameters": [
+                    {
+                        "name": "name",
+                        "in": "path",
+                        "required": True,
+                        "schema": {"type": "string"},
+                    },
+                    {"name": "namespace", "in": "query", "schema": {"type": "string"}},
+                ],
+                "responses": {
+                    "200": {"description": "OK", "content": json_body(eval_run_ref)},
+                    "404": {"description": "Not found", "content": text_plain_error()},
+                    "409": {"description": "Conflict", "content": text_plain_error()},
+                    "default": {"description": "Error", "content": text_plain_error()},
+                },
+            }
+        }
+    paths["/v1/eval-runs/{name}/export"] = {
+        "get": {
+            "tags": ["eval-runs"],
+            "summary": "Export eval run sample results",
+            "security": SEC_READER,
+            "parameters": [
+                {
+                    "name": "name",
+                    "in": "path",
+                    "required": True,
+                    "schema": {"type": "string"},
+                },
+                {"name": "namespace", "in": "query", "schema": {"type": "string"}},
+                {
+                    "name": "format",
+                    "in": "query",
+                    "schema": {"type": "string", "enum": ["json", "csv"], "default": "json"},
+                },
+            ],
+            "responses": {
+                "200": {
+                    "description": "OK",
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "array",
+                                "items": schema_ref(eval_result_ref),
+                            }
+                        },
+                        "text/csv": {"schema": {"type": "string"}},
+                    },
+                },
+                "400": {"description": "Bad request", "content": text_plain_error()},
+                "404": {"description": "Not found", "content": text_plain_error()},
+                "default": {"description": "Error", "content": text_plain_error()},
+            },
+        }
+    }
+    paths["/v1/eval-runs/{name}/results"] = {
+        "post": {
+            "tags": ["eval-runs"],
+            "summary": "Bulk-import sample annotations",
+            "security": SEC_WRITER,
+            "parameters": [
+                {
+                    "name": "name",
+                    "in": "path",
+                    "required": True,
+                    "schema": {"type": "string"},
+                },
+                {"name": "namespace", "in": "query", "schema": {"type": "string"}},
+            ],
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "sample_name": {"type": "string"},
+                                    "score": {"type": ["number", "null"]},
+                                    "pass": {"type": ["boolean", "null"]},
+                                    "comment": {"type": "string"},
+                                },
+                            },
+                        }
+                    }
+                },
+            },
+            "responses": {
+                "200": {"description": "OK", "content": json_body(eval_run_ref)},
+                "400": {"description": "Bad request", "content": text_plain_error()},
+                "404": {"description": "Not found", "content": text_plain_error()},
+                "default": {"description": "Error", "content": text_plain_error()},
+            },
+        }
+    }
+    paths["/v1/eval-runs/{name}/results/{sample_name}"] = {
+        "put": {
+            "tags": ["eval-runs"],
+            "summary": "Annotate a single sample result",
+            "security": SEC_WRITER,
+            "parameters": [
+                {
+                    "name": "name",
+                    "in": "path",
+                    "required": True,
+                    "schema": {"type": "string"},
+                },
+                {
+                    "name": "sample_name",
+                    "in": "path",
+                    "required": True,
+                    "schema": {"type": "string"},
+                },
+                {"name": "namespace", "in": "query", "schema": {"type": "string"}},
+            ],
+            "requestBody": {
+                "required": True,
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "score": {"type": ["number", "null"]},
+                                "pass": {"type": ["boolean", "null"]},
+                                "comment": {"type": "string"},
+                            },
+                        }
+                    }
+                },
+            },
+            "responses": {
+                "200": {"description": "OK", "content": json_body(eval_run_ref)},
+                "400": {"description": "Bad request", "content": text_plain_error()},
+                "404": {"description": "Not found", "content": text_plain_error()},
+                "default": {"description": "Error", "content": text_plain_error()},
+            },
+        }
+    }
+    paths["/v1/eval-runs/compare"] = {
+        "get": {
+            "tags": ["eval-runs"],
+            "summary": "Compare multiple eval runs",
+            "security": SEC_READER,
+            "parameters": [
+                {
+                    "name": "runs",
+                    "in": "query",
+                    "required": True,
+                    "schema": {"type": "string"},
+                    "description": "Comma-separated eval run names (at least two).",
+                },
+                {"name": "namespace", "in": "query", "schema": {"type": "string"}},
+            ],
+            "responses": {
+                "200": {
+                    "description": "OK",
+                    "content": json_body(
+                        "./schemas/eval-run.yaml#/components/schemas/EvalRunCompareResponse"
+                    ),
+                },
+                "400": {"description": "Bad request", "content": text_plain_error()},
+                "404": {"description": "Not found", "content": text_plain_error()},
                 "default": {"description": "Error", "content": text_plain_error()},
             },
         }
@@ -970,6 +1173,8 @@ def build() -> dict:
             },
         }
     }
+    # Alias registered by the server for Agent Card discovery compatibility.
+    paths["/.well-known/agent.json"] = copy.deepcopy(paths["/.well-known/agent-card.json"])
     system_card_get = {
         "get": {
             "tags": ["a2a"],
@@ -1151,6 +1356,39 @@ def build() -> dict:
                 },
                 "401": {"description": "Invalid credentials", "content": text_plain_error()},
                 "409": {"description": "Setup required", "content": text_plain_error()},
+                "429": {"description": "Rate limited", "content": text_plain_error()},
+                "default": {"description": "Error", "content": text_plain_error()},
+            },
+        }
+    }
+    paths["/v1/auth/cli-token"] = {
+        "post": {
+            "tags": ["auth"],
+            "summary": "Authenticate with username/password and obtain a CLI bearer token",
+            "description": (
+                "Validates credentials against the native user store and mints a new API "
+                "bearer token for CLI use. Only available when the server runs in native "
+                "auth mode."
+            ),
+            "security": [],
+            "requestBody": {
+                "required": True,
+                "content": json_body(
+                    "./schemas/common.yaml#/components/schemas/AuthCLITokenRequest"
+                ),
+            },
+            "responses": {
+                "201": {
+                    "description": "Token created",
+                    "content": json_body(
+                        "./schemas/common.yaml#/components/schemas/AuthCLITokenResponse"
+                    ),
+                },
+                "400": {
+                    "description": "Bad request (non-native mode or missing fields)",
+                    "content": text_plain_error(),
+                },
+                "401": {"description": "Invalid credentials", "content": text_plain_error()},
                 "429": {"description": "Rate limited", "content": text_plain_error()},
                 "default": {"description": "Error", "content": text_plain_error()},
             },
@@ -1415,6 +1653,9 @@ def build() -> dict:
             },
             {"name": "sealed-secrets"},
             {"name": "memories"},
+            {"name": "context-adapters"},
+            {"name": "eval-datasets"},
+            {"name": "eval-runs"},
             {"name": "agent-policies"},
             {"name": "agent-roles"},
             {"name": "tool-permissions"},

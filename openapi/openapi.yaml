@@ -32,6 +32,9 @@ tags:
     exists).
 - name: sealed-secrets
 - name: memories
+- name: context-adapters
+- name: eval-datasets
+- name: eval-runs
 - name: agent-policies
 - name: agent-roles
 - name: tool-permissions
@@ -2319,6 +2322,1251 @@ paths:
                 "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
         '503':
           description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/context-adapters":
+    get:
+      tags:
+      - context-adapters
+      parameters:
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+      - name: after
+        in: query
+        schema:
+          type: string
+      - name: labelSelector
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/context-adapter.yaml#/components/schemas/ContextAdapterList"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    post:
+      tags:
+      - context-adapters
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/context-adapter.yaml#/components/schemas/ContextAdapter"
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/context-adapter.yaml#/components/schemas/ContextAdapter"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/context-adapters/{name}":
+    get:
+      tags:
+      - context-adapters
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/context-adapter.yaml#/components/schemas/ContextAdapter"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    put:
+      tags:
+      - context-adapters
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/context-adapter.yaml#/components/schemas/ContextAdapter"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/context-adapter.yaml#/components/schemas/ContextAdapter"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    delete:
+      tags:
+      - context-adapters
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/eval-datasets":
+    get:
+      tags:
+      - eval-datasets
+      parameters:
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+      - name: after
+        in: query
+        schema:
+          type: string
+      - name: labelSelector
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/eval-dataset.yaml#/components/schemas/EvalDatasetList"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    post:
+      tags:
+      - eval-datasets
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/eval-dataset.yaml#/components/schemas/EvalDataset"
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/eval-dataset.yaml#/components/schemas/EvalDataset"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/eval-datasets/{name}/status":
+    get:
+      tags:
+      - eval-datasets
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    put:
+      tags:
+      - eval-datasets
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/eval-datasets/{name}":
+    get:
+      tags:
+      - eval-datasets
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/eval-dataset.yaml#/components/schemas/EvalDataset"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    put:
+      tags:
+      - eval-datasets
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/eval-dataset.yaml#/components/schemas/EvalDataset"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/eval-dataset.yaml#/components/schemas/EvalDataset"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    delete:
+      tags:
+      - eval-datasets
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/eval-runs":
+    get:
+      tags:
+      - eval-runs
+      parameters:
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+      - name: after
+        in: query
+        schema:
+          type: string
+      - name: labelSelector
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/eval-run.yaml#/components/schemas/EvalRunList"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    post:
+      tags:
+      - eval-runs
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/eval-run.yaml#/components/schemas/EvalRun"
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/eval-run.yaml#/components/schemas/EvalRun"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/eval-runs/{name}/status":
+    get:
+      tags:
+      - eval-runs
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    put:
+      tags:
+      - eval-runs
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/StatusEnvelope"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/eval-runs/{name}":
+    get:
+      tags:
+      - eval-runs
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/eval-run.yaml#/components/schemas/EvalRun"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    put:
+      tags:
+      - eval-runs
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/eval-run.yaml#/components/schemas/EvalRun"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/eval-run.yaml#/components/schemas/EvalRun"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    delete:
+      tags:
+      - eval-runs
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/eval-runs/{name}/start":
+    post:
+      tags:
+      - eval-runs
+      summary: Start an eval run
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/eval-run.yaml#/components/schemas/EvalRun"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/eval-runs/{name}/cancel":
+    post:
+      tags:
+      - eval-runs
+      summary: Cancel an eval run
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/eval-run.yaml#/components/schemas/EvalRun"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/eval-runs/{name}/finalize":
+    post:
+      tags:
+      - eval-runs
+      summary: Finalize an eval run
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/eval-run.yaml#/components/schemas/EvalRun"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/eval-runs/{name}/export":
+    get:
+      tags:
+      - eval-runs
+      summary: Export eval run sample results
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: format
+        in: query
+        schema:
+          type: string
+          enum:
+          - json
+          - csv
+          default: json
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  "$ref": "./schemas/eval-run.yaml#/components/schemas/EvalSampleResult"
+            text/csv:
+              schema:
+                type: string
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/eval-runs/{name}/results":
+    post:
+      tags:
+      - eval-runs
+      summary: Bulk-import sample annotations
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: object
+                properties:
+                  sample_name:
+                    type: string
+                  score:
+                    type:
+                    - number
+                    - 'null'
+                  pass:
+                    type:
+                    - boolean
+                    - 'null'
+                  comment:
+                    type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/eval-run.yaml#/components/schemas/EvalRun"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/eval-runs/{name}/results/{sample_name}":
+    put:
+      tags:
+      - eval-runs
+      summary: Annotate a single sample result
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: sample_name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                score:
+                  type:
+                  - number
+                  - 'null'
+                pass:
+                  type:
+                  - boolean
+                  - 'null'
+                comment:
+                  type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/eval-run.yaml#/components/schemas/EvalRun"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/eval-runs/compare":
+    get:
+      tags:
+      - eval-runs
+      summary: Compare multiple eval runs
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: runs
+        in: query
+        required: true
+        schema:
+          type: string
+        description: Comma-separated eval run names (at least two).
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/eval-run.yaml#/components/schemas/EvalRunCompareResponse"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
           content:
             text/plain:
               schema:
@@ -5803,6 +7051,33 @@ paths:
             text/plain:
               schema:
                 "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/.well-known/agent.json":
+    get:
+      tags:
+      - a2a
+      summary: Get the default Agent Card
+      description: Returns the A2A Agent Card when exactly one AgentSystem has spec.a2a.enabled=true.
+        Use the registry or per-system card URLs when multiple systems are exposed.
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/a2a.yaml#/components/schemas/AgentCard"
+        '404':
+          description: No single default AgentSystem available
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
   "/v1/agent-systems/{name}/.well-known/agent-card.json":
     get:
       tags:
@@ -5873,10 +7148,8 @@ paths:
       - a2a
       summary: A2A JSON-RPC endpoint
       description: 'JSON-RPC 2.0 endpoint implementing the A2A protocol. Supports
-        methods: tasks/send, tasks/get, tasks/cancel, tasks/sendSubscribe. Auth
-        depends on the target AgentSystem spec.a2a.auth policy (public or bearer).'
+        methods: tasks/send, tasks/get, tasks/cancel, tasks/sendSubscribe.'
       security:
-      - {}
       - bearerAuth: []
       requestBody:
         required: true
@@ -5910,9 +7183,7 @@ paths:
       summary: A2A JSON-RPC endpoint for a specific AgentSystem
       description: JSON-RPC 2.0 endpoint for the named AgentSystem. The system name
         in the path determines routing; no target field is needed in request params.
-        Auth depends on the target AgentSystem spec.a2a.auth policy (public or bearer).
       security:
-      - {}
       - bearerAuth: []
       requestBody:
         required: true
@@ -5950,10 +7221,8 @@ paths:
       tags:
       - a2a
       summary: A2A JSON-RPC endpoint for a specific AgentSystem (legacy path)
-      description: Legacy alias for /v1/agent-systems/{name}/a2a. Auth depends on
-        the target AgentSystem spec.a2a.auth policy (public or bearer).
+      description: Legacy alias for /v1/agent-systems/{name}/a2a.
       security:
-      - {}
       - bearerAuth: []
       requestBody:
         required: true
@@ -5992,10 +7261,8 @@ paths:
       - a2a
       summary: List A2A agent registry
       description: Returns locally exposed A2A-enabled AgentSystem cards visible to
-        the caller. Unauthenticated requests see only public systems; authenticated
-        requests see public systems plus systems the token is scoped to.
+        the bearer token plus configured remote agent entries with cache metadata.
       security:
-      - {}
       - bearerAuth: []
       responses:
         '200':
@@ -6167,9 +7434,8 @@ paths:
       tags:
       - auth
       summary: Authenticate with username/password and obtain a CLI bearer token
-      description: |
-        Validates credentials against the native user store and mints a new API
-        bearer token for CLI use. Only available when the server runs in native
+      description: Validates credentials against the native user store and mints a
+        new API bearer token for CLI use. Only available when the server runs in native
         auth mode.
       security: []
       requestBody:

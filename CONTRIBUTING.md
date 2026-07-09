@@ -90,9 +90,11 @@ The root README includes visual media for **Orloj in Action** backed by assets i
 
 - **[openapi/openapi.yaml](openapi/openapi.yaml)** is **generated**. Do not edit it by hand for `paths`, `info`, or `tags`—changes are overwritten when someone runs the generator.
 - **Regenerate** from the repo root: `python3 openapi/build_openapi.py` (uses Ruby to emit YAML). CI lints with `npx @redocly/cli lint openapi/openapi.yaml`.
+- **Path coverage:** run `python3 scripts/check_openapi_routes.py` to ensure every `/v1/...` (and related) mux route in `api/server.go` appears in OpenAPI. CI fails on missing paths except documented known gaps in that script. Close known gaps by adding the paths to `openapi/build_openapi.py`.
 - **Where to edit:**
   - **[openapi/schemas/\*.yaml](openapi/schemas/)** — `components` schemas (fields, types, `description` on properties). Referenced by `$ref` from the root spec.
   - **[openapi/build_openapi.py](openapi/build_openapi.py)** — `info.description` (keep it high-level), **`tags`** (including tag `description` for groups like secrets), and all **path operations** (`get` / `put` / …). Use operation-level text for resource-specific notes; use tag descriptions for behavior shared by all operations under that tag.
+- After API changes that affect clients, sync the Python SDK OpenAPI pin (`orloj-python-sdk` `scripts/sync_openapi.py`) so external clients stay aligned.
 
 ## Review and Response SLA
 

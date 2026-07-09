@@ -97,6 +97,10 @@ jobs:
         if: needs.changes.outputs.code == 'true'
         run: npx --yes @redocly/cli@1.28.5 lint openapi/openapi.yaml
 
+      - name: OpenAPI path coverage vs server mux
+        if: needs.changes.outputs.code == 'true'
+        run: python3 scripts/check_openapi_routes.py
+
   reliability:
     needs: [changes, build-and-test]
     runs-on: ubuntu-latest
