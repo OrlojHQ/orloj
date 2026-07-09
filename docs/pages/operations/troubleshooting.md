@@ -83,12 +83,14 @@ Fix:
 Cause:
 
 - missing or invalid API key on the ModelEndpoint resource.
+- Anthropic OAuth access token (`sk-ant-oat...`) used against a build that only sends `x-api-key` (pre-OAuth support), or a standard API key stored with an accidental `Bearer ` prefix.
 
 Fix:
 
 - verify `auth.secretRef` is set for providers that require auth (`openai`, `anthropic`, `azure-openai`).
 - for `openai-compatible`, auth is optional, but if `auth.secretRef` is set, verify that Secret exists and is valid.
 - if you use env-based secret resolution, set `ORLOJ_SECRET_<name>` (or your configured prefix) to match the `secretRef` value.
+- for Anthropic: store either a standard API key (`sk-ant-api...`) or an OAuth access token (`sk-ant-oat...`) in the secret. Orloj selects `x-api-key` vs `Authorization: Bearer` from the token prefix — do not mix prefixes.
 
 ### Wasm/container runtime errors
 
