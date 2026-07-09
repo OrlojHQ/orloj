@@ -458,6 +458,103 @@ func TestKubernetesToolRuntimeCreateJobError(t *testing.T) {
 	}
 }
 
+func TestParseToolMemoryQuantity(t *testing.T) {
+	tests := []struct {
+		input   string
+		want    int64
+		wantErr bool
+	}{
+		{"256m", 256 * 1024 * 1024, false},
+		{"512Mi", 512 * 1024 * 1024, false},
+		{"1g", 1024 * 1024 * 1024, false},
+		{"1Gi", 1024 * 1024 * 1024, false},
+		{"", 0, true},
+		{"not-a-size", 0, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got, err := parseToolMemoryQuantity(tt.input)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error for %q, got %s", tt.input, got.String())
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error for %q: %v", tt.input, err)
+			}
+			if got.Value() != tt.want {
+				t.Fatalf("parseToolMemoryQuantity(%q) = %d (%s), want %d", tt.input, got.Value(), got.String(), tt.want)
+			}
+			// Regression: Docker-style "256m" must not become Kubernetes millibytes.
+			if tt.input == "256m" && got.Value() < 1024 {
+				t.Fatalf("256m collapsed to millibytes (%s); projected SA mounts would ENOSPC", got.String())
+			}
+		})
+	}
+}
+
+func TestToolJobResourceRequirementsDockerMemory(t *testing.T) {
+	reqs := toolJobResourceRequirements("256m", "0.5", "", "")
+	mem := reqs.Limits[corev1.ResourceMemory]
+	if mem.Value() != 256*1024*1024 {
+		t.Fatalf("expected 256Mi worth of bytes, got %s (%d)", mem.String(), mem.Value())
+	}
+	cpu := reqs.Limits[corev1.ResourceCPU]
+	if cpu.AsApproximateFloat64() != 0.5 {
+		t.Fatalf("expected 0.5 CPU, got %s", cpu.String())
+	}
+}
+
+func TestToolJobResourceRequirementsFallsBackToDefaults(t *testing.T) {
+	reqs := toolJobResourceRequirements("", "", "128m", "0.25")
+	mem := reqs.Limits[corev1.ResourceMemory]
+	if mem.Value() != 128*1024*1024 {
+		t.Fatalf("expected default 128m as bytes, got %s (%d)", mem.String(), mem.Value())
+	}
+}
+
+func TestKubernetesToolRuntimeBuildJobConvertsDockerMemory(t *testing.T) {
+	rt := NewKubernetesToolRuntimeWithClient(&fakeKubernetesJobClient{}, KubernetesToolConfig{
+		Namespace:     "test-ns",
+		DefaultMemory: "64m",
+		DefaultCPUs:   "0.25",
+	}, nil)
+
+	job := rt.buildJob("slack-notify", "node:20-alpine", []string{"true"}, nil, "", resources.ToolSpec{
+		Type: "cli",
+		Cli: resources.ToolCliSpec{
+			Resources: resources.ContainerResources{Memory: "256m", CPUs: "0.5"},
+		},
+	})
+	container := job.Spec.Template.Spec.Containers[0]
+	mem := container.Resources.Limits[corev1.ResourceMemory]
+	if mem.Value() != 256*1024*1024 {
+		t.Fatalf("job memory = %s (%d), want 256Mi bytes", mem.String(), mem.Value())
+	}
+	// Ensure we did not pass the raw Docker string through resource.MustParse.
+	if mem.String() == "256m" {
+		t.Fatal("job still carries Docker-style 256m quantity (millibytes)")
+	}
+}
+
+func TestWrapWithStdinQuotesMultiArgCommand(t *testing.T) {
+	got := wrapWithStdin([]string{"sh", "-c", "INPUT=$(cat); echo \"$INPUT\""}, `{"message":"hi"}`)
+	if len(got) != 3 || got[0] != "/bin/sh" || got[1] != "-c" {
+		t.Fatalf("unexpected wrapper argv: %v", got)
+	}
+	script := got[2]
+	if !strings.Contains(script, "| 'sh' '-c'") && !strings.Contains(script, "| 'sh' '-c' '") {
+		// Expect each original argv entry to be single-quoted.
+		if !strings.Contains(script, "'sh'") || !strings.Contains(script, "'-c'") {
+			t.Fatalf("expected quoted multi-arg command in script, got %q", script)
+		}
+	}
+	if strings.Contains(script, "| sh -c INPUT=") {
+		t.Fatalf("unquoted join would break sh -c: %q", script)
+	}
+}
+
 func TestSanitizeK8sName(t *testing.T) {
 	tests := []struct {
 		input    string

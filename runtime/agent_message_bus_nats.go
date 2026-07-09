@@ -27,7 +27,8 @@ const (
 	defaultConsumerMaxDeliver = 10
 
 	// defaultConsumerAckWait is the time the server waits for an ack before
-	// redelivering.  Matches the long-running agent execution window.
+	// redelivering. Handlers must call ExtendLease/InProgress periodically
+	// during long agent/tool runs; this is the idle window between heartbeats.
 	defaultConsumerAckWait = 120 * time.Second
 )
 
@@ -79,6 +80,13 @@ func (d *natsAgentMessageDelivery) NackWithDelay(_ context.Context, delay time.D
 }
 
 func (d *natsAgentMessageDelivery) ExtendLease(_ context.Context, _ time.Duration) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.acked {
+		return nil
+	}
+	// InProgress resets AckWait so long-running handlers are not redelivered
+	// while still actively processing.
 	return d.msg.InProgress()
 }
 

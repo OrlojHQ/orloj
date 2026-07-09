@@ -374,10 +374,10 @@ func (m *AgentMessageConsumerManager) handleDelivery(ctx context.Context, _ stri
 		return nil
 	}
 
-	return m.processMessage(ctx, taskKey, task, msg)
+	return m.processMessage(ctx, taskKey, task, msg, delivery)
 }
 
-func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKey string, cachedTask resources.Task, msg AgentMessage) error {
+func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKey string, cachedTask resources.Task, msg AgentMessage, delivery AgentMessageDelivery) error {
 	// Restore the W3C trace context from task annotations so the message span
 	// is linked as a continuation of the HTTP request that created the task.
 	// Uses the task already fetched by handleDelivery to avoid a redundant lookup.
@@ -400,16 +400,23 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 		return RetryAfter(retryAfter, nil)
 	}
 
+	// Ownership is held; keep the task lease + NATS AckWait alive for the full
+	// agent/tool window so another worker cannot takeover mid-run.
+	parentCtx := ctx
+	hbCtx, stopHeartbeat := m.startMessageLeaseHeartbeat(ctx, delivery, taskKey)
+	defer stopHeartbeat()
+	ctx = hbCtx
+
 	ns, _ := splitTaskKey(taskKey)
 	systemKey := scopedTaskName(ns, task.Spec.System)
 	system, ok, sysErr := m.systems.Get(ctx, systemKey)
 	if sysErr != nil {
-		return sysErr
+		return remapLeaseLost(sysErr, hbCtx, parentCtx)
 	}
 	if !ok {
 		retryScheduled, delay, markErr := m.recordRetryOrDeadLetter(ctx, taskKey, msg, record, fmt.Errorf("agentsystem %q not found", task.Spec.System))
 		if markErr != nil {
-			return markErr
+			return remapLeaseLost(markErr, hbCtx, parentCtx)
 		}
 		if retryScheduled {
 			return RetryAfter(delay, nil)
@@ -420,7 +427,7 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 
 	joinDecision, err := m.applyJoinGate(ctx, taskKey, msg, system)
 	if err != nil {
-		return err
+		return remapLeaseLost(err, hbCtx, parentCtx)
 	}
 	if joinDecision.SkipExecution {
 		m.debugf("agent message skipped task=%s message_id=%s reason=join_gate_waiting mode=%s required=%d received=%d", taskKey, msg.MessageID, joinDecision.JoinMode, joinDecision.Required, len(joinDecision.Sources))
@@ -429,7 +436,7 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 
 	delegationDecision, err := m.applyDelegationGate(ctx, taskKey, msg, system)
 	if err != nil {
-		return err
+		return remapLeaseLost(err, hbCtx, parentCtx)
 	}
 	if delegationDecision.SkipExecution {
 		m.debugf("agent message skipped task=%s message_id=%s reason=delegation_gate_waiting mode=%s required=%d received=%d", taskKey, msg.MessageID, delegationDecision.DelegationMode, delegationDecision.Required, len(delegationDecision.Sources))
@@ -439,12 +446,12 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 	agentKey := scopedTaskName(ns, msg.ToAgent)
 	agent, ok, agentErr := m.agents.Get(ctx, agentKey)
 	if agentErr != nil {
-		return agentErr
+		return remapLeaseLost(agentErr, hbCtx, parentCtx)
 	}
 	if !ok {
 		retryScheduled, delay, markErr := m.recordRetryOrDeadLetter(ctx, taskKey, msg, record, fmt.Errorf("agent %q not found for message processing", msg.ToAgent))
 		if markErr != nil {
-			return markErr
+			return remapLeaseLost(markErr, hbCtx, parentCtx)
 		}
 		if retryScheduled {
 			return RetryAfter(delay, nil)
@@ -455,7 +462,7 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 	if err != nil {
 		retryScheduled, delay, markErr := m.recordRetryOrDeadLetter(ctx, taskKey, msg, record, fmt.Errorf("agent %s model resolution failed: %w", agent.Metadata.Name, err))
 		if markErr != nil {
-			return markErr
+			return remapLeaseLost(markErr, hbCtx, parentCtx)
 		}
 		if retryScheduled {
 			return RetryAfter(delay, nil)
@@ -664,6 +671,9 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 	}
 	if err != nil {
 		telemetry.EndSpanError(agentSpan, err)
+		if remapped := remapLeaseLost(err, hbCtx, parentCtx); errors.Is(remapped, errMessageLeaseLost) {
+			return remapped
+		}
 		if IsApprovalRequiredError(err) && m.toolApprovals != nil {
 			if pauseErr := m.pauseTaskForToolApproval(ctx, taskKey, msg, record, agent, err); pauseErr == nil {
 				return RetryAfter(2*time.Second, nil)
@@ -2085,6 +2095,106 @@ func extendWorkerLease(task *resources.Task, workerID string, duration time.Dura
 	now := time.Now().UTC()
 	task.Status.LastHeartbeat = now.Format(time.RFC3339Nano)
 	task.Status.LeaseUntil = now.Add(duration).Format(time.RFC3339Nano)
+}
+
+// errMessageLeaseLost is returned when a worker loses message ownership mid-run
+// (task deleted, terminal, or claimed by another worker). Callers should stop
+// processing rather than continue as a zombie.
+var errMessageLeaseLost = errors.New("message lease lost")
+
+func remapLeaseLost(err error, hbCtx, parentCtx context.Context) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, context.Canceled) && hbCtx != nil && errors.Is(hbCtx.Err(), context.Canceled) && (parentCtx == nil || parentCtx.Err() == nil) {
+		return errMessageLeaseLost
+	}
+	return err
+}
+
+// startMessageLeaseHeartbeat periodically renews the task lease and signals
+// NATS InProgress so AckWait does not expire during long agent/tool runs.
+// The returned context is cancelled if ownership is lost so in-flight model
+// HTTP calls abort instead of racing a takeover worker.
+func (m *AgentMessageConsumerManager) startMessageLeaseHeartbeat(
+	parent context.Context,
+	delivery AgentMessageDelivery,
+	taskKey string,
+) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(parent)
+	interval := m.leaseExtend / 3
+	switch {
+	case interval <= 0:
+		interval = 5 * time.Second
+	case interval > 15*time.Second:
+		interval = 15 * time.Second
+	case interval < 5*time.Second && m.leaseExtend >= 15*time.Second:
+		// Production leases are >=30s; keep a 5s floor so we renew well
+		// before AckWait/lease expiry. Short leases are allowed for tests.
+		interval = 5 * time.Second
+	}
+
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if delivery != nil {
+					if err := delivery.ExtendLease(ctx, m.leaseExtend); err != nil {
+						m.debugf("message bus lease extend failed task=%s: %v", taskKey, err)
+					}
+				}
+				if err := m.renewTaskMessageLease(ctx, taskKey); err != nil {
+					m.debugf("task message lease renew failed task=%s: %v", taskKey, err)
+					if errors.Is(err, errMessageLeaseLost) {
+						cancel()
+						return
+					}
+				}
+			}
+		}
+	}()
+	return ctx, cancel
+}
+
+func (m *AgentMessageConsumerManager) renewTaskMessageLease(ctx context.Context, taskKey string) error {
+	if m == nil || m.tasks == nil {
+		return nil
+	}
+	worker := strings.TrimSpace(m.workerID)
+	if worker == "" {
+		return nil
+	}
+	for attempt := 0; attempt < 5; attempt++ {
+		task, ok, err := m.tasks.Get(ctx, taskKey)
+		if err != nil {
+			return err
+		}
+		if !ok || isTerminalTaskPhase(task.Status.Phase) {
+			return errMessageLeaseLost
+		}
+		claimedBy := strings.TrimSpace(task.Status.ClaimedBy)
+		if claimedBy != "" && !strings.EqualFold(claimedBy, worker) {
+			return errMessageLeaseLost
+		}
+		if claimedBy == "" {
+			task.Status.ClaimedBy = worker
+			task.Status.AssignedWorker = worker
+		}
+		extendWorkerLease(&task, worker, m.leaseExtend)
+		task.Status.ObservedGeneration = task.Metadata.Generation
+		if _, err := m.tasks.Upsert(ctx, task); err != nil {
+			if !casRetryDelay(ctx, attempt) {
+				return ctx.Err()
+			}
+			continue
+		}
+		return nil
+	}
+	return fmt.Errorf("task lease renew exhausted retries for %s", taskKey)
 }
 
 func hasTraceMarker(trace []resources.TaskTraceEvent, eventType, messageID string) bool {
