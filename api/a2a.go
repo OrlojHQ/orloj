@@ -26,6 +26,7 @@ type A2AConfig struct {
 	StreamingEnabled       bool
 	AuthSchemes            []string
 	Registry               *a2a.Registry
+	CardSigner             a2a.CardSigner
 	RateLimitRPM           int
 	MaxConcurrentSubscribe int
 }
@@ -54,6 +55,11 @@ func (s *Server) handleWellKnownAgentCard(w http.ResponseWriter, r *http.Request
 		config.AuthSchemes = nil
 	}
 	card := a2a.GenerateSystemCard(systems[0], agentsForSystem(systems[0], agents), tools, config)
+	card, err = s.signA2ACard(card)
+	if err != nil {
+		http.Error(w, "failed to sign Agent Card", http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "public, max-age=300")
@@ -91,6 +97,11 @@ func (s *Server) handleAgentCard(w http.ResponseWriter, r *http.Request) {
 		config.AuthSchemes = nil
 	}
 	card := a2a.GenerateSystemCard(system, agentsForSystem(system, agents), tools, config)
+	card, err = s.signA2ACard(card)
+	if err != nil {
+		http.Error(w, "failed to sign Agent Card", http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "public, max-age=300")
@@ -529,6 +540,11 @@ func (s *Server) handleA2ARegistry(w http.ResponseWriter, r *http.Request) {
 				config.AuthSchemes = nil
 			}
 			card := a2a.GenerateSystemCard(system, agentsForSystem(system, agents), tools, config)
+			card, err = s.signA2ACard(card)
+			if err != nil {
+				http.Error(w, "failed to sign Agent Card", http.StatusInternalServerError)
+				return
+			}
 			localCards = append(localCards, card)
 		}
 	}
@@ -812,6 +828,13 @@ func writeA2AV1VersionError(w http.ResponseWriter, id any, version string) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
+}
+
+func (s *Server) signA2ACard(card a2a.AgentCard) (a2a.AgentCard, error) {
+	if s.a2aConfig == nil || s.a2aConfig.CardSigner == nil {
+		return card, nil
+	}
+	return a2a.SignAgentCard(card, s.a2aConfig.CardSigner)
 }
 
 func sendSSEEvent(w http.ResponseWriter, flusher http.Flusher, eventType string, data any) error {

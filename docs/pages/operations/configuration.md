@@ -87,6 +87,8 @@ Example:
 | `ORLOJ_A2A_RATE_LIMIT_ENABLED` | `orlojd` | `--a2a-rate-limit-enabled` | Enable per-IP rate limiting on A2A endpoints. Default: `true`. |
 | `ORLOJ_A2A_RATE_LIMIT_RPM` | `orlojd` | `--a2a-rate-limit-rpm` | Max JSON-RPC requests per minute per IP when rate limiting is enabled. Default: `30`. |
 | `ORLOJ_A2A_RATE_LIMIT_MAX_SUBSCRIBE` | `orlojd` | `--a2a-rate-limit-max-subscribe` | Max concurrent SSE subscribe connections globally. Default: `10`. |
+| `ORLOJ_A2A_CARD_SIGNING_KEY_FILE` | `orlojd` | `--a2a-card-signing-key-file` | Optional RSA, P-256 ECDSA, or Ed25519 PEM private key used to sign Agent Cards. |
+| `ORLOJ_A2A_CARD_SIGNING_KEY_ID` | `orlojd` | `--a2a-card-signing-key-id` | JWS `kid` for signed Agent Cards. Default: `orloj`. |
 
 ## Server and Worker Flags
 

@@ -303,6 +303,14 @@ a2a:
   #   url: https://partner.example.com/.well-known/agent-card.json
   #   authType: bearer
   #   secretRef: partner-token
+  # -- Optional Agent Card JWS signing configuration
+  cardSigning:
+    # -- Kubernetes Secret containing an RSA, P-256 ECDSA, or Ed25519 PEM private key
+    existingSecret: ""
+    # -- Secret data key containing the PEM private key
+    secretKey: "private-key.pem"
+    # -- JWS kid value advertised in signed Agent Cards
+    keyID: "orloj"
   # -- Rate limiting for A2A endpoints
   rateLimit:
     # -- Enable rate limiting on A2A endpoints

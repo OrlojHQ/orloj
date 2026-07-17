@@ -85,6 +85,8 @@ func main() {
 	a2aRateLimitEnabled := flag.Bool("a2a-rate-limit-enabled", envBool("ORLOJ_A2A_RATE_LIMIT_ENABLED", true), "enable per-IP rate limiting on A2A endpoints (env: ORLOJ_A2A_RATE_LIMIT_ENABLED)")
 	a2aRateLimitRPM := flag.Int("a2a-rate-limit-rpm", envInt("ORLOJ_A2A_RATE_LIMIT_RPM", 30), "A2A requests per minute per IP (env: ORLOJ_A2A_RATE_LIMIT_RPM)")
 	a2aRateLimitMaxSubscribe := flag.Int("a2a-rate-limit-max-subscribe", envInt("ORLOJ_A2A_RATE_LIMIT_MAX_SUBSCRIBE", 10), "max concurrent A2A SSE subscriptions globally (env: ORLOJ_A2A_RATE_LIMIT_MAX_SUBSCRIBE)")
+	a2aCardSigningKeyFile := flag.String("a2a-card-signing-key-file", env("ORLOJ_A2A_CARD_SIGNING_KEY_FILE", ""), "PEM private key for signing A2A Agent Cards (env: ORLOJ_A2A_CARD_SIGNING_KEY_FILE)")
+	a2aCardSigningKeyID := flag.String("a2a-card-signing-key-id", env("ORLOJ_A2A_CARD_SIGNING_KEY_ID", "orloj"), "JWS key ID for signed A2A Agent Cards (env: ORLOJ_A2A_CARD_SIGNING_KEY_ID)")
 	toolK8sEnabled := flag.Bool("tool-k8s-enabled", envBool("ORLOJ_TOOL_K8S_ENABLED", false), "enable kubernetes tool isolation runtime for isolation_mode=kubernetes tools")
 	toolK8sNamespace := flag.String("tool-k8s-namespace", env("ORLOJ_TOOL_K8S_NAMESPACE", ""), "namespace for kubernetes tool isolation Jobs (default: pod namespace or 'default')")
 	toolK8sServiceAccount := flag.String("tool-k8s-service-account", env("ORLOJ_TOOL_K8S_SERVICE_ACCOUNT", ""), "service account for kubernetes tool isolation Pods")
@@ -391,11 +393,19 @@ func main() {
 		rateLimitRPM = *a2aRateLimitRPM
 		maxConcurrentSubscribe = *a2aRateLimitMaxSubscribe
 	}
+	var cardSigner a2a.CardSigner
+	if keyFile := strings.TrimSpace(*a2aCardSigningKeyFile); keyFile != "" {
+		cardSigner, err = a2a.LoadPEMCardSigner(keyFile, strings.TrimSpace(*a2aCardSigningKeyID))
+		if err != nil {
+			fatalLogger.Fatalf("load A2A Agent Card signing key: %v", err)
+		}
+	}
 	a2aConfig := &api.A2AConfig{
 		PublicBaseURL:          strings.TrimSpace(*a2aPublicBaseURL),
 		ProtocolVersion:        strings.TrimSpace(*a2aProtocolVersion),
 		StreamingEnabled:       true,
 		AuthSchemes:            authSchemes,
+		CardSigner:             cardSigner,
 		Registry:               a2aRegistry,
 		RateLimitRPM:           rateLimitRPM,
 		MaxConcurrentSubscribe: maxConcurrentSubscribe,
@@ -450,11 +460,11 @@ func main() {
 		APITokens:       stores.APITokens,
 		AuthSessions:    stores.AuthSessions,
 	}, runtime, logger, api.ServerOptions{
-		Extensions:     extensions,
-		AuthMode:       authMode,
-		SessionTTL:     *authSessionTTL,
-		UIBasePath:     *uiPath,
-		TrustedProxies: *trustedProxies,
+		Extensions:         extensions,
+		AuthMode:           authMode,
+		SessionTTL:         *authSessionTTL,
+		UIBasePath:         *uiPath,
+		TrustedProxies:     *trustedProxies,
 		CORSAllowedOrigins: parseCSVList(*corsAllowedOrigins),
 		ContainerResourceCeiling: resources.ContainerResourceCeiling{
 			MaxMemory:    *toolContainerMaxMemory,

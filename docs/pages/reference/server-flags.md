@@ -52,6 +52,8 @@ go run ./cmd/orlojd -h
 | `--a2a-rate-limit-enabled` | `true` | Enable per-IP rate limiting for A2A endpoints. | Env `ORLOJ_A2A_RATE_LIMIT_ENABLED`. |
 | `--a2a-rate-limit-rpm` | `30` | Max A2A JSON-RPC requests per minute per IP. | Env `ORLOJ_A2A_RATE_LIMIT_RPM`. |
 | `--a2a-rate-limit-max-subscribe` | `10` | Max concurrent SSE subscribe connections globally (server-wide). | Env `ORLOJ_A2A_RATE_LIMIT_MAX_SUBSCRIBE`. |
+| `--a2a-card-signing-key-file` | empty | PEM private key used to JWS-sign Agent Cards. | Env `ORLOJ_A2A_CARD_SIGNING_KEY_FILE`; supports RSA (2048+), P-256 ECDSA, and Ed25519. |
+| `--a2a-card-signing-key-id` | `orloj` | JWS `kid` for signed Agent Cards. | Env `ORLOJ_A2A_CARD_SIGNING_KEY_ID`. |
 
 ### CRD conflict policy
 

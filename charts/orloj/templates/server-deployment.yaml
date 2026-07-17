@@ -202,6 +202,12 @@ spec:
               value: {{ .Values.a2a.rateLimit.requestsPerMinute | quote }}
             - name: ORLOJ_A2A_RATE_LIMIT_MAX_SUBSCRIBE
               value: {{ .Values.a2a.rateLimit.maxConcurrentSubscriptions | quote }}
+            {{- if .Values.a2a.cardSigning.existingSecret }}
+            - name: ORLOJ_A2A_CARD_SIGNING_KEY_FILE
+              value: /var/run/orloj/a2a-signing/private-key.pem
+            - name: ORLOJ_A2A_CARD_SIGNING_KEY_ID
+              value: {{ .Values.a2a.cardSigning.keyID | quote }}
+            {{- end }}
             # --- CRD conflict policy ---
             - name: ORLOJ_CRD_CONFLICT_POLICY
               value: {{ .Values.crdConflictPolicy | default "warn" | quote }}
@@ -211,6 +217,12 @@ spec:
           {{- with .Values.server.extraEnvFrom }}
           envFrom:
             {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- if .Values.a2a.cardSigning.existingSecret }}
+          volumeMounts:
+            - name: a2a-card-signing-key
+              mountPath: /var/run/orloj/a2a-signing
+              readOnly: true
           {{- end }}
           ports:
             - name: http
@@ -234,6 +246,15 @@ spec:
             failureThreshold: {{ .Values.server.readinessProbe.failureThreshold }}
           resources:
             {{- toYaml .Values.server.resources | nindent 12 }}
+      {{- if .Values.a2a.cardSigning.existingSecret }}
+      volumes:
+        - name: a2a-card-signing-key
+          secret:
+            secretName: {{ .Values.a2a.cardSigning.existingSecret | quote }}
+            items:
+              - key: {{ .Values.a2a.cardSigning.secretKey | quote }}
+                path: private-key.pem
+      {{- end }}
       {{- with .Values.server.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
