@@ -3,6 +3,7 @@ module github.com/OrlojHQ/orloj
 go 1.26.5
 
 require (
+	github.com/a2aproject/a2a-go/v2 v2.3.1
 	github.com/aws/aws-sdk-go-v2 v1.42.1
 	github.com/aws/aws-sdk-go-v2/config v1.32.29
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.28
