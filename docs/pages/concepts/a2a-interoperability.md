@@ -86,7 +86,12 @@ Two routing modes are supported for inbound A2A requests:
 
 ## Outbound: A2A Tools
 
-External A2A agents are consumed as `type: a2a` tools. The tool spec includes the remote agent URL, optional protocol version, and streaming preference. At invocation time, the A2A tool runtime fetches the remote card, sends a JSON-RPC request, and maps the response back to Orloj's tool result format.
+External A2A agents are consumed as `type: a2a` tools. The tool spec includes
+the remote agent URL, optional protocol version, and streaming preference. At
+invocation time, the A2A tool runtime fetches the remote card, negotiates an A2A
+v1 JSON-RPC interface from `supportedInterfaces`, sends `SendMessage`, and maps
+the response back to Orloj's tool result format. Cards without a compatible v1
+interface retain the legacy `tasks/send` behavior.
 
 Existing `spec.auth` profiles (bearer, API key, basic, OAuth2) work for authenticating with remote A2A agents.
 
