@@ -516,6 +516,7 @@ func main() {
 			fn()
 		}()
 	}
+	startBackground(func() { server.StartA2APushDispatcher(ctx) })
 
 	if strings.EqualFold(strings.TrimSpace(*taskExecutionMode), "message-driven") {
 		logger.Printf("agent runtime reconciliation disabled in message-driven mode")

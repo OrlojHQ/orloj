@@ -31,7 +31,8 @@ Orloj Agent step
       → Map remote A2A result → tool result
 ```
 
-Both directions reuse existing Orloj infrastructure: Tasks, auth, governance, webhooks, and SSE streaming.
+Both directions reuse existing Orloj infrastructure: Tasks, auth, governance,
+the event bus, and streaming.
 
 ## Agent Cards
 
@@ -41,7 +42,7 @@ Cards are generated automatically from the agent's metadata, tools, and runtime 
 
 - **Name** and **description** come from the AgentSystem `metadata.name` and `metadata.annotations["orloj.dev/description"]`.
 - **Skills** are derived from the agent's attached tools, including each tool's `description` and `input_schema`.
-- **Capabilities** reflect runtime support: streaming (from task trace SSE), push notifications (from TaskWebhook support), and state transition history.
+- **Capabilities** reflect runtime support: v1 streaming, outbound push notifications, and state transition history.
 - **Authentication** reflects the server's configured auth mode.
 
 Cards are served at:
@@ -63,6 +64,18 @@ A2A defines its own task lifecycle states. Orloj maps them bidirectionally:
 | `rejected` | `Failed` (with rejection reason) | inbound |
 
 Orloj task output is converted to A2A artifacts, and trace/watch events are converted to A2A streaming status updates for `tasks/sendSubscribe` calls.
+
+## Push Notifications
+
+A2A v1 clients can register multiple callback configurations per task with
+`CreateTaskPushNotificationConfig` and manage them with the corresponding get,
+list, and delete methods over JSON-RPC or gRPC. Orloj publishes the latest v1
+task state to each callback as task events occur.
+
+Push configurations are distinct from inbound `TaskWebhook` resources. Callback
+URLs are validated and dialed through Orloj's SSRF-safe HTTP transport. Delivery
+uses bounded retries, and callback credentials are encrypted at rest in
+PostgreSQL when `ORLOJ_SECRET_ENCRYPTION_KEY` is configured.
 
 ## Inbound Routing
 
