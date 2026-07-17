@@ -131,6 +131,85 @@ func TestA2AV1RejectsUnsupportedVersion(t *testing.T) {
 	}
 }
 
+func TestA2AV1PushConfigCRUD(t *testing.T) {
+	ts, stores := newA2ATestServer(t, true)
+	defer ts.Close()
+	seedAgent(t, stores, "v1-system", "A v1 agent", nil)
+	endpoint := ts.URL + "/v1/agent-systems/v1-system/a2a"
+
+	send := postA2AV1JSONRPC(t, endpoint, "SendMessage", map[string]any{
+		"message": map[string]any{
+			"messageId": "push-message",
+			"role":      "ROLE_USER",
+			"parts":     []map[string]any{{"text": "notify me"}},
+		},
+		"configuration": map[string]any{"returnImmediately": true},
+	}, "1.0")
+	sendRPC := decodeJSONRPCResponse(t, send)
+	var sendResult struct {
+		Task struct {
+			ID string `json:"id"`
+		} `json:"task"`
+	}
+	if err := json.Unmarshal(sendRPC.Result, &sendResult); err != nil {
+		t.Fatalf("decode SendMessage result: %v", err)
+	}
+
+	create := postA2AV1JSONRPC(t, endpoint, "CreateTaskPushNotificationConfig", map[string]any{
+		"taskId": sendResult.Task.ID,
+		"url":    "https://callbacks.example.com/a2a",
+		"token":  "notification-token",
+	}, "1.0")
+	createRPC := decodeJSONRPCResponse(t, create)
+	if createRPC.Error != nil {
+		t.Fatalf("CreateTaskPushNotificationConfig error = %#v", createRPC.Error)
+	}
+	var config struct {
+		ID     string `json:"id"`
+		TaskID string `json:"taskId"`
+		URL    string `json:"url"`
+	}
+	if err := json.Unmarshal(createRPC.Result, &config); err != nil {
+		t.Fatalf("decode create result: %v", err)
+	}
+	if config.ID == "" || config.TaskID != sendResult.Task.ID {
+		t.Fatalf("created config = %#v", config)
+	}
+
+	get := postA2AV1JSONRPC(t, endpoint, "GetTaskPushNotificationConfig", map[string]any{
+		"taskId": sendResult.Task.ID,
+		"id":     config.ID,
+	}, "1.0")
+	getRPC := decodeJSONRPCResponse(t, get)
+	if getRPC.Error != nil {
+		t.Fatalf("GetTaskPushNotificationConfig error = %#v", getRPC.Error)
+	}
+
+	list := postA2AV1JSONRPC(t, endpoint, "ListTaskPushNotificationConfigs", map[string]any{
+		"taskId":   sendResult.Task.ID,
+		"pageSize": 10,
+	}, "1.0")
+	listRPC := decodeJSONRPCResponse(t, list)
+	if listRPC.Error != nil {
+		t.Fatalf("ListTaskPushNotificationConfigs error = %#v", listRPC.Error)
+	}
+	var listed struct {
+		Configs []json.RawMessage `json:"configs"`
+	}
+	if err := json.Unmarshal(listRPC.Result, &listed); err != nil || len(listed.Configs) != 1 {
+		t.Fatalf("list result = %s, error = %v", listRPC.Result, err)
+	}
+
+	deleteResp := postA2AV1JSONRPC(t, endpoint, "DeleteTaskPushNotificationConfig", map[string]any{
+		"taskId": sendResult.Task.ID,
+		"id":     config.ID,
+	}, "1.0")
+	deleteRPC := decodeJSONRPCResponse(t, deleteResp)
+	if deleteRPC.Error != nil {
+		t.Fatalf("DeleteTaskPushNotificationConfig error = %#v", deleteRPC.Error)
+	}
+}
+
 func TestA2AV1PascalCaseWorksWithoutVersionHeaderForMethodCompatibility(t *testing.T) {
 	ts, stores := newA2ATestServer(t, true)
 	defer ts.Close()

@@ -28,6 +28,7 @@ type A2AConfig struct {
 	AuthSchemes            []string
 	Registry               *a2a.Registry
 	CardSigner             a2a.CardSigner
+	AllowPrivateEndpoints  bool
 	RateLimitRPM           int
 	MaxConcurrentSubscribe int
 }
@@ -572,6 +573,7 @@ func (s *Server) buildCardConfig(namespace string) a2a.CardGeneratorConfig {
 		GRPCPublicURL:    s.a2aConfig.GRPCPublicURL,
 		ProtocolVersion:  s.a2aConfig.ProtocolVersion,
 		StreamingEnabled: s.a2aConfig.StreamingEnabled,
+		WebhooksEnabled:  s.stores.A2APushConfigs != nil,
 		AuthSchemes:      s.a2aConfig.AuthSchemes,
 		Namespace:        resources.NormalizeNamespace(namespace),
 	}

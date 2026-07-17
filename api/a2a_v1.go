@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"iter"
 	"net/http"
@@ -12,10 +13,12 @@ import (
 
 	lf "github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
+	"github.com/a2aproject/a2a-go/v2/a2asrv/push"
 	"google.golang.org/grpc/metadata"
 
 	"github.com/OrlojHQ/orloj/eventbus"
 	"github.com/OrlojHQ/orloj/resources"
+	agentruntime "github.com/OrlojHQ/orloj/runtime"
 	orloja2a "github.com/OrlojHQ/orloj/runtime/a2a"
 	"github.com/OrlojHQ/orloj/store"
 )
@@ -217,20 +220,103 @@ func (h *a2aV1Handler) SubscribeToTask(ctx context.Context, req *lf.SubscribeToT
 	}
 }
 
-func (h *a2aV1Handler) GetTaskPushConfig(context.Context, *lf.GetTaskPushConfigRequest) (*lf.PushConfig, error) {
-	return nil, lf.ErrPushNotificationNotSupported
+func (h *a2aV1Handler) GetTaskPushConfig(ctx context.Context, req *lf.GetTaskPushConfigRequest) (*lf.PushConfig, error) {
+	call, err := h.callFromContext(ctx)
+	if err != nil || req == nil || req.TaskID == "" || req.ID == "" {
+		return nil, lf.ErrInvalidParams
+	}
+	call = v1CallForTenant(call, req.Tenant)
+	if _, err := h.server.findTaskByA2AID(call.request, string(req.TaskID), call.systemName); err != nil {
+		return nil, lf.ErrTaskNotFound
+	}
+	config, err := h.server.stores.A2APushConfigs.Get(ctx, req.TaskID, req.ID)
+	if err != nil {
+		if errors.Is(err, push.ErrPushConfigNotFound) {
+			return nil, lf.ErrTaskNotFound
+		}
+		return nil, lf.ErrInternalError
+	}
+	return config, nil
 }
 
-func (h *a2aV1Handler) ListTaskPushConfigs(context.Context, *lf.ListTaskPushConfigRequest) (*lf.ListTaskPushConfigResponse, error) {
-	return nil, lf.ErrPushNotificationNotSupported
+func (h *a2aV1Handler) ListTaskPushConfigs(ctx context.Context, req *lf.ListTaskPushConfigRequest) (*lf.ListTaskPushConfigResponse, error) {
+	call, err := h.callFromContext(ctx)
+	if err != nil || req == nil || req.TaskID == "" {
+		return nil, lf.ErrInvalidParams
+	}
+	call = v1CallForTenant(call, req.Tenant)
+	if _, err := h.server.findTaskByA2AID(call.request, string(req.TaskID), call.systemName); err != nil {
+		return nil, lf.ErrTaskNotFound
+	}
+	configs, err := h.server.stores.A2APushConfigs.List(ctx, req.TaskID)
+	if err != nil {
+		return nil, lf.ErrInternalError
+	}
+	pageSize := req.PageSize
+	if pageSize == 0 {
+		pageSize = 50
+	}
+	if pageSize < 1 || pageSize > 100 {
+		return nil, lf.ErrInvalidParams
+	}
+	start := 0
+	if req.PageToken != "" {
+		decoded, err := base64.RawURLEncoding.DecodeString(req.PageToken)
+		if err != nil {
+			return nil, lf.ErrInvalidParams
+		}
+		found := false
+		for index, config := range configs {
+			if config.ID == string(decoded) {
+				start = index + 1
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, lf.ErrInvalidParams
+		}
+	}
+	end := min(start+pageSize, len(configs))
+	response := &lf.ListTaskPushConfigResponse{Configs: configs[start:end]}
+	if end < len(configs) {
+		response.NextPageToken = base64.RawURLEncoding.EncodeToString([]byte(configs[end-1].ID))
+	}
+	return response, nil
 }
 
-func (h *a2aV1Handler) CreateTaskPushConfig(context.Context, *lf.PushConfig) (*lf.PushConfig, error) {
-	return nil, lf.ErrPushNotificationNotSupported
+func (h *a2aV1Handler) CreateTaskPushConfig(ctx context.Context, req *lf.PushConfig) (*lf.PushConfig, error) {
+	call, err := h.callFromContext(ctx)
+	if err != nil || req == nil || req.TaskID == "" {
+		return nil, lf.ErrInvalidParams
+	}
+	call = v1CallForTenant(call, req.Tenant)
+	if _, err := h.server.findTaskByA2AID(call.request, string(req.TaskID), call.systemName); err != nil {
+		return nil, lf.ErrTaskNotFound
+	}
+	if err := h.validatePushConfig(req); err != nil {
+		return nil, err
+	}
+	saved, err := h.server.stores.A2APushConfigs.Save(ctx, req.TaskID, req)
+	if err != nil {
+		return nil, lf.ErrInternalError
+	}
+	return saved, nil
 }
 
-func (h *a2aV1Handler) DeleteTaskPushConfig(context.Context, *lf.DeleteTaskPushConfigRequest) error {
-	return lf.ErrPushNotificationNotSupported
+func (h *a2aV1Handler) DeleteTaskPushConfig(ctx context.Context, req *lf.DeleteTaskPushConfigRequest) error {
+	call, err := h.callFromContext(ctx)
+	if err != nil || req == nil || req.TaskID == "" || req.ID == "" {
+		return lf.ErrInvalidParams
+	}
+	call = v1CallForTenant(call, req.Tenant)
+	if _, err := h.server.findTaskByA2AID(call.request, string(req.TaskID), call.systemName); err != nil {
+		return lf.ErrTaskNotFound
+	}
+	if err := h.server.stores.A2APushConfigs.Delete(ctx, req.TaskID, req.ID); err != nil {
+		return lf.ErrInternalError
+	}
+	return nil
 }
 
 func (h *a2aV1Handler) GetExtendedAgentCard(context.Context, *lf.GetExtendedAgentCardRequest) (*lf.AgentCard, error) {
@@ -283,14 +369,45 @@ func (h *a2aV1Handler) createTask(ctx context.Context, req *lf.SendMessageReques
 	if err != nil {
 		return resources.Task{}, call, err
 	}
+	if req.Config != nil && req.Config.PushConfig != nil {
+		req.Config.PushConfig.TaskID = lf.TaskID(task.Metadata.Labels[orloja2a.LabelA2ATaskID])
+		if err := h.validatePushConfig(req.Config.PushConfig); err != nil {
+			return resources.Task{}, call, err
+		}
+	}
 	task.Metadata.Name = a2aInternalTaskName(target, task.Metadata.Labels[orloja2a.LabelA2ATaskID])
 	created, err := h.server.stores.Tasks.Upsert(ctx, task)
 	if err != nil {
 		return resources.Task{}, call, lf.ErrInternalError
 	}
 	h.server.publishResourceEvent("Task", created.Metadata.Name, "created", created)
+	if req.Config != nil && req.Config.PushConfig != nil {
+		config := req.Config.PushConfig
+		config.TaskID = lf.TaskID(created.Metadata.Labels[orloja2a.LabelA2ATaskID])
+		if _, err := h.server.stores.A2APushConfigs.Save(ctx, config.TaskID, config); err != nil {
+			return resources.Task{}, call, lf.ErrInternalError
+		}
+	}
 	call.systemName = target.Metadata.Name
 	return created, call, nil
+}
+
+func (h *a2aV1Handler) validatePushConfig(config *lf.PushConfig) error {
+	if config == nil || strings.TrimSpace(config.URL) == "" {
+		return lf.ErrInvalidParams
+	}
+	allowPrivate := h.server.a2aConfig != nil && h.server.a2aConfig.AllowPrivateEndpoints
+	if err := agentruntime.ValidateEndpointURL(config.URL, allowPrivate); err != nil {
+		return fmt.Errorf("%w: invalid push notification URL", lf.ErrInvalidParams)
+	}
+	if config.Auth != nil {
+		switch strings.ToLower(strings.TrimSpace(config.Auth.Scheme)) {
+		case "", "bearer", "basic":
+		default:
+			return fmt.Errorf("%w: unsupported push authentication scheme", lf.ErrInvalidParams)
+		}
+	}
+	return nil
 }
 
 func (h *a2aV1Handler) waitForTask(

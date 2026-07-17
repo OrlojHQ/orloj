@@ -30,6 +30,7 @@ type StoreSet struct {
 	Tasks           *store.TaskStore
 	TaskSchedules   *store.TaskScheduleStore
 	TaskWebhooks    *store.TaskWebhookStore
+	A2APushConfigs  *store.A2APushConfigStore
 	WebhookDedupe   *store.WebhookDedupeStore
 	Workers         *store.WorkerStore
 	McpServers      *store.McpServerStore
@@ -93,6 +94,7 @@ func OpenStores(cfg StoreConfig, logger *log.Logger) (*StoreSet, error) {
 		if cfg.IncludeScheduleStores {
 			s.TaskSchedules = store.NewTaskScheduleStore()
 			s.TaskWebhooks = store.NewTaskWebhookStore()
+			s.A2APushConfigs = store.NewA2APushConfigStore()
 			s.WebhookDedupe = store.NewWebhookDedupeStore()
 		}
 		if logger != nil {
@@ -166,6 +168,7 @@ func OpenStores(cfg StoreConfig, logger *log.Logger) (*StoreSet, error) {
 		if cfg.IncludeScheduleStores {
 			s.TaskSchedules = store.NewTaskScheduleStoreWithDB(db)
 			s.TaskWebhooks = store.NewTaskWebhookStoreWithDB(db)
+			s.A2APushConfigs = store.NewA2APushConfigStoreWithDB(db, cfg.SecretEncryptionKey)
 			s.WebhookDedupe = store.NewWebhookDedupeStoreWithDB(db)
 		}
 		if logger != nil {
