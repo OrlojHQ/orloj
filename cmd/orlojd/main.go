@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -85,6 +86,8 @@ func main() {
 	a2aCardCacheTTL := flag.Duration("a2a-card-cache-ttl", envDuration("ORLOJ_A2A_CARD_CACHE_TTL", 5*time.Minute), "TTL for cached remote Agent Cards (env: ORLOJ_A2A_CARD_CACHE_TTL)")
 	a2aAllowPrivateEndpoints := flag.Bool("a2a-allow-private-endpoints", envBool("ORLOJ_A2A_ALLOW_PRIVATE_ENDPOINTS", false), "allow outbound A2A requests to private/RFC1918 addresses (env: ORLOJ_A2A_ALLOW_PRIVATE_ENDPOINTS)")
 	a2aRemoteAgents := flag.String("a2a-remote-agents", env("ORLOJ_A2A_REMOTE_AGENTS", ""), "JSON-encoded array of remote A2A agent configs (env: ORLOJ_A2A_REMOTE_AGENTS)")
+	a2aRequireSignedCards := flag.Bool("a2a-require-signed-cards", envBool("ORLOJ_A2A_REQUIRE_SIGNED_CARDS", false), "require a trusted JWS signature on fetched Agent Cards (env: ORLOJ_A2A_REQUIRE_SIGNED_CARDS)")
+	a2aTrustedCardKeys := flag.String("a2a-trusted-card-keys", env("ORLOJ_A2A_TRUSTED_CARD_KEYS", ""), "JSON object mapping Agent Card JWS key IDs to PEM public key files (env: ORLOJ_A2A_TRUSTED_CARD_KEYS)")
 	a2aRateLimitEnabled := flag.Bool("a2a-rate-limit-enabled", envBool("ORLOJ_A2A_RATE_LIMIT_ENABLED", true), "enable per-IP rate limiting on A2A endpoints (env: ORLOJ_A2A_RATE_LIMIT_ENABLED)")
 	a2aRateLimitRPM := flag.Int("a2a-rate-limit-rpm", envInt("ORLOJ_A2A_RATE_LIMIT_RPM", 30), "A2A requests per minute per IP (env: ORLOJ_A2A_RATE_LIMIT_RPM)")
 	a2aRateLimitMaxSubscribe := flag.Int("a2a-rate-limit-max-subscribe", envInt("ORLOJ_A2A_RATE_LIMIT_MAX_SUBSCRIBE", 10), "max concurrent A2A SSE subscriptions globally (env: ORLOJ_A2A_RATE_LIMIT_MAX_SUBSCRIBE)")
@@ -367,9 +370,38 @@ func main() {
 
 	// A2A outbound tool runtime — always available so type=a2a tools work
 	// regardless of whether the inbound A2A API is enabled.
+	trustedCardKeys := make(map[string]crypto.PublicKey)
+	if raw := strings.TrimSpace(*a2aTrustedCardKeys); raw != "" {
+		var keyFiles map[string]string
+		if err := json.Unmarshal([]byte(raw), &keyFiles); err != nil {
+			fatalLogger.Fatalf("parse ORLOJ_A2A_TRUSTED_CARD_KEYS: %v", err)
+		}
+		for keyID, path := range keyFiles {
+			publicKey, err := a2a.LoadPEMCardPublicKey(strings.TrimSpace(path))
+			if err != nil {
+				fatalLogger.Fatalf("load trusted A2A Agent Card key %q: %v", keyID, err)
+			}
+			trustedCardKeys[strings.TrimSpace(keyID)] = publicKey
+		}
+	}
+	if *a2aRequireSignedCards && len(trustedCardKeys) == 0 {
+		fatalLogger.Fatalf("--a2a-require-signed-cards requires at least one --a2a-trusted-card-keys entry")
+	}
+	var cardKeyResolver a2a.CardKeyResolver
+	if len(trustedCardKeys) > 0 {
+		cardKeyResolver = func(_ context.Context, keyID string) (crypto.PublicKey, error) {
+			key, ok := trustedCardKeys[keyID]
+			if !ok {
+				return nil, fmt.Errorf("untrusted key ID %q", keyID)
+			}
+			return key, nil
+		}
+	}
 	a2aClient := a2a.NewClient(a2a.ClientConfig{
-		AllowPrivate: *a2aAllowPrivateEndpoints,
-		CardCacheTTL: *a2aCardCacheTTL,
+		AllowPrivate:       *a2aAllowPrivateEndpoints,
+		CardCacheTTL:       *a2aCardCacheTTL,
+		RequireSignedCards: *a2aRequireSignedCards,
+		ResolveCardKey:     cardKeyResolver,
 	})
 	a2aToolRT := a2a.NewToolRuntime(a2aClient, nil, cliSecretResolver)
 	taskController.SetA2AToolRuntime(a2aToolRT)

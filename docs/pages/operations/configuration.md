@@ -84,6 +84,8 @@ Example:
 | `ORLOJ_A2A_CARD_CACHE_TTL` | `orlojd`, `orlojworker` | `--a2a-card-cache-ttl` | Cache TTL for fetched remote Agent Cards. Default: `5m`. |
 | `ORLOJ_A2A_ALLOW_PRIVATE_ENDPOINTS` | `orlojd`, `orlojworker` | `--a2a-allow-private-endpoints` | Allow outbound A2A requests to private/loopback IPs. Default: `false`. |
 | `ORLOJ_A2A_REMOTE_AGENTS` | `orlojd` | `--a2a-remote-agents` | JSON-encoded list of static remote A2A agents to register. |
+| `ORLOJ_A2A_REQUIRE_SIGNED_CARDS` | `orlojd` | `--a2a-require-signed-cards` | Require at least one trusted JWS signature on fetched remote Agent Cards. Default: `false`. |
+| `ORLOJ_A2A_TRUSTED_CARD_KEYS` | `orlojd` | `--a2a-trusted-card-keys` | JSON object mapping JWS `kid` values to PEM public key or certificate files. |
 | `ORLOJ_A2A_RATE_LIMIT_ENABLED` | `orlojd` | `--a2a-rate-limit-enabled` | Enable per-IP rate limiting on A2A endpoints. Default: `true`. |
 | `ORLOJ_A2A_RATE_LIMIT_RPM` | `orlojd` | `--a2a-rate-limit-rpm` | Max JSON-RPC requests per minute per IP when rate limiting is enabled. Default: `30`. |
 | `ORLOJ_A2A_RATE_LIMIT_MAX_SUBSCRIBE` | `orlojd` | `--a2a-rate-limit-max-subscribe` | Max concurrent SSE subscribe connections globally. Default: `10`. |

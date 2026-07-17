@@ -216,6 +216,16 @@ spec:
             - name: ORLOJ_A2A_CARD_SIGNING_KEY_ID
               value: {{ .Values.a2a.cardSigning.keyID | quote }}
             {{- end }}
+            - name: ORLOJ_A2A_REQUIRE_SIGNED_CARDS
+              value: {{ .Values.a2a.cardVerification.requireSigned | quote }}
+            {{- if .Values.a2a.cardVerification.keys }}
+            {{- $trustedCardKeys := dict }}
+            {{- range $keyID, $secretKey := .Values.a2a.cardVerification.keys }}
+            {{- $_ := set $trustedCardKeys $keyID (printf "/var/run/orloj/a2a-trusted-keys/%s" $secretKey) }}
+            {{- end }}
+            - name: ORLOJ_A2A_TRUSTED_CARD_KEYS
+              value: {{ $trustedCardKeys | toJson | quote }}
+            {{- end }}
             # --- CRD conflict policy ---
             - name: ORLOJ_CRD_CONFLICT_POLICY
               value: {{ .Values.crdConflictPolicy | default "warn" | quote }}
@@ -230,6 +240,16 @@ spec:
           volumeMounts:
             - name: a2a-card-signing-key
               mountPath: /var/run/orloj/a2a-signing
+              readOnly: true
+            {{- if .Values.a2a.cardVerification.existingSecret }}
+            - name: a2a-trusted-card-keys
+              mountPath: /var/run/orloj/a2a-trusted-keys
+              readOnly: true
+            {{- end }}
+          {{- else if .Values.a2a.cardVerification.existingSecret }}
+          volumeMounts:
+            - name: a2a-trusted-card-keys
+              mountPath: /var/run/orloj/a2a-trusted-keys
               readOnly: true
           {{- end }}
           ports:
@@ -267,6 +287,16 @@ spec:
             items:
               - key: {{ .Values.a2a.cardSigning.secretKey | quote }}
                 path: private-key.pem
+        {{- if .Values.a2a.cardVerification.existingSecret }}
+        - name: a2a-trusted-card-keys
+          secret:
+            secretName: {{ .Values.a2a.cardVerification.existingSecret | quote }}
+        {{- end }}
+      {{- else if .Values.a2a.cardVerification.existingSecret }}
+      volumes:
+        - name: a2a-trusted-card-keys
+          secret:
+            secretName: {{ .Values.a2a.cardVerification.existingSecret | quote }}
       {{- end }}
       {{- with .Values.server.nodeSelector }}
       nodeSelector:

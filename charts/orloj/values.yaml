@@ -320,6 +320,15 @@ a2a:
     secretKey: "private-key.pem"
     # -- JWS kid value advertised in signed Agent Cards
     keyID: "orloj"
+  # -- Optional trust policy for fetched remote Agent Cards
+  cardVerification:
+    # -- Reject remote cards unless one trusted signature verifies
+    requireSigned: false
+    # -- Kubernetes Secret containing trusted PEM public keys or certificates
+    existingSecret: ""
+    # -- Map of JWS kid values to Secret data keys
+    keys: {}
+    # partner-key: partner-public-key.pem
   # -- Rate limiting for A2A endpoints
   rateLimit:
     # -- Enable rate limiting on A2A endpoints

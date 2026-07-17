@@ -3,6 +3,7 @@ package a2a
 import (
 	"bytes"
 	"context"
+	"crypto"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,6 +27,8 @@ type Client struct {
 	skipURLValidation bool // test-only: bypasses ValidateEndpointURL
 	cardCache         map[string]*cachedCard
 	cardCacheTTL      time.Duration
+	requireSigned     bool
+	resolveCardKey    CardKeyResolver
 	mu                sync.RWMutex
 }
 
@@ -37,9 +40,14 @@ type cachedCard struct {
 
 // ClientConfig configures the outbound A2A client.
 type ClientConfig struct {
-	AllowPrivate bool
-	CardCacheTTL time.Duration
+	AllowPrivate       bool
+	CardCacheTTL       time.Duration
+	RequireSignedCards bool
+	ResolveCardKey     CardKeyResolver
 }
+
+// CardKeyResolver resolves a trusted public key for a protected JWS kid.
+type CardKeyResolver func(context.Context, string) (crypto.PublicKey, error)
 
 // NewClient creates a new outbound A2A client with SSRF-safe HTTP.
 func NewClient(config ClientConfig) *Client {
@@ -48,10 +56,12 @@ func NewClient(config ClientConfig) *Client {
 		ttl = 5 * time.Minute
 	}
 	return &Client{
-		httpClient:   agentruntime.SafeHTTPClient(config.AllowPrivate, 60*time.Second),
-		allowPrivate: config.AllowPrivate,
-		cardCache:    make(map[string]*cachedCard),
-		cardCacheTTL: ttl,
+		httpClient:     agentruntime.SafeHTTPClient(config.AllowPrivate, 60*time.Second),
+		allowPrivate:   config.AllowPrivate,
+		cardCache:      make(map[string]*cachedCard),
+		cardCacheTTL:   ttl,
+		requireSigned:  config.RequireSignedCards,
+		resolveCardKey: config.ResolveCardKey,
 	}
 }
 
@@ -108,12 +118,51 @@ func (c *Client) FetchCard(ctx context.Context, agentURL string, extraHeaders ma
 	if err := json.Unmarshal(body, &card); err != nil {
 		return AgentCard{}, fmt.Errorf("a2a: decode card: %w", err)
 	}
+	if err := c.verifyAgentCard(ctx, card); err != nil {
+		c.cacheError(agentURL, err)
+		return AgentCard{}, fmt.Errorf("a2a: verify card: %w", err)
+	}
 
 	c.mu.Lock()
 	c.cardCache[agentURL] = &cachedCard{card: card, fetchedAt: time.Now()}
 	c.mu.Unlock()
 
 	return card, nil
+}
+
+func (c *Client) verifyAgentCard(ctx context.Context, card AgentCard) error {
+	if len(card.Signatures) == 0 {
+		if c.requireSigned {
+			return errors.New("Agent Card signature is required")
+		}
+		return nil
+	}
+	if c.resolveCardKey == nil {
+		if c.requireSigned {
+			return errors.New("Agent Card key resolver is required")
+		}
+		return nil
+	}
+
+	var verificationErrors []error
+	for _, signature := range card.Signatures {
+		keyID, err := AgentCardSignatureKeyID(signature)
+		if err != nil {
+			verificationErrors = append(verificationErrors, err)
+			continue
+		}
+		publicKey, err := c.resolveCardKey(ctx, keyID)
+		if err != nil {
+			verificationErrors = append(verificationErrors, fmt.Errorf("resolve key %q: %w", keyID, err))
+			continue
+		}
+		if err := VerifyAgentCardSignature(card, signature, publicKey); err != nil {
+			verificationErrors = append(verificationErrors, fmt.Errorf("verify key %q: %w", keyID, err))
+			continue
+		}
+		return nil
+	}
+	return fmt.Errorf("no trusted Agent Card signature verified: %w", errors.Join(verificationErrors...))
 }
 
 func (c *Client) cacheError(url string, err error) {

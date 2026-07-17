@@ -42,6 +42,40 @@ func LoadPEMCardSigner(path, keyID string) (CardSigner, error) {
 	return NewPEMCardSigner(data, keyID)
 }
 
+// LoadPEMCardPublicKey loads a PKIX, PKCS#1 RSA, or certificate public key.
+func LoadPEMCardPublicKey(path string) (crypto.PublicKey, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read A2A card verification key: %w", err)
+	}
+	block, _ := pem.Decode(data)
+	if block == nil {
+		return nil, errors.New("A2A card verification key is not PEM encoded")
+	}
+	switch block.Type {
+	case "PUBLIC KEY":
+		key, err := x509.ParsePKIXPublicKey(block.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("parse A2A card public key: %w", err)
+		}
+		return key, nil
+	case "RSA PUBLIC KEY":
+		key, err := x509.ParsePKCS1PublicKey(block.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("parse A2A card RSA public key: %w", err)
+		}
+		return key, nil
+	case "CERTIFICATE":
+		certificate, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("parse A2A card certificate: %w", err)
+		}
+		return certificate.PublicKey, nil
+	default:
+		return nil, fmt.Errorf("unsupported A2A card verification PEM type %q", block.Type)
+	}
+}
+
 // NewPEMCardSigner creates a signer from PKCS#8, PKCS#1, or SEC1 PEM data.
 func NewPEMCardSigner(data []byte, keyID string) (CardSigner, error) {
 	block, _ := pem.Decode(data)
@@ -144,6 +178,24 @@ func VerifyAgentCardSignature(card AgentCard, signature AgentCardSignature, publ
 		return fmt.Errorf("decode JWS signature: %w", err)
 	}
 	return verifyJWS(publicKey, header.Algorithm, signingInput, rawSignature)
+}
+
+// AgentCardSignatureKeyID returns the protected JWS kid value.
+func AgentCardSignatureKeyID(signature AgentCardSignature) (string, error) {
+	protectedJSON, err := base64.RawURLEncoding.DecodeString(signature.Protected)
+	if err != nil {
+		return "", fmt.Errorf("decode protected JWS header: %w", err)
+	}
+	var header struct {
+		KeyID string `json:"kid"`
+	}
+	if err := json.Unmarshal(protectedJSON, &header); err != nil {
+		return "", fmt.Errorf("decode protected JWS header: %w", err)
+	}
+	if strings.TrimSpace(header.KeyID) == "" {
+		return "", errors.New("protected JWS header does not contain kid")
+	}
+	return strings.TrimSpace(header.KeyID), nil
 }
 
 func canonicalAgentCard(card AgentCard) ([]byte, error) {

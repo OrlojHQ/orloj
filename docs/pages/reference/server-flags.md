@@ -49,6 +49,8 @@ go run ./cmd/orlojd -h
 | `--a2a-card-cache-ttl` | `5m` | TTL for cached remote Agent Cards. | Env `ORLOJ_A2A_CARD_CACHE_TTL`. |
 | `--a2a-allow-private-endpoints` | `false` | Allow outbound A2A requests to private/loopback IPs. | Env `ORLOJ_A2A_ALLOW_PRIVATE_ENDPOINTS`. See [Security — A2A Security](../operations/security.md#a2a-security). |
 | `--a2a-remote-agents` | empty | JSON-encoded list of static remote A2A agents. | Env `ORLOJ_A2A_REMOTE_AGENTS`. |
+| `--a2a-require-signed-cards` | `false` | Require at least one trusted JWS signature on fetched remote Agent Cards. | Env `ORLOJ_A2A_REQUIRE_SIGNED_CARDS`; requires trusted keys. |
+| `--a2a-trusted-card-keys` | empty | JSON object mapping JWS `kid` values to PEM public key or certificate files. | Env `ORLOJ_A2A_TRUSTED_CARD_KEYS`. |
 | `--a2a-rate-limit-enabled` | `true` | Enable per-IP rate limiting for A2A endpoints. | Env `ORLOJ_A2A_RATE_LIMIT_ENABLED`. |
 | `--a2a-rate-limit-rpm` | `30` | Max A2A JSON-RPC requests per minute per IP. | Env `ORLOJ_A2A_RATE_LIMIT_RPM`. |
 | `--a2a-rate-limit-max-subscribe` | `10` | Max concurrent SSE subscribe connections globally (server-wide). | Env `ORLOJ_A2A_RATE_LIMIT_MAX_SUBSCRIBE`. |

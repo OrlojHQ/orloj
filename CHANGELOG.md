@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A2A v1.0 JSON-RPC compatibility**: the existing A2A endpoint now accepts the v1 `SendMessage`, `SendStreamingMessage`, `GetTask`, `ListTasks`, `CancelTask`, and `SubscribeToTask` methods while preserving Orloj's legacy `tasks/*` methods. Outbound A2A tools negotiate v1 JSON-RPC from `supportedInterfaces` and retain legacy fallback.
 - **A2A v1.0 gRPC binding**: `orlojd` can expose the normative A2A service on a separate listener with shared task handling, bearer authorization, TLS configuration, and Agent Card discovery.
 - **A2A push notifications**: v1 JSON-RPC and gRPC clients can create, get, list, and delete persistent per-task callback configurations. Task events are delivered with bounded retries through SSRF-safe HTTP; credentials are encrypted in PostgreSQL when secret encryption is configured.
-- **A2A v1.0 Agent Cards**: generated cards now advertise `supportedInterfaces`, required default content modes, v1 security schemes and requirements, agent versions, and normative skill fields while retaining legacy discovery fields. Operators can optionally sign cards with RFC 8785 canonicalization and detached JWS using RSA, P-256 ECDSA, or Ed25519 keys.
+- **A2A v1.0 Agent Cards**: generated cards now advertise `supportedInterfaces`, required default content modes, v1 security schemes and requirements, agent versions, and normative skill fields while retaining legacy discovery fields. Operators can sign cards with RFC 8785 canonicalization and detached JWS using RSA, P-256 ECDSA, or Ed25519 keys, and can require trusted signatures on fetched remote cards.
 
 ## [0.18.0] - 2026-07-09
 

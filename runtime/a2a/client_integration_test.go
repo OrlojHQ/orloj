@@ -2,13 +2,71 @@ package a2a
 
 import (
 	"context"
+	"crypto"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestFetchCard_VerifiesRequiredSignature(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	keyBytes, _ := x509.MarshalPKCS8PrivateKey(privateKey)
+	signer, err := NewPEMCardSigner(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyBytes}), "trusted-key")
+	if err != nil {
+		t.Fatalf("create signer: %v", err)
+	}
+	card, err := SignAgentCard(AgentCard{
+		Name:                "signed-agent",
+		Description:         "trusted",
+		Version:             "1.0.0",
+		SupportedInterfaces: []AgentInterface{{URL: "https://example.com/a2a", ProtocolBinding: "JSONRPC", ProtocolVersion: "1.0"}},
+		Capabilities:        CardCapabilities{},
+		DefaultInputModes:   []string{"text/plain"},
+		DefaultOutputModes:  []string{"text/plain"},
+		Skills:              []CardSkill{},
+	}, signer)
+	if err != nil {
+		t.Fatalf("sign card: %v", err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(card)
+	}))
+	defer server.Close()
+
+	client := newTestClient(func(client *Client) {
+		client.requireSigned = true
+		client.resolveCardKey = func(_ context.Context, keyID string) (crypto.PublicKey, error) {
+			if keyID != "trusted-key" {
+				t.Fatalf("key ID = %q", keyID)
+			}
+			return publicKey, nil
+		}
+	})
+	if _, err := client.FetchCard(context.Background(), server.URL, nil); err != nil {
+		t.Fatalf("FetchCard() error = %v", err)
+	}
+}
+
+func TestFetchCard_RejectsUnsignedWhenRequired(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(AgentCard{Name: "unsigned"})
+	}))
+	defer server.Close()
+	client := newTestClient(func(client *Client) { client.requireSigned = true })
+	if _, err := client.FetchCard(context.Background(), server.URL, nil); err == nil {
+		t.Fatal("expected unsigned card rejection")
+	}
+}
 
 func TestFetchCard_Success(t *testing.T) {
 	card := AgentCard{
