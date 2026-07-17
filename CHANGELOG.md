@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **A2A v1.0 JSON-RPC compatibility**: the existing A2A endpoint now accepts the v1 `SendMessage`, `SendStreamingMessage`, `GetTask`, `ListTasks`, `CancelTask`, and `SubscribeToTask` methods while preserving Orloj's legacy `tasks/*` methods.
+- **A2A v1.0 Agent Cards**: generated cards now advertise `supportedInterfaces`, required default content modes, v1 security schemes and requirements, agent versions, and normative skill fields while retaining legacy discovery fields.
 
 ## [0.18.0] - 2026-07-09
 

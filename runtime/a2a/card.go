@@ -9,12 +9,14 @@ import (
 
 // CardGeneratorConfig controls Agent Card generation.
 type CardGeneratorConfig struct {
-	PublicBaseURL    string
-	ProtocolVersion  string
-	StreamingEnabled bool
-	WebhooksEnabled  bool
-	AuthSchemes      []string
-	Namespace        string
+	PublicBaseURL        string
+	ProtocolVersion      string
+	AgentVersion         string
+	StreamingEnabled     bool
+	WebhooksEnabled      bool
+	AuthSchemes          []string
+	AdditionalInterfaces []AgentInterface
+	Namespace            string
 }
 
 // GenerateAgentCard builds an A2A Agent Card from an Orloj Agent and its tools.
@@ -30,27 +32,17 @@ func GenerateAgentCard(agent resources.Agent, tools []resources.Tool, config Car
 
 	agentURL := appendNamespaceQuery(strings.TrimSuffix(config.PublicBaseURL, "/")+"/v1/agents/"+url.PathEscape(name)+"/a2a", config.Namespace)
 
-	card := AgentCard{
-		Name:            name,
-		Description:     desc,
-		URL:             agentURL,
-		ProtocolVersion: config.ProtocolVersion,
-		Capabilities: CardCapabilities{
-			Streaming:         config.StreamingEnabled,
-			PushNotifications: config.WebhooksEnabled,
-			StateTransitions:  true,
-		},
-	}
-
-	if len(config.AuthSchemes) > 0 {
-		card.Authentication = &CardAuth{Schemes: config.AuthSchemes}
-	}
+	card := newBaseCard(name, desc, agentURL, config)
 
 	for _, tool := range tools {
 		skill := CardSkill{
 			ID:          tool.Metadata.Name,
 			Name:        tool.Metadata.Name,
 			Description: tool.Spec.Description,
+			Tags:        []string{"tool"},
+		}
+		if strings.TrimSpace(skill.Description) == "" {
+			skill.Description = "Orloj tool " + tool.Metadata.Name
 		}
 		if len(tool.Spec.InputSchema) > 0 {
 			skill.InputSchema = tool.Spec.InputSchema
@@ -75,21 +67,7 @@ func GenerateSystemCard(system resources.AgentSystem, agents []resources.Agent, 
 
 	agentURL := appendNamespaceQuery(strings.TrimSuffix(config.PublicBaseURL, "/")+"/v1/agent-systems/"+url.PathEscape(name)+"/a2a", config.Namespace)
 
-	card := AgentCard{
-		Name:            name,
-		Description:     desc,
-		URL:             agentURL,
-		ProtocolVersion: config.ProtocolVersion,
-		Capabilities: CardCapabilities{
-			Streaming:         config.StreamingEnabled,
-			PushNotifications: config.WebhooksEnabled,
-			StateTransitions:  true,
-		},
-	}
-
-	if len(config.AuthSchemes) > 0 {
-		card.Authentication = &CardAuth{Schemes: config.AuthSchemes}
-	}
+	card := newBaseCard(name, desc, agentURL, config)
 
 	toolsByName := make(map[string]resources.Tool, len(tools))
 	for _, t := range tools {
@@ -111,6 +89,10 @@ func GenerateSystemCard(system resources.AgentSystem, agents []resources.Agent, 
 				ID:          tool.Metadata.Name,
 				Name:        tool.Metadata.Name,
 				Description: tool.Spec.Description,
+				Tags:        []string{"tool"},
+			}
+			if strings.TrimSpace(skill.Description) == "" {
+				skill.Description = "Orloj tool " + tool.Metadata.Name
 			}
 			if len(tool.Spec.InputSchema) > 0 {
 				skill.InputSchema = tool.Spec.InputSchema
@@ -119,6 +101,58 @@ func GenerateSystemCard(system resources.AgentSystem, agents []resources.Agent, 
 		}
 	}
 
+	return card
+}
+
+func newBaseCard(name, description, agentURL string, config CardGeneratorConfig) AgentCard {
+	protocolVersion := strings.TrimSpace(config.ProtocolVersion)
+	if protocolVersion == "" {
+		protocolVersion = "1.0"
+	}
+	agentVersion := strings.TrimSpace(config.AgentVersion)
+	if agentVersion == "" {
+		agentVersion = "1.0.0"
+	}
+	interfaces := []AgentInterface{{
+		URL:             agentURL,
+		ProtocolBinding: "JSONRPC",
+		ProtocolVersion: protocolVersion,
+	}}
+	interfaces = append(interfaces, config.AdditionalInterfaces...)
+
+	card := AgentCard{
+		Name:                name,
+		Description:         description,
+		URL:                 agentURL,
+		Version:             agentVersion,
+		ProtocolVersion:     protocolVersion,
+		SupportedInterfaces: interfaces,
+		Capabilities: CardCapabilities{
+			Streaming:         config.StreamingEnabled,
+			PushNotifications: config.WebhooksEnabled,
+			StateTransitions:  true,
+		},
+		DefaultInputModes:  []string{"text/plain"},
+		DefaultOutputModes: []string{"text/plain", "application/json"},
+		Skills:             make([]CardSkill, 0),
+	}
+
+	if len(config.AuthSchemes) > 0 {
+		card.Authentication = &CardAuth{Schemes: append([]string(nil), config.AuthSchemes...)}
+		card.SecuritySchemes = make(map[string]map[string]any, len(config.AuthSchemes))
+		for _, rawScheme := range config.AuthSchemes {
+			scheme := strings.ToLower(strings.TrimSpace(rawScheme))
+			if scheme == "" {
+				continue
+			}
+			name := scheme + "Auth"
+			definition := map[string]any{"type": "http", "scheme": scheme}
+			card.SecuritySchemes[name] = definition
+			// Each requirement object is an alternative (logical OR). Schemes
+			// within one object would instead require all schemes together.
+			card.SecurityRequirements = append(card.SecurityRequirements, map[string][]string{name: {}})
+		}
+	}
 	return card
 }
 

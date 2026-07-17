@@ -30,7 +30,7 @@ func TestGenerateAgentCard_BasicFields(t *testing.T) {
 
 	config := CardGeneratorConfig{
 		PublicBaseURL:    "https://orloj.example.com",
-		ProtocolVersion: "1.0",
+		ProtocolVersion:  "1.0",
 		StreamingEnabled: true,
 		WebhooksEnabled:  true,
 		AuthSchemes:      []string{"bearer"},
@@ -49,6 +49,21 @@ func TestGenerateAgentCard_BasicFields(t *testing.T) {
 	}
 	if card.ProtocolVersion != "1.0" {
 		t.Errorf("expected protocol version 1.0, got %s", card.ProtocolVersion)
+	}
+	if card.Version != "1.0.0" {
+		t.Errorf("expected default agent version 1.0.0, got %s", card.Version)
+	}
+	if len(card.SupportedInterfaces) != 1 {
+		t.Fatalf("expected one supported interface, got %d", len(card.SupportedInterfaces))
+	}
+	if iface := card.SupportedInterfaces[0]; iface.URL != card.URL || iface.ProtocolBinding != "JSONRPC" || iface.ProtocolVersion != "1.0" {
+		t.Errorf("unexpected supported interface: %+v", iface)
+	}
+	if len(card.DefaultInputModes) != 1 || card.DefaultInputModes[0] != "text/plain" {
+		t.Errorf("unexpected default input modes: %v", card.DefaultInputModes)
+	}
+	if len(card.DefaultOutputModes) == 0 {
+		t.Error("expected default output modes")
 	}
 	if !card.Capabilities.Streaming {
 		t.Error("expected streaming=true")
@@ -70,6 +85,12 @@ func TestGenerateAgentCard_BasicFields(t *testing.T) {
 	}
 	if card.Authentication == nil || len(card.Authentication.Schemes) != 1 || card.Authentication.Schemes[0] != "bearer" {
 		t.Errorf("unexpected auth: %+v", card.Authentication)
+	}
+	if card.SecuritySchemes["bearerAuth"]["scheme"] != "bearer" {
+		t.Errorf("unexpected v1 security schemes: %+v", card.SecuritySchemes)
+	}
+	if len(card.SecurityRequirements) != 1 {
+		t.Errorf("unexpected v1 security requirements: %+v", card.SecurityRequirements)
 	}
 }
 
