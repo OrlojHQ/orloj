@@ -12,6 +12,7 @@ import (
 
 	lf "github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
+	"google.golang.org/grpc/metadata"
 
 	"github.com/OrlojHQ/orloj/eventbus"
 	"github.com/OrlojHQ/orloj/resources"
@@ -40,10 +41,11 @@ func (s *Server) handleA2AV1JSONRPC(w http.ResponseWriter, r *http.Request, syst
 }
 
 func (h *a2aV1Handler) GetTask(ctx context.Context, req *lf.GetTaskRequest) (*lf.Task, error) {
-	call, err := v1CallFromContext(ctx)
+	call, err := h.callFromContext(ctx)
 	if err != nil || req == nil || req.ID == "" {
 		return nil, lf.ErrInvalidParams
 	}
+	call = v1CallForTenant(call, req.Tenant)
 	task, err := h.server.findTaskByA2AID(call.request, string(req.ID), call.systemName)
 	if err != nil {
 		return nil, lf.ErrTaskNotFound
@@ -54,13 +56,14 @@ func (h *a2aV1Handler) GetTask(ctx context.Context, req *lf.GetTaskRequest) (*lf
 }
 
 func (h *a2aV1Handler) ListTasks(ctx context.Context, req *lf.ListTasksRequest) (*lf.ListTasksResponse, error) {
-	call, err := v1CallFromContext(ctx)
+	call, err := h.callFromContext(ctx)
 	if err != nil {
 		return nil, lf.ErrInvalidRequest
 	}
 	if req == nil {
 		req = &lf.ListTasksRequest{}
 	}
+	call = v1CallForTenant(call, req.Tenant)
 	pageSize := req.PageSize
 	if pageSize == 0 {
 		pageSize = 50
@@ -125,10 +128,11 @@ func (h *a2aV1Handler) ListTasks(ctx context.Context, req *lf.ListTasksRequest) 
 }
 
 func (h *a2aV1Handler) CancelTask(ctx context.Context, req *lf.CancelTaskRequest) (*lf.Task, error) {
-	call, err := v1CallFromContext(ctx)
+	call, err := h.callFromContext(ctx)
 	if err != nil || req == nil || req.ID == "" {
 		return nil, lf.ErrInvalidParams
 	}
+	call = v1CallForTenant(call, req.Tenant)
 	task, err := h.server.findTaskByA2AID(call.request, string(req.ID), call.systemName)
 	if err != nil {
 		return nil, lf.ErrTaskNotFound
@@ -186,11 +190,12 @@ func (h *a2aV1Handler) SendStreamingMessage(ctx context.Context, req *lf.SendMes
 
 func (h *a2aV1Handler) SubscribeToTask(ctx context.Context, req *lf.SubscribeToTaskRequest) iter.Seq2[lf.Event, error] {
 	return func(yield func(lf.Event, error) bool) {
-		call, err := v1CallFromContext(ctx)
+		call, err := h.callFromContext(ctx)
 		if err != nil || req == nil || req.ID == "" {
 			yield(nil, lf.ErrInvalidParams)
 			return
 		}
+		call = v1CallForTenant(call, req.Tenant)
 		if h.server.a2aConfig != nil && !h.server.a2aConfig.StreamingEnabled {
 			yield(nil, lf.ErrUnsupportedOperation)
 			return
@@ -233,13 +238,18 @@ func (h *a2aV1Handler) GetExtendedAgentCard(context.Context, *lf.GetExtendedAgen
 }
 
 func (h *a2aV1Handler) createTask(ctx context.Context, req *lf.SendMessageRequest) (resources.Task, a2aV1CallContext, error) {
-	call, err := v1CallFromContext(ctx)
+	call, err := h.callFromContext(ctx)
 	if err != nil {
 		return resources.Task{}, call, lf.ErrInvalidRequest
 	}
 	systemName := call.systemName
 	if systemName == "" && req != nil {
-		systemName = v1TargetFromMetadata(req.Metadata)
+		call = v1CallForTenant(call, req.Tenant)
+		systemName = call.systemName
+	}
+	if systemName == "" && req != nil {
+		call = v1CallForTenant(call, v1TargetFromMetadata(req.Metadata))
+		systemName = call.systemName
 	}
 	var target resources.AgentSystem
 	if systemName == "" {
@@ -343,12 +353,38 @@ func (h *a2aV1Handler) waitForTask(
 	}
 }
 
-func v1CallFromContext(ctx context.Context) (a2aV1CallContext, error) {
+func (h *a2aV1Handler) callFromContext(ctx context.Context) (a2aV1CallContext, error) {
 	call, ok := ctx.Value(a2aV1CallContextKey{}).(a2aV1CallContext)
-	if !ok || call.request == nil {
-		return a2aV1CallContext{}, fmt.Errorf("missing A2A request context")
+	if ok && call.request != nil {
+		return call, nil
 	}
-	return call, nil
+
+	// gRPC carries the same bearer credential in incoming metadata. Build a
+	// synthetic request so the existing A2A authorization and task visibility
+	// rules remain the single source of truth across transports.
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://a2a-grpc.local/a2a", nil)
+	if err != nil {
+		return a2aV1CallContext{}, err
+	}
+	if md, present := metadata.FromIncomingContext(ctx); present {
+		if values := md.Get("authorization"); len(values) > 0 {
+			request.Header.Set("Authorization", values[0])
+		}
+	}
+	allowed, statusCode, _, identity := authorizeWithIdentity(h.server.authorizer, request, "a2a")
+	if allowed {
+		request = request.WithContext(withAuthIdentity(request.Context(), identity))
+		return a2aV1CallContext{request: request}, nil
+	}
+	if request.Header.Get("Authorization") == "" {
+		// Unauthenticated calls may still access AgentSystems explicitly
+		// configured with spec.a2a.auth=public.
+		return a2aV1CallContext{request: request}, nil
+	}
+	if statusCode == http.StatusForbidden {
+		return a2aV1CallContext{}, lf.ErrUnauthorized
+	}
+	return a2aV1CallContext{}, lf.ErrUnauthenticated
 }
 
 func v1TargetFromMetadata(metadata map[string]any) string {
@@ -358,6 +394,32 @@ func v1TargetFromMetadata(metadata map[string]any) string {
 		}
 	}
 	return ""
+}
+
+func v1CallForTenant(call a2aV1CallContext, tenant string) a2aV1CallContext {
+	if call.systemName != "" || call.request == nil {
+		return call
+	}
+	tenant = strings.TrimSpace(tenant)
+	if tenant == "" {
+		return call
+	}
+	namespace := resources.DefaultNamespace
+	systemName := tenant
+	if value, name, ok := strings.Cut(tenant, "/"); ok {
+		namespace = resources.NormalizeNamespace(value)
+		systemName = strings.TrimSpace(name)
+	}
+	if systemName == "" {
+		return call
+	}
+	request := call.request.Clone(call.request.Context())
+	query := request.URL.Query()
+	query.Set("namespace", namespace)
+	request.URL.RawQuery = query.Encode()
+	call.request = request
+	call.systemName = systemName
+	return call
 }
 
 func isA2ATask(task resources.Task) bool {

@@ -177,6 +177,28 @@ func TestGenerateSystemCard(t *testing.T) {
 	}
 }
 
+func TestGenerateSystemCardAdvertisesGRPCInterface(t *testing.T) {
+	system := resources.AgentSystem{
+		Metadata: resources.ObjectMeta{Name: "pipeline", Namespace: "team"},
+	}
+	card := GenerateSystemCard(system, nil, nil, CardGeneratorConfig{
+		PublicBaseURL:   "https://orloj.example.com",
+		GRPCPublicURL:   "https://orloj.example.com:8443",
+		ProtocolVersion: "1.0",
+		Namespace:       "team",
+	})
+	if len(card.SupportedInterfaces) != 2 {
+		t.Fatalf("supported interfaces = %d, want 2", len(card.SupportedInterfaces))
+	}
+	grpcInterface := card.SupportedInterfaces[1]
+	if grpcInterface.ProtocolBinding != "GRPC" || grpcInterface.URL != "https://orloj.example.com:8443" {
+		t.Fatalf("unexpected gRPC interface: %+v", grpcInterface)
+	}
+	if grpcInterface.Tenant != "team/pipeline" {
+		t.Fatalf("gRPC tenant = %q, want team/pipeline", grpcInterface.Tenant)
+	}
+}
+
 func TestGenerateAgentCard_NoAuth(t *testing.T) {
 	agent := resources.Agent{
 		Metadata: resources.ObjectMeta{Name: "no-auth-agent"},

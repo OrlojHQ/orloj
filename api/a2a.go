@@ -22,6 +22,7 @@ import (
 // A2AConfig holds server-side A2A configuration.
 type A2AConfig struct {
 	PublicBaseURL          string
+	GRPCPublicURL          string
 	ProtocolVersion        string
 	StreamingEnabled       bool
 	AuthSchemes            []string
@@ -568,6 +569,7 @@ func (s *Server) buildCardConfig(namespace string) a2a.CardGeneratorConfig {
 	}
 	return a2a.CardGeneratorConfig{
 		PublicBaseURL:    s.a2aConfig.PublicBaseURL,
+		GRPCPublicURL:    s.a2aConfig.GRPCPublicURL,
 		ProtocolVersion:  s.a2aConfig.ProtocolVersion,
 		StreamingEnabled: s.a2aConfig.StreamingEnabled,
 		AuthSchemes:      s.a2aConfig.AuthSchemes,

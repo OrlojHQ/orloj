@@ -202,6 +202,14 @@ spec:
               value: {{ .Values.a2a.rateLimit.requestsPerMinute | quote }}
             - name: ORLOJ_A2A_RATE_LIMIT_MAX_SUBSCRIBE
               value: {{ .Values.a2a.rateLimit.maxConcurrentSubscriptions | quote }}
+            {{- if .Values.a2a.grpc.enabled }}
+            - name: ORLOJ_A2A_GRPC_ADDR
+              value: {{ .Values.a2a.grpc.addr | quote }}
+            {{- if .Values.a2a.grpc.publicURL }}
+            - name: ORLOJ_A2A_GRPC_PUBLIC_URL
+              value: {{ .Values.a2a.grpc.publicURL | quote }}
+            {{- end }}
+            {{- end }}
             {{- if .Values.a2a.cardSigning.existingSecret }}
             - name: ORLOJ_A2A_CARD_SIGNING_KEY_FILE
               value: /var/run/orloj/a2a-signing/private-key.pem
@@ -228,6 +236,11 @@ spec:
             - name: http
               containerPort: {{ .Values.server.containerPort }}
               protocol: TCP
+            {{- if .Values.a2a.grpc.enabled }}
+            - name: a2a-grpc
+              containerPort: {{ .Values.a2a.grpc.port }}
+              protocol: TCP
+            {{- end }}
           livenessProbe:
             httpGet:
               path: /healthz

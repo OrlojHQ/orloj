@@ -15,5 +15,11 @@ spec:
       {{- if and (eq .Values.server.service.type "NodePort") .Values.server.service.nodePort }}
       nodePort: {{ .Values.server.service.nodePort }}
       {{- end }}
+    {{- if .Values.a2a.grpc.enabled }}
+    - port: {{ .Values.a2a.grpc.port }}
+      targetPort: a2a-grpc
+      protocol: TCP
+      name: a2a-grpc
+    {{- end }}
   selector:
     {{- include "orloj.server.selectorLabels" . | nindent 4 }}

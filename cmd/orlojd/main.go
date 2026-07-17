@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -25,6 +26,8 @@ import (
 	"github.com/OrlojHQ/orloj/store"
 	"github.com/OrlojHQ/orloj/telemetry"
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 func main() {
@@ -85,6 +88,8 @@ func main() {
 	a2aRateLimitEnabled := flag.Bool("a2a-rate-limit-enabled", envBool("ORLOJ_A2A_RATE_LIMIT_ENABLED", true), "enable per-IP rate limiting on A2A endpoints (env: ORLOJ_A2A_RATE_LIMIT_ENABLED)")
 	a2aRateLimitRPM := flag.Int("a2a-rate-limit-rpm", envInt("ORLOJ_A2A_RATE_LIMIT_RPM", 30), "A2A requests per minute per IP (env: ORLOJ_A2A_RATE_LIMIT_RPM)")
 	a2aRateLimitMaxSubscribe := flag.Int("a2a-rate-limit-max-subscribe", envInt("ORLOJ_A2A_RATE_LIMIT_MAX_SUBSCRIBE", 10), "max concurrent A2A SSE subscriptions globally (env: ORLOJ_A2A_RATE_LIMIT_MAX_SUBSCRIBE)")
+	a2aGRPCAddr := flag.String("a2a-grpc-addr", env("ORLOJ_A2A_GRPC_ADDR", ""), "separate listen address for the A2A v1 gRPC service (env: ORLOJ_A2A_GRPC_ADDR)")
+	a2aGRPCPublicURL := flag.String("a2a-grpc-public-url", env("ORLOJ_A2A_GRPC_PUBLIC_URL", ""), "public gRPC URL advertised in A2A Agent Cards (env: ORLOJ_A2A_GRPC_PUBLIC_URL)")
 	a2aCardSigningKeyFile := flag.String("a2a-card-signing-key-file", env("ORLOJ_A2A_CARD_SIGNING_KEY_FILE", ""), "PEM private key for signing A2A Agent Cards (env: ORLOJ_A2A_CARD_SIGNING_KEY_FILE)")
 	a2aCardSigningKeyID := flag.String("a2a-card-signing-key-id", env("ORLOJ_A2A_CARD_SIGNING_KEY_ID", "orloj"), "JWS key ID for signed A2A Agent Cards (env: ORLOJ_A2A_CARD_SIGNING_KEY_ID)")
 	toolK8sEnabled := flag.Bool("tool-k8s-enabled", envBool("ORLOJ_TOOL_K8S_ENABLED", false), "enable kubernetes tool isolation runtime for isolation_mode=kubernetes tools")
@@ -402,6 +407,7 @@ func main() {
 	}
 	a2aConfig := &api.A2AConfig{
 		PublicBaseURL:          strings.TrimSpace(*a2aPublicBaseURL),
+		GRPCPublicURL:          strings.TrimSpace(*a2aGRPCPublicURL),
 		ProtocolVersion:        strings.TrimSpace(*a2aProtocolVersion),
 		StreamingEnabled:       true,
 		AuthSchemes:            authSchemes,
@@ -607,6 +613,47 @@ func main() {
 		logger.Printf("embedded task worker enabled id=%s lease=%s max_concurrent_tasks=%d", *taskWorkerID, taskLeaseDuration.String(), *embeddedWorkerMaxConcurrentTasks)
 	}
 
+	tlsEnabled := strings.TrimSpace(*tlsCertFile) != "" || strings.TrimSpace(*tlsKeyFile) != ""
+	if tlsEnabled && (strings.TrimSpace(*tlsCertFile) == "" || strings.TrimSpace(*tlsKeyFile) == "") {
+		fatalLogger.Fatalf("both --tls-cert-file and --tls-key-file are required for TLS")
+	}
+
+	if grpcAddr := strings.TrimSpace(*a2aGRPCAddr); grpcAddr != "" {
+		listener, err := net.Listen("tcp", grpcAddr)
+		if err != nil {
+			fatalLogger.Fatalf("listen for A2A gRPC on %s: %v", grpcAddr, err)
+		}
+		grpcOptions := make([]grpc.ServerOption, 0, 1)
+		if tlsEnabled {
+			transportCredentials, err := credentials.NewServerTLSFromFile(*tlsCertFile, *tlsKeyFile)
+			if err != nil {
+				fatalLogger.Fatalf("load A2A gRPC TLS credentials: %v", err)
+			}
+			grpcOptions = append(grpcOptions, grpc.Creds(transportCredentials))
+		}
+		grpcServer := grpc.NewServer(grpcOptions...)
+		server.RegisterA2AGRPC(grpcServer)
+		startBackground(func() {
+			if err := grpcServer.Serve(listener); err != nil {
+				logger.Printf("A2A gRPC server stopped: %v", err)
+			}
+		})
+		startBackground(func() {
+			<-ctx.Done()
+			stopped := make(chan struct{})
+			go func() {
+				grpcServer.GracefulStop()
+				close(stopped)
+			}()
+			select {
+			case <-stopped:
+			case <-time.After(5 * time.Second):
+				grpcServer.Stop()
+			}
+		})
+		logger.Printf("A2A gRPC server listening on %s", grpcAddr)
+	}
+
 	httpServer := &http.Server{
 		Addr:              *addr,
 		Handler:           telemetry.RequestIDMiddleware(server.Handler()),
@@ -627,10 +674,7 @@ func main() {
 	}()
 
 	logger.Printf("API server listening on %s", *addr)
-	if strings.TrimSpace(*tlsCertFile) != "" || strings.TrimSpace(*tlsKeyFile) != "" {
-		if strings.TrimSpace(*tlsCertFile) == "" || strings.TrimSpace(*tlsKeyFile) == "" {
-			fatalLogger.Fatalf("both --tls-cert-file and --tls-key-file are required for TLS")
-		}
+	if tlsEnabled {
 		if err := httpServer.ListenAndServeTLS(*tlsCertFile, *tlsKeyFile); err != nil && err != http.ErrServerClosed {
 			fatalLogger.Fatalf("server error: %v", err)
 		}

@@ -52,6 +52,8 @@ go run ./cmd/orlojd -h
 | `--a2a-rate-limit-enabled` | `true` | Enable per-IP rate limiting for A2A endpoints. | Env `ORLOJ_A2A_RATE_LIMIT_ENABLED`. |
 | `--a2a-rate-limit-rpm` | `30` | Max A2A JSON-RPC requests per minute per IP. | Env `ORLOJ_A2A_RATE_LIMIT_RPM`. |
 | `--a2a-rate-limit-max-subscribe` | `10` | Max concurrent SSE subscribe connections globally (server-wide). | Env `ORLOJ_A2A_RATE_LIMIT_MAX_SUBSCRIBE`. |
+| `--a2a-grpc-addr` | empty | Separate listen address for the normative A2A v1 gRPC service. | Env `ORLOJ_A2A_GRPC_ADDR`; empty disables gRPC. |
+| `--a2a-grpc-public-url` | empty | Externally reachable gRPC URL advertised in Agent Cards. | Env `ORLOJ_A2A_GRPC_PUBLIC_URL`; set with `--a2a-grpc-addr`. |
 | `--a2a-card-signing-key-file` | empty | PEM private key used to JWS-sign Agent Cards. | Env `ORLOJ_A2A_CARD_SIGNING_KEY_FILE`; supports RSA (2048+), P-256 ECDSA, and Ed25519. |
 | `--a2a-card-signing-key-id` | `orloj` | JWS `kid` for signed Agent Cards. | Env `ORLOJ_A2A_CARD_SIGNING_KEY_ID`. |
 

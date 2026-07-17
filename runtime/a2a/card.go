@@ -10,6 +10,7 @@ import (
 // CardGeneratorConfig controls Agent Card generation.
 type CardGeneratorConfig struct {
 	PublicBaseURL        string
+	GRPCPublicURL        string
 	ProtocolVersion      string
 	AgentVersion         string
 	StreamingEnabled     bool
@@ -118,6 +119,19 @@ func newBaseCard(name, description, agentURL string, config CardGeneratorConfig)
 		ProtocolBinding: "JSONRPC",
 		ProtocolVersion: protocolVersion,
 	}}
+	if grpcURL := strings.TrimSpace(config.GRPCPublicURL); grpcURL != "" {
+		tenant := name
+		namespace := resources.NormalizeNamespace(config.Namespace)
+		if namespace != "" {
+			tenant = namespace + "/" + name
+		}
+		interfaces = append(interfaces, AgentInterface{
+			URL:             grpcURL,
+			ProtocolBinding: "GRPC",
+			ProtocolVersion: protocolVersion,
+			Tenant:          tenant,
+		})
+	}
 	interfaces = append(interfaces, config.AdditionalInterfaces...)
 
 	card := AgentCard{
