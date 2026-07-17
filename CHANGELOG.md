@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **A2A v1.0 JSON-RPC compatibility**: the existing A2A endpoint now accepts the v1 `SendMessage`, `SendStreamingMessage`, `GetTask`, `ListTasks`, `CancelTask`, and `SubscribeToTask` methods while preserving Orloj's legacy `tasks/*` methods.
+
 ## [0.18.0] - 2026-07-09
 
 ### Added

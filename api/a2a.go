@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -125,6 +126,16 @@ func (s *Server) handleA2AJSONRPC(w http.ResponseWriter, r *http.Request) {
 	}
 
 	systemName := extractA2ASystemNameFromPath(r.URL.Path)
+	if isA2AV1Method(req.Method) {
+		version := strings.TrimSpace(r.Header.Get("A2A-Version"))
+		if version != "" && version != "1.0" {
+			writeA2AV1VersionError(w, req.ID, version)
+			return
+		}
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		s.handleA2AV1JSONRPC(w, r, systemName)
+		return
+	}
 
 	switch req.Method {
 	case a2a.MethodTaskSend:
@@ -776,6 +787,28 @@ func writeA2AResult(w http.ResponseWriter, id any, result any) {
 		JSONRPC: "2.0",
 		ID:      id,
 		Result:  result,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func writeA2AV1VersionError(w http.ResponseWriter, id any, version string) {
+	resp := a2a.JSONRPCResponse{
+		JSONRPC: "2.0",
+		ID:      id,
+		Error: &a2a.JSONRPCError{
+			Code:    -32009,
+			Message: "this version is not supported",
+			Data: []map[string]any{{
+				"@type":  "type.googleapis.com/google.rpc.ErrorInfo",
+				"reason": "VERSION_NOT_SUPPORTED",
+				"domain": "a2a-protocol.org",
+				"metadata": map[string]string{
+					"requestedVersion": version,
+					"supportedVersion": "1.0",
+				},
+			}},
+		},
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)

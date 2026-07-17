@@ -82,7 +82,22 @@ components:
             - type: integer
         method:
           type: string
-          enum: ["tasks/send", "tasks/get", "tasks/cancel", "tasks/sendSubscribe"]
+          enum:
+            - tasks/send
+            - tasks/get
+            - tasks/cancel
+            - tasks/sendSubscribe
+            - SendMessage
+            - SendStreamingMessage
+            - GetTask
+            - ListTasks
+            - CancelTask
+            - SubscribeToTask
+            - CreateTaskPushNotificationConfig
+            - GetTaskPushNotificationConfig
+            - ListTaskPushNotificationConfigs
+            - DeleteTaskPushNotificationConfig
+            - GetExtendedAgentCard
         params:
           type: object
 
