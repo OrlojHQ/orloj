@@ -1087,8 +1087,17 @@ func fetchLogs(ctx context.Context, endpoint string) ([]string, error) {
 // This is polling, not a server push: AppendLog does not publish to the
 // event bus, so there's no existing live signal to subscribe to without a
 // backend change. Latency is bounded by interval, not instant.
+//
+// Resume position is tracked by the content of the last printed line, not
+// an index: both agent logs (runtime/agent_worker.go recordLog, last 200)
+// and in-memory task logs (store/resource_stores.go AppendLog, last 500)
+// are ring buffers that trim from the front, so the slice length alone
+// isn't a reliable cursor once it fills up. If the last-seen line has
+// rotated out entirely, everything currently returned is printed instead
+// of nothing.
 func streamLogs(ctx context.Context, out io.Writer, fetch func(context.Context) ([]string, error), interval time.Duration) error {
-	printed := 0
+	var lastPrinted string
+	haveLast := false
 	for {
 		logs, err := fetch(ctx)
 		if err != nil {
@@ -1097,13 +1106,20 @@ func streamLogs(ctx context.Context, out io.Writer, fetch func(context.Context) 
 			}
 			return err
 		}
-		if printed > len(logs) {
-			printed = 0
+
+		start := 0
+		if haveLast {
+			if idx := lastIndexOf(logs, lastPrinted); idx >= 0 {
+				start = idx + 1
+			}
 		}
-		for _, line := range logs[printed:] {
+		for _, line := range logs[start:] {
 			fmt.Fprintln(out, line)
 		}
-		printed = len(logs)
+		if len(logs) > 0 {
+			lastPrinted = logs[len(logs)-1]
+			haveLast = true
+		}
 
 		select {
 		case <-ctx.Done():
@@ -1111,6 +1127,18 @@ func streamLogs(ctx context.Context, out io.Writer, fetch func(context.Context) 
 		case <-time.After(interval):
 		}
 	}
+}
+
+// lastIndexOf returns the index of the last occurrence of target in logs,
+// or -1 if not found. Searches from the end since the resume point is
+// always the most recently printed line.
+func lastIndexOf(logs []string, target string) int {
+	for i := len(logs) - 1; i >= 0; i-- {
+		if logs[i] == target {
+			return i
+		}
+	}
+	return -1
 }
 
 // --- trace ---

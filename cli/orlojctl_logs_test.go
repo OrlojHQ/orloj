@@ -130,6 +130,73 @@ func TestStreamLogsFollowsNewLines(t *testing.T) {
 	}
 }
 
+// TestStreamLogsFollowsRotatedBuffer verifies --follow keeps up when the
+// backing log store is a fixed-size ring buffer (agent logs cap at 200,
+// in-memory task logs cap at 500) that drops the oldest line as new ones
+// are appended, so len(logs) alone can't be used as a resume cursor.
+func TestStreamLogsFollowsRotatedBuffer(t *testing.T) {
+	const maxLen = 3
+	var calls int32
+	responses := [][]string{
+		{"a", "b", "c"}, // buffer full
+		{"b", "c", "d"}, // "a" rotated out, "d" appended
+		{"c", "d", "e"}, // "b" rotated out, "e" appended
+		{"c", "d", "e"}, // no change
+	}
+	fetch := func(ctx context.Context) ([]string, error) {
+		n := atomic.AddInt32(&calls, 1) - 1
+		if int(n) >= len(responses) {
+			n = int32(len(responses) - 1)
+		}
+		got := responses[n]
+		if len(got) > maxLen {
+			t.Fatalf("test fixture response exceeds ring buffer size: %v", got)
+		}
+		return got, nil
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	var out bytes.Buffer
+	done := make(chan error, 1)
+	go func() {
+		done <- streamLogs(ctx, &out, fetch, time.Millisecond)
+	}()
+
+	deadline := time.After(2 * time.Second)
+	for {
+		if atomic.LoadInt32(&calls) >= int32(len(responses)) {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("timed out waiting for streamLogs to poll enough times")
+		case <-time.After(time.Millisecond):
+		}
+	}
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("streamLogs returned error: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("streamLogs did not return after context cancellation")
+	}
+
+	printed := strings.TrimSpace(out.String())
+	lines := strings.Split(printed, "\n")
+	want := []string{"a", "b", "c", "d", "e"}
+	if len(lines) != len(want) {
+		t.Fatalf("expected %d printed lines (no gaps, no duplicates), got %d: %v", len(want), len(lines), lines)
+	}
+	for i, line := range want {
+		if lines[i] != line {
+			t.Fatalf("expected line %d to be %q, got %q", i, line, lines[i])
+		}
+	}
+}
+
 // TestStreamLogsPropagatesFetchError ensures a real fetch failure (not a
 // context cancellation) is still surfaced to the caller.
 func TestStreamLogsPropagatesFetchError(t *testing.T) {

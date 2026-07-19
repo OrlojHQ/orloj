@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`orlojctl logs --follow` / `-f`**: polls task/agent logs and prints new lines as they appear, until interrupted with Ctrl+C. `--follow-interval` sets the poll period (default `2s`).
+
 ## [0.18.0] - 2026-07-09
 
 ### Added
