@@ -153,6 +153,10 @@ export default defineConfig({
           text: "Use Remote A2A Agents",
           link: "/guides/a2a-remote-agents",
         },
+        {
+          text: "OpenAI Chat Completions Facade",
+          link: "/guides/openai-chat-completions",
+        },
       ],
     },
 

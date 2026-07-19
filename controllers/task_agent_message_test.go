@@ -158,8 +158,10 @@ func TestTaskControllerPublishesAgentHandoffMessages(t *testing.T) {
 	if got := task.Status.Output["agent.1.message_content"]; got != "model=gpt-4o step=1" {
 		t.Fatalf("expected task output message content from result output, got %q", got)
 	}
+	if got := task.Status.Output["last_output"]; got != "model=gpt-4o step=1" {
+		t.Fatalf("expected task last_output from final agent result, got %q", got)
+	}
 }
-
 
 func TestTaskControllerFailsTaskWhenMessagePublishFails(t *testing.T) {
 	controller, stores := newTaskControllerHarness()

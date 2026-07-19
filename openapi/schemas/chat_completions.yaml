@@ -1,0 +1,97 @@
+# OpenAI-compatible chat completions facade schemas.
+components:
+  schemas:
+    ChatCompletionMessage:
+      type: object
+      required: [role, content]
+      properties:
+        role:
+          type: string
+          enum: [system, user, assistant]
+          description: Chat role. Other OpenAI roles are rejected.
+        content:
+          type: string
+          description: Plain text content only. Multimodal content part arrays are not supported.
+    ChatCompletionRequest:
+      type: object
+      required: [model, messages]
+      properties:
+        model:
+          type: string
+          description: AgentSystem metadata.name in the request namespace (`?namespace=`).
+        messages:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/ChatCompletionMessage"
+        stream:
+          type: boolean
+          default: false
+          description: >
+            When true, open an OpenAI-shaped SSE (`text/event-stream`) response immediately,
+            send keepalives while the Task runs, then emit the final content and `data: [DONE]`.
+            This is not token streaming.
+      additionalProperties: true
+    ChatCompletionMessageOut:
+      type: object
+      properties:
+        role:
+          type: string
+        content:
+          type: string
+    ChatCompletionChoice:
+      type: object
+      properties:
+        index:
+          type: integer
+        message:
+          $ref: "#/components/schemas/ChatCompletionMessageOut"
+        delta:
+          $ref: "#/components/schemas/ChatCompletionMessageOut"
+        finish_reason:
+          type: [string, "null"]
+    ChatCompletionUsage:
+      type: object
+      properties:
+        prompt_tokens:
+          type: integer
+        completion_tokens:
+          type: integer
+        total_tokens:
+          type: integer
+    ChatCompletionResponse:
+      type: object
+      required: [id, object, created, model, choices]
+      properties:
+        id:
+          type: string
+        object:
+          type: string
+          enum: [chat.completion, chat.completion.chunk]
+        created:
+          type: integer
+          format: int64
+        model:
+          type: string
+        choices:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChatCompletionChoice"
+        usage:
+          $ref: "#/components/schemas/ChatCompletionUsage"
+    ChatCompletionError:
+      type: object
+      required: [message, type]
+      properties:
+        message:
+          type: string
+        type:
+          type: string
+        code:
+          type: string
+    ChatCompletionErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          $ref: "#/components/schemas/ChatCompletionError"

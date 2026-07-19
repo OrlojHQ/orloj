@@ -266,6 +266,12 @@ Watch streams are bounded:
 - `PUT` requires `metadata.resourceVersion` or `If-Match`
 - stale updates return `409 Conflict`
 
+## OpenAI Chat Completions Facade
+
+- `POST /v1/chat/completions` — OpenAI-compatible facade that maps `model` to an AgentSystem name, creates a Task from `messages`, waits for a terminal phase, and returns an OpenAI-shaped completion. Optional `?namespace=` selects the AgentSystem namespace. `stream=true` opens SSE immediately and sends keepalives before the final content (not token streaming). Requires writer auth.
+
+See [Call AgentSystems via OpenAI Chat Completions](../guides/openai-chat-completions.md).
+
 ## A2A Endpoints
 
 AgentSystems opt in to inbound A2A with `spec.a2a.enabled: true`. Enabled systems are available through:

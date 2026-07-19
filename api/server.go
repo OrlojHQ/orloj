@@ -94,6 +94,7 @@ type Server struct {
 	corsAllowedOrigins       []string
 	watchSubscribeCount      atomic.Int32
 	watchRateLimiter         *ipRateLimiter
+	chatCompletionCount      atomic.Int32
 }
 
 func NewServer(stores Stores, runtime *agentruntime.Manager, logger *log.Logger) *Server {
@@ -363,6 +364,12 @@ func isStreamingWatchRequest(r *http.Request) bool {
 		return true
 	}
 
+	// Chat completions waits for an AgentSystem task (often longer than the
+	// default write timeout) and may return OpenAI-shaped SSE.
+	if r.Method == http.MethodPost && path == "/v1/chat/completions" {
+		return true
+	}
+
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		return false
 	}
@@ -437,6 +444,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/v1/tool-approvals/", s.handleToolApprovalByName)
 	s.mux.HandleFunc("/v1/task-approvals", s.handleTaskApprovals)
 	s.mux.HandleFunc("/v1/task-approvals/", s.handleTaskApprovalByName)
+
+	s.mux.HandleFunc("/v1/chat/completions", s.handleChatCompletions)
 
 	s.mux.HandleFunc("/v1/tasks", s.handleTasks)
 	s.mux.HandleFunc("/v1/tasks/watch", s.watchTasks)

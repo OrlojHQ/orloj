@@ -2063,6 +2063,7 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 		output[prefix+".tokens_used"] = strconv.Itoa(result.TokensUsed)
 		output[prefix+".token_usage_source"] = strings.TrimSpace(result.TokenSource)
 		output[prefix+".last_event"] = result.LastEvent
+		output["last_output"] = strings.TrimSpace(result.Output)
 		task.Status.Output = copyStringMap(output)
 
 		nextRuntimeInput := copyStringMap(runtimeInput)
@@ -2454,6 +2455,7 @@ func (c *TaskController) executeTaskFromResume(
 		output[prefix+".last_event"] = result.LastEvent
 		output["tokens_used_total"] = strconv.Itoa(totalUsedTokens)
 		output["tokens_estimated_total"] = strconv.Itoa(totalEstimatedTokens)
+		output["last_output"] = strings.TrimSpace(result.Output)
 		task.Status.Output = copyStringMap(output)
 
 		nextRuntimeInput := copyStringMap(runtimeInput)
