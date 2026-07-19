@@ -60,7 +60,11 @@ func (r *ToolRuntime) Call(ctx context.Context, tool string, input string) (stri
 	// Best-effort Agent Card resolution: use the card's canonical URL if
 	// available, falling back to the configured agent_url on any error.
 	if card, err := r.client.FetchCard(ctx, agentURL, authHeaders); err == nil {
-		if canonical := strings.TrimSpace(card.URL); canonical != "" {
+		canonical := strings.TrimSpace(card.URL)
+		if iface, ok := card.PreferredInterface("JSONRPC", ""); ok {
+			canonical = strings.TrimSpace(iface.URL)
+		}
+		if canonical != "" {
 			agentURL = canonical
 		}
 	}

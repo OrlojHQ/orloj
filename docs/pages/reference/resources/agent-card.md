@@ -34,7 +34,7 @@ Both endpoints are public (no authentication required). Cards contain only metad
 | Field | Type | Description |
 |-------|------|-------------|
 | `streaming` | boolean | Whether the agent supports `tasks/sendSubscribe`. Derived from task trace SSE support. |
-| `pushNotifications` | boolean | Whether push notifications are available. Derived from TaskWebhook support. |
+| `pushNotifications` | boolean | Whether A2A v1 push configuration and outbound task event delivery are available. |
 | `stateTransitionHistory` | boolean | Whether task history is available. |
 
 ### Skills
@@ -73,7 +73,7 @@ How Orloj resources map to Agent Card fields:
 | `url` | `a2a.publicBaseURL` + `/v1/agent-systems/{name}/a2a` |
 | `protocolVersion` | `a2a.protocolVersion` server config |
 | `capabilities.streaming` | Server SSE support enabled |
-| `capabilities.pushNotifications` | TaskWebhook controller active |
+| `capabilities.pushNotifications` | A2A push configuration store and dispatcher active |
 | `skills[].id` | `Tool.metadata.name` (for each tool in `Agent.spec.tools`) |
 | `skills[].description` | `Tool.spec.description` |
 | `skills[].inputSchema` | `Tool.spec.input_schema` |

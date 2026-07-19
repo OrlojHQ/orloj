@@ -104,7 +104,7 @@ func (r *Registry) refreshAll(ctx context.Context) {
 			entry.CacheStatus = "ok"
 			entry.Error = ""
 			entry.LastRefreshed = now
-			entry.ProtocolVersion = card.ProtocolVersion
+			entry.ProtocolVersion = card.EffectiveProtocolVersion()
 		}
 		r.mu.Unlock()
 	}

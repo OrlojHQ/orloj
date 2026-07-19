@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -21,10 +22,13 @@ import (
 // A2AConfig holds server-side A2A configuration.
 type A2AConfig struct {
 	PublicBaseURL          string
+	GRPCPublicURL          string
 	ProtocolVersion        string
 	StreamingEnabled       bool
 	AuthSchemes            []string
 	Registry               *a2a.Registry
+	CardSigner             a2a.CardSigner
+	AllowPrivateEndpoints  bool
 	RateLimitRPM           int
 	MaxConcurrentSubscribe int
 }
@@ -53,6 +57,11 @@ func (s *Server) handleWellKnownAgentCard(w http.ResponseWriter, r *http.Request
 		config.AuthSchemes = nil
 	}
 	card := a2a.GenerateSystemCard(systems[0], agentsForSystem(systems[0], agents), tools, config)
+	card, err = s.signA2ACard(card)
+	if err != nil {
+		http.Error(w, "failed to sign Agent Card", http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "public, max-age=300")
@@ -90,6 +99,11 @@ func (s *Server) handleAgentCard(w http.ResponseWriter, r *http.Request) {
 		config.AuthSchemes = nil
 	}
 	card := a2a.GenerateSystemCard(system, agentsForSystem(system, agents), tools, config)
+	card, err = s.signA2ACard(card)
+	if err != nil {
+		http.Error(w, "failed to sign Agent Card", http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "public, max-age=300")
@@ -125,6 +139,16 @@ func (s *Server) handleA2AJSONRPC(w http.ResponseWriter, r *http.Request) {
 	}
 
 	systemName := extractA2ASystemNameFromPath(r.URL.Path)
+	if isA2AV1Method(req.Method) {
+		version := strings.TrimSpace(r.Header.Get("A2A-Version"))
+		if version != "" && version != "1.0" {
+			writeA2AV1VersionError(w, req.ID, version)
+			return
+		}
+		r.Body = io.NopCloser(bytes.NewReader(body))
+		s.handleA2AV1JSONRPC(w, r, systemName)
+		return
+	}
 
 	switch req.Method {
 	case a2a.MethodTaskSend:
@@ -518,6 +542,11 @@ func (s *Server) handleA2ARegistry(w http.ResponseWriter, r *http.Request) {
 				config.AuthSchemes = nil
 			}
 			card := a2a.GenerateSystemCard(system, agentsForSystem(system, agents), tools, config)
+			card, err = s.signA2ACard(card)
+			if err != nil {
+				http.Error(w, "failed to sign Agent Card", http.StatusInternalServerError)
+				return
+			}
 			localCards = append(localCards, card)
 		}
 	}
@@ -541,8 +570,10 @@ func (s *Server) buildCardConfig(namespace string) a2a.CardGeneratorConfig {
 	}
 	return a2a.CardGeneratorConfig{
 		PublicBaseURL:    s.a2aConfig.PublicBaseURL,
+		GRPCPublicURL:    s.a2aConfig.GRPCPublicURL,
 		ProtocolVersion:  s.a2aConfig.ProtocolVersion,
 		StreamingEnabled: s.a2aConfig.StreamingEnabled,
+		WebhooksEnabled:  s.stores.A2APushConfigs != nil,
 		AuthSchemes:      s.a2aConfig.AuthSchemes,
 		Namespace:        resources.NormalizeNamespace(namespace),
 	}
@@ -779,6 +810,35 @@ func writeA2AResult(w http.ResponseWriter, id any, result any) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
+}
+
+func writeA2AV1VersionError(w http.ResponseWriter, id any, version string) {
+	resp := a2a.JSONRPCResponse{
+		JSONRPC: "2.0",
+		ID:      id,
+		Error: &a2a.JSONRPCError{
+			Code:    -32009,
+			Message: "this version is not supported",
+			Data: []map[string]any{{
+				"@type":  "type.googleapis.com/google.rpc.ErrorInfo",
+				"reason": "VERSION_NOT_SUPPORTED",
+				"domain": "a2a-protocol.org",
+				"metadata": map[string]string{
+					"requestedVersion": version,
+					"supportedVersion": "1.0",
+				},
+			}},
+		},
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func (s *Server) signA2ACard(card a2a.AgentCard) (a2a.AgentCard, error) {
+	if s.a2aConfig == nil || s.a2aConfig.CardSigner == nil {
+		return card, nil
+	}
+	return a2a.SignAgentCard(card, s.a2aConfig.CardSigner)
 }
 
 func sendSSEEvent(w http.ResponseWriter, flusher http.Flusher, eventType string, data any) error {

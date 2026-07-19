@@ -160,6 +160,15 @@ Agent Card discovery (GET) is always public regardless of `spec.a2a.auth`. Publi
 
 Setting `--a2a-allow-private-endpoints=true` (env: `ORLOJ_A2A_ALLOW_PRIVATE_ENDPOINTS`) permits outbound A2A requests to private and loopback IPs. This weakens SSRF protection and should only be enabled in trusted network environments (e.g., when remote A2A agents run on the same private network). Cloud metadata endpoints remain blocked regardless of this setting.
 
+### Agent Card Trust
+
+Agent Card signatures are optional by default for interoperability with legacy
+agents. In controlled deployments, configure `--a2a-trusted-card-keys` and
+`--a2a-require-signed-cards` so outbound tools and registry refreshes reject
+unsigned cards or signatures from unknown `kid` values. Keep signing private
+keys separate from trusted public-key material and rotate both by publishing
+overlapping signatures during the transition.
+
 ### Production Recommendations
 
 - Keep `allowPrivateEndpoints` disabled unless remote agents are on a trusted private network.
