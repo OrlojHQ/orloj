@@ -2313,9 +2313,10 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-			fetchLimit := opts.Limit
+			pageLimit := boundedSelectorPageLimit(opts.Limit)
+			fetchLimit := pageLimit
 			if len(selector) > 0 {
-				fetchLimit = boundedSelectorPageLimit(opts.Limit) * 2
+				fetchLimit = pageLimit * 2
 			}
 			items, err := s.stores.Tasks.ListQuery(r.Context(), store.TaskListOptions{
 				Limit:     fetchLimit,
@@ -2329,24 +2330,24 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if len(selector) > 0 {
-				filtered := make([]resources.Task, 0, opts.Limit)
+				filtered := make([]resources.Task, 0, pageLimit)
 				for _, item := range items {
 					if !matchMetadataFilters(item.Metadata, "", false, selector) {
 						continue
 					}
 					filtered = append(filtered, item)
-					if len(filtered) >= opts.Limit {
+					if len(filtered) >= pageLimit {
 						break
 					}
 				}
 				items = filtered
-			} else if opts.Limit > 0 && len(items) > opts.Limit {
-				items = items[:opts.Limit]
+			} else if len(items) > pageLimit {
+				items = items[:pageLimit]
 			}
 			cont := ""
 			if len(items) > 0 {
 				lastKey := scopedResourceKey(items[len(items)-1].Metadata)
-				cont = scopedListContinue(opts.Limit, lastKey, len(items) >= opts.Limit)
+				cont = scopedListContinue(pageLimit, lastKey, len(items) >= pageLimit)
 			}
 			writeJSON(w, http.StatusOK, resources.TaskList{ListMeta: resources.ListMeta{Continue: cont}, Items: items})
 			return
