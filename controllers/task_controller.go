@@ -1804,8 +1804,20 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 	if adaptErr != nil {
 		return nil, fmt.Errorf("context adapter: %w", adaptErr)
 	}
+	currentAgent := ""
+	currentBranchID := ""
+	currentParentBranchID := ""
 	if c.eventBus != nil {
 		c.executor.OnStepEvent = func(evt agentruntime.AgentStepEvent) {
+			if strings.TrimSpace(evt.Agent) == "" {
+				evt.Agent = currentAgent
+			}
+			if strings.TrimSpace(evt.BranchID) == "" {
+				evt.BranchID = currentBranchID
+			}
+			if strings.TrimSpace(evt.ParentBranchID) == "" {
+				evt.ParentBranchID = currentParentBranchID
+			}
 			c.eventBus.Publish(eventbus.Event{
 				Source:    "task-controller",
 				Type:      "task.trace",
@@ -1818,6 +1830,9 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 	}
 	defer func() { c.executor.OnStepEvent = nil }()
 	for idx, agentName := range order {
+		currentAgent = strings.TrimSpace(agentName)
+		currentBranchID = strings.TrimSpace(runtimeInput["inbox.branch_id"])
+		currentParentBranchID = strings.TrimSpace(runtimeInput["inbox.parent_branch_id"])
 		agentInputBefore := copyStringMap(runtimeInput)
 		lastAgentInputBefore = copyStringMap(agentInputBefore)
 		agent, ok, err := c.agentStore.Get(ctx, store.ScopedName(task.Metadata.Namespace, agentName))
@@ -2298,8 +2313,20 @@ func (c *TaskController) executeTaskFromResume(
 			return nil, fmt.Errorf("context adapter: %w", adaptErr)
 		}
 	}
+	currentAgent := ""
+	currentBranchID := ""
+	currentParentBranchID := ""
 	if c.eventBus != nil {
 		c.executor.OnStepEvent = func(evt agentruntime.AgentStepEvent) {
+			if strings.TrimSpace(evt.Agent) == "" {
+				evt.Agent = currentAgent
+			}
+			if strings.TrimSpace(evt.BranchID) == "" {
+				evt.BranchID = currentBranchID
+			}
+			if strings.TrimSpace(evt.ParentBranchID) == "" {
+				evt.ParentBranchID = currentParentBranchID
+			}
 			c.eventBus.Publish(eventbus.Event{
 				Source:    "task-controller",
 				Type:      "task.trace",
@@ -2313,6 +2340,9 @@ func (c *TaskController) executeTaskFromResume(
 	defer func() { c.executor.OnStepEvent = nil }()
 	for idx := startIndex; idx < len(order); idx++ {
 		agentName := order[idx]
+		currentAgent = strings.TrimSpace(agentName)
+		currentBranchID = strings.TrimSpace(runtimeInput["inbox.branch_id"])
+		currentParentBranchID = strings.TrimSpace(runtimeInput["inbox.parent_branch_id"])
 		agentInputBefore := copyStringMap(runtimeInput)
 		lastAgentInputBefore = copyStringMap(agentInputBefore)
 		agent, ok, err := c.agentStore.Get(ctx, store.ScopedName(task.Metadata.Namespace, agentName))
@@ -2950,10 +2980,16 @@ func (c *TaskController) appendRuntimeStepTrace(task *resources.Task, agentName 
 		return
 	}
 	for _, runtimeEvent := range events {
+		agent := strings.TrimSpace(runtimeEvent.Agent)
+		if agent == "" {
+			agent = strings.TrimSpace(agentName)
+		}
 		traceEvent := resources.TaskTraceEvent{
 			Timestamp:           runtimeEvent.Timestamp,
 			Type:                runtimeEvent.Type,
-			Agent:               strings.TrimSpace(agentName),
+			Agent:               agent,
+			BranchID:            strings.TrimSpace(runtimeEvent.BranchID),
+			ParentBranchID:      strings.TrimSpace(runtimeEvent.ParentBranchID),
 			Tool:                strings.TrimSpace(runtimeEvent.Tool),
 			ToolContractVersion: strings.TrimSpace(runtimeEvent.ToolContractVersion),
 			ToolRequestID:       strings.TrimSpace(runtimeEvent.ToolRequestID),
@@ -2963,6 +2999,7 @@ func (c *TaskController) appendRuntimeStepTrace(task *resources.Task, agentName 
 			Retryable:           runtimeEvent.Retryable,
 			Message:             agentruntime.RedactSensitive(strings.TrimSpace(runtimeEvent.Message)),
 			Step:                runtimeEvent.Step,
+			LatencyMS:           runtimeEvent.LatencyMS,
 			ToolAuthProfile:     strings.TrimSpace(runtimeEvent.ToolAuthProfile),
 			ToolAuthSecretRef:   strings.TrimSpace(runtimeEvent.ToolAuthSecretRef),
 		}
@@ -2971,6 +3008,8 @@ func (c *TaskController) appendRuntimeStepTrace(task *resources.Task, agentName 
 		}
 		if strings.EqualFold(runtimeEvent.Type, "model_call") {
 			traceEvent.Tokens = runtimeEvent.Tokens
+			traceEvent.InputTokens = runtimeEvent.InputTokens
+			traceEvent.OutputTokens = runtimeEvent.OutputTokens
 			traceEvent.TokenUsageSource = strings.TrimSpace(runtimeEvent.UsageSource)
 			if source := strings.TrimSpace(runtimeEvent.UsageSource); source != "" {
 				traceEvent.Message = strings.TrimSpace(traceEvent.Message + " usage_source=" + source)

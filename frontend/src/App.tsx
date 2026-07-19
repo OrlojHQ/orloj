@@ -13,6 +13,7 @@ import {
 import { Sidebar } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
 import { ToastContainer } from "./components/Toast";
+import { ConfirmDialogHost } from "./components/ConfirmDialog";
 import { SearchDialog } from "./components/SearchDialog";
 import { Dashboard } from "./pages/Dashboard";
 import { AgentSystems } from "./pages/AgentSystems";
@@ -199,6 +200,7 @@ function AppLayout({
         </main>
       </div>
       <ToastContainer />
+      <ConfirmDialogHost />
       <SearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   );

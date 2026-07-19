@@ -5,6 +5,7 @@ import { useDetailReturnNav } from "../hooks/useDetailReturnNav";
 import { useDeleteResource, useWorker, useUpdateResource } from "../api/hooks";
 import { saveWorkerYaml } from "../hooks/saveDetailYamlWithFreshRv";
 import { StatusBadge } from "../components/StatusBadge";
+import { DetailSkeleton } from "../components/DetailSkeleton";
 import { YamlEditor } from "../components/YamlEditor";
 import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
 import { ArrowLeft } from "lucide-react";
@@ -12,6 +13,7 @@ import clsx from "clsx";
 import { toast } from "../components/Toast";
 import type { Worker } from "../api/types";
 import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
+import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 
 type Tab = "overview" | "yaml";
 
@@ -26,6 +28,7 @@ export function WorkerDetail() {
   const routeName = nameParam ?? "";
   const { data: worker, isLoading, isError, error } = useWorker(routeName);
   const queryClient = useQueryClient();
+  const confirmDelete = useDeleteConfirm();
   const deleteMutation = useDeleteResource("Worker");
   const updateMutation = useUpdateResource("Worker");
   const [tab, setTab] = useState<Tab>("overview");
@@ -46,11 +49,11 @@ export function WorkerDetail() {
   }
 
   if (isLoading || !worker) {
-    return <div className="page"><div className="loading-placeholder">Loading worker...</div></div>;
+    return <DetailSkeleton />;
   }
 
   const handleDelete = async () => {
-    if (!window.confirm(`Delete Worker ${worker.metadata.name}?`)) return;
+    if (!(await confirmDelete("Worker", worker.metadata.name, worker.metadata))) return;
     try {
       await deleteMutation.mutateAsync({
         name: routeName,

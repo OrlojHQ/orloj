@@ -267,18 +267,34 @@ export function useTasks() {
   return useResourceList<Task>("Task", RESOURCE_ENDPOINTS.Task);
 }
 
+export type TaskListOptions = {
+  labelSelector?: string;
+  /** `name` | `created_at` | `phase` */
+  sort?: string;
+  /** `asc` | `desc` */
+  order?: string;
+  /** Exact task phase filter. */
+  phase?: string;
+};
+
 /** Paged task list for the Tasks index (`limit` / cursor, explicit “Load more”). */
-export function useTaskList(listOpts?: Pick<ResourceListOptions, "labelSelector">) {
+export function useTaskList(listOpts?: TaskListOptions) {
   const ns = useNamespace();
   const labelKey = listOpts?.labelSelector?.trim() ?? "";
+  const sortKey = listOpts?.sort?.trim() ?? "";
+  const orderKey = listOpts?.order?.trim() ?? "";
+  const phaseKey = listOpts?.phase?.trim() ?? "";
   const infinite = useInfiniteQuery({
-    queryKey: [...resourceKey("Task", ns), "paged", labelKey],
+    queryKey: [...resourceKey("Task", ns), "paged", labelKey, sortKey, orderKey, phaseKey],
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam }) =>
       client.list<Task>(RESOURCE_ENDPOINTS.Task, {
         limit: TASK_LIST_PAGE_LIMIT,
         after: pageParam,
         labelSelector: listOpts?.labelSelector?.trim() || undefined,
+        sort: listOpts?.sort?.trim() || undefined,
+        order: listOpts?.order?.trim() || undefined,
+        phase: listOpts?.phase?.trim() || undefined,
       }),
     getNextPageParam: (lastPage) => lastPage.continue?.trim() || undefined,
     refetchInterval: REFETCH_INTERVAL,

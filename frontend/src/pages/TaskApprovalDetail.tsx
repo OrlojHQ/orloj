@@ -12,6 +12,7 @@ import {
 import { useAppStore } from "../store";
 import { saveNamespacedResourceYaml } from "../hooks/saveDetailYamlWithFreshRv";
 import { StatusBadge } from "../components/StatusBadge";
+import { DetailSkeleton } from "../components/DetailSkeleton";
 import { YamlEditor } from "../components/YamlEditor";
 import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
 import { ArrowLeft, CheckCircle, MessageSquareWarning, XCircle } from "lucide-react";
@@ -19,6 +20,7 @@ import clsx from "clsx";
 import { toast } from "../components/Toast";
 import type { TaskApproval } from "../api/types";
 import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
+import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 
 type Tab = "overview" | "output" | "yaml";
 
@@ -43,6 +45,7 @@ export function TaskApprovalDetail() {
   const { data: approval, isLoading, isError, error } = useTaskApproval(routeName);
   const queryClient = useQueryClient();
   const namespace = useAppStore((s) => s.namespace);
+  const confirmDelete = useDeleteConfirm();
   const deleteMutation = useDeleteResource("TaskApproval");
   const updateMutation = useUpdateResource("TaskApproval");
   const approveMutation = useApproveTaskApproval();
@@ -63,7 +66,7 @@ export function TaskApprovalDetail() {
   }
 
   if (isLoading || !approval) {
-    return <div className="page"><div className="loading-placeholder">Loading approval...</div></div>;
+    return <DetailSkeleton />;
   }
 
   const isPending = (approval.status?.phase ?? "Pending").toLowerCase() === "pending";
@@ -105,7 +108,7 @@ export function TaskApprovalDetail() {
   };
 
   const handleDelete = async () => {
-    if (!window.confirm(`Delete TaskApproval ${approval.metadata.name}?`)) return;
+    if (!(await confirmDelete("TaskApproval", approval.metadata.name, approval.metadata))) return;
     try {
       await deleteMutation.mutateAsync(routeName);
       toast("success", "TaskApproval deleted");

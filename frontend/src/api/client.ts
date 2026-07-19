@@ -105,7 +105,26 @@ export type ListOptions = {
    * Server also accepts `labels` as an alias.
    */
   labelSelector?: string;
+  /** Task list sort field: `name` | `created_at` | `phase`. */
+  sort?: string;
+  /** Task list sort direction: `asc` | `desc`. */
+  order?: string;
+  /** Task list phase filter (exact phase name). */
+  phase?: string;
 };
+
+function applyListQueryParams(params: URLSearchParams | Record<string, string>, opts?: ListOptions) {
+  const set = (key: string, value: string) => {
+    if (params instanceof URLSearchParams) params.set(key, value);
+    else params[key] = value;
+  };
+  if (opts?.limit != null) set("limit", String(opts.limit));
+  if (opts?.after) set("after", opts.after);
+  if (opts?.labelSelector?.trim()) set("labelSelector", opts.labelSelector.trim());
+  if (opts?.sort?.trim()) set("sort", opts.sort.trim());
+  if (opts?.order?.trim()) set("order", opts.order.trim());
+  if (opts?.phase?.trim()) set("phase", opts.phase.trim());
+}
 
 export async function list<T>(resourcePath: string, opts?: ListOptions): Promise<ListResponse<T>> {
   const { namespace, apiBase } = getConnection();
@@ -114,15 +133,11 @@ export async function list<T>(resourcePath: string, opts?: ListOptions): Promise
   if (opts?.allNamespaces) {
     const base = apiBase.replace(/\/$/, "");
     const u = new URL(`/v1/${path}`, base);
-    if (opts?.limit != null) u.searchParams.set("limit", String(opts.limit));
-    if (opts?.after) u.searchParams.set("after", opts.after);
-    if (opts?.labelSelector?.trim()) u.searchParams.set("labelSelector", opts.labelSelector.trim());
+    applyListQueryParams(u.searchParams, opts);
     url = u.toString();
   } else {
     const qp: Record<string, string> = {};
-    if (opts?.limit != null) qp.limit = String(opts.limit);
-    if (opts?.after) qp.after = opts.after;
-    if (opts?.labelSelector?.trim()) qp.labelSelector = opts.labelSelector.trim();
+    applyListQueryParams(qp, opts);
     url = buildUrl(path, namespace, qp);
   }
   return request<ListResponse<T>>(url);

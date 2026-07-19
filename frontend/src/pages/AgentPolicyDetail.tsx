@@ -5,6 +5,7 @@ import { useAgentPolicy, useDeleteResource, useUpdateResource } from "../api/hoo
 import { useAppStore } from "../store";
 import { saveNamespacedResourceYaml } from "../hooks/saveDetailYamlWithFreshRv";
 import { StatusBadge } from "../components/StatusBadge";
+import { DetailSkeleton } from "../components/DetailSkeleton";
 import { YamlEditor } from "../components/YamlEditor";
 import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
 import { ArrowLeft } from "lucide-react";
@@ -46,11 +47,11 @@ export function AgentPolicyDetail() {
   }
 
   if (isLoading || !policy) {
-    return <div className="page"><div className="loading-placeholder">Loading agent policy...</div></div>;
+    return <DetailSkeleton />;
   }
 
   const handleDelete = async () => {
-    if (!confirmDelete("AgentPolicy", policy.metadata.name, policy.metadata)) return;
+    if (!(await confirmDelete("AgentPolicy", policy.metadata.name, policy.metadata))) return;
     try {
       await deleteMutation.mutateAsync(routeName);
       toast("success", "AgentPolicy deleted successfully");

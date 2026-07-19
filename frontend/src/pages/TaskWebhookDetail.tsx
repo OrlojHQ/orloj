@@ -8,12 +8,14 @@ import { useDeleteResource, useTaskWebhook, useTasks, useUpdateResource } from "
 import { useAppStore } from "../store";
 import { saveNamespacedResourceYaml } from "../hooks/saveDetailYamlWithFreshRv";
 import { StatusBadge } from "../components/StatusBadge";
+import { DetailSkeleton } from "../components/DetailSkeleton";
 import { YamlEditor } from "../components/YamlEditor";
 import { ResourceTable, type Column } from "../components/ResourceTable";
 import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
 import { toast } from "../components/Toast";
 import type { Task, TaskWebhook } from "../api/types";
 import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
+import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 
 type Tab = "overview" | "runs" | "yaml";
 
@@ -41,6 +43,7 @@ export function TaskWebhookDetail() {
   const queryClient = useQueryClient();
   const namespace = useAppStore((s) => s.namespace);
   const tasks = useTasks();
+  const confirmDelete = useDeleteConfirm();
   const deleteMutation = useDeleteResource("TaskWebhook");
   const updateMutation = useUpdateResource("TaskWebhook");
   const [tab, setTab] = useState<Tab>("overview");
@@ -89,13 +92,13 @@ export function TaskWebhookDetail() {
   }
 
   if (isLoading || !taskWebhook) {
-    return <div className="page"><div className="loading-placeholder">Loading task webhook...</div></div>;
+    return <DetailSkeleton />;
   }
 
   const webhookDetailPath = `/task-webhooks/${encodeURIComponent(routeName)}`;
 
   const handleDelete = async () => {
-    if (!window.confirm(`Delete TaskWebhook ${taskWebhook.metadata.name}?`)) return;
+    if (!(await confirmDelete("TaskWebhook", taskWebhook.metadata.name, taskWebhook.metadata))) return;
     try {
       await deleteMutation.mutateAsync(routeName);
       toast("success", "TaskWebhook deleted successfully");

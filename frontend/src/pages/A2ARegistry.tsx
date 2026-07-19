@@ -3,6 +3,7 @@ import { useA2AAgents } from "../api/hooks";
 import { StatusBadge } from "../components/StatusBadge";
 import { AgentCardPreview } from "../components/AgentCardPreview";
 import { EmptyState } from "../components/EmptyState";
+import { DetailSkeleton } from "../components/DetailSkeleton";
 import { Radio } from "lucide-react";
 import type { AgentCard } from "../api/types";
 
@@ -14,14 +15,7 @@ export function A2ARegistry() {
   const remoteAgents = data?.remoteAgents ?? [];
 
   if (isLoading) {
-    return (
-      <div className="page">
-        <div className="page__header">
-          <h1 className="page__title">A2A Registry</h1>
-        </div>
-        <div className="loading-placeholder">Loading A2A agents...</div>
-      </div>
-    );
+    return <DetailSkeleton />;
   }
 
   if (isError) {

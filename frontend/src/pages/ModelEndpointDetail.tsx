@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useDeleteResource, useModelEndpoint, useUpdateResource } from "../api/hooks";
 import { useAppStore } from "../store";
 import { StatusBadge } from "../components/StatusBadge";
+import { DetailSkeleton } from "../components/DetailSkeleton";
 import { YamlEditor } from "../components/YamlEditor";
 import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
 import { ArrowLeft } from "lucide-react";
@@ -48,11 +49,11 @@ export function ModelEndpointDetail() {
   }
 
   if (isLoading || !ep) {
-    return <div className="page"><div className="loading-placeholder">Loading model endpoint...</div></div>;
+    return <DetailSkeleton />;
   }
 
   const handleDelete = async () => {
-    if (!confirmDelete("ModelEndpoint", ep.metadata.name, ep.metadata)) return;
+    if (!(await confirmDelete("ModelEndpoint", ep.metadata.name, ep.metadata))) return;
     try {
       await deleteMutation.mutateAsync(routeName);
       toast("success", "ModelEndpoint deleted successfully");

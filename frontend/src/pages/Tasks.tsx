@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTaskList } from "../api/hooks";
-import { ResourceTable, type Column } from "../components/ResourceTable";
+import { ResourceTable, type Column, type SortOrder } from "../components/ResourceTable";
 import { StatusBadge } from "../components/StatusBadge";
 import { FilterPills } from "../components/FilterPills";
 import { EmptyState } from "../components/EmptyState";
@@ -15,9 +15,20 @@ const PHASES = ["All", "Pending", "Running", "WaitingApproval", "Succeeded", "Fa
 export function Tasks() {
   const [labelDraft, setLabelDraft] = useState("");
   const [labelApplied, setLabelApplied] = useState("");
+  const [phaseFilter, setPhaseFilter] = useState("All");
+  const [sortKey, setSortKey] = useState("created_at");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("desc");
+  const [showTemplateTasks, setShowTemplateTasks] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+
   const taskListOpts = useMemo(
-    () => (labelApplied.trim() ? { labelSelector: labelApplied.trim() } : undefined),
-    [labelApplied],
+    () => ({
+      labelSelector: labelApplied.trim() || undefined,
+      sort: sortKey,
+      order: sortOrder,
+      phase: phaseFilter === "All" ? undefined : phaseFilter,
+    }),
+    [labelApplied, sortKey, sortOrder, phaseFilter],
   );
   const {
     data,
@@ -30,9 +41,6 @@ export function Tasks() {
     isFetchingNextPage,
   } = useTaskList(taskListOpts);
   const navigate = useNavigate();
-  const [phaseFilter, setPhaseFilter] = useState("All");
-  const [showTemplateTasks, setShowTemplateTasks] = useState(false);
-  const [showCreate, setShowCreate] = useState(false);
 
   const tasks = data ?? [];
   const visibleTasks = useMemo(() => {
@@ -51,27 +59,47 @@ export function Tasks() {
       const phase = t.status?.phase ?? "Pending";
       counts[phase] = (counts[phase] ?? 0) + 1;
     }
+    // When a phase filter is active, server already filtered — reflect that in All/selected.
+    if (phaseFilter !== "All") {
+      counts.All = visibleTasks.length;
+      counts[phaseFilter] = visibleTasks.length;
+    }
     return counts;
-  }, [visibleTasks]);
-
-  const filtered = useMemo(() => {
-    const list = phaseFilter === "All" ? visibleTasks : visibleTasks.filter((t) => (t.status?.phase ?? "Pending") === phaseFilter);
-    return [...list].sort((a, b) => {
-      const ta = a.metadata.createdAt ? new Date(a.metadata.createdAt).getTime() : 0;
-      const tb = b.metadata.createdAt ? new Date(b.metadata.createdAt).getTime() : 0;
-      return tb - ta;
-    });
   }, [visibleTasks, phaseFilter]);
 
   const columns: Column<Task>[] = [
-    { key: "name", header: "Name", render: (r) => <span className="mono">{r.metadata.name}</span> },
+    {
+      key: "name",
+      header: "Name",
+      sortable: true,
+      sortKey: "name",
+      render: (r) => <span className="mono">{r.metadata.name}</span>,
+    },
     { key: "system", header: "System", render: (r) => r.spec.system ?? "—" },
-    { key: "phase", header: "Phase", render: (r) => <StatusBadge phase={r.status?.phase} />, width: "120px" },
+    {
+      key: "phase",
+      header: "Phase",
+      sortable: true,
+      sortKey: "phase",
+      render: (r) => <StatusBadge phase={r.status?.phase} />,
+      width: "120px",
+    },
     { key: "worker", header: "Worker", render: (r) => <span className="text-muted">{r.status?.assignedWorker ?? "—"}</span> },
     { key: "attempts", header: "Attempts", render: (r) => r.status?.attempts ?? 0, width: "90px" },
     { key: "priority", header: "Priority", render: (r) => r.spec.priority ?? "normal", width: "90px" },
-    { key: "created", header: "Created", render: (r) => r.metadata.createdAt ? new Date(r.metadata.createdAt).toLocaleString() : "—" },
+    {
+      key: "created",
+      header: "Created",
+      sortable: true,
+      sortKey: "created_at",
+      render: (r) => r.metadata.createdAt ? new Date(r.metadata.createdAt).toLocaleString() : "—",
+    },
   ];
+
+  const handleSortChange = (key: string, order: SortOrder) => {
+    setSortKey(key);
+    setSortOrder(order);
+  };
 
   return (
     <div className="page">
@@ -140,7 +168,7 @@ export function Tasks() {
         />
       )}
 
-      {filtered.length === 0 && !isLoading && !isError ? (
+      {visibleTasks.length === 0 && !isLoading && !isError ? (
         <EmptyState
           icon={<ListTodo size={40} />}
           title={phaseFilter === "All" ? "No Tasks" : `No ${phaseFilter} Tasks`}
@@ -153,13 +181,17 @@ export function Tasks() {
       ) : (
         <ResourceTable
           columns={columns}
-          data={filtered}
+          data={visibleTasks}
           rowKey={(r) => r.metadata.name}
           onRowClick={(r) => navigate(`/tasks/${r.metadata.name}`)}
           loading={isLoading}
           hasMore={hasNextPage}
           onLoadMore={() => void fetchNextPage()}
           loadingMore={isFetchingNextPage}
+          sortKey={sortKey}
+          sortOrder={sortOrder}
+          onSortChange={handleSortChange}
+          virtualize
         />
       )}
       <CreateResourceDialog kind="Task" open={showCreate} onClose={() => setShowCreate(false)} />

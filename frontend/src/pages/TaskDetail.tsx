@@ -1,11 +1,12 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useDetailReturnNav } from "../hooks/useDetailReturnNav";
 import { useTask, useTaskMessages, useTaskMetrics, useTaskLogs, useAgentSystem, useDeleteResource, useUpdateResource } from "../api/hooks";
 import { useAppStore } from "../store";
 import { saveNamespacedResourceYaml } from "../hooks/saveDetailYamlWithFreshRv";
 import { toast } from "../components/Toast";
+import { DetailSkeleton } from "../components/DetailSkeleton";
 import { StatusBadge } from "../components/StatusBadge";
 import { YamlEditor } from "../components/YamlEditor";
 import { LogViewer } from "../components/LogViewer";
@@ -13,10 +14,12 @@ import { GraphView } from "../components/GraphView";
 import { MetricCard } from "../components/MetricCard";
 import { TraceView } from "../components/TraceView";
 import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
-import { ArrowLeft, Clock, Activity, Hash, Zap } from "lucide-react";
+import { ArrowLeft, Clock, Activity, Hash, Zap, Network, X } from "lucide-react";
+import { EmptyState } from "../components/EmptyState";
 import clsx from "clsx";
 import type { Task, TaskTraceEvent } from "../api/types";
 import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
+import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 
 function traceKey(e: TaskTraceEvent): string {
   return `${e.timestamp}|${e.type}|${e.step ?? ""}|${e.tool ?? ""}`;
@@ -54,6 +57,9 @@ function useTaskTraceStream(taskName: string, namespace: string, apiBase: string
         const evt: TaskTraceEvent = {
           timestamp: d.Timestamp,
           type: d.Type,
+          agent: d.Agent,
+          branch_id: d.BranchID,
+          parent_branch_id: d.ParentBranchID,
           step: d.Step,
           tool: d.Tool,
           message: d.Message,
@@ -82,11 +88,42 @@ function useTaskTraceStream(taskName: string, namespace: string, apiBase: string
 
 type Tab = "overview" | "messages" | "metrics" | "trace" | "logs" | "graph" | "yaml";
 
+const VALID_TABS: Tab[] = ["overview", "messages", "metrics", "trace", "logs", "graph", "yaml"];
+
 const TOOLTIP_AVG_LATENCY_MS =
   "Average end-to-end time from each message's timestamp to when it was processed (milliseconds). Only messages that have both times are included; queue wait is part of this duration.";
 
 const TOOLTIP_P95_LATENCY_MS =
   "The 95th percentile of those same end-to-end latencies: about 95% of measured messages finished within this time or faster (the slowest few are above it).";
+
+const MSG_FILTER_LABELS: Record<string, string> = {
+  phase: "Phase",
+  from_agent: "From agent",
+  to_agent: "To agent",
+  branch_id: "Branch",
+  trace_id: "Trace ID",
+  limit: "Limit",
+};
+
+type MsgFilterKey = keyof typeof MSG_FILTER_LABELS;
+
+function buildMessageFilters(fields: {
+  phase: string;
+  from: string;
+  to: string;
+  branch: string;
+  trace: string;
+  limit: string;
+}): Record<string, string> {
+  const q: Record<string, string> = {};
+  if (fields.phase.trim()) q.phase = fields.phase.trim();
+  if (fields.from.trim()) q.from_agent = fields.from.trim();
+  if (fields.to.trim()) q.to_agent = fields.to.trim();
+  if (fields.branch.trim()) q.branch_id = fields.branch.trim();
+  if (fields.trace.trim()) q.trace_id = fields.trace.trim();
+  if (fields.limit.trim()) q.limit = fields.limit.trim();
+  return q;
+}
 
 export function TaskDetail() {
   const { name: nameParam } = useParams<{ name: string }>();
@@ -104,32 +141,95 @@ export function TaskDetail() {
   const [msgBranch, setMsgBranch] = useState("");
   const [msgTrace, setMsgTrace] = useState("");
   const [msgLimit, setMsgLimit] = useState("");
-  const [msgFiltersApplied, setMsgFiltersApplied] = useState<Record<string, string>>({});
+  const [msgFilters, setMsgFilters] = useState<Record<string, string>>({});
 
-  const buildMessageFilters = useCallback(() => {
-    const q: Record<string, string> = {};
-    if (msgPhase.trim()) q.phase = msgPhase.trim();
-    if (msgFrom.trim()) q.from_agent = msgFrom.trim();
-    if (msgTo.trim()) q.to_agent = msgTo.trim();
-    if (msgBranch.trim()) q.branch_id = msgBranch.trim();
-    if (msgTrace.trim()) q.trace_id = msgTrace.trim();
-    if (msgLimit.trim()) q.limit = msgLimit.trim();
-    return q;
+  useEffect(() => {
+    const handle = window.setTimeout(() => {
+      setMsgFilters(
+        buildMessageFilters({
+          phase: msgPhase,
+          from: msgFrom,
+          to: msgTo,
+          branch: msgBranch,
+          trace: msgTrace,
+          limit: msgLimit,
+        }),
+      );
+    }, 250);
+    return () => window.clearTimeout(handle);
   }, [msgPhase, msgFrom, msgTo, msgBranch, msgTrace, msgLimit]);
+
+  const clearMsgFilter = (key: MsgFilterKey) => {
+    const next = {
+      phase: key === "phase" ? "" : msgPhase,
+      from: key === "from_agent" ? "" : msgFrom,
+      to: key === "to_agent" ? "" : msgTo,
+      branch: key === "branch_id" ? "" : msgBranch,
+      trace: key === "trace_id" ? "" : msgTrace,
+      limit: key === "limit" ? "" : msgLimit,
+    };
+    setMsgPhase(next.phase);
+    setMsgFrom(next.from);
+    setMsgTo(next.to);
+    setMsgBranch(next.branch);
+    setMsgTrace(next.trace);
+    setMsgLimit(next.limit);
+    setMsgFilters(buildMessageFilters(next));
+  };
+
+  const clearAllMsgFilters = () => {
+    setMsgPhase("");
+    setMsgFrom("");
+    setMsgTo("");
+    setMsgBranch("");
+    setMsgTrace("");
+    setMsgLimit("");
+    setMsgFilters({});
+  };
+
+  const activeMsgChips = (
+    Object.entries(
+      buildMessageFilters({
+        phase: msgPhase,
+        from: msgFrom,
+        to: msgTo,
+        branch: msgBranch,
+        trace: msgTrace,
+        limit: msgLimit,
+      }),
+    ) as [MsgFilterKey, string][]
+  ).map(([key, value]) => ({ key, label: MSG_FILTER_LABELS[key] ?? key, value }));
 
   const messages = useTaskMessages(
     routeName,
-    Object.keys(msgFiltersApplied).length > 0 ? msgFiltersApplied : undefined,
+    Object.keys(msgFilters).length > 0 ? msgFilters : undefined,
   );
   const metrics = useTaskMetrics(routeName);
   const logs = useTaskLogs(routeName);
   const system = useAgentSystem(task?.spec.system ?? "");
+  const confirmDelete = useDeleteConfirm();
   const deleteMutation = useDeleteResource("Task");
   const updateMutation = useUpdateResource("Task");
-  const [tab, setTab] = useState<Tab>("overview");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get("tab") as Tab | null;
+  const tab: Tab = tabParam && VALID_TABS.includes(tabParam) ? tabParam : "overview";
+  const setTab = useCallback(
+    (next: Tab) => {
+      setSearchParams(
+        (prev) => {
+          const p = new URLSearchParams(prev);
+          if (next === "overview") p.delete("tab");
+          else p.set("tab", next);
+          return p;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
 
   const handleDelete = async () => {
-    if (!task || !window.confirm(`Delete Task ${task.metadata.name}?`)) return;
+    if (!task || !(await confirmDelete("Task", task.metadata.name, task.metadata))) return;
     try {
       await deleteMutation.mutateAsync(routeName);
       toast("success", "Task deleted successfully");
@@ -150,7 +250,7 @@ export function TaskDetail() {
   }
 
   if (isLoading || !task) {
-    return <div className="page"><div className="loading-placeholder">Loading task...</div></div>;
+    return <DetailSkeleton />;
   }
 
   const persistedTrace = task.status?.trace ?? [];
@@ -326,52 +426,57 @@ export function TaskDetail() {
           <div className="messages-list">
             <div className="message-filters">
               <div className="message-filters__field">
-                <label htmlFor="msg-filter-phase">phase</label>
+                <label htmlFor="msg-filter-phase">Phase</label>
                 <input
                   id="msg-filter-phase"
-                  placeholder="queued,running,…"
+                  placeholder="queued, running, …"
                   value={msgPhase}
                   onChange={(e) => setMsgPhase(e.target.value)}
                 />
               </div>
               <div className="message-filters__field">
-                <label htmlFor="msg-filter-from">from_agent</label>
+                <label htmlFor="msg-filter-from">From agent</label>
                 <input id="msg-filter-from" value={msgFrom} onChange={(e) => setMsgFrom(e.target.value)} />
               </div>
               <div className="message-filters__field">
-                <label htmlFor="msg-filter-to">to_agent</label>
+                <label htmlFor="msg-filter-to">To agent</label>
                 <input id="msg-filter-to" value={msgTo} onChange={(e) => setMsgTo(e.target.value)} />
               </div>
               <div className="message-filters__field">
-                <label htmlFor="msg-filter-branch">branch_id</label>
+                <label htmlFor="msg-filter-branch">Branch</label>
                 <input id="msg-filter-branch" value={msgBranch} onChange={(e) => setMsgBranch(e.target.value)} />
               </div>
               <div className="message-filters__field">
-                <label htmlFor="msg-filter-trace">trace_id</label>
+                <label htmlFor="msg-filter-trace">Trace ID</label>
                 <input id="msg-filter-trace" value={msgTrace} onChange={(e) => setMsgTrace(e.target.value)} />
               </div>
               <div className="message-filters__field">
-                <label htmlFor="msg-filter-limit">limit</label>
+                <label htmlFor="msg-filter-limit">Limit</label>
                 <input id="msg-filter-limit" type="number" min={0} placeholder="50" value={msgLimit} onChange={(e) => setMsgLimit(e.target.value)} />
               </div>
-              <button type="button" className="btn-primary" onClick={() => setMsgFiltersApplied(buildMessageFilters())}>
-                Apply filters
-              </button>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() => {
-                  setMsgPhase("");
-                  setMsgFrom("");
-                  setMsgTo("");
-                  setMsgBranch("");
-                  setMsgTrace("");
-                  setMsgLimit("");
-                  setMsgFiltersApplied({});
-                }}
-              >
-                Clear
-              </button>
+              {activeMsgChips.length > 0 && (
+                <button type="button" className="btn-secondary" onClick={clearAllMsgFilters}>
+                  Clear
+                </button>
+              )}
+              {activeMsgChips.length > 0 && (
+                <div className="message-filters__chips" aria-label="Active message filters">
+                  {activeMsgChips.map((chip) => (
+                    <span key={chip.key} className="message-filters__chip">
+                      <span className="message-filters__chip-label">{chip.label}</span>
+                      <span className="message-filters__chip-value">{chip.value}</span>
+                      <button
+                        type="button"
+                        className="message-filters__chip-dismiss"
+                        aria-label={`Remove ${chip.label} filter`}
+                        onClick={() => clearMsgFilter(chip.key)}
+                      >
+                        <X size={12} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
             {messages.isLoading && <p className="text-muted">Loading messages…</p>}
             {messages.isError && (
@@ -381,7 +486,7 @@ export function TaskDetail() {
             )}
             {(messages.data ?? []).length === 0 && !messages.isLoading && !messages.isError && (
               <p className="text-muted">
-                {Object.keys(msgFiltersApplied).length > 0
+                {Object.keys(msgFilters).length > 0
                   ? "No messages match the current filters"
                   : "No messages yet"}
               </p>
@@ -453,7 +558,18 @@ export function TaskDetail() {
         {tab === "graph" && system.data && (
           <GraphView system={system.data} animated={task.status?.phase === "Running"} />
         )}
-        {tab === "graph" && !system.data && <p className="text-muted">System not found</p>}
+        {tab === "graph" && !system.data && (
+          <EmptyState
+            icon={<Network size={32} />}
+            title="System not found"
+            description={`This task references the agent system "${task.spec.system}", which no longer exists in this namespace, so there is no topology to display.`}
+            action={
+              <button type="button" className="btn-secondary" onClick={() => navigate("/systems")}>
+                View agent systems
+              </button>
+            }
+          />
+        )}
 
         {tab === "yaml" && (
           <YamlEditor

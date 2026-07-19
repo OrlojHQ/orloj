@@ -514,6 +514,7 @@ export interface TaskTraceEvent {
   attempt?: number;
   step?: number;
   branch_id?: string;
+  parent_branch_id?: string;
   type?: string;
   agent?: string;
   tool?: string;

@@ -6,6 +6,7 @@ import { useDeleteResource, useSecret, useUpdateResource } from "../api/hooks";
 import { useAppStore } from "../store";
 import { saveNamespacedResourceYaml } from "../hooks/saveDetailYamlWithFreshRv";
 import { StatusBadge } from "../components/StatusBadge";
+import { DetailSkeleton } from "../components/DetailSkeleton";
 import { YamlEditor } from "../components/YamlEditor";
 import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
 import { ArrowLeft, ShieldCheck } from "lucide-react";
@@ -50,14 +51,14 @@ export function SecretDetail() {
   }
 
   if (isLoading || !secret) {
-    return <div className="page"><div className="loading-placeholder">Loading secret...</div></div>;
+    return <DetailSkeleton />;
   }
 
   const dataKeys = Object.keys(secret.spec.data ?? {});
   const sealedOwner = secret.metadata.annotations?.[SEALED_OWNER_ANNOTATION];
 
   const handleDelete = async () => {
-    if (!confirmDelete("Secret", secret.metadata.name, secret.metadata)) return;
+    if (!(await confirmDelete("Secret", secret.metadata.name, secret.metadata))) return;
     try {
       await deleteMutation.mutateAsync(routeName);
       toast("success", "Secret deleted successfully");

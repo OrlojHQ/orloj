@@ -2422,6 +2422,163 @@ func (s *TaskStore) ListCursor(ctx context.Context, limit int, after, namespace 
 	), nil
 }
 
+// TaskListOptions controls filtered/sorted task listing.
+type TaskListOptions struct {
+	Limit     int
+	After     string
+	Namespace string
+	Sort      string // name | created_at | phase
+	Order     string // asc | desc
+	Phase     string
+}
+
+// NormalizeTaskListOptions validates and defaults sort/order values.
+func NormalizeTaskListOptions(opts TaskListOptions) (TaskListOptions, error) {
+	opts.Sort = strings.ToLower(strings.TrimSpace(opts.Sort))
+	if opts.Sort == "" {
+		opts.Sort = "name"
+	}
+	switch opts.Sort {
+	case "name", "created_at", "phase":
+	default:
+		return opts, fmt.Errorf("invalid sort %q (want name, created_at, or phase)", opts.Sort)
+	}
+	opts.Order = strings.ToLower(strings.TrimSpace(opts.Order))
+	if opts.Order == "" {
+		opts.Order = "asc"
+	}
+	switch opts.Order {
+	case "asc", "desc":
+	default:
+		return opts, fmt.Errorf("invalid order %q (want asc or desc)", opts.Order)
+	}
+	opts.Phase = strings.TrimSpace(opts.Phase)
+	if opts.Limit <= 0 {
+		opts.Limit = defaultListLimit
+	}
+	return opts, nil
+}
+
+func taskListUsesDefaultNameCursor(opts TaskListOptions) bool {
+	return opts.Sort == "name" && opts.Order == "asc" && opts.Phase == ""
+}
+
+func taskCreatedAtUnix(task resources.Task) int64 {
+	raw := strings.TrimSpace(task.Metadata.CreatedAt)
+	if raw == "" {
+		return 0
+	}
+	if ts, err := time.Parse(time.RFC3339Nano, raw); err == nil {
+		return ts.UnixNano()
+	}
+	if ts, err := time.Parse(time.RFC3339, raw); err == nil {
+		return ts.UnixNano()
+	}
+	return 0
+}
+
+func taskPhaseKey(task resources.Task) string {
+	phase := strings.TrimSpace(task.Status.Phase)
+	if phase == "" {
+		return "Pending"
+	}
+	return phase
+}
+
+func compareTasksByListOpts(a, b resources.Task, opts TaskListOptions) bool {
+	cmp := 0
+	switch opts.Sort {
+	case "created_at":
+		ca, cb := taskCreatedAtUnix(a), taskCreatedAtUnix(b)
+		switch {
+		case ca < cb:
+			cmp = -1
+		case ca > cb:
+			cmp = 1
+		}
+	case "phase":
+		pa, pb := strings.ToLower(taskPhaseKey(a)), strings.ToLower(taskPhaseKey(b))
+		switch {
+		case pa < pb:
+			cmp = -1
+		case pa > pb:
+			cmp = 1
+		}
+	}
+	if cmp == 0 {
+		ka, kb := scopedNameFromMeta(a.Metadata), scopedNameFromMeta(b.Metadata)
+		switch {
+		case ka < kb:
+			cmp = -1
+		case ka > kb:
+			cmp = 1
+		}
+	}
+	if opts.Order == "desc" {
+		return cmp > 0
+	}
+	return cmp < 0
+}
+
+// ListQuery returns tasks filtered by phase and sorted by the requested field.
+// Continue tokens remain scoped name keys; for non-default sorts the cursor is
+// applied against the sorted result set (skip until after the named item).
+func (s *TaskStore) ListQuery(ctx context.Context, opts TaskListOptions) ([]resources.Task, error) {
+	opts, err := NormalizeTaskListOptions(opts)
+	if err != nil {
+		return nil, err
+	}
+	if taskListUsesDefaultNameCursor(opts) {
+		return s.ListCursor(ctx, opts.Limit, opts.After, opts.Namespace)
+	}
+
+	var out []resources.Task
+	if s.db != nil {
+		out, err = listTasksQuerySQL(ctx, s.db, opts)
+		if err != nil {
+			return nil, err
+		}
+		return out, nil
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out = make([]resources.Task, 0, len(s.items))
+	phaseFilter := strings.ToLower(opts.Phase)
+	for _, item := range s.items {
+		if opts.Namespace != "" && !strings.EqualFold(resources.NormalizeNamespace(item.Metadata.Namespace), opts.Namespace) {
+			continue
+		}
+		if phaseFilter != "" && !strings.EqualFold(taskPhaseKey(item), phaseFilter) {
+			continue
+		}
+		out = append(out, item.DeepCopy())
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		return compareTasksByListOpts(out[i], out[j], opts)
+	})
+	if opts.After != "" {
+		after := normalizeStoreListCursor(opts.After, opts.Namespace)
+		filtered := make([]resources.Task, 0, len(out))
+		seen := false
+		for _, item := range out {
+			key := scopedNameFromMeta(item.Metadata)
+			if !seen {
+				if key == after {
+					seen = true
+				}
+				continue
+			}
+			filtered = append(filtered, item)
+		}
+		out = filtered
+	}
+	if opts.Limit > 0 && len(out) > opts.Limit {
+		out = out[:opts.Limit]
+	}
+	return out, nil
+}
+
 func (s *TaskStore) Delete(ctx context.Context, name string) error {
 	key := normalizeLookupName(name)
 	if s.db != nil {

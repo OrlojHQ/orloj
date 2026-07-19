@@ -80,6 +80,7 @@ done:
 	}
 
 	var hasModelCall bool
+	var sawAgent bool
 	for _, evt := range traceEvents {
 		if evt.Type != "task.trace" {
 			t.Fatalf("unexpected event type %q in trace stream", evt.Type)
@@ -91,10 +92,16 @@ done:
 			if data.Type == "model_call" {
 				hasModelCall = true
 			}
+			if data.Agent == "streamer-agent" {
+				sawAgent = true
+			}
 		}
 	}
 	if !hasModelCall {
 		t.Fatal("expected model_call event in trace stream")
+	}
+	if !sawAgent {
+		t.Fatal("expected streamed AgentStepEvent to include Agent=streamer-agent")
 	}
 }
 

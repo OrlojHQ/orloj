@@ -20,6 +20,7 @@ import {
 import { useAppStore } from "../store";
 import { saveNamespacedResourceYaml } from "../hooks/saveDetailYamlWithFreshRv";
 import { toast } from "../components/Toast";
+import { DetailSkeleton } from "../components/DetailSkeleton";
 import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
 import { GraphView } from "../components/GraphView";
 import { StatusBadge } from "../components/StatusBadge";
@@ -114,7 +115,7 @@ export function AgentSystemDetail() {
   }, [systemTasks]);
 
   const handleDelete = async () => {
-    if (!system || !confirmDelete("AgentSystem", system.metadata.name, system.metadata)) return;
+    if (!system || !(await confirmDelete("AgentSystem", system.metadata.name, system.metadata))) return;
     try {
       await deleteMutation.mutateAsync(routeName);
       toast("success", "AgentSystem deleted successfully");
@@ -177,11 +178,7 @@ export function AgentSystemDetail() {
   }
 
   if (isLoading || !system) {
-    return (
-      <div className="page">
-        <div className="loading-placeholder">Loading system...</div>
-      </div>
-    );
+    return <DetailSkeleton />;
   }
 
   const yamlContent = JSON.stringify(system, null, 2);

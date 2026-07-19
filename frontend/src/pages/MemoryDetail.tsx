@@ -6,6 +6,7 @@ import { useDeleteResource, useMemory, useMemoryEntries, useUpdateResource } fro
 import { useAppStore } from "../store";
 import { saveNamespacedResourceYaml } from "../hooks/saveDetailYamlWithFreshRv";
 import { StatusBadge } from "../components/StatusBadge";
+import { DetailSkeleton } from "../components/DetailSkeleton";
 import { YamlEditor } from "../components/YamlEditor";
 import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
 import { ArrowLeft, Search } from "lucide-react";
@@ -49,11 +50,11 @@ export function MemoryDetail() {
   }
 
   if (isLoading || !memory) {
-    return <div className="page"><div className="loading-placeholder">Loading memory...</div></div>;
+    return <DetailSkeleton />;
   }
 
   const handleDelete = async () => {
-    if (!confirmDelete("Memory", memory.metadata.name, memory.metadata)) return;
+    if (!(await confirmDelete("Memory", memory.metadata.name, memory.metadata))) return;
     try {
       await deleteMutation.mutateAsync(routeName);
       toast("success", "Memory deleted successfully");
