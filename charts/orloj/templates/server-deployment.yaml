@@ -202,6 +202,30 @@ spec:
               value: {{ .Values.a2a.rateLimit.requestsPerMinute | quote }}
             - name: ORLOJ_A2A_RATE_LIMIT_MAX_SUBSCRIBE
               value: {{ .Values.a2a.rateLimit.maxConcurrentSubscriptions | quote }}
+            {{- if .Values.a2a.grpc.enabled }}
+            - name: ORLOJ_A2A_GRPC_ADDR
+              value: {{ .Values.a2a.grpc.addr | quote }}
+            {{- if .Values.a2a.grpc.publicURL }}
+            - name: ORLOJ_A2A_GRPC_PUBLIC_URL
+              value: {{ .Values.a2a.grpc.publicURL | quote }}
+            {{- end }}
+            {{- end }}
+            {{- if .Values.a2a.cardSigning.existingSecret }}
+            - name: ORLOJ_A2A_CARD_SIGNING_KEY_FILE
+              value: /var/run/orloj/a2a-signing/private-key.pem
+            - name: ORLOJ_A2A_CARD_SIGNING_KEY_ID
+              value: {{ .Values.a2a.cardSigning.keyID | quote }}
+            {{- end }}
+            - name: ORLOJ_A2A_REQUIRE_SIGNED_CARDS
+              value: {{ .Values.a2a.cardVerification.requireSigned | quote }}
+            {{- if .Values.a2a.cardVerification.keys }}
+            {{- $trustedCardKeys := dict }}
+            {{- range $keyID, $secretKey := .Values.a2a.cardVerification.keys }}
+            {{- $_ := set $trustedCardKeys $keyID (printf "/var/run/orloj/a2a-trusted-keys/%s" $secretKey) }}
+            {{- end }}
+            - name: ORLOJ_A2A_TRUSTED_CARD_KEYS
+              value: {{ $trustedCardKeys | toJson | quote }}
+            {{- end }}
             # --- CRD conflict policy ---
             - name: ORLOJ_CRD_CONFLICT_POLICY
               value: {{ .Values.crdConflictPolicy | default "warn" | quote }}
@@ -212,10 +236,31 @@ spec:
           envFrom:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+          {{- if .Values.a2a.cardSigning.existingSecret }}
+          volumeMounts:
+            - name: a2a-card-signing-key
+              mountPath: /var/run/orloj/a2a-signing
+              readOnly: true
+            {{- if .Values.a2a.cardVerification.existingSecret }}
+            - name: a2a-trusted-card-keys
+              mountPath: /var/run/orloj/a2a-trusted-keys
+              readOnly: true
+            {{- end }}
+          {{- else if .Values.a2a.cardVerification.existingSecret }}
+          volumeMounts:
+            - name: a2a-trusted-card-keys
+              mountPath: /var/run/orloj/a2a-trusted-keys
+              readOnly: true
+          {{- end }}
           ports:
             - name: http
               containerPort: {{ .Values.server.containerPort }}
               protocol: TCP
+            {{- if .Values.a2a.grpc.enabled }}
+            - name: a2a-grpc
+              containerPort: {{ .Values.a2a.grpc.port }}
+              protocol: TCP
+            {{- end }}
           livenessProbe:
             httpGet:
               path: /healthz
@@ -234,6 +279,25 @@ spec:
             failureThreshold: {{ .Values.server.readinessProbe.failureThreshold }}
           resources:
             {{- toYaml .Values.server.resources | nindent 12 }}
+      {{- if .Values.a2a.cardSigning.existingSecret }}
+      volumes:
+        - name: a2a-card-signing-key
+          secret:
+            secretName: {{ .Values.a2a.cardSigning.existingSecret | quote }}
+            items:
+              - key: {{ .Values.a2a.cardSigning.secretKey | quote }}
+                path: private-key.pem
+        {{- if .Values.a2a.cardVerification.existingSecret }}
+        - name: a2a-trusted-card-keys
+          secret:
+            secretName: {{ .Values.a2a.cardVerification.existingSecret | quote }}
+        {{- end }}
+      {{- else if .Values.a2a.cardVerification.existingSecret }}
+      volumes:
+        - name: a2a-trusted-card-keys
+          secret:
+            secretName: {{ .Values.a2a.cardVerification.existingSecret | quote }}
+      {{- end }}
       {{- with .Values.server.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

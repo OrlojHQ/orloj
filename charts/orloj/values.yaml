@@ -303,6 +303,32 @@ a2a:
   #   url: https://partner.example.com/.well-known/agent-card.json
   #   authType: bearer
   #   secretRef: partner-token
+  # -- Normative A2A v1 gRPC binding on a separate listener
+  grpc:
+    enabled: false
+    # -- Container listen address
+    addr: ":8081"
+    # -- Container and Service port
+    port: 8081
+    # -- Externally reachable URL advertised in Agent Cards
+    publicURL: ""
+  # -- Optional Agent Card JWS signing configuration
+  cardSigning:
+    # -- Kubernetes Secret containing an RSA, P-256 ECDSA, or Ed25519 PEM private key
+    existingSecret: ""
+    # -- Secret data key containing the PEM private key
+    secretKey: "private-key.pem"
+    # -- JWS kid value advertised in signed Agent Cards
+    keyID: "orloj"
+  # -- Optional trust policy for fetched remote Agent Cards
+  cardVerification:
+    # -- Reject remote cards unless one trusted signature verifies
+    requireSigned: false
+    # -- Kubernetes Secret containing trusted PEM public keys or certificates
+    existingSecret: ""
+    # -- Map of JWS kid values to Secret data keys
+    keys: {}
+    # partner-key: partner-public-key.pem
   # -- Rate limiting for A2A endpoints
   rateLimit:
     # -- Enable rate limiting on A2A endpoints

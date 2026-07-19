@@ -44,6 +44,7 @@ type Stores struct {
 	Tasks           *store.TaskStore
 	TaskSchedules   *store.TaskScheduleStore
 	TaskWebhooks    *store.TaskWebhookStore
+	A2APushConfigs  *store.A2APushConfigStore
 	WebhookDedupe   *store.WebhookDedupeStore
 	Workers         *store.WorkerStore
 	McpServers      *store.McpServerStore
@@ -129,6 +130,9 @@ func NewServerWithOptions(stores Stores, runtime *agentruntime.Manager, logger *
 	}
 	if stores.TaskWebhooks == nil {
 		stores.TaskWebhooks = store.NewTaskWebhookStore()
+	}
+	if stores.A2APushConfigs == nil {
+		stores.A2APushConfigs = store.NewA2APushConfigStore()
 	}
 	if stores.WebhookDedupe == nil {
 		stores.WebhookDedupe = store.NewWebhookDedupeStore()

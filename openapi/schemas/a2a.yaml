@@ -2,7 +2,7 @@ components:
   schemas:
     AgentCard:
       type: object
-      required: [name, url]
+      required: [name, description, version, supportedInterfaces, capabilities, defaultInputModes, defaultOutputModes, skills]
       properties:
         name:
           type: string
@@ -18,9 +18,23 @@ components:
           type: string
         protocolVersion:
           type: string
-          description: A2A protocol version
+          deprecated: true
+          description: Legacy compatibility field; use supportedInterfaces.protocolVersion.
+        supportedInterfaces:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/A2AAgentInterface'
         capabilities:
           $ref: '#/components/schemas/CardCapabilities'
+        defaultInputModes:
+          type: array
+          items:
+            type: string
+        defaultOutputModes:
+          type: array
+          items:
+            type: string
         skills:
           type: array
           items:
@@ -32,6 +46,23 @@ components:
               type: array
               items:
                 type: string
+        securitySchemes:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties: true
+        securityRequirements:
+          type: array
+          items:
+            type: object
+            additionalProperties:
+              type: array
+              items:
+                type: string
+        signatures:
+          type: array
+          items:
+            $ref: '#/components/schemas/A2AAgentCardSignature'
         provider:
           type: object
           properties:
@@ -41,6 +72,33 @@ components:
               type: string
               format: uri
 
+    A2AAgentInterface:
+      type: object
+      required: [url, protocolBinding, protocolVersion]
+      properties:
+        url:
+          type: string
+          format: uri
+        protocolBinding:
+          type: string
+          examples: [JSONRPC, GRPC, HTTP+JSON]
+        protocolVersion:
+          type: string
+        tenant:
+          type: string
+
+    A2AAgentCardSignature:
+      type: object
+      required: [protected, signature]
+      properties:
+        protected:
+          type: string
+        signature:
+          type: string
+        header:
+          type: object
+          additionalProperties: true
+
     CardCapabilities:
       type: object
       properties:
@@ -48,12 +106,14 @@ components:
           type: boolean
         pushNotifications:
           type: boolean
+        extendedAgentCard:
+          type: boolean
         stateTransitionHistory:
           type: boolean
 
     CardSkill:
       type: object
-      required: [id, name]
+      required: [id, name, description, tags]
       properties:
         id:
           type: string
@@ -64,6 +124,18 @@ components:
         inputSchema:
           type: object
           additionalProperties: true
+        inputModes:
+          type: array
+          items:
+            type: string
+        outputModes:
+          type: array
+          items:
+            type: string
+        examples:
+          type: array
+          items:
+            type: string
         tags:
           type: array
           items:
@@ -82,7 +154,22 @@ components:
             - type: integer
         method:
           type: string
-          enum: ["tasks/send", "tasks/get", "tasks/cancel", "tasks/sendSubscribe"]
+          enum:
+            - tasks/send
+            - tasks/get
+            - tasks/cancel
+            - tasks/sendSubscribe
+            - SendMessage
+            - SendStreamingMessage
+            - GetTask
+            - ListTasks
+            - CancelTask
+            - SubscribeToTask
+            - CreateTaskPushNotificationConfig
+            - GetTaskPushNotificationConfig
+            - ListTaskPushNotificationConfigs
+            - DeleteTaskPushNotificationConfig
+            - GetExtendedAgentCard
         params:
           type: object
 

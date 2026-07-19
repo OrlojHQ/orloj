@@ -2,29 +2,84 @@ package a2a
 
 // AgentCard represents an A2A Agent Card as defined by the A2A protocol.
 type AgentCard struct {
-	Name            string           `json:"name"`
-	Description     string           `json:"description,omitempty"`
-	URL             string           `json:"url"`
-	Version         string           `json:"version,omitempty"`
-	ProtocolVersion string           `json:"protocolVersion,omitempty"`
-	Capabilities    CardCapabilities `json:"capabilities,omitempty"`
-	Skills          []CardSkill      `json:"skills,omitempty"`
-	Authentication  *CardAuth        `json:"authentication,omitempty"`
-	Provider        *CardProvider    `json:"provider,omitempty"`
+	Name                 string                    `json:"name"`
+	Description          string                    `json:"description"`
+	URL                  string                    `json:"url,omitempty"`
+	Version              string                    `json:"version"`
+	ProtocolVersion      string                    `json:"protocolVersion,omitempty"`
+	SupportedInterfaces  []AgentInterface          `json:"supportedInterfaces"`
+	Capabilities         CardCapabilities          `json:"capabilities"`
+	DefaultInputModes    []string                  `json:"defaultInputModes"`
+	DefaultOutputModes   []string                  `json:"defaultOutputModes"`
+	Skills               []CardSkill               `json:"skills"`
+	Authentication       *CardAuth                 `json:"authentication,omitempty"`
+	SecuritySchemes      map[string]map[string]any `json:"securitySchemes,omitempty"`
+	SecurityRequirements []map[string][]string     `json:"securityRequirements,omitempty"`
+	Signatures           []AgentCardSignature      `json:"signatures,omitempty"`
+	Provider             *CardProvider             `json:"provider,omitempty"`
 }
 
 type CardCapabilities struct {
-	Streaming         bool `json:"streaming,omitempty"`
-	PushNotifications bool `json:"pushNotifications,omitempty"`
-	StateTransitions  bool `json:"stateTransitionHistory,omitempty"`
+	Streaming         bool            `json:"streaming,omitempty"`
+	PushNotifications bool            `json:"pushNotifications,omitempty"`
+	ExtendedAgentCard bool            `json:"extendedAgentCard,omitempty"`
+	StateTransitions  bool            `json:"stateTransitionHistory,omitempty"`
+	Extensions        []CardExtension `json:"extensions,omitempty"`
 }
 
 type CardSkill struct {
 	ID          string         `json:"id"`
 	Name        string         `json:"name"`
-	Description string         `json:"description,omitempty"`
+	Description string         `json:"description"`
 	InputSchema map[string]any `json:"inputSchema,omitempty"`
-	Tags        []string       `json:"tags,omitempty"`
+	InputModes  []string       `json:"inputModes,omitempty"`
+	OutputModes []string       `json:"outputModes,omitempty"`
+	Examples    []string       `json:"examples,omitempty"`
+	Tags        []string       `json:"tags"`
+}
+
+type AgentInterface struct {
+	URL             string `json:"url"`
+	ProtocolBinding string `json:"protocolBinding"`
+	Tenant          string `json:"tenant,omitempty"`
+	ProtocolVersion string `json:"protocolVersion"`
+}
+
+type CardExtension struct {
+	URI         string         `json:"uri,omitempty"`
+	Description string         `json:"description,omitempty"`
+	Required    bool           `json:"required,omitempty"`
+	Params      map[string]any `json:"params,omitempty"`
+}
+
+type AgentCardSignature struct {
+	Protected string         `json:"protected"`
+	Signature string         `json:"signature"`
+	Header    map[string]any `json:"header,omitempty"`
+}
+
+// PreferredInterface returns the first matching interface in server preference
+// order. Empty binding or version values do not constrain selection.
+func (c AgentCard) PreferredInterface(binding, version string) (AgentInterface, bool) {
+	for _, candidate := range c.SupportedInterfaces {
+		if binding != "" && candidate.ProtocolBinding != binding {
+			continue
+		}
+		if version != "" && candidate.ProtocolVersion != version {
+			continue
+		}
+		return candidate, true
+	}
+	return AgentInterface{}, false
+}
+
+// EffectiveProtocolVersion returns the preferred interface version while
+// retaining compatibility with cards that only carry the legacy top-level field.
+func (c AgentCard) EffectiveProtocolVersion() string {
+	if len(c.SupportedInterfaces) > 0 && c.SupportedInterfaces[0].ProtocolVersion != "" {
+		return c.SupportedInterfaces[0].ProtocolVersion
+	}
+	return c.ProtocolVersion
 }
 
 type CardAuth struct {

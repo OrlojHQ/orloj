@@ -883,26 +883,45 @@ export const RESOURCE_DETAIL_BASE_PATH: Record<ResourceKind, string> = {
 
 export interface AgentCard {
   name: string;
-  description?: string;
-  url: string;
-  version?: string;
+  description: string;
+  url?: string;
+  version: string;
   protocolVersion?: string;
-  capabilities?: {
+  supportedInterfaces: Array<{
+    url: string;
+    protocolBinding: string;
+    protocolVersion: string;
+    tenant?: string;
+  }>;
+  capabilities: {
     streaming?: boolean;
     pushNotifications?: boolean;
+    extendedAgentCard?: boolean;
     stateTransitionHistory?: boolean;
   };
-  skills?: AgentCardSkill[];
+  defaultInputModes: string[];
+  defaultOutputModes: string[];
+  skills: AgentCardSkill[];
   authentication?: { schemes?: string[] };
+  securitySchemes?: Record<string, Record<string, unknown>>;
+  securityRequirements?: Array<Record<string, string[]>>;
+  signatures?: Array<{
+    protected: string;
+    signature: string;
+    header?: Record<string, unknown>;
+  }>;
   provider?: { organization?: string; url?: string };
 }
 
 export interface AgentCardSkill {
   id: string;
   name: string;
-  description?: string;
+  description: string;
   inputSchema?: Record<string, any>;
-  tags?: string[];
+  inputModes?: string[];
+  outputModes?: string[];
+  examples?: string[];
+  tags: string[];
 }
 
 export interface RemoteAgentEntry {

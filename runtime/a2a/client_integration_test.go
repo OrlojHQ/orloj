@@ -2,13 +2,71 @@ package a2a
 
 import (
 	"context"
+	"crypto"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestFetchCard_VerifiesRequiredSignature(t *testing.T) {
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	keyBytes, _ := x509.MarshalPKCS8PrivateKey(privateKey)
+	signer, err := NewPEMCardSigner(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyBytes}), "trusted-key")
+	if err != nil {
+		t.Fatalf("create signer: %v", err)
+	}
+	card, err := SignAgentCard(AgentCard{
+		Name:                "signed-agent",
+		Description:         "trusted",
+		Version:             "1.0.0",
+		SupportedInterfaces: []AgentInterface{{URL: "https://example.com/a2a", ProtocolBinding: "JSONRPC", ProtocolVersion: "1.0"}},
+		Capabilities:        CardCapabilities{},
+		DefaultInputModes:   []string{"text/plain"},
+		DefaultOutputModes:  []string{"text/plain"},
+		Skills:              []CardSkill{},
+	}, signer)
+	if err != nil {
+		t.Fatalf("sign card: %v", err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(card)
+	}))
+	defer server.Close()
+
+	client := newTestClient(func(client *Client) {
+		client.requireSigned = true
+		client.resolveCardKey = func(_ context.Context, keyID string) (crypto.PublicKey, error) {
+			if keyID != "trusted-key" {
+				t.Fatalf("key ID = %q", keyID)
+			}
+			return publicKey, nil
+		}
+	})
+	if _, err := client.FetchCard(context.Background(), server.URL, nil); err != nil {
+		t.Fatalf("FetchCard() error = %v", err)
+	}
+}
+
+func TestFetchCard_RejectsUnsignedWhenRequired(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(AgentCard{Name: "unsigned"})
+	}))
+	defer server.Close()
+	client := newTestClient(func(client *Client) { client.requireSigned = true })
+	if _, err := client.FetchCard(context.Background(), server.URL, nil); err == nil {
+		t.Fatal("expected unsigned card rejection")
+	}
+}
 
 func TestFetchCard_Success(t *testing.T) {
 	card := AgentCard{
@@ -155,6 +213,76 @@ func TestSendTask_Success(t *testing.T) {
 	}
 	if result.Status.State != TaskStateCompleted {
 		t.Errorf("expected completed, got %s", result.Status.State)
+	}
+}
+
+func TestSendTask_NegotiatesV1JSONRPC(t *testing.T) {
+	var server *httptest.Server
+	server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/.well-known/agent-card.json":
+			_ = json.NewEncoder(w).Encode(AgentCard{
+				Name:               "v1-agent",
+				Description:        "v1 test agent",
+				Version:            "1.0.0",
+				DefaultInputModes:  []string{"text/plain"},
+				DefaultOutputModes: []string{"text/plain"},
+				Capabilities:       CardCapabilities{},
+				Skills:             []CardSkill{},
+				SupportedInterfaces: []AgentInterface{{
+					URL:             server.URL + "/a2a",
+					ProtocolBinding: "JSONRPC",
+					ProtocolVersion: "1.0",
+				}},
+			})
+		case "/a2a":
+			var request struct {
+				Method string `json:"method"`
+				Params struct {
+					Message struct {
+						ID   string `json:"messageId"`
+						Role string `json:"role"`
+					} `json:"message"`
+				} `json:"params"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Fatalf("decode request: %v", err)
+			}
+			if request.Method != "SendMessage" {
+				t.Fatalf("method = %q, want SendMessage", request.Method)
+			}
+			if request.Params.Message.Role != "ROLE_USER" || request.Params.Message.ID != "message-1" {
+				t.Fatalf("unexpected v1 message: %#v", request.Params.Message)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"jsonrpc": "2.0",
+				"id":      "1",
+				"result": map[string]any{
+					"task": map[string]any{
+						"id":        "remote-task-1",
+						"contextId": "context-1",
+						"status": map[string]any{
+							"state": "TASK_STATE_COMPLETED",
+						},
+					},
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	client := newTestClient()
+	result, err := client.SendTask(context.Background(), server.URL, TaskSendParams{
+		ID:      "message-1",
+		Message: TaskMessage{Role: "user", Parts: []TaskPart{{Type: "text", Text: "hello v1"}}},
+	}, nil)
+	if err != nil {
+		t.Fatalf("SendTask() error = %v", err)
+	}
+	if result.ID != "remote-task-1" || result.Status.State != TaskStateCompleted {
+		t.Fatalf("result = %#v", result)
 	}
 }
 

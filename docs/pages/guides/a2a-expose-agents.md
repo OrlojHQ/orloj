@@ -32,6 +32,20 @@ Set the public base URL so generated Agent Cards point at the externally reachab
 orlojd --a2a-public-base-url https://orloj.example.com
 ```
 
+To expose the normative A2A v1 gRPC binding as well, configure its separate
+listener and externally reachable URL:
+
+```bash
+orlojd \
+  --a2a-public-base-url https://orloj.example.com \
+  --a2a-grpc-addr :8081 \
+  --a2a-grpc-public-url https://orloj.example.com:8081
+```
+
+The generated card then includes both `JSONRPC` and `GRPC` entries in
+`supportedInterfaces`. When server TLS is enabled, the gRPC listener uses the
+same certificate and key.
+
 ## Step 2: Verify the Default Agent Card
 
 If exactly one AgentSystem is A2A-enabled, the root well-known URL returns its card:
