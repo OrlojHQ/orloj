@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"sort"
 	"strconv"
 	"strings"
@@ -996,37 +997,78 @@ func runDelete(cmd *cobra.Command, args []string) error {
 // --- logs ---
 
 func newLogsCommand() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "logs <agent-name>|task/<task-name>",
 		Short: "View agent or task logs",
 		Args:  cobra.ExactArgs(1),
 		RunE:  runLogs,
 	}
+	cmd.Flags().BoolP("follow", "f", false, "stream new log lines in real time until interrupted (Ctrl+C)")
+	cmd.Flags().Duration("follow-interval", 2*time.Second, "poll interval when --follow is set")
+	return cmd
 }
 
 func runLogs(cmd *cobra.Command, args []string) error {
 	server := resolveServer(cmd)
-	target := args[0]
-	endpoint := ""
-	name := target
-	if strings.HasPrefix(strings.ToLower(target), "task/") {
-		name = strings.TrimSpace(target[len("task/"):])
-		endpoint = server + "/v1/tasks/" + name + "/logs"
-	} else {
-		endpoint = server + "/v1/agents/" + name + "/logs"
-	}
-	if name == "" {
-		return errors.New("logs target name is required")
+	follow, _ := cmd.Flags().GetBool("follow")
+	interval, _ := cmd.Flags().GetDuration("follow-interval")
+	if interval <= 0 {
+		return errors.New("--follow-interval must be > 0")
 	}
 
-	resp, err := http.Get(endpoint)
+	_, endpoint, err := logsEndpoint(server, args[0])
 	if err != nil {
-		return fmt.Errorf("logs request failed: %w", err)
+		return err
+	}
+	fetch := func(ctx context.Context) ([]string, error) {
+		return fetchLogs(ctx, endpoint)
+	}
+
+	if !follow {
+		logs, err := fetch(cmd.Context())
+		if err != nil {
+			return err
+		}
+		for _, line := range logs {
+			fmt.Println(line)
+		}
+		return nil
+	}
+
+	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt)
+	defer stop()
+	return streamLogs(ctx, os.Stdout, fetch, interval)
+}
+
+// logsEndpoint resolves a "task/<name>" or "<agent-name>" logs target into
+// the resource name and the server endpoint that returns its logs.
+func logsEndpoint(server, target string) (name, endpoint string, err error) {
+	name = target
+	if strings.HasPrefix(strings.ToLower(target), "task/") {
+		name = strings.TrimSpace(target[len("task/"):])
+		endpoint = strings.TrimRight(server, "/") + "/v1/tasks/" + name + "/logs"
+	} else {
+		endpoint = strings.TrimRight(server, "/") + "/v1/agents/" + name + "/logs"
+	}
+	if strings.TrimSpace(name) == "" {
+		return "", "", errors.New("logs target name is required")
+	}
+	return name, endpoint, nil
+}
+
+func fetchLogs(ctx context.Context, endpoint string) ([]string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("logs request build failed: %w", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("logs request failed: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("logs failed: %s", bytes.TrimSpace(body))
+		return nil, fmt.Errorf("logs failed: %s", bytes.TrimSpace(body))
 	}
 
 	var payload struct {
@@ -1034,13 +1076,69 @@ func runLogs(cmd *cobra.Command, args []string) error {
 		Logs []string `json:"logs"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return fmt.Errorf("failed to decode logs response: %w", err)
+		return nil, fmt.Errorf("failed to decode logs response: %w", err)
 	}
+	return payload.Logs, nil
+}
 
-	for _, line := range payload.Logs {
-		fmt.Println(line)
+// streamLogs polls fetch on interval, printing only newly-appeared lines,
+// until ctx is cancelled (e.g. by Ctrl+C via signal.NotifyContext).
+//
+// This is polling, not a server push: AppendLog does not publish to the
+// event bus, so there's no existing live signal to subscribe to without a
+// backend change. Latency is bounded by interval, not instant.
+//
+// Resume position is tracked by the content of the last printed line, not
+// an index: both agent logs (runtime/agent_worker.go recordLog, last 200)
+// and in-memory task logs (store/resource_stores.go AppendLog, last 500)
+// are ring buffers that trim from the front, so the slice length alone
+// isn't a reliable cursor once it fills up. If the last-seen line has
+// rotated out entirely, everything currently returned is printed instead
+// of nothing.
+func streamLogs(ctx context.Context, out io.Writer, fetch func(context.Context) ([]string, error), interval time.Duration) error {
+	var lastPrinted string
+	haveLast := false
+	for {
+		logs, err := fetch(ctx)
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			return err
+		}
+
+		start := 0
+		if haveLast {
+			if idx := lastIndexOf(logs, lastPrinted); idx >= 0 {
+				start = idx + 1
+			}
+		}
+		for _, line := range logs[start:] {
+			fmt.Fprintln(out, line)
+		}
+		if len(logs) > 0 {
+			lastPrinted = logs[len(logs)-1]
+			haveLast = true
+		}
+
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(interval):
+		}
 	}
-	return nil
+}
+
+// lastIndexOf returns the index of the last occurrence of target in logs,
+// or -1 if not found. Searches from the end since the resume point is
+// always the most recently printed line.
+func lastIndexOf(logs []string, target string) int {
+	for i := len(logs) - 1; i >= 0; i-- {
+		if logs[i] == target {
+			return i
+		}
+	}
+	return -1
 }
 
 // --- trace ---
