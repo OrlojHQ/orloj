@@ -847,6 +847,91 @@ def build() -> dict:
         }
     }
 
+    paths["/v1/chat/completions"] = {
+        "post": {
+            "tags": ["chat-completions"],
+            "summary": "OpenAI-compatible chat completions facade",
+            "description": (
+                "Maps `model` to an AgentSystem name, creates a Task from `messages`, "
+                "waits for a terminal phase, and returns an OpenAI-shaped completion. "
+                "Namespace is selected with `?namespace=` (default namespace when omitted). "
+                "Requires writer auth. `stream=true` opens SSE immediately, sends "
+                "keepalives, and emits final content (not token streaming). "
+                "Unsupported OpenAI fields are ignored."
+            ),
+            "parameters": [
+                {"name": "namespace", "in": "query", "schema": {"type": "string"}},
+            ],
+            "security": SEC_WRITER,
+            "requestBody": {
+                "required": True,
+                "content": json_body(
+                    "./schemas/chat_completions.yaml#/components/schemas/ChatCompletionRequest"
+                ),
+            },
+            "responses": {
+                "200": {
+                    "description": (
+                        "Completion JSON (`application/json`) or OpenAI-shaped SSE "
+                        "(`text/event-stream`) when `stream=true`."
+                    ),
+                    "content": {
+                        "application/json": {
+                            "schema": schema_ref(
+                                "./schemas/chat_completions.yaml#/components/schemas/ChatCompletionResponse"
+                            )
+                        },
+                        "text/event-stream": {
+                            "schema": {"type": "string"},
+                        },
+                    },
+                },
+                "400": {
+                    "description": "Bad request",
+                    "content": json_body(
+                        "./schemas/chat_completions.yaml#/components/schemas/ChatCompletionErrorResponse"
+                    ),
+                },
+                "404": {
+                    "description": "AgentSystem not found",
+                    "content": json_body(
+                        "./schemas/chat_completions.yaml#/components/schemas/ChatCompletionErrorResponse"
+                    ),
+                },
+                "409": {
+                    "description": "Task waiting for approval",
+                    "content": json_body(
+                        "./schemas/chat_completions.yaml#/components/schemas/ChatCompletionErrorResponse"
+                    ),
+                },
+                "500": {
+                    "description": "Task failed or produced no content",
+                    "content": json_body(
+                        "./schemas/chat_completions.yaml#/components/schemas/ChatCompletionErrorResponse"
+                    ),
+                },
+                "504": {
+                    "description": "Task did not finish before the completion deadline",
+                    "content": json_body(
+                        "./schemas/chat_completions.yaml#/components/schemas/ChatCompletionErrorResponse"
+                    ),
+                },
+                "503": {
+                    "description": "Store unavailable",
+                    "content": json_body(
+                        "./schemas/chat_completions.yaml#/components/schemas/ChatCompletionErrorResponse"
+                    ),
+                },
+                "default": {
+                    "description": "Error",
+                    "content": json_body(
+                        "./schemas/chat_completions.yaml#/components/schemas/ChatCompletionErrorResponse"
+                    ),
+                },
+            },
+        }
+    }
+
     paths["/v1/tasks"] = {
         "get": list_tasks("tasks", "./schemas/task.yaml#/components/schemas/TaskList"),
         "post": post_create("tasks", "./schemas/task.yaml#/components/schemas/Task"),
@@ -1686,6 +1771,13 @@ def build() -> dict:
             {"name": "task-webhooks"},
             {"name": "workers"},
             {"name": "mcp-servers"},
+            {
+                "name": "chat-completions",
+                "description": (
+                    "OpenAI-compatible chat completions facade. `model` selects an "
+                    "AgentSystem; requests create and wait on Orloj Tasks."
+                ),
+            },
             {"name": "a2a", "description": (
                 "Agent-to-Agent (A2A) protocol endpoints. Provides Agent Card discovery, "
                 "JSON-RPC task operations, and a registry of local and remote A2A agents."

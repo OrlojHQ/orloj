@@ -40,3 +40,7 @@ Generate reproducible frontend screenshots and lifecycle GIF media for the READM
 **[Run Your First Agent Evaluation](./run-agent-evaluation.md)**
 *For platform engineers and ML teams who want to measure agent quality.*
 Create a golden dataset, run evaluations with multiple scoring strategies, compare models side-by-side, and set up human review workflows.
+
+**[Call AgentSystems via OpenAI Chat Completions](./openai-chat-completions.md)**
+*For teams that already speak the OpenAI Chat Completions API.*
+Point an OpenAI client at Orloj, set `model` to an AgentSystem name, and invoke governed multi-agent runs without a custom integration.
