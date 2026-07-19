@@ -6,6 +6,7 @@ import { useDeleteResource, useTool, useUpdateResource } from "../api/hooks";
 import { useAppStore } from "../store";
 import { saveNamespacedResourceYaml } from "../hooks/saveDetailYamlWithFreshRv";
 import { StatusBadge } from "../components/StatusBadge";
+import { DetailSkeleton } from "../components/DetailSkeleton";
 import { YamlEditor } from "../components/YamlEditor";
 import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
 import { ArrowLeft } from "lucide-react";
@@ -48,11 +49,11 @@ export function ToolDetail() {
   }
 
   if (isLoading || !tool) {
-    return <div className="page"><div className="loading-placeholder">Loading tool...</div></div>;
+    return <DetailSkeleton />;
   }
 
   const handleDelete = async () => {
-    if (!confirmDelete("Tool", tool.metadata.name, tool.metadata)) return;
+    if (!(await confirmDelete("Tool", tool.metadata.name, tool.metadata))) return;
     try {
       await deleteMutation.mutateAsync(routeName);
       toast("success", "Tool deleted successfully");

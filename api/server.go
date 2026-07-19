@@ -2286,6 +2286,71 @@ func (s *Server) handleTasks(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		limit, offset := paginationParams(r)
 		after := normalizeListCursor(cursorParam(r), requestNamespace(r))
+		sortParam := strings.TrimSpace(r.URL.Query().Get("sort"))
+		orderParam := strings.TrimSpace(r.URL.Query().Get("order"))
+		phaseParam := strings.TrimSpace(r.URL.Query().Get("phase"))
+		useQuery := sortParam != "" || orderParam != "" || phaseParam != ""
+		if useQuery {
+			ns, hasNS := namespaceFilter(r)
+			nsFilter := ""
+			if hasNS {
+				nsFilter = ns
+			}
+			opts, err := store.NormalizeTaskListOptions(store.TaskListOptions{
+				Limit:     limit,
+				After:     after,
+				Namespace: nsFilter,
+				Sort:      sortParam,
+				Order:     orderParam,
+				Phase:     phaseParam,
+			})
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			selector, err := labelSelectorFilter(r)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			fetchLimit := opts.Limit
+			if len(selector) > 0 {
+				fetchLimit = boundedSelectorPageLimit(opts.Limit) * 2
+			}
+			items, err := s.stores.Tasks.ListQuery(r.Context(), store.TaskListOptions{
+				Limit:     fetchLimit,
+				After:     opts.After,
+				Namespace: opts.Namespace,
+				Sort:      opts.Sort,
+				Order:     opts.Order,
+				Phase:     opts.Phase,
+			})
+			if writeStoreFetchError(w, err) {
+				return
+			}
+			if len(selector) > 0 {
+				filtered := make([]resources.Task, 0, opts.Limit)
+				for _, item := range items {
+					if !matchMetadataFilters(item.Metadata, "", false, selector) {
+						continue
+					}
+					filtered = append(filtered, item)
+					if len(filtered) >= opts.Limit {
+						break
+					}
+				}
+				items = filtered
+			} else if opts.Limit > 0 && len(items) > opts.Limit {
+				items = items[:opts.Limit]
+			}
+			cont := ""
+			if len(items) > 0 {
+				lastKey := scopedResourceKey(items[len(items)-1].Metadata)
+				cont = scopedListContinue(opts.Limit, lastKey, len(items) >= opts.Limit)
+			}
+			writeJSON(w, http.StatusOK, resources.TaskList{ListMeta: resources.ListMeta{Continue: cont}, Items: items})
+			return
+		}
 		if after != "" || offset == 0 {
 			items, cont, err := fetchListPage(r.Context(), r, s.stores.Tasks.ListCursor, func(item resources.Task) resources.ObjectMeta { return item.Metadata })
 			if writeListPageError(w, err) {

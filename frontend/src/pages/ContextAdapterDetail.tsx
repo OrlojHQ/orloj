@@ -6,6 +6,7 @@ import { useContextAdapter, useDeleteResource, useUpdateResource } from "../api/
 import { useAppStore } from "../store";
 import { saveNamespacedResourceYaml } from "../hooks/saveDetailYamlWithFreshRv";
 import { StatusBadge } from "../components/StatusBadge";
+import { DetailSkeleton } from "../components/DetailSkeleton";
 import { YamlEditor } from "../components/YamlEditor";
 import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
 import { ArrowLeft } from "lucide-react";
@@ -13,6 +14,7 @@ import clsx from "clsx";
 import { toast } from "../components/Toast";
 import type { ContextAdapter } from "../api/types";
 import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
+import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 
 type Tab = "overview" | "yaml";
 
@@ -24,6 +26,7 @@ export function ContextAdapterDetail() {
   const { data: adapter, isLoading, isError, error } = useContextAdapter(routeName);
   const queryClient = useQueryClient();
   const namespace = useAppStore((s) => s.namespace);
+  const confirmDelete = useDeleteConfirm();
   const deleteMutation = useDeleteResource("ContextAdapter");
   const updateMutation = useUpdateResource("ContextAdapter");
   const [tab, setTab] = useState<Tab>("overview");
@@ -44,15 +47,11 @@ export function ContextAdapterDetail() {
   }
 
   if (isLoading || !adapter) {
-    return (
-      <div className="page">
-        <div className="loading-placeholder">Loading context adapter...</div>
-      </div>
-    );
+    return <DetailSkeleton />;
   }
 
   const handleDelete = async () => {
-    if (!window.confirm(`Delete ContextAdapter ${adapter.metadata.name}?`)) return;
+    if (!(await confirmDelete("ContextAdapter", adapter.metadata.name, adapter.metadata))) return;
     try {
       await deleteMutation.mutateAsync(routeName);
       toast("success", "ContextAdapter deleted successfully");

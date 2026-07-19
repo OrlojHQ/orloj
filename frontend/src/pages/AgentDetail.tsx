@@ -6,6 +6,7 @@ import { useAgent, useAgentLogs, useDeleteResource, useUpdateResource, useAgentC
 import { useAppStore } from "../store";
 import { saveNamespacedResourceYaml } from "../hooks/saveDetailYamlWithFreshRv";
 import { toast } from "../components/Toast";
+import { DetailSkeleton } from "../components/DetailSkeleton";
 import { StatusBadge } from "../components/StatusBadge";
 import { YamlEditor } from "../components/YamlEditor";
 import { LogViewer } from "../components/LogViewer";
@@ -39,7 +40,7 @@ export function AgentDetail() {
   const [tab, setTab] = useState<Tab>("overview");
 
   const handleDelete = async () => {
-    if (!agent || !confirmDelete("Agent", agent.metadata.name, agent.metadata)) return;
+    if (!agent || !(await confirmDelete("Agent", agent.metadata.name, agent.metadata))) return;
     try {
       await deleteMutation.mutateAsync(routeName);
       toast("success", "Agent deleted successfully");
@@ -60,7 +61,7 @@ export function AgentDetail() {
   }
 
   if (isLoading || !agent) {
-    return <div className="page"><div className="loading-placeholder">Loading agent...</div></div>;
+    return <DetailSkeleton />;
   }
 
   const tabs: { id: Tab; label: string }[] = [

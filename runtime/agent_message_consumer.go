@@ -640,7 +640,19 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 	agentCtx, agentSpan := telemetry.StartAgentSpan(ctx, agent.Metadata.Name, msg.MessageID, msg.Attempt)
 	if m.onStepEvent != nil {
 		ns, taskName := splitTaskKey(taskKey)
+		agentName := strings.TrimSpace(agent.Metadata.Name)
+		branchID := strings.TrimSpace(msg.BranchID)
+		parentBranchID := strings.TrimSpace(msg.ParentBranchID)
 		m.executor.OnStepEvent = func(evt AgentStepEvent) {
+			if strings.TrimSpace(evt.Agent) == "" {
+				evt.Agent = agentName
+			}
+			if strings.TrimSpace(evt.BranchID) == "" {
+				evt.BranchID = branchID
+			}
+			if strings.TrimSpace(evt.ParentBranchID) == "" {
+				evt.ParentBranchID = parentBranchID
+			}
 			m.onStepEvent(taskName, ns, evt)
 		}
 	}
@@ -1913,12 +1925,13 @@ func appendMessageTrace(task *resources.Task, msg AgentMessage, eventType, messa
 		return
 	}
 	task.Status.Trace = append(task.Status.Trace, resources.TaskTraceEvent{
-		Timestamp: normalizeMessageTimestamp(msg.Timestamp),
-		Attempt:   max(msg.Attempt, task.Status.Attempts),
-		BranchID:  strings.TrimSpace(msg.BranchID),
-		Type:      strings.TrimSpace(eventType),
-		Agent:     strings.TrimSpace(msg.ToAgent),
-		Message:   strings.TrimSpace(message),
+		Timestamp:      normalizeMessageTimestamp(msg.Timestamp),
+		Attempt:        max(msg.Attempt, task.Status.Attempts),
+		BranchID:       strings.TrimSpace(msg.BranchID),
+		ParentBranchID: strings.TrimSpace(msg.ParentBranchID),
+		Type:           strings.TrimSpace(eventType),
+		Agent:          strings.TrimSpace(msg.ToAgent),
+		Message:        strings.TrimSpace(message),
 	})
 	trimTaskTrace(task)
 }
@@ -1934,10 +1947,16 @@ func appendRuntimeStepTrace(task *resources.Task, agentName string, events []Age
 	}
 	modelUsageByStep := make(map[int]modelUsage, 8)
 	for _, runtimeEvent := range events {
+		agent := strings.TrimSpace(runtimeEvent.Agent)
+		if agent == "" {
+			agent = strings.TrimSpace(agentName)
+		}
 		traceEvent := resources.TaskTraceEvent{
 			Timestamp:           runtimeEvent.Timestamp,
 			Type:                runtimeEvent.Type,
-			Agent:               strings.TrimSpace(agentName),
+			Agent:               agent,
+			BranchID:            strings.TrimSpace(runtimeEvent.BranchID),
+			ParentBranchID:      strings.TrimSpace(runtimeEvent.ParentBranchID),
 			Tool:                strings.TrimSpace(runtimeEvent.Tool),
 			ToolContractVersion: strings.TrimSpace(runtimeEvent.ToolContractVersion),
 			ToolRequestID:       strings.TrimSpace(runtimeEvent.ToolRequestID),

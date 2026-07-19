@@ -245,6 +245,77 @@ func listFromTableCursor[T any](ctx context.Context, db dbExecer, table string, 
 	return out, nil
 }
 
+func listTasksQuerySQL(ctx context.Context, db dbExecer, opts TaskListOptions) ([]resources.Task, error) {
+	query := `SELECT payload FROM tasks WHERE 1=1`
+	args := make([]any, 0, 4)
+	argN := 1
+	if opts.Namespace != "" {
+		query += fmt.Sprintf(` AND namespace = $%d`, argN)
+		args = append(args, opts.Namespace)
+		argN++
+	}
+	if opts.Phase != "" {
+		query += fmt.Sprintf(` AND lower(status_phase) = lower($%d)`, argN)
+		args = append(args, opts.Phase)
+		argN++
+	}
+	dir := "ASC"
+	if opts.Order == "desc" {
+		dir = "DESC"
+	}
+	switch opts.Sort {
+	case "created_at":
+		query += fmt.Sprintf(` ORDER BY COALESCE(payload->'metadata'->>'createdAt', '') %s, name %s`, dir, dir)
+	case "phase":
+		query += fmt.Sprintf(` ORDER BY status_phase %s, name %s`, dir, dir)
+	default:
+		query += fmt.Sprintf(` ORDER BY name %s`, dir)
+	}
+
+	rows, err := db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]resources.Task, 0)
+	for rows.Next() {
+		var payload []byte
+		if err := rows.Scan(&payload); err != nil {
+			return nil, err
+		}
+		var item resources.Task
+		if err := json.Unmarshal(payload, &item); err != nil {
+			return nil, err
+		}
+		out = append(out, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	if opts.After != "" {
+		after := normalizeStoreListCursor(opts.After, opts.Namespace)
+		filtered := make([]resources.Task, 0, len(out))
+		seen := false
+		for _, item := range out {
+			key := scopedNameFromMeta(item.Metadata)
+			if !seen {
+				if key == after {
+					seen = true
+				}
+				continue
+			}
+			filtered = append(filtered, item)
+		}
+		out = filtered
+	}
+	if opts.Limit > 0 && len(out) > opts.Limit {
+		out = out[:opts.Limit]
+	}
+	return out, nil
+}
+
 func deleteFromTable(ctx context.Context, db *sql.DB, table, name string) (bool, error) {
 	result, err := db.ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE name = $1`, table), name)
 	if err != nil {

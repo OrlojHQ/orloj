@@ -5,6 +5,7 @@ import { useToolApproval, useDeleteResource, useApproveToolApproval, useDenyTool
 import { useAppStore } from "../store";
 import { saveNamespacedResourceYaml } from "../hooks/saveDetailYamlWithFreshRv";
 import { StatusBadge } from "../components/StatusBadge";
+import { DetailSkeleton } from "../components/DetailSkeleton";
 import { YamlEditor } from "../components/YamlEditor";
 import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
 import { ArrowLeft, CheckCircle, XCircle } from "lucide-react";
@@ -12,6 +13,7 @@ import clsx from "clsx";
 import { toast } from "../components/Toast";
 import type { ToolApproval } from "../api/types";
 import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
+import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 
 type Tab = "overview" | "yaml";
 
@@ -35,6 +37,7 @@ export function ToolApprovalDetail() {
   const { data: approval, isLoading, isError, error } = useToolApproval(routeName);
   const queryClient = useQueryClient();
   const namespace = useAppStore((s) => s.namespace);
+  const confirmDelete = useDeleteConfirm();
   const deleteMutation = useDeleteResource("ToolApproval");
   const updateMutation = useUpdateResource("ToolApproval");
   const approveMutation = useApproveToolApproval();
@@ -53,7 +56,7 @@ export function ToolApprovalDetail() {
   }
 
   if (isLoading || !approval) {
-    return <div className="page"><div className="loading-placeholder">Loading approval...</div></div>;
+    return <DetailSkeleton />;
   }
 
   const isPending = (approval.status?.phase ?? "Pending").toLowerCase() === "pending";
@@ -77,7 +80,7 @@ export function ToolApprovalDetail() {
   };
 
   const handleDelete = async () => {
-    if (!window.confirm(`Delete ToolApproval ${approval.metadata.name}?`)) return;
+    if (!(await confirmDelete("ToolApproval", approval.metadata.name, approval.metadata))) return;
     try {
       await deleteMutation.mutateAsync(routeName);
       toast("success", "ToolApproval deleted");

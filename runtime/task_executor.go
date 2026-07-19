@@ -34,6 +34,9 @@ type AgentStepEvent struct {
 	Timestamp           string
 	Type                string
 	Step                int
+	Agent               string
+	BranchID            string
+	ParentBranchID      string
 	Tool                string
 	Message             string
 	ErrorCode           string

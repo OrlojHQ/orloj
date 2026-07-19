@@ -1,26 +1,27 @@
 [data-theme="dark"] {
   color-scheme: dark;
 
-  --bg-primary: #1E1D22;
-  --bg-secondary: #29282D;
-  --bg-tertiary: #29282D;
-  --bg-surface: #29282D;
-  --bg-hover: rgba(212, 160, 74, 0.04);
-  --bg-input: #161518;
+  /* Layered surfaces: canvas → section → surface → raised */
+  --bg-primary: #141317;
+  --bg-secondary: #1B1A1F;
+  --bg-tertiary: #232229;
+  --bg-surface: #1E1D23;
+  --bg-hover: rgba(212, 160, 74, 0.06);
+  --bg-input: #121116;
   --bg-overlay: rgba(0, 0, 0, 0.7);
 
-  --text-primary: #E8E4DC;
-  --text-secondary: #7A7872;
-  --text-tertiary: #7A7870;
-  --text-inverse: #1E1D22;
+  --text-primary: #ECE9E2;
+  --text-secondary: #A6A29A;
+  --text-tertiary: #7F7C74;
+  --text-inverse: #17161A;
 
-  --border: #35342B;
-  --border-subtle: rgba(255, 255, 255, 0.05);
-  --border-strong: #45443A;
+  --border: #2C2B32;
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-strong: #413F47;
 
   --accent: #D4A04A;
-  --accent-hover: #B8822E;
-  --accent-alpha: rgba(184, 130, 46, 0.15);
+  --accent-hover: #E0B266;
+  --accent-alpha: rgba(212, 160, 74, 0.15);
   --accent-text: #D4A04A;
   --accent-glow: 0 0 0 1px rgba(212, 160, 74, 0.35), 0 0 24px rgba(184, 130, 46, 0.18);
   --accent-blue: #5C7CFA;
@@ -44,18 +45,18 @@
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
   --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
 
-  --sidebar-bg: #29282D;
-  --sidebar-border: #35342B;
+  --sidebar-bg: #17161B;
+  --sidebar-border: #26252B;
   --sidebar-text: #B5B3AA;
-  --sidebar-text-active: #E8E4DC;
+  --sidebar-text-active: #ECE9E2;
   --sidebar-hover: rgba(212, 160, 74, 0.08);
-  --sidebar-active: rgba(184, 130, 46, 0.30);
+  --sidebar-active: rgba(212, 160, 74, 0.14);
 
-  --topbar-bg: #29282D;
-  --topbar-border: rgba(255, 255, 255, 0.05);
+  --topbar-bg: rgba(23, 22, 27, 0.78);
+  --topbar-border: rgba(255, 255, 255, 0.06);
 
-  --card-bg: #29282D;
-  --card-border: #35342B;
+  --card-bg: #1E1D23;
+  --card-border: #2C2B32;
 
   --badge-healthy: var(--green);
   --badge-healthy-bg: var(--green-bg);
@@ -68,10 +69,10 @@
   --badge-deadletter: var(--orange);
   --badge-deadletter-bg: var(--orange-bg);
 
-  --node-bg: #29282D;
-  --node-border: #35342B;
-  --node-text: #E8E4DC;
-  --edge-color: #35342B;
+  --node-bg: #1E1D23;
+  --node-border: #2C2B32;
+  --node-text: #ECE9E2;
+  --edge-color: #35343B;
   --edge-stroke: rgba(212, 160, 74, 0.3);
   --graph-grid: rgba(212, 160, 74, 0.02);
 }

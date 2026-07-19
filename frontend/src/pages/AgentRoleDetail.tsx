@@ -6,6 +6,7 @@ import { useAgentRole, useDeleteResource, useUpdateResource } from "../api/hooks
 import { useAppStore } from "../store";
 import { saveNamespacedResourceYaml } from "../hooks/saveDetailYamlWithFreshRv";
 import { StatusBadge } from "../components/StatusBadge";
+import { DetailSkeleton } from "../components/DetailSkeleton";
 import { YamlEditor } from "../components/YamlEditor";
 import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
 import { ArrowLeft } from "lucide-react";
@@ -13,6 +14,7 @@ import clsx from "clsx";
 import { toast } from "../components/Toast";
 import type { AgentRole } from "../api/types";
 import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
+import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 
 type Tab = "overview" | "yaml";
 
@@ -24,6 +26,7 @@ export function AgentRoleDetail() {
   const { data: role, isLoading, isError, error } = useAgentRole(routeName);
   const queryClient = useQueryClient();
   const namespace = useAppStore((s) => s.namespace);
+  const confirmDelete = useDeleteConfirm();
   const deleteMutation = useDeleteResource("AgentRole");
   const updateMutation = useUpdateResource("AgentRole");
   const [tab, setTab] = useState<Tab>("overview");
@@ -44,11 +47,11 @@ export function AgentRoleDetail() {
   }
 
   if (isLoading || !role) {
-    return <div className="page"><div className="loading-placeholder">Loading agent role...</div></div>;
+    return <DetailSkeleton />;
   }
 
   const handleDelete = async () => {
-    if (!window.confirm(`Delete AgentRole ${role.metadata.name}?`)) return;
+    if (!(await confirmDelete("AgentRole", role.metadata.name, role.metadata))) return;
     try {
       await deleteMutation.mutateAsync(routeName);
       toast("success", "AgentRole deleted successfully");

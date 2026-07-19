@@ -6,6 +6,7 @@ import { useEvalRun, useDeleteResource, useUpdateResource } from "../api/hooks";
 import { useAppStore } from "../store";
 import { saveNamespacedResourceYaml } from "../hooks/saveDetailYamlWithFreshRv";
 import { StatusBadge } from "../components/StatusBadge";
+import { DetailSkeleton } from "../components/DetailSkeleton";
 import { MetricCard } from "../components/MetricCard";
 import { YamlEditor } from "../components/YamlEditor";
 import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
@@ -14,6 +15,7 @@ import clsx from "clsx";
 import { toast } from "../components/Toast";
 import type { EvalRun } from "../api/types";
 import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
+import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 
 type Tab = "overview" | "results" | "yaml";
 
@@ -25,6 +27,7 @@ export function EvalRunDetail() {
   const { data: run, isLoading, isError, error } = useEvalRun(routeName);
   const queryClient = useQueryClient();
   const namespace = useAppStore((s) => s.namespace);
+  const confirmDelete = useDeleteConfirm();
   const deleteMutation = useDeleteResource("EvalRun");
   const updateMutation = useUpdateResource("EvalRun");
   const [tab, setTab] = useState<Tab>("overview");
@@ -46,15 +49,11 @@ export function EvalRunDetail() {
   }
 
   if (isLoading || !run) {
-    return (
-      <div className="page">
-        <div className="loading-placeholder">Loading eval run...</div>
-      </div>
-    );
+    return <DetailSkeleton />;
   }
 
   const handleDelete = async () => {
-    if (!window.confirm(`Delete EvalRun ${run.metadata.name}?`)) return;
+    if (!(await confirmDelete("EvalRun", run.metadata.name, run.metadata))) return;
     try {
       await deleteMutation.mutateAsync(routeName);
       toast("success", "EvalRun deleted successfully");

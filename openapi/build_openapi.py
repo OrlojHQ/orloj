@@ -60,6 +60,26 @@ def list_tasks(tag: str, list_ref: str) -> dict:
         {"name": "offset", "in": "query", "schema": {
             "type": "integer", "minimum": 0}},
     )
+    op["parameters"].extend([
+        {
+            "name": "sort",
+            "in": "query",
+            "description": "Sort field: name, created_at, or phase. Default name.",
+            "schema": {"type": "string", "enum": ["name", "created_at", "phase"]},
+        },
+        {
+            "name": "order",
+            "in": "query",
+            "description": "Sort order. Default asc.",
+            "schema": {"type": "string", "enum": ["asc", "desc"]},
+        },
+        {
+            "name": "phase",
+            "in": "query",
+            "description": "Filter by task status phase (exact match, case-insensitive).",
+            "schema": {"type": "string"},
+        },
+    ])
     return op
 
 

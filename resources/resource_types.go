@@ -1476,6 +1476,7 @@ type TaskTraceEvent struct {
 	Attempt             int    `json:"attempt,omitempty" yaml:"attempt,omitempty"`
 	Step                int    `json:"step,omitempty" yaml:"step,omitempty"`
 	BranchID            string `json:"branch_id,omitempty" yaml:"branch_id,omitempty"`
+	ParentBranchID      string `json:"parent_branch_id,omitempty" yaml:"parent_branch_id,omitempty"`
 	Type                string `json:"type,omitempty" yaml:"type,omitempty"`
 	Agent               string `json:"agent,omitempty" yaml:"agent,omitempty"`
 	Tool                string `json:"tool,omitempty" yaml:"tool,omitempty"`
@@ -1627,6 +1628,9 @@ type AgentJobStepEvt struct {
 	Timestamp           string `json:"timestamp,omitempty" yaml:"timestamp,omitempty"`
 	Type                string `json:"type,omitempty" yaml:"type,omitempty"`
 	Step                int    `json:"step,omitempty" yaml:"step,omitempty"`
+	Agent               string `json:"agent,omitempty" yaml:"agent,omitempty"`
+	BranchID            string `json:"branchID,omitempty" yaml:"branchID,omitempty"`
+	ParentBranchID      string `json:"parentBranchID,omitempty" yaml:"parentBranchID,omitempty"`
 	Tool                string `json:"tool,omitempty" yaml:"tool,omitempty"`
 	Message             string `json:"message,omitempty" yaml:"message,omitempty"`
 	ErrorCode           string `json:"errorCode,omitempty" yaml:"errorCode,omitempty"`

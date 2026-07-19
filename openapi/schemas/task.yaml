@@ -40,6 +40,7 @@ components:
         attempt: { type: integer }
         step: { type: integer }
         branch_id: { type: string }
+        parent_branch_id: { type: string }
         type: { type: string }
         agent: { type: string }
         tool: { type: string }

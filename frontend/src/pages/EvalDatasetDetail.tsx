@@ -6,12 +6,14 @@ import { useEvalDataset, useDeleteResource, useUpdateResource } from "../api/hoo
 import { useAppStore } from "../store";
 import { saveNamespacedResourceYaml } from "../hooks/saveDetailYamlWithFreshRv";
 import { YamlEditor } from "../components/YamlEditor";
+import { DetailSkeleton } from "../components/DetailSkeleton";
 import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
 import { ArrowLeft } from "lucide-react";
 import clsx from "clsx";
 import { toast } from "../components/Toast";
 import type { EvalDataset } from "../api/types";
 import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
+import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 
 type Tab = "overview" | "samples" | "yaml";
 
@@ -23,6 +25,7 @@ export function EvalDatasetDetail() {
   const { data: dataset, isLoading, isError, error } = useEvalDataset(routeName);
   const queryClient = useQueryClient();
   const namespace = useAppStore((s) => s.namespace);
+  const confirmDelete = useDeleteConfirm();
   const deleteMutation = useDeleteResource("EvalDataset");
   const updateMutation = useUpdateResource("EvalDataset");
   const [tab, setTab] = useState<Tab>("overview");
@@ -44,15 +47,11 @@ export function EvalDatasetDetail() {
   }
 
   if (isLoading || !dataset) {
-    return (
-      <div className="page">
-        <div className="loading-placeholder">Loading eval dataset...</div>
-      </div>
-    );
+    return <DetailSkeleton />;
   }
 
   const handleDelete = async () => {
-    if (!window.confirm(`Delete EvalDataset ${dataset.metadata.name}?`)) return;
+    if (!(await confirmDelete("EvalDataset", dataset.metadata.name, dataset.metadata))) return;
     try {
       await deleteMutation.mutateAsync(routeName);
       toast("success", "EvalDataset deleted successfully");

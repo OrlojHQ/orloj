@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Console trace waterfall**: the task Trace tab now renders real spans (operations are drawn from start to finish using their recorded latency), grouped into collapsible per-agent lanes with a time axis, per-event `t+offset` and duration columns, multi-row expansion, and a wall-clock **duration** stat that replaces the misleading summed "total latency". Live-streamed trace events now populate the agent lane when the server provides it. Branch-aware sub-lanes nest via `parent_branch_id`, the header shows a cumulative token sparkline, and expanded events can copy their JSON to the clipboard.
+- **Console confirm dialogs**: destructive actions (resource deletion, CRD-managed warnings) use a styled in-app confirmation dialog instead of `window.confirm` across all detail pages.
+- **Console task list sorting & virtualization**: the Tasks page drives server `sort` / `order` / `phase` query params from column headers and phase pills (default `created_at` desc), and virtualizes large result sets.
+- **`GET /v1/tasks` sort/phase**: list tasks with `sort` (`name` | `created_at` | `phase`), `order` (`asc` | `desc`), and `phase` filter.
+- **Trace event branch parent**: `TaskTraceEvent.parent_branch_id` is persisted and streamed when known; live `task.trace` step events include `Agent` and `BranchID` for agent-lane grouping.
+
+### Changed
+
+- **Console visual refresh**: layered dark-theme surfaces (distinct canvas, panel, and card tones), higher-contrast secondary text, softer sidebar active state, design tokens for radius/spacing/typography (including migration of hard-coded sizes in component CSS), keyboard focus rings, reduced-motion support, self-hosted Inter/JetBrains Mono fonts, skeleton loading states on detail pages (and A2A Registry / Capabilities), task detail tabs deep-linkable via `?tab=`, and message filters as dismissible chips with debounced apply (no Apply button). Dashboard bento sidebar uses denser count tiles.
+
+
 - **A2A v1.0 JSON-RPC compatibility**: the existing A2A endpoint now accepts the v1 `SendMessage`, `SendStreamingMessage`, `GetTask`, `ListTasks`, `CancelTask`, and `SubscribeToTask` methods while preserving Orloj's legacy `tasks/*` methods. Outbound A2A tools negotiate v1 JSON-RPC from `supportedInterfaces` and retain legacy fallback.
 - **A2A v1.0 gRPC binding**: `orlojd` can expose the normative A2A service on a separate listener with shared task handling, bearer authorization, TLS configuration, and Agent Card discovery.
 - **A2A push notifications**: v1 JSON-RPC and gRPC clients can create, get, list, and delete persistent per-task callback configurations. Task events are delivered with bounded retries through SSRF-safe HTTP; credentials are encrypted in PostgreSQL when secret encryption is configured.

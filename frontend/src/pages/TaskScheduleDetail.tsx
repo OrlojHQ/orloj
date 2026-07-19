@@ -6,6 +6,7 @@ import { useDeleteResource, useTaskSchedule, useTasks, useUpdateResource } from 
 import { useAppStore } from "../store";
 import { saveNamespacedResourceYaml } from "../hooks/saveDetailYamlWithFreshRv";
 import { StatusBadge } from "../components/StatusBadge";
+import { DetailSkeleton } from "../components/DetailSkeleton";
 import { YamlEditor } from "../components/YamlEditor";
 import { ResourceTable, type Column } from "../components/ResourceTable";
 import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
@@ -14,6 +15,7 @@ import clsx from "clsx";
 import type { Task, TaskSchedule } from "../api/types";
 import { RESOURCE_DETAIL_BASE_PATH } from "../api/types";
 import { toast } from "../components/Toast";
+import { useDeleteConfirm } from "../hooks/useDeleteConfirm";
 
 type Tab = "overview" | "runs" | "yaml";
 
@@ -30,6 +32,7 @@ export function TaskScheduleDetail() {
   const queryClient = useQueryClient();
   const namespace = useAppStore((s) => s.namespace);
   const tasks = useTasks();
+  const confirmDelete = useDeleteConfirm();
   const deleteMutation = useDeleteResource("TaskSchedule");
   const updateMutation = useUpdateResource("TaskSchedule");
   const [tab, setTab] = useState<Tab>("overview");
@@ -79,13 +82,13 @@ export function TaskScheduleDetail() {
   }
 
   if (isLoading || !taskSchedule) {
-    return <div className="page"><div className="loading-placeholder">Loading task schedule...</div></div>;
+    return <DetailSkeleton />;
   }
 
   const scheduleDetailPath = `/task-schedules/${encodeURIComponent(routeName)}`;
 
   const handleDelete = async () => {
-    if (!window.confirm(`Delete TaskSchedule ${taskSchedule.metadata.name}?`)) return;
+    if (!(await confirmDelete("TaskSchedule", taskSchedule.metadata.name, taskSchedule.metadata))) return;
     try {
       await deleteMutation.mutateAsync(routeName);
       toast("success", "TaskSchedule deleted successfully");
