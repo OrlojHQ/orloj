@@ -19,6 +19,9 @@ type ExecutionEngine interface {
 type ExecutionEventSink struct {
 	StepEvent   func(AgentStepEvent)
 	ModelStream ModelStreamEventSink
+	Checkpoint  ExecutionCheckpointSink
+	Resume      *AgentExecutionCheckpoint
+	ResumeError error
 }
 
 // EventSinkingExecutionEngine optionally accepts execution-scoped event sinks.
@@ -76,6 +79,9 @@ func (e *ReActExecutionEngine) ExecuteWithEventSink(
 	if err := agent.Normalize(); err != nil {
 		return AgentExecutionResult{}, err
 	}
+	if sink.ResumeError != nil {
+		return AgentExecutionResult{}, fmt.Errorf("restore execution checkpoint: %w", sink.ResumeError)
+	}
 	stepSink := sink.StepEvent
 	if stepSink == nil {
 		stepSink = e.OnStepEvent
@@ -123,13 +129,15 @@ func (e *ReActExecutionEngine) ExecuteWithEventSink(
 
 	memory := e.newMemoryStore()
 	worker := NewAgentWorkerWithIntervalAndGatewayAndInput(agent, e.toolRuntime, memory, e.modelGateway, input, appendObserved, e.stepEvery)
+	worker.SetCheckpointing(sink.Resume, sink.Checkpoint)
 	if resolver, ok := e.toolRuntime.(ToolSchemaResolver); ok {
 		worker.SetToolSchemas(resolver.ResolveToolSchemas(agent.Spec.Tools))
 	}
+	var workerErr error
 	if sink.ModelStream != nil {
-		worker.RunWithEventSink(runCtx, sink.ModelStream)
+		workerErr = worker.RunWithEventSink(runCtx, sink.ModelStream)
 	} else {
-		worker.Run(runCtx)
+		workerErr = worker.Run(runCtx)
 	}
 
 	duration := time.Since(start)
@@ -153,6 +161,17 @@ func (e *ReActExecutionEngine) ExecuteWithEventSink(
 		result.LastEvent = rawEvents[len(rawEvents)-1]
 	}
 	result.Output = preferredAgentOutput(stepEvents)
+	if checkpoint := worker.LastCheckpoint(); checkpoint != nil {
+		if result.Output == "" {
+			result.Output = checkpoint.LastOutput
+		}
+		result.Steps = max(result.Steps, checkpoint.Steps)
+		result.ToolCalls = max(result.ToolCalls, checkpoint.ToolCalls)
+		result.TokensUsed = max(result.TokensUsed, checkpoint.TokensUsed)
+	}
+	if workerErr != nil {
+		return result, workerErr
+	}
 	if denied, ok := firstToolPermissionDenied(stepEvents); ok {
 		return result, fmt.Errorf(
 			"%w: agent=%s step=%d tool=%s error=%s",

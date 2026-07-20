@@ -12,12 +12,15 @@ Sessions do not replace Tasks. A Session turn creates a Task internally so exist
 - `idle_ttl` (duration string): expiry window after the last activity. Defaults to `24h`.
 - `max_turns` (int, >= 0): optional completed-turn limit. `0` means unlimited.
 - `input` (map[string]string): values added to each turn's internal Task input.
+- `checkpoint_retention.max_count` (int, >= 0): maximum retained safe-point snapshots. Defaults to `100`.
+- `checkpoint_retention.max_age` (duration string): maximum checkpoint age. Defaults to `168h`.
 
 ## status
 
 - `phase`: `WaitingInput`, `Running`, `Paused`, `WaitingApproval`, `Failed`, `Cancelled`, `Completed`, or `Expired`.
 - `activeTurnID`, `queuedTurns`, `completedTurns`
 - `lastEventSequence`: highest durable event sequence available for replay.
+- `lastCheckpointID`, `restoredCheckpoint`: current durable execution head and the checkpoint selected by recovery or rewind.
 - `claimedBy`, `leaseUntil`, `lastHeartbeat`, `fence`: worker lease and stale-writer fencing.
 - `startedAt`, `lastActivityAt`, `expiresAt`, `completedAt`
 - `systemGeneration`: AgentSystem generation captured when the Session was created.
@@ -33,8 +36,21 @@ Session events have a strictly increasing per-Session `seq`. Important event typ
 - `session.paused`, `session.resumed`, `session.cancelled`, `session.completed`, `session.expired`
 - `approval.requested`, `approval.resolved`
 - `tool.started`, `tool.completed`, `error`
+- `checkpoint.created`, `checkpoint.pruned`, `session.recovered`, `session.rewound`, `session.forked`
 
-Clients reconnect to `GET /v1/sessions/{name}/stream` with `Last-Event-ID` or `?after=<seq>`. The server replays every later event before following live updates. A `message.reset` tells clients to discard tentative assistant output for that message after interruption or worker takeover.
+Clients reconnect to `GET /v1/sessions/{name}/stream` with `Last-Event-ID` or `?after=<seq>`. The server replays every later event before following live updates. On lease recovery, `message.reset` discards tentative output emitted after the safe point, then `session.recovered` identifies the checkpoint used to continue the agent loop.
+
+## Checkpoints and time travel
+
+Orloj snapshots the serializable agent loop after a complete ReAct step and at agent completion. Partial model streams are never treated as safe points. Checkpoint persistence is synchronous: execution does not advance if the snapshot cannot be stored.
+
+- `GET /v1/sessions/{name}/checkpoints` lists snapshots newest first.
+- `GET /v1/sessions/{name}/checkpoints/{id}` returns one snapshot.
+- `GET .../{id}/replay` verifies the stored state hash and replays recorded events without model or tool calls.
+- `POST .../{id}/rewind` fences current execution and restores the Session to a paused checkpoint. Pass `{"interrupt":true,"resume":true}` to replace an active turn and continue.
+- `POST .../{id}/fork` with `{"name":"alternate"}` creates an independent paused Session with materialized conversation history. Forks continue with a new user turn; they do not resume the source's partially executing turn.
+
+Replaying recorded data is deterministic. Continuing live execution after rewind or fork is not guaranteed to produce identical output because models and external systems may change. Tool calls receive stable Session/turn/step request IDs, but tools that do not honor idempotency remain at-least-once across a crash.
 
 ## Example
 
@@ -47,6 +63,9 @@ spec:
   system: support-system
   idle_ttl: 8h
   max_turns: 50
+  checkpoint_retention:
+    max_count: 100
+    max_age: 168h
 ```
 
 See [Interactive Sessions](../../guides/interactive-sessions.md) for complete API examples.

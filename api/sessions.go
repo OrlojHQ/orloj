@@ -99,6 +99,12 @@ func (s *Server) handleSessionByName(w http.ResponseWriter, r *http.Request) {
 		s.watchSessions(w, r)
 		return
 	}
+	if marker := strings.Index(path, "/checkpoints"); marker >= 0 {
+		name := strings.Trim(path[:marker], "/")
+		checkpointPath := strings.TrimPrefix(path[marker:], "/checkpoints")
+		s.handleSessionCheckpoints(w, r, name, strings.Trim(checkpointPath, "/"))
+		return
+	}
 
 	for _, suffix := range []string{"/turns", "/events", "/stream", "/pause", "/resume", "/cancel", "/complete"} {
 		if !strings.HasSuffix(path, suffix) {

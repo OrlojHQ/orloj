@@ -488,6 +488,7 @@ func main() {
 					A2AToolRuntime:      a2aToolRT,
 					KubernetesToolRT:    k8sToolRT,
 					AgentK8sRuntime:     agentK8sRT,
+					Sessions:            stores.Sessions,
 					DebugLogger:         debugLogger,
 				},
 			)

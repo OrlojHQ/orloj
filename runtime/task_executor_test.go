@@ -75,9 +75,9 @@ func TestTaskExecutorStepEventsIncludeModelAndToolCalls(t *testing.T) {
 		Spec: resources.AgentSpec{
 			Model:    "gpt-4o",
 			ModelRef: "test-endpoint",
-			Prompt: "test prompt",
-			Tools:  []string{"web_search"},
-			Limits: resources.AgentLimits{MaxSteps: 2},
+			Prompt:   "test prompt",
+			Tools:    []string{"web_search"},
+			Limits:   resources.AgentLimits{MaxSteps: 2},
 		},
 	}
 
@@ -121,6 +121,93 @@ func TestTaskExecutorStepEventsIncludeModelAndToolCalls(t *testing.T) {
 	}
 }
 
+func TestTaskExecutorResumesFromSafeStepCheckpoint(t *testing.T) {
+	tools := &countingToolRuntime{}
+	gateway := &scriptedModelGateway{responses: map[int]ModelResponse{
+		1: {
+			ToolCalls: []ModelToolCall{{ID: "call-1", Name: "web_search", Input: "orloj"}},
+		},
+		2: {Content: "finished"},
+	}}
+	executor := NewTaskExecutorWithRuntime(nil, tools, gateway, nil)
+	agent := resources.Agent{
+		Metadata: resources.ObjectMeta{Name: "research"},
+		Spec: resources.AgentSpec{
+			Model:    "gpt-4o",
+			ModelRef: "test-endpoint",
+			Prompt:   "test prompt",
+			Tools:    []string{"web_search"},
+			Limits:   resources.AgentLimits{MaxSteps: 3},
+		},
+	}
+
+	var saved AgentExecutionCheckpoint
+	_, err := executor.ExecuteAgentWithEventSink(
+		context.Background(),
+		agent,
+		map[string]string{"session.id": "chat", "session.turn_id": "turn-1"},
+		ExecutionEventSink{
+			Checkpoint: func(checkpoint AgentExecutionCheckpoint) error {
+				saved = copyAgentExecutionCheckpoint(checkpoint)
+				if !checkpoint.Completed && checkpoint.NextStep == 2 {
+					return errors.New("simulated worker crash")
+				}
+				return nil
+			},
+		},
+	)
+	if err == nil || !strings.Contains(err.Error(), "simulated worker crash") {
+		t.Fatalf("first execution error = %v", err)
+	}
+	if saved.NextStep != 2 || saved.Completed {
+		t.Fatalf("saved checkpoint = %#v", saved)
+	}
+	if tools.calls["web_search"] != 1 {
+		t.Fatalf("tool calls after first execution = %d", tools.calls["web_search"])
+	}
+
+	result, err := executor.ExecuteAgentWithEventSink(
+		context.Background(),
+		agent,
+		map[string]string{"session.id": "chat", "session.turn_id": "turn-1"},
+		ExecutionEventSink{Resume: &saved},
+	)
+	if err != nil {
+		t.Fatalf("resume execution: %v", err)
+	}
+	if result.Output != "finished" {
+		t.Fatalf("resumed output = %q", result.Output)
+	}
+	if tools.calls["web_search"] != 1 {
+		t.Fatalf("resume repeated completed tool call: %d", tools.calls["web_search"])
+	}
+}
+
+func TestTaskExecutorFailsClosedOnCheckpointRestoreError(t *testing.T) {
+	tools := &countingToolRuntime{}
+	executor := NewTaskExecutorWithRuntime(nil, tools, &scriptedModelGateway{}, nil)
+	agent := resources.Agent{
+		Metadata: resources.ObjectMeta{Name: "research"},
+		Spec: resources.AgentSpec{
+			Model:    "gpt-4o",
+			ModelRef: "test-endpoint",
+			Tools:    []string{"web_search"},
+		},
+	}
+	_, err := executor.ExecuteAgentWithEventSink(
+		context.Background(),
+		agent,
+		map[string]string{"topic": "checkpoint"},
+		ExecutionEventSink{ResumeError: errors.New("state hash mismatch")},
+	)
+	if err == nil || !strings.Contains(err.Error(), "state hash mismatch") {
+		t.Fatalf("restore error = %v", err)
+	}
+	if len(tools.calls) != 0 {
+		t.Fatalf("restore failure executed tools: %#v", tools.calls)
+	}
+}
+
 func TestTaskExecutorStepEventsCaptureModelErrors(t *testing.T) {
 	executor := NewTaskExecutorWithRuntime(nil, &staticToolRuntime{}, &failingModelGateway{}, nil)
 	agent := resources.Agent{
@@ -128,9 +215,9 @@ func TestTaskExecutorStepEventsCaptureModelErrors(t *testing.T) {
 		Spec: resources.AgentSpec{
 			Model:    "gpt-4o",
 			ModelRef: "test-endpoint",
-			Prompt: "test prompt",
-			Tools:  []string{"web_search"},
-			Limits: resources.AgentLimits{MaxSteps: 1},
+			Prompt:   "test prompt",
+			Tools:    []string{"web_search"},
+			Limits:   resources.AgentLimits{MaxSteps: 1},
 		},
 	}
 
@@ -169,9 +256,9 @@ func TestTaskExecutorHardFailsOnPermissionDenied(t *testing.T) {
 		Spec: resources.AgentSpec{
 			Model:    "gpt-4o",
 			ModelRef: "test-endpoint",
-			Prompt: "test prompt",
-			Tools:  []string{"vector_db"},
-			Limits: resources.AgentLimits{MaxSteps: 2},
+			Prompt:   "test prompt",
+			Tools:    []string{"vector_db"},
+			Limits:   resources.AgentLimits{MaxSteps: 2},
 		},
 	}
 
@@ -235,8 +322,8 @@ func TestTaskExecutorContractModeHappyPath(t *testing.T) {
 		Spec: resources.AgentSpec{
 			Model:    "gpt-4o",
 			ModelRef: "test-endpoint",
-			Prompt: "contract prompt",
-			Tools:  []string{"tool.alpha", "tool.beta"},
+			Prompt:   "contract prompt",
+			Tools:    []string{"tool.alpha", "tool.beta"},
 			Execution: resources.AgentExecutionSpec{
 				Profile:               resources.AgentExecutionProfileContract,
 				ToolSequence:          []string{"tool.alpha", "tool.beta"},
@@ -290,8 +377,8 @@ func TestTaskExecutorContractModeAllowsNoToolIntermediateStep(t *testing.T) {
 		Spec: resources.AgentSpec{
 			Model:    "gpt-4o",
 			ModelRef: "test-endpoint",
-			Prompt: "contract prompt",
-			Tools:  []string{"tool.alpha"},
+			Prompt:   "contract prompt",
+			Tools:    []string{"tool.alpha"},
 			Execution: resources.AgentExecutionSpec{
 				Profile:               resources.AgentExecutionProfileContract,
 				ToolSequence:          []string{"tool.alpha"},
@@ -340,8 +427,8 @@ func TestTaskExecutorContractModeDuplicateShortCircuit(t *testing.T) {
 		Spec: resources.AgentSpec{
 			Model:    "gpt-4o",
 			ModelRef: "test-endpoint",
-			Prompt: "contract prompt",
-			Tools:  []string{"tool.alpha"},
+			Prompt:   "contract prompt",
+			Tools:    []string{"tool.alpha"},
 			Execution: resources.AgentExecutionSpec{
 				Profile:                 resources.AgentExecutionProfileContract,
 				ToolSequence:            []string{"tool.alpha"},
@@ -388,8 +475,8 @@ func TestTaskExecutorContractModeDuplicateDeny(t *testing.T) {
 		Spec: resources.AgentSpec{
 			Model:    "gpt-4o",
 			ModelRef: "test-endpoint",
-			Prompt: "contract prompt",
-			Tools:  []string{"tool.alpha"},
+			Prompt:   "contract prompt",
+			Tools:    []string{"tool.alpha"},
 			Execution: resources.AgentExecutionSpec{
 				Profile:                 resources.AgentExecutionProfileContract,
 				ToolSequence:            []string{"tool.alpha"},
@@ -450,8 +537,8 @@ func TestTaskExecutorContractModeToolNotInSequence(t *testing.T) {
 		Spec: resources.AgentSpec{
 			Model:    "gpt-4o",
 			ModelRef: "test-endpoint",
-			Prompt: "contract prompt",
-			Tools:  []string{"tool.alpha", "tool.beta", "tool.gamma"},
+			Prompt:   "contract prompt",
+			Tools:    []string{"tool.alpha", "tool.beta", "tool.gamma"},
 			Execution: resources.AgentExecutionSpec{
 				Profile:                 resources.AgentExecutionProfileContract,
 				ToolSequence:            []string{"tool.alpha", "tool.beta"},
@@ -502,8 +589,8 @@ func TestTaskExecutorContractModeOutOfOrderAllowed(t *testing.T) {
 		Spec: resources.AgentSpec{
 			Model:    "gpt-4o",
 			ModelRef: "test-endpoint",
-			Prompt: "contract prompt",
-			Tools:  []string{"tool.alpha", "tool.beta"},
+			Prompt:   "contract prompt",
+			Tools:    []string{"tool.alpha", "tool.beta"},
 			Execution: resources.AgentExecutionSpec{
 				Profile:               resources.AgentExecutionProfileContract,
 				ToolSequence:          []string{"tool.alpha", "tool.beta"},
@@ -546,8 +633,8 @@ func TestTaskExecutorContractModeMaxStepsMarkersIncompleteCompletesWithWarning(t
 		Spec: resources.AgentSpec{
 			Model:    "gpt-4o",
 			ModelRef: "test-endpoint",
-			Prompt: "contract prompt",
-			Tools:  []string{"tool.alpha"},
+			Prompt:   "contract prompt",
+			Tools:    []string{"tool.alpha"},
 			Execution: resources.AgentExecutionSpec{
 				Profile:               resources.AgentExecutionProfileContract,
 				ToolSequence:          []string{"tool.alpha"},
@@ -595,8 +682,8 @@ func TestTaskExecutorContractModeMaxStepsToolsIncomplete(t *testing.T) {
 		Spec: resources.AgentSpec{
 			Model:    "gpt-4o",
 			ModelRef: "test-endpoint",
-			Prompt: "contract prompt",
-			Tools:  []string{"tool.alpha"},
+			Prompt:   "contract prompt",
+			Tools:    []string{"tool.alpha"},
 			Execution: resources.AgentExecutionSpec{
 				Profile:               resources.AgentExecutionProfileContract,
 				ToolSequence:          []string{"tool.alpha"},
@@ -640,8 +727,8 @@ func TestTaskExecutorDynamicProfileUnaffectedByContractFields(t *testing.T) {
 		Spec: resources.AgentSpec{
 			Model:    "gpt-4o",
 			ModelRef: "test-endpoint",
-			Prompt: "dynamic prompt",
-			Tools:  []string{"tool.alpha", "tool.beta"},
+			Prompt:   "dynamic prompt",
+			Tools:    []string{"tool.alpha", "tool.beta"},
 			Execution: resources.AgentExecutionSpec{
 				Profile:      resources.AgentExecutionProfileDynamic,
 				ToolSequence: []string{"tool.alpha", "tool.beta"},
@@ -685,9 +772,9 @@ func TestTaskExecutorDynamicProfileShortCircuitsDuplicates(t *testing.T) {
 		Spec: resources.AgentSpec{
 			Model:    "gpt-4o",
 			ModelRef: "test-endpoint",
-			Prompt: "test prompt",
-			Tools:  []string{"web_search"},
-			Limits: resources.AgentLimits{MaxSteps: 4},
+			Prompt:   "test prompt",
+			Tools:    []string{"web_search"},
+			Limits:   resources.AgentLimits{MaxSteps: 4},
 		},
 	}
 
@@ -739,9 +826,9 @@ func TestTaskExecutorMultiToolAgentFiltersIndependently(t *testing.T) {
 		Spec: resources.AgentSpec{
 			Model:    "gpt-4o",
 			ModelRef: "test-endpoint",
-			Prompt: "search and query",
-			Tools:  []string{"web_search", "database"},
-			Limits: resources.AgentLimits{MaxSteps: 4},
+			Prompt:   "search and query",
+			Tools:    []string{"web_search", "database"},
+			Limits:   resources.AgentLimits{MaxSteps: 4},
 		},
 	}
 
@@ -787,8 +874,8 @@ func TestTaskExecutorContractModeObservePolicyDoesNotError(t *testing.T) {
 		Spec: resources.AgentSpec{
 			Model:    "gpt-4o",
 			ModelRef: "test-endpoint",
-			Prompt: "contract prompt",
-			Tools:  []string{"tool.alpha", "tool.gamma"},
+			Prompt:   "contract prompt",
+			Tools:    []string{"tool.alpha", "tool.gamma"},
 			Execution: resources.AgentExecutionSpec{
 				Profile:               resources.AgentExecutionProfileContract,
 				ToolSequence:          []string{"tool.alpha"},
@@ -835,9 +922,9 @@ func TestTaskExecutorReturnsApprovalRequiredWhenToolNeedsApproval(t *testing.T) 
 		Spec: resources.AgentSpec{
 			Model:    "gpt-4o",
 			ModelRef: "test-endpoint",
-			Prompt: "use the smoke tool once",
-			Tools:  []string{"smoke"},
-			Limits: resources.AgentLimits{MaxSteps: 6},
+			Prompt:   "use the smoke tool once",
+			Tools:    []string{"smoke"},
+			Limits:   resources.AgentLimits{MaxSteps: 6},
 		},
 	}
 	_, err := executor.ExecuteAgent(context.Background(), agent, map[string]string{"topic": "t"})
@@ -856,9 +943,9 @@ func TestTaskExecutorStepEventsCaptureToolContractMetadata(t *testing.T) {
 		Spec: resources.AgentSpec{
 			Model:    "gpt-4o",
 			ModelRef: "test-endpoint",
-			Prompt: "test prompt",
-			Tools:  []string{"web_search"},
-			Limits: resources.AgentLimits{MaxSteps: 1},
+			Prompt:   "test prompt",
+			Tools:    []string{"web_search"},
+			Limits:   resources.AgentLimits{MaxSteps: 1},
 		},
 	}
 
@@ -896,8 +983,8 @@ func TestTaskExecutorNoToolsReturnsModelOutput(t *testing.T) {
 		Spec: resources.AgentSpec{
 			Model:    "gpt-4o-mini",
 			ModelRef: "test-endpoint",
-			Prompt: "write summary",
-			Limits: resources.AgentLimits{MaxSteps: 4},
+			Prompt:   "write summary",
+			Limits:   resources.AgentLimits{MaxSteps: 4},
 		},
 	}
 
@@ -951,8 +1038,8 @@ func TestTaskExecutorStopOnFirstToolCompletesImmediately(t *testing.T) {
 		Spec: resources.AgentSpec{
 			Model:    "gpt-4o",
 			ModelRef: "test-endpoint",
-			Prompt: "search once",
-			Tools:  []string{"web_search"},
+			Prompt:   "search once",
+			Tools:    []string{"web_search"},
 			Execution: resources.AgentExecutionSpec{
 				ToolUseBehavior: resources.AgentToolUseBehaviorStopOnFirstTool,
 			},
@@ -1004,9 +1091,9 @@ func TestTaskExecutorStructuredToolHistoryPreservesIDs(t *testing.T) {
 		Spec: resources.AgentSpec{
 			Model:    "gpt-4o",
 			ModelRef: "test-endpoint",
-			Prompt: "test",
-			Tools:  []string{"web_search"},
-			Limits: resources.AgentLimits{MaxSteps: 3},
+			Prompt:   "test",
+			Tools:    []string{"web_search"},
+			Limits:   resources.AgentLimits{MaxSteps: 3},
 		},
 	}
 

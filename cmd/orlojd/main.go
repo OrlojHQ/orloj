@@ -634,6 +634,7 @@ func main() {
 						ContextAdapters:     stores.ContextAdapters,
 						A2AToolRuntime:      a2aToolRT,
 						KubernetesToolRT:    k8sToolRT,
+						Sessions:            stores.Sessions,
 						DebugLogger:         debugLogger,
 						OnStepEvent: func(taskName, namespace string, evt agentruntime.AgentStepEvent) {
 							if bus != nil {

@@ -197,3 +197,100 @@ func TestSessionPauseAndResumeActions(t *testing.T) {
 		t.Fatalf("resume status=%d session=%#v", resp.StatusCode, resumed.Status)
 	}
 }
+
+func TestSessionCheckpointReplayRewindAndForkAPI(t *testing.T) {
+	server, sessions := newSessionAPIServer(t)
+	defer server.Close()
+	resp := sessionRequest(t, http.MethodPost, server.URL+"/v1/sessions", map[string]any{
+		"metadata": map[string]any{"name": "time-travel"},
+		"spec":     map[string]any{"system": "support"},
+	}, nil)
+	resp.Body.Close()
+	resp = sessionRequest(t, http.MethodPost, server.URL+"/v1/sessions/time-travel/turns", map[string]any{
+		"content": "investigate",
+	}, map[string]string{"Idempotency-Key": "time-travel-turn"})
+	resp.Body.Close()
+
+	claim, claimed, _, err := sessions.ClaimNextTurn(context.Background(), "worker", time.Minute)
+	if err != nil || !claimed {
+		t.Fatalf("claim claimed=%v err=%v", claimed, err)
+	}
+	checkpoint, _, err := sessions.CreateCheckpoint(
+		context.Background(),
+		"time-travel",
+		claim.Turn.ID,
+		claim.Turn.ClaimedBy,
+		claim.Turn.Fence,
+		resources.SessionCheckpoint{
+			TaskName:     "session-time-travel",
+			Agent:        "assistant",
+			SafePoint:    resources.SessionCheckpointSafePointStep,
+			StateVersion: resources.SessionCheckpointStateVersion,
+			State:        json.RawMessage(`{"version":1,"next_step":2}`),
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp = sessionRequest(t, http.MethodGet, server.URL+"/v1/sessions/time-travel/checkpoints", nil, nil)
+	var list resources.SessionCheckpointList
+	if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || len(list.Items) != 1 || list.Items[0].ID != checkpoint.ID {
+		t.Fatalf("checkpoint list status=%d items=%#v", resp.StatusCode, list.Items)
+	}
+
+	resp = sessionRequest(
+		t,
+		http.MethodGet,
+		server.URL+"/v1/sessions/time-travel/checkpoints/"+checkpoint.ID+"/replay",
+		nil,
+		nil,
+	)
+	var replay resources.SessionReplayResult
+	if err := json.NewDecoder(resp.Body).Decode(&replay); err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || !replay.Verified || replay.CheckpointID != checkpoint.ID {
+		t.Fatalf("replay status=%d result=%#v", resp.StatusCode, replay)
+	}
+
+	resp = sessionRequest(
+		t,
+		http.MethodPost,
+		server.URL+"/v1/sessions/time-travel/checkpoints/"+checkpoint.ID+"/rewind",
+		map[string]any{"interrupt": true},
+		nil,
+	)
+	var rewind map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&rewind); err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("rewind status=%d response=%#v", resp.StatusCode, rewind)
+	}
+
+	resp = sessionRequest(
+		t,
+		http.MethodPost,
+		server.URL+"/v1/sessions/time-travel/checkpoints/"+checkpoint.ID+"/fork",
+		map[string]any{"name": "alternate"},
+		nil,
+	)
+	var fork map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&fork); err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("fork status=%d response=%#v", resp.StatusCode, fork)
+	}
+	if _, found, err := sessions.Get(context.Background(), "alternate"); err != nil || !found {
+		t.Fatalf("forked session found=%v err=%v", found, err)
+	}
+}

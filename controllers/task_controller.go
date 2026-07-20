@@ -169,6 +169,54 @@ func (c *TaskController) SetSessionStore(s *store.SessionStore) {
 	c.sessionStore = s
 }
 
+func (c *TaskController) withSessionFenceContext(
+	parent context.Context,
+	task resources.Task,
+) (context.Context, context.CancelFunc) {
+	if c.sessionStore == nil {
+		return parent, func() {}
+	}
+	sessionName := strings.TrimSpace(task.Metadata.Labels["orloj.dev/session"])
+	workerID := strings.TrimSpace(task.Metadata.Annotations["orloj.dev/session-worker"])
+	fence, err := strconv.ParseInt(
+		strings.TrimSpace(task.Metadata.Annotations["orloj.dev/session-fence"]),
+		10,
+		64,
+	)
+	if sessionName == "" || workerID == "" || err != nil || fence <= 0 {
+		return parent, func() {}
+	}
+	key := store.ScopedName(task.Metadata.Namespace, sessionName)
+	ctx, cancel := context.WithCancel(parent)
+	valid := func() bool {
+		session, found, getErr := c.sessionStore.Get(ctx, key)
+		return getErr == nil &&
+			found &&
+			session.Status.Fence == fence &&
+			session.Status.ClaimedBy == workerID
+	}
+	if !valid() {
+		cancel()
+		return ctx, cancel
+	}
+	go func() {
+		ticker := time.NewTicker(250 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if !valid() {
+					cancel()
+					return
+				}
+			}
+		}
+	}()
+	return ctx, cancel
+}
+
 func (c *TaskController) SetModelEndpointStore(modelEPStore *store.ModelEndpointStore) {
 	c.modelEPStore = modelEPStore
 }
@@ -192,7 +240,12 @@ func (c *TaskController) executionEventSink(
 	ctx context.Context,
 	task *resources.Task,
 	agent, branchID, parentBranchID string,
+	agentIndices ...int,
 ) agentruntime.ExecutionEventSink {
+	agentIndex := 0
+	if len(agentIndices) > 0 {
+		agentIndex = agentIndices[0]
+	}
 	stepSink := func(evt agentruntime.AgentStepEvent) {
 		if c.eventBus == nil {
 			return
@@ -223,6 +276,63 @@ func (c *TaskController) executionEventSink(
 		return agentruntime.ExecutionEventSink{StepEvent: stepSink}
 	}
 	key := store.ScopedName(task.Metadata.Namespace, sessionName)
+	sessionWorker := strings.TrimSpace(task.Metadata.Annotations["orloj.dev/session-worker"])
+	sessionFence, fenceErr := strconv.ParseInt(
+		strings.TrimSpace(task.Metadata.Annotations["orloj.dev/session-fence"]),
+		10,
+		64,
+	)
+	if fenceErr != nil {
+		sessionFence = 0
+	}
+	systemGeneration, _ := strconv.ParseInt(
+		strings.TrimSpace(task.Spec.Input["session.system_generation"]),
+		10,
+		64,
+	)
+	var resume *agentruntime.AgentExecutionCheckpoint
+	var resumeErr error
+	checkpoint, found, checkpointErr := c.sessionStore.LatestExecutionCheckpoint(
+		ctx,
+		key,
+		turnID,
+		agent,
+		agentIndex,
+		"",
+		branchID,
+	)
+	if checkpointErr != nil {
+		resumeErr = checkpointErr
+	} else if found {
+		if checkpoint.TaskName != task.Metadata.Name {
+			resumeErr = fmt.Errorf(
+				"checkpoint %q belongs to task %q, not %q",
+				checkpoint.ID,
+				checkpoint.TaskName,
+				task.Metadata.Name,
+			)
+		} else if checkpoint.StateVersion != resources.SessionCheckpointStateVersion {
+			resumeErr = fmt.Errorf(
+				"checkpoint %q has unsupported state version %d",
+				checkpoint.ID,
+				checkpoint.StateVersion,
+			)
+		}
+		var state agentruntime.AgentExecutionCheckpoint
+		if resumeErr == nil {
+			if err := json.Unmarshal(checkpoint.State, &state); err != nil {
+				resumeErr = fmt.Errorf("decode checkpoint %q: %w", checkpoint.ID, err)
+			} else if state.Version != agentruntime.AgentExecutionCheckpointVersion {
+				resumeErr = fmt.Errorf(
+					"checkpoint %q has unsupported runtime version %d",
+					checkpoint.ID,
+					state.Version,
+				)
+			} else {
+				resume = &state
+			}
+		}
+	}
 	messageID := ""
 	resolveMessageID := func() string {
 		if messageID != "" {
@@ -274,16 +384,15 @@ func (c *TaskController) executionEventSink(
 		default:
 			return
 		}
-		session, ok, err := c.sessionStore.Get(ctx, key)
-		if err != nil || !ok {
+		if sessionWorker == "" || sessionFence <= 0 {
 			return
 		}
 		evt, err := c.sessionStore.AppendEvent(
 			ctx,
 			key,
 			turnID,
-			session.Status.ClaimedBy,
-			session.Status.Fence,
+			sessionWorker,
+			sessionFence,
 			resources.SessionEvent{
 				Type:      eventType,
 				TurnID:    turnID,
@@ -310,9 +419,59 @@ func (c *TaskController) executionEventSink(
 			})
 		}
 	}
+	checkpointSink := func(state agentruntime.AgentExecutionCheckpoint) error {
+		raw, err := json.Marshal(state)
+		if err != nil {
+			return err
+		}
+		if sessionWorker == "" || sessionFence <= 0 {
+			return fmt.Errorf("task %q is missing Session checkpoint fence metadata", task.Metadata.Name)
+		}
+		safePoint := resources.SessionCheckpointSafePointStep
+		if state.Completed {
+			safePoint = resources.SessionCheckpointSafePointAgent
+		}
+		checkpoint, event, err := c.sessionStore.CreateCheckpoint(
+			ctx,
+			key,
+			turnID,
+			sessionWorker,
+			sessionFence,
+			resources.SessionCheckpoint{
+				TurnID:           turnID,
+				TaskName:         task.Metadata.Name,
+				Agent:            strings.TrimSpace(agent),
+				AgentIndex:       agentIndex,
+				BranchID:         strings.TrimSpace(branchID),
+				Attempt:          task.Status.Attempts,
+				SafePoint:        safePoint,
+				StateVersion:     resources.SessionCheckpointStateVersion,
+				SystemGeneration: systemGeneration,
+				State:            raw,
+			},
+		)
+		if err != nil {
+			return err
+		}
+		if c.eventBus != nil {
+			c.eventBus.Publish(eventbus.Event{
+				Source:    "task-controller",
+				Type:      event.Type,
+				Kind:      "Session",
+				Name:      event.SessionName,
+				Namespace: event.Namespace,
+				Action:    event.Type,
+				Data:      checkpoint,
+			})
+		}
+		return nil
+	}
 	return agentruntime.ExecutionEventSink{
 		StepEvent:   stepSink,
 		ModelStream: modelSink,
+		Checkpoint:  checkpointSink,
+		Resume:      resume,
+		ResumeError: resumeErr,
 	}
 }
 
@@ -1871,6 +2030,8 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 	if task == nil {
 		return nil, fmt.Errorf("task is required")
 	}
+	ctx, cancelSessionFence := c.withSessionFenceContext(ctx, *task)
+	defer cancelSessionFence()
 	order := resources.ExecutionAgentOrder(system)
 	if len(order) == 0 {
 		return nil, fmt.Errorf("cannot derive execution order from agentsystem %q", system.Metadata.Name)
@@ -2045,8 +2206,11 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 		}
 
 		var result agentruntime.AgentExecutionResult
-		eventSink := c.executionEventSink(agentCtx, task, currentAgent, currentBranchID, currentParentBranchID)
-		if c.agentK8sRuntime != nil && c.canRunAgentAsJob(agentCtx, agent) {
+		checkpointK8sResult := false
+		eventSink := c.executionEventSink(agentCtx, task, currentAgent, currentBranchID, currentParentBranchID, idx)
+		if eventSink.Resume != nil || eventSink.ResumeError != nil {
+			result, err = c.executor.ExecuteAgentWithRuntimeAndEventSink(agentCtx, agent, runtimeInput, finalRT, eventSink)
+		} else if c.agentK8sRuntime != nil && c.canRunAgentAsJob(agentCtx, agent) {
 			syncMsgID := fmt.Sprintf("sync/a%d/%s", task.Status.Attempts, agentName)
 			jobResult, jobErr := c.agentK8sRuntime.ExecuteAgent(agentCtx, *task, agent, runtimeInput, task.Status.Attempts, syncMsgID)
 			if jobErr != nil {
@@ -2057,9 +2221,13 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 				err = fmt.Errorf("%s", jobResult.Error)
 			} else {
 				result = agentruntime.AgentJobResultToExecution(jobResult, agentName)
+				checkpointK8sResult = true
 			}
 		} else {
 			result, err = c.executor.ExecuteAgentWithRuntimeAndEventSink(agentCtx, agent, runtimeInput, finalRT, eventSink)
+		}
+		if err == nil && checkpointK8sResult && eventSink.Checkpoint != nil {
+			err = eventSink.Checkpoint(agentruntime.CheckpointFromExecutionResult(result))
 		}
 		if err != nil {
 			category := "failure"
@@ -2359,6 +2527,8 @@ func (c *TaskController) executeTaskFromResume(
 	if task == nil {
 		return nil, fmt.Errorf("task is required")
 	}
+	ctx, cancelSessionFence := c.withSessionFenceContext(ctx, *task)
+	defer cancelSessionFence()
 	if len(order) == 0 {
 		order = resources.ExecutionAgentOrder(system)
 	}
@@ -2499,8 +2669,11 @@ func (c *TaskController) executeTaskFromResume(
 		}
 
 		var result agentruntime.AgentExecutionResult
-		eventSink := c.executionEventSink(ctx, task, currentAgent, currentBranchID, currentParentBranchID)
-		if c.agentK8sRuntime != nil && c.canRunAgentAsJob(ctx, agent) {
+		checkpointK8sResult := false
+		eventSink := c.executionEventSink(ctx, task, currentAgent, currentBranchID, currentParentBranchID, idx)
+		if eventSink.Resume != nil || eventSink.ResumeError != nil {
+			result, err = c.executor.ExecuteAgentWithRuntimeAndEventSink(ctx, agent, runtimeInput, finalRT, eventSink)
+		} else if c.agentK8sRuntime != nil && c.canRunAgentAsJob(ctx, agent) {
 			jobResult, jobErr := c.agentK8sRuntime.ExecuteAgent(ctx, *task, agent, runtimeInput, task.Status.Attempts, syncMsgID)
 			if jobErr != nil {
 				c.logger.Printf("agent k8s job failed for %s (falling back to in-process): %v", agentName, jobErr)
@@ -2510,9 +2683,13 @@ func (c *TaskController) executeTaskFromResume(
 				err = fmt.Errorf("%s", jobResult.Error)
 			} else {
 				result = agentruntime.AgentJobResultToExecution(jobResult, agentName)
+				checkpointK8sResult = true
 			}
 		} else {
 			result, err = c.executor.ExecuteAgentWithRuntimeAndEventSink(ctx, agent, runtimeInput, finalRT, eventSink)
+		}
+		if err == nil && checkpointK8sResult && eventSink.Checkpoint != nil {
+			err = eventSink.Checkpoint(agentruntime.CheckpointFromExecutionResult(result))
 		}
 		if err != nil {
 			return nil, fmt.Errorf("agent %q execution failed: %w", agentName, err)

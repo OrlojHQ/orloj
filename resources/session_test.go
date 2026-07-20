@@ -19,6 +19,10 @@ func TestSessionNormalizeDefaults(t *testing.T) {
 	if session.Spec.IdleTTL != "24h" {
 		t.Fatalf("idle ttl = %q", session.Spec.IdleTTL)
 	}
+	if session.Spec.CheckpointRetention.MaxCount != 100 ||
+		session.Spec.CheckpointRetention.MaxAge != "168h" {
+		t.Fatalf("checkpoint retention = %#v", session.Spec.CheckpointRetention)
+	}
 	if session.Status.Phase != SessionPhaseWaitingInput {
 		t.Fatalf("phase = %q", session.Status.Phase)
 	}
@@ -45,6 +49,18 @@ func TestSessionNormalizeRejectsInvalidValues(t *testing.T) {
 			session: Session{
 				Metadata: ObjectMeta{Name: "chat"},
 				Spec:     SessionSpec{System: "support", MaxTurns: -1},
+			},
+		},
+		{
+			name: "invalid checkpoint age",
+			session: Session{
+				Metadata: ObjectMeta{Name: "chat"},
+				Spec: SessionSpec{
+					System: "support",
+					CheckpointRetention: SessionCheckpointRetention{
+						MaxAge: "forever",
+					},
+				},
 			},
 		},
 		{

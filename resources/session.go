@@ -45,7 +45,17 @@ const (
 	SessionEventApprovalResolved  = "approval.resolved"
 	SessionEventToolStarted       = "tool.started"
 	SessionEventToolCompleted     = "tool.completed"
+	SessionEventCheckpointCreated = "checkpoint.created"
+	SessionEventCheckpointPruned  = "checkpoint.pruned"
+	SessionEventSessionRecovered  = "session.recovered"
+	SessionEventSessionRewound    = "session.rewound"
+	SessionEventSessionForked     = "session.forked"
 	SessionEventError             = "error"
+
+	SessionCheckpointStateVersion   = 1
+	SessionCheckpointSafePointStep  = "step.completed"
+	SessionCheckpointSafePointAgent = "agent.completed"
+	SessionCheckpointSafePointTurn  = "turn.completed"
 )
 
 // Session is a durable conversation routed through an AgentSystem.
@@ -60,10 +70,16 @@ type Session struct {
 }
 
 type SessionSpec struct {
-	System   string            `json:"system" yaml:"system"`
-	IdleTTL  string            `json:"idle_ttl,omitempty" yaml:"idle_ttl,omitempty"`
-	MaxTurns int               `json:"max_turns,omitempty" yaml:"max_turns,omitempty"`
-	Input    map[string]string `json:"input,omitempty" yaml:"input,omitempty"`
+	System              string                     `json:"system" yaml:"system"`
+	IdleTTL             string                     `json:"idle_ttl,omitempty" yaml:"idle_ttl,omitempty"`
+	MaxTurns            int                        `json:"max_turns,omitempty" yaml:"max_turns,omitempty"`
+	Input               map[string]string          `json:"input,omitempty" yaml:"input,omitempty"`
+	CheckpointRetention SessionCheckpointRetention `json:"checkpoint_retention,omitempty" yaml:"checkpoint_retention,omitempty"`
+}
+
+type SessionCheckpointRetention struct {
+	MaxCount int    `json:"max_count,omitempty" yaml:"max_count,omitempty"`
+	MaxAge   string `json:"max_age,omitempty" yaml:"max_age,omitempty"`
 }
 
 type SessionStatus struct {
@@ -77,6 +93,8 @@ type SessionStatus struct {
 	QueuedTurns        int            `json:"queuedTurns,omitempty" yaml:"queuedTurns,omitempty"`
 	CompletedTurns     int            `json:"completedTurns,omitempty" yaml:"completedTurns,omitempty"`
 	LastEventSequence  uint64         `json:"lastEventSequence,omitempty" yaml:"lastEventSequence,omitempty"`
+	LastCheckpointID   string         `json:"lastCheckpointID,omitempty" yaml:"lastCheckpointID,omitempty"`
+	RestoredCheckpoint string         `json:"restoredCheckpoint,omitempty" yaml:"restoredCheckpoint,omitempty"`
 	ClaimedBy          string         `json:"claimedBy,omitempty" yaml:"claimedBy,omitempty"`
 	LeaseUntil         string         `json:"leaseUntil,omitempty" yaml:"leaseUntil,omitempty"`
 	LastHeartbeat      string         `json:"lastHeartbeat,omitempty" yaml:"lastHeartbeat,omitempty"`
@@ -130,6 +148,47 @@ type SessionEvent struct {
 	Payload        map[string]any `json:"payload,omitempty" yaml:"payload,omitempty"`
 }
 
+// SessionCheckpoint is a durable, versioned snapshot captured at a safe
+// execution boundary. State is runtime-owned JSON so checkpoint schema
+// versions can evolve independently from the Session API resource.
+type SessionCheckpoint struct {
+	ID                 string          `json:"id" yaml:"id"`
+	SessionName        string          `json:"session_name" yaml:"session_name"`
+	Namespace          string          `json:"namespace" yaml:"namespace"`
+	TurnID             string          `json:"turn_id,omitempty" yaml:"turn_id,omitempty"`
+	TaskName           string          `json:"task_name,omitempty" yaml:"task_name,omitempty"`
+	Agent              string          `json:"agent,omitempty" yaml:"agent,omitempty"`
+	AgentIndex         int             `json:"agent_index,omitempty" yaml:"agent_index,omitempty"`
+	MessageID          string          `json:"message_id,omitempty" yaml:"message_id,omitempty"`
+	BranchID           string          `json:"branch_id,omitempty" yaml:"branch_id,omitempty"`
+	Attempt            int             `json:"attempt,omitempty" yaml:"attempt,omitempty"`
+	Fence              int64           `json:"fence,omitempty" yaml:"fence,omitempty"`
+	SystemGeneration   int64           `json:"system_generation,omitempty" yaml:"system_generation,omitempty"`
+	EventSequence      uint64          `json:"event_sequence" yaml:"event_sequence"`
+	ParentCheckpointID string          `json:"parent_checkpoint_id,omitempty" yaml:"parent_checkpoint_id,omitempty"`
+	SafePoint          string          `json:"safe_point" yaml:"safe_point"`
+	StateVersion       int             `json:"state_version" yaml:"state_version"`
+	StateHash          string          `json:"state_hash" yaml:"state_hash"`
+	State              json.RawMessage `json:"state" yaml:"state"`
+	CreatedAt          string          `json:"created_at" yaml:"created_at"`
+	ExpiresAt          string          `json:"expires_at,omitempty" yaml:"expires_at,omitempty"`
+}
+
+type SessionCheckpointList struct {
+	Items []SessionCheckpoint `json:"items" yaml:"items"`
+}
+
+type SessionReplayResult struct {
+	SessionName     string             `json:"session_name" yaml:"session_name"`
+	CheckpointID    string             `json:"checkpoint_id" yaml:"checkpoint_id"`
+	StateVersion    int                `json:"state_version" yaml:"state_version"`
+	StateHash       string             `json:"state_hash" yaml:"state_hash"`
+	Verified        bool               `json:"verified" yaml:"verified"`
+	CheckpointCount int                `json:"checkpoint_count" yaml:"checkpoint_count"`
+	Events          []SessionEvent     `json:"events,omitempty" yaml:"events,omitempty"`
+	FinalCheckpoint *SessionCheckpoint `json:"final_checkpoint,omitempty" yaml:"final_checkpoint,omitempty"`
+}
+
 func (s *Session) Normalize() error {
 	if s.APIVersion == "" {
 		s.APIVersion = "orloj.dev/v1"
@@ -158,6 +217,23 @@ func (s *Session) Normalize() error {
 	}
 	if s.Spec.MaxTurns < 0 {
 		return fmt.Errorf("spec.max_turns cannot be negative")
+	}
+	if s.Spec.CheckpointRetention.MaxCount < 0 {
+		return fmt.Errorf("spec.checkpoint_retention.max_count cannot be negative")
+	}
+	if s.Spec.CheckpointRetention.MaxCount == 0 {
+		s.Spec.CheckpointRetention.MaxCount = 100
+	}
+	s.Spec.CheckpointRetention.MaxAge = strings.TrimSpace(s.Spec.CheckpointRetention.MaxAge)
+	if s.Spec.CheckpointRetention.MaxAge == "" {
+		s.Spec.CheckpointRetention.MaxAge = "168h"
+	}
+	checkpointMaxAge, err := time.ParseDuration(s.Spec.CheckpointRetention.MaxAge)
+	if err != nil || checkpointMaxAge <= 0 {
+		return fmt.Errorf(
+			"invalid spec.checkpoint_retention.max_age %q: expected a positive duration",
+			s.Spec.CheckpointRetention.MaxAge,
+		)
 	}
 	if s.Spec.Input == nil {
 		s.Spec.Input = map[string]string{}
@@ -236,5 +312,11 @@ func (e SessionEvent) DeepCopy() SessionEvent {
 		raw, _ := json.Marshal(e.Payload)
 		_ = json.Unmarshal(raw, &out.Payload)
 	}
+	return out
+}
+
+func (c SessionCheckpoint) DeepCopy() SessionCheckpoint {
+	out := c
+	out.State = append(json.RawMessage(nil), c.State...)
 	return out
 }
