@@ -36,6 +36,7 @@ import {
   ClipboardList,
   FlaskConical,
   Radio,
+  MessagesSquare,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import orlojMark from "/orloj-mark.png?url";
@@ -52,6 +53,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/systems", icon: <Network size={18} />, label: "Agent Systems", group: "Core" },
   { to: "/agents", icon: <Bot size={18} />, label: "Agents", group: "Core" },
   { to: "/tasks", icon: <ListTodo size={18} />, label: "Tasks", group: "Core" },
+  { to: "/sessions", icon: <MessagesSquare size={18} />, label: "Sessions", group: "Core" },
   { to: "/task-schedules", icon: <CalendarClock size={18} />, label: "Task Schedules", group: "Core" },
   { to: "/task-webhooks", icon: <Webhook size={18} />, label: "Task Webhooks", group: "Core" },
   { to: "/workers", icon: <Cpu size={18} />, label: "Workers", group: "Infra" },

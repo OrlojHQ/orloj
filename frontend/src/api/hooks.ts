@@ -23,6 +23,7 @@ import type {
   ToolApproval,
   TaskApproval,
   Task,
+  Session,
   TaskSchedule,
   TaskWebhook,
   Worker,
@@ -320,6 +321,63 @@ export function useTaskList(listOpts?: TaskListOptions) {
 
 export function useTask(name: string) {
   return useResourceGet<Task>("Task", RESOURCE_ENDPOINTS.Task, name);
+}
+
+export function useSessions() {
+  return useResourceList<Session>("Session", RESOURCE_ENDPOINTS.Session);
+}
+
+export function useSession(name: string) {
+  return useResourceGet<Session>("Session", RESOURCE_ENDPOINTS.Session, name);
+}
+
+export function useCreateSession() {
+  const qc = useQueryClient();
+  const ns = useNamespace();
+  return useMutation({
+    mutationFn: (body: unknown) => client.createSession(body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["Session", ns] }),
+  });
+}
+
+export function useSendSessionTurn() {
+  const qc = useQueryClient();
+  const ns = useNamespace();
+  return useMutation({
+    mutationFn: ({
+      name,
+      content,
+      interrupt,
+      idempotencyKey,
+    }: {
+      name: string;
+      content: string;
+      interrupt?: boolean;
+      idempotencyKey: string;
+    }) => client.sendSessionTurn(name, { content, interrupt }, idempotencyKey),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ["Session", ns] });
+      qc.invalidateQueries({ queryKey: ["Session", ns, variables.name] });
+    },
+  });
+}
+
+export function useSessionAction() {
+  const qc = useQueryClient();
+  const ns = useNamespace();
+  return useMutation({
+    mutationFn: ({
+      name,
+      action,
+    }: {
+      name: string;
+      action: "pause" | "resume" | "cancel";
+    }) => client.postSessionAction(name, action),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ["Session", ns] });
+      qc.invalidateQueries({ queryKey: ["Session", ns, variables.name] });
+    },
+  });
 }
 
 export function useTaskSchedules() {

@@ -1,5 +1,10 @@
 import { useAppStore } from "../store";
-import type { ListResponse, MemoryEntriesResponse } from "./types";
+import type {
+  ListResponse,
+  MemoryEntriesResponse,
+  Session,
+  SessionEvent,
+} from "./types";
 
 const GET_HEAD_TIMEOUT_MS = 30_000;
 const MUTATE_TIMEOUT_MS = 60_000;
@@ -222,6 +227,66 @@ export async function postAction<T>(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body ?? {}),
   });
+}
+
+export async function listSessions(): Promise<ListResponse<Session>> {
+  return list<Session>("sessions");
+}
+
+export async function getSession(name: string): Promise<Session> {
+  return get<Session>("sessions", encodeURIComponent(name));
+}
+
+export async function createSession(body: unknown): Promise<Session> {
+  return create<Session>("sessions", body);
+}
+
+export async function sendSessionTurn(
+  name: string,
+  body: { content: string; interrupt?: boolean },
+  idempotencyKey: string,
+): Promise<SessionEvent | Session> {
+  const { namespace } = getConnection();
+  const url = buildUrl(`sessions/${encodeURIComponent(name)}/turns`, namespace);
+  return request<SessionEvent | Session>(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Idempotency-Key": idempotencyKey,
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+export async function postSessionAction(
+  name: string,
+  action: "pause" | "resume" | "cancel",
+): Promise<Session> {
+  return postAction<Session>("sessions", encodeURIComponent(name), action);
+}
+
+export function getSessionStreamUrl(name: string, afterSeq?: number): string {
+  const { namespace } = getConnection();
+  const params: Record<string, string> = {};
+  if (afterSeq != null && afterSeq > 0) {
+    params.after = String(afterSeq);
+  }
+  return buildUrl(
+    `sessions/${encodeURIComponent(name)}/stream`,
+    namespace,
+    params,
+  );
+}
+
+export function getSessionStreamInit(): RequestInit {
+  const { token } = getConnection();
+  return {
+    credentials: "same-origin",
+    headers: {
+      ...buildHeaders(token),
+      Accept: "text/event-stream",
+    },
+  };
 }
 
 export async function getStatus<T>(resourcePath: string, name: string): Promise<T> {

@@ -21,6 +21,7 @@ This page summarizes key HTTP endpoints and behavior contracts.
 - tool-permissions
 - tool-approvals
 - task-approvals
+- sessions
 - tasks
 - task-schedules
 - task-webhooks
@@ -93,6 +94,7 @@ Decision request bodies may include:
 
 - `GET /v1/agents/watch`
 - `GET /v1/tasks/watch`
+- `GET /v1/sessions/watch`
 - `GET /v1/task-schedules/watch`
 - `GET /v1/task-webhooks/watch`
 - `GET /v1/events/watch`
@@ -142,6 +144,19 @@ Both profiles support replay protection through timestamp skew and/or event-id d
 - `error_code`
 - `error_reason`
 - `retryable`
+
+## Interactive Session Endpoints
+
+- `POST /v1/sessions` — create a durable conversation bound to an AgentSystem.
+- `POST /v1/sessions/{name}/turns` — queue a user message; requires `Idempotency-Key`.
+- `GET /v1/sessions/{name}/turns` — list ordered turn records.
+- `GET /v1/sessions/{name}/events?after=<seq>` — replay durable ordered events.
+- `GET /v1/sessions/{name}/stream` — replay and follow events as SSE. Resume with `Last-Event-ID` or `?after=<seq>`.
+- `POST /v1/sessions/{name}/pause|resume|cancel|complete` — control Session execution.
+
+Only one turn runs at a time per Session. Concurrent submissions remain queued in durable order. Session SSE uses each event's per-Session sequence as the SSE `id`, so reconnect does not depend on an individual API process retaining in-memory history.
+
+See [Build an Interactive Agent Session](../guides/interactive-sessions.md) and the [Session resource](./resources/session.md).
 
 ## Request and Response Examples
 
@@ -268,7 +283,7 @@ Watch streams are bounded:
 
 ## OpenAI Chat Completions Facade
 
-- `POST /v1/chat/completions` — OpenAI-compatible facade that maps `model` to an AgentSystem name, creates a Task from `messages`, waits for a terminal phase, and returns an OpenAI-shaped completion. Optional `?namespace=` selects the AgentSystem namespace. `stream=true` opens SSE immediately and sends keepalives before the final content (not token streaming). Requires writer auth.
+- `POST /v1/chat/completions` — OpenAI-compatible facade that maps `model` to an AgentSystem name and executes `messages` through a one-turn Session. Optional `?namespace=` selects the AgentSystem namespace. `stream=true` forwards native OpenAI-compatible and Anthropic deltas as SSE chunks; other gateways use a one-shot content fallback. Requires writer auth.
 
 See [Call AgentSystems via OpenAI Chat Completions](../guides/openai-chat-completions.md).
 

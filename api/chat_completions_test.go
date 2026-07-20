@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -28,6 +29,7 @@ func newChatCompletionsTestServer(t *testing.T) (*httptest.Server, api.Stores, *
 		AgentSystems: store.NewAgentSystemStore(),
 		Tools:        store.NewToolStore(),
 		Tasks:        store.NewTaskStore(),
+		Sessions:     store.NewSessionStore(),
 		Workers:      store.NewWorkerStore(),
 		Memories:     store.NewMemoryStore(),
 		Policies:     store.NewAgentPolicyStore(),
@@ -58,32 +60,91 @@ func completeLatestChatTask(t *testing.T, server *api.Server, stores api.Stores,
 	t.Helper()
 	deadline := time.Now().Add(3 * time.Second)
 	for {
-		tasks, err := stores.Tasks.List(context.Background())
+		sessions, err := stores.Sessions.List(context.Background())
 		if err != nil {
-			t.Fatalf("list tasks: %v", err)
+			t.Fatalf("list sessions: %v", err)
 		}
-		var target *resources.Task
-		for i := range tasks {
-			task := tasks[i]
-			if task.Metadata.Labels["orloj.dev/created-by"] == "chat-completions" {
-				target = &task
+		var target *resources.Session
+		for i := range sessions {
+			session := sessions[i]
+			if session.Metadata.Labels["orloj.dev/created-by"] == "chat-completions" {
+				target = &session
 				break
 			}
 		}
 		if target != nil {
-			target.Status.Phase = phase
-			target.Status.Output = output
-			target.Status.LastError = lastError
-			target.Status.CompletedAt = time.Now().UTC().Format(time.RFC3339Nano)
-			updated, err := stores.Tasks.Upsert(context.Background(), *target)
-			if err != nil {
-				t.Fatalf("upsert task status: %v", err)
+			claim, ok, _, err := stores.Sessions.ClaimNextTurn(context.Background(), "test-worker", time.Minute)
+			if err != nil || !ok {
+				t.Fatalf("claim session turn ok=%v err=%v", ok, err)
 			}
-			server.PublishResourceEventForTest("Task", updated.Metadata.Name, "status", updated)
+			switch phase {
+			case "Succeeded":
+				content := output["last_output"]
+				if content == "" {
+					best := ""
+					for _, key := range []string{"agent.1.message_content", "agent.2.message_content", "response", "result"} {
+						if value := output[key]; value != "" && value != "executed" {
+							best = value
+						}
+					}
+					content = best
+				}
+				if rawDeltas := output["_stream_deltas"]; rawDeltas != "" {
+					for _, delta := range strings.Split(rawDeltas, "|") {
+						evt, appendErr := stores.Sessions.AppendEvent(
+							context.Background(),
+							store.ScopedName(claim.Session.Metadata.Namespace, claim.Session.Metadata.Name),
+							claim.Turn.ID,
+							claim.Turn.ClaimedBy,
+							claim.Turn.Fence,
+							resources.SessionEvent{
+								Type:      resources.SessionEventMessageDelta,
+								MessageID: claim.Turn.AssistantMessageID,
+								Payload:   map[string]any{"role": "assistant", "delta": delta},
+							},
+						)
+						if appendErr != nil {
+							t.Fatalf("append session delta: %v", appendErr)
+						}
+						server.PublishResourceEventForTest("Session", claim.Session.Metadata.Name, evt.Type, evt)
+					}
+				}
+				events, updated, err := stores.Sessions.CompleteTurn(context.Background(), claim, content, nil)
+				if err != nil {
+					t.Fatalf("complete session turn: %v", err)
+				}
+				for _, evt := range events {
+					server.PublishResourceEventForTest("Session", updated.Metadata.Name, evt.Type, evt)
+				}
+			case "WaitingApproval":
+				events, updated, err := stores.Sessions.SetApprovalState(
+					context.Background(),
+					claim,
+					true,
+					&resources.TaskBlockedOn{Kind: "Approval", Name: "test", Reason: "session requires approval"},
+				)
+				if err != nil {
+					t.Fatalf("mark session waiting for approval: %v", err)
+				}
+				for _, evt := range events {
+					server.PublishResourceEventForTest("Session", updated.Metadata.Name, evt.Type, evt)
+				}
+			default:
+				if lastError == "" {
+					lastError = "session failed"
+				}
+				events, updated, err := stores.Sessions.FailTurn(context.Background(), claim, fmt.Errorf("%s", lastError))
+				if err != nil {
+					t.Fatalf("fail session turn: %v", err)
+				}
+				for _, evt := range events {
+					server.PublishResourceEventForTest("Session", updated.Metadata.Name, evt.Type, evt)
+				}
+			}
 			return
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("timed out waiting for chat-completions task")
+			t.Fatal("timed out waiting for chat-completions session")
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
@@ -186,21 +247,22 @@ func TestChatCompletionsSuccessUsesLastOutput(t *testing.T) {
 		t.Fatalf("unexpected content: %#v", message["content"])
 	}
 
-	tasks, err := stores.Tasks.List(context.Background())
+	sessions, err := stores.Sessions.List(context.Background())
 	if err != nil {
-		t.Fatalf("list tasks: %v", err)
+		t.Fatalf("list sessions: %v", err)
 	}
-	if len(tasks) != 1 {
-		t.Fatalf("expected 1 task, got %d", len(tasks))
+	if len(sessions) != 1 {
+		t.Fatalf("expected 1 session, got %d", len(sessions))
 	}
-	if tasks[0].Spec.Input["topic"] == "" {
-		t.Fatalf("expected topic input, got %#v", tasks[0].Spec.Input)
+	turns, err := stores.Sessions.ListTurns(context.Background(), sessions[0].Metadata.Name)
+	if err != nil {
+		t.Fatalf("list turns: %v", err)
 	}
-	if _, ok := tasks[0].Spec.Input["prompt"]; ok {
-		t.Fatalf("expected transcript to be stored once, got %#v", tasks[0].Spec.Input)
+	if len(turns) != 1 {
+		t.Fatalf("expected 1 turn, got %d", len(turns))
 	}
-	if !strings.Contains(tasks[0].Spec.Input["topic"], "user: hello") {
-		t.Fatalf("expected flattened user message in topic, got %q", tasks[0].Spec.Input["topic"])
+	if !strings.Contains(turns[0].Content, "user: hello") {
+		t.Fatalf("expected flattened user message in turn, got %q", turns[0].Content)
 	}
 }
 
@@ -283,7 +345,8 @@ func TestChatCompletionsStreamFinalChunk(t *testing.T) {
 	}
 
 	completeLatestChatTask(t, server, stores, "Succeeded", map[string]string{
-		"last_output": "streamed answer",
+		"last_output":    "streamed answer",
+		"_stream_deltas": "streamed |answer",
 	}, "")
 
 	defer resp.Body.Close()
@@ -295,8 +358,8 @@ func TestChatCompletionsStreamFinalChunk(t *testing.T) {
 	if !strings.Contains(text, `"object":"chat.completion.chunk"`) && !strings.Contains(text, `"object": "chat.completion.chunk"`) {
 		t.Fatalf("expected completion chunk in SSE body, got %s", text)
 	}
-	if !strings.Contains(text, "streamed answer") {
-		t.Fatalf("expected content in SSE body, got %s", text)
+	if !strings.Contains(text, `"content":"streamed "`) || !strings.Contains(text, `"content":"answer"`) {
+		t.Fatalf("expected incremental content chunks in SSE body, got %s", text)
 	}
 	if !strings.Contains(text, "data: [DONE]") {
 		t.Fatalf("expected [DONE] terminator, got %s", text)

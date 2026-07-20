@@ -3,8 +3,8 @@ package api
 import (
 	"strings"
 
-	"github.com/OrlojHQ/orloj/resources"
 	"github.com/OrlojHQ/orloj/eventbus"
+	"github.com/OrlojHQ/orloj/resources"
 )
 
 func (s *Server) publishResourceEvent(kind, name, action string, resource any) {
@@ -45,6 +45,8 @@ func extractResourceNamespace(resource any) string {
 	case resources.ToolPermission:
 		return resources.NormalizeNamespace(obj.Metadata.Namespace)
 	case resources.Task:
+		return resources.NormalizeNamespace(obj.Metadata.Namespace)
+	case resources.Session:
 		return resources.NormalizeNamespace(obj.Metadata.Namespace)
 	case resources.TaskSchedule:
 		return resources.NormalizeNamespace(obj.Metadata.Namespace)

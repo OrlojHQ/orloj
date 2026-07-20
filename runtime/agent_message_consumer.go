@@ -638,12 +638,13 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 		agent.Spec.Tools = dedupeStrings(agent.Spec.Tools)
 	}
 	agentCtx, agentSpan := telemetry.StartAgentSpan(ctx, agent.Metadata.Name, msg.MessageID, msg.Attempt)
+	executionSink := ExecutionEventSink{}
 	if m.onStepEvent != nil {
 		ns, taskName := splitTaskKey(taskKey)
 		agentName := strings.TrimSpace(agent.Metadata.Name)
 		branchID := strings.TrimSpace(msg.BranchID)
 		parentBranchID := strings.TrimSpace(msg.ParentBranchID)
-		m.executor.OnStepEvent = func(evt AgentStepEvent) {
+		executionSink.StepEvent = func(evt AgentStepEvent) {
 			if strings.TrimSpace(evt.Agent) == "" {
 				evt.Agent = agentName
 			}
@@ -662,7 +663,7 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 		jobStore, ok := m.tasks.(AgentJobStore)
 		if !ok {
 			m.debugf("agent k8s runtime configured but task store does not implement AgentJobStore; falling back to in-process")
-			result, err = m.executor.ExecuteAgentWithRuntime(agentCtx, agent, input, toolRT)
+			result, err = m.executor.ExecuteAgentWithRuntimeAndEventSink(agentCtx, agent, input, toolRT, executionSink)
 		} else {
 			_ = jobStore
 			jobResult, jobErr := m.agentK8sRuntime.ExecuteAgent(agentCtx, task, agent, input, msg.Attempt, msg.MessageID)
@@ -670,7 +671,7 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 				if m.logger != nil {
 					m.logger.Printf("agent k8s job failed for %s (falling back to in-process): %v", agent.Metadata.Name, jobErr)
 				}
-				result, err = m.executor.ExecuteAgentWithRuntime(agentCtx, agent, input, toolRT)
+				result, err = m.executor.ExecuteAgentWithRuntimeAndEventSink(agentCtx, agent, input, toolRT, executionSink)
 			} else if jobResult.Error != "" {
 				result = AgentJobResultToExecution(jobResult, agent.Metadata.Name)
 				err = fmt.Errorf("%s", jobResult.Error)
@@ -679,7 +680,7 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 			}
 		}
 	} else {
-		result, err = m.executor.ExecuteAgentWithRuntime(agentCtx, agent, input, toolRT)
+		result, err = m.executor.ExecuteAgentWithRuntimeAndEventSink(agentCtx, agent, input, toolRT, executionSink)
 	}
 	if err != nil {
 		telemetry.EndSpanError(agentSpan, err)

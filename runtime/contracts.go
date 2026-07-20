@@ -81,6 +81,33 @@ type ModelToolCall struct {
 	ProviderName string
 }
 
+// ModelStreamEventType identifies one typed event in a streamed model response.
+type ModelStreamEventType string
+
+const (
+	ModelStreamEventTextDelta  ModelStreamEventType = "text_delta"
+	ModelStreamEventToolCall   ModelStreamEventType = "tool_call"
+	ModelStreamEventUsage      ModelStreamEventType = "usage"
+	ModelStreamEventCompletion ModelStreamEventType = "completion"
+	ModelStreamEventError      ModelStreamEventType = "error"
+)
+
+// ModelStreamEvent is one incremental model response event. Fields are populated
+// according to Type: Delta for text_delta, ToolCall for a complete tool_call,
+// Usage for a cumulative usage snapshot, Response for completion, and Err for
+// error.
+type ModelStreamEvent struct {
+	Type     ModelStreamEventType
+	Delta    string
+	ToolCall *ModelToolCall
+	Usage    *ModelUsage
+	Response *ModelResponse
+	Err      error
+}
+
+// ModelStreamEventSink receives model stream events synchronously and in order.
+type ModelStreamEventSink func(ModelStreamEvent)
+
 // ToolSchemaResolver resolves rich tool schemas for model gateway formatting.
 // Implementations that wrap tool registries (e.g. GovernedToolRuntime) can
 // provide per-tool descriptions and JSON Schemas to the LLM.
@@ -91,4 +118,11 @@ type ToolSchemaResolver interface {
 // ModelGateway abstracts model-provider calls for agent execution.
 type ModelGateway interface {
 	Complete(ctx context.Context, req ModelRequest) (ModelResponse, error)
+}
+
+// StreamingModelGateway is an optional extension implemented by gateways that
+// can deliver incremental output. ModelGateway remains intentionally unchanged
+// so existing provider and test implementations continue to work.
+type StreamingModelGateway interface {
+	Stream(ctx context.Context, req ModelRequest, sink ModelStreamEventSink) (ModelResponse, error)
 }

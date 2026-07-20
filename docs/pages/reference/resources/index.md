@@ -21,6 +21,7 @@ Each kind has a dedicated page; see [Resource reference pages](#resource-referen
 - [Agent](./agent.md)
 - [AgentSystem](./agent-system.md)
 - [Task](./task.md)
+- [Session](./session.md)
 - [TaskSchedule](./task-schedule.md)
 - [TaskWebhook](./task-webhook.md)
 - [Tool](./tool.md)

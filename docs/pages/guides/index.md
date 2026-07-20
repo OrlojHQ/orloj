@@ -44,3 +44,7 @@ Create a golden dataset, run evaluations with multiple scoring strategies, compa
 **[Call AgentSystems via OpenAI Chat Completions](./openai-chat-completions.md)**
 *For teams that already speak the OpenAI Chat Completions API.*
 Point an OpenAI client at Orloj, set `model` to an AgentSystem name, and invoke governed multi-agent runs without a custom integration.
+
+**[Build an Interactive Agent Session](./interactive-sessions.md)**
+*For teams building copilots, support chats, and human-steered agent workflows.*
+Create a durable multi-turn Session, submit idempotent messages, consume replayable SSE, and pause or resume execution.

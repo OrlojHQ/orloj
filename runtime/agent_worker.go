@@ -87,6 +87,16 @@ func (w *AgentWorker) SetToolSchemas(schemas map[string]ToolSchemaInfo) {
 }
 
 func (w *AgentWorker) Run(ctx context.Context) {
+	w.run(ctx, nil)
+}
+
+// RunWithEventSink runs the worker while forwarding incremental model events
+// to the execution-scoped sink.
+func (w *AgentWorker) RunWithEventSink(ctx context.Context, sink ModelStreamEventSink) {
+	w.run(ctx, sink)
+}
+
+func (w *AgentWorker) run(ctx context.Context, streamSink ModelStreamEventSink) {
 	maxSteps := w.agent.Spec.Limits.MaxSteps
 	if maxSteps <= 0 {
 		maxSteps = 10
@@ -178,8 +188,8 @@ func (w *AgentWorker) Run(ctx context.Context) {
 			}
 			return
 		case <-ticker.C:
-		availableTools := w.agent.Spec.Tools
-		if strings.EqualFold(duplicatePolicy, resources.AgentDuplicateToolCallPolicyShortCircuit) && len(toolCalled) > 0 {
+			availableTools := w.agent.Spec.Tools
+			if strings.EqualFold(duplicatePolicy, resources.AgentDuplicateToolCallPolicyShortCircuit) && len(toolCalled) > 0 {
 				filtered := make([]string, 0, len(w.agent.Spec.Tools))
 				for _, t := range w.agent.Spec.Tools {
 					if !toolCalled[normalizeToolKey(t)] {
@@ -194,52 +204,59 @@ func (w *AgentWorker) Run(ctx context.Context) {
 				Content: buildOpenAIUserContent(ModelRequest{Step: step, Tools: availableTools, Context: w.modelContext(step)}),
 			})
 			modelStart := time.Now()
-			modelResp, modelErr := w.modelGateway.Complete(ctx, ModelRequest{
+			modelReq := ModelRequest{
 				Model:             w.agent.Spec.Model,
 				ModelRef:          w.agent.Spec.ModelRef,
 				FallbackModelRefs: w.agent.Spec.FallbackModelRefs,
 				Namespace:         w.agent.Metadata.Namespace,
-				Agent:        w.agent.Metadata.Name,
-				Prompt:       w.agent.Spec.Prompt,
-				Step:         step,
-				Tools:        append([]string(nil), availableTools...),
-				ToolSchemas:  w.toolSchemas,
-				Context:      w.modelContext(step),
-				Messages:     append([]ChatMessage(nil), w.history...),
-				OutputSchema: w.agent.Spec.Execution.OutputSchema,
-			})
-		modelLatencyMS := time.Since(modelStart).Milliseconds()
-		if modelErr != nil {
-			consecutiveModelErrors++
-			if w.onEvent != nil {
-				w.onEvent(fmt.Sprintf("step=%d model_error=%v latency_ms=%d consecutive_errors=%d", step, modelErr, modelLatencyMS, consecutiveModelErrors))
+				Agent:             w.agent.Metadata.Name,
+				Prompt:            w.agent.Spec.Prompt,
+				Step:              step,
+				Tools:             append([]string(nil), availableTools...),
+				ToolSchemas:       w.toolSchemas,
+				Context:           w.modelContext(step),
+				Messages:          append([]ChatMessage(nil), w.history...),
+				OutputSchema:      w.agent.Spec.Execution.OutputSchema,
 			}
-			w.history = w.history[:len(w.history)-1]
-			if mge, retryable := IsModelGatewayError(modelErr); mge != nil && !retryable {
+			var modelResp ModelResponse
+			var modelErr error
+			if streamSink != nil {
+				modelResp, modelErr = streamModelResponse(ctx, w.modelGateway, modelReq, streamSink)
+			} else {
+				modelResp, modelErr = w.modelGateway.Complete(ctx, modelReq)
+			}
+			modelLatencyMS := time.Since(modelStart).Milliseconds()
+			if modelErr != nil {
+				consecutiveModelErrors++
 				if w.onEvent != nil {
-					w.onEvent(fmt.Sprintf("step=%d model_error non-retryable status=%d; stopping", step, mge.StatusCode))
-					w.onEvent("worker stopped model error")
+					w.onEvent(fmt.Sprintf("step=%d model_error=%v latency_ms=%d consecutive_errors=%d", step, modelErr, modelLatencyMS, consecutiveModelErrors))
+				}
+				w.history = w.history[:len(w.history)-1]
+				if mge, retryable := IsModelGatewayError(modelErr); mge != nil && !retryable {
+					if w.onEvent != nil {
+						w.onEvent(fmt.Sprintf("step=%d model_error non-retryable status=%d; stopping", step, mge.StatusCode))
+						w.onEvent("worker stopped model error")
+					}
+					return
+				}
+				if consecutiveModelErrors >= maxConsecutiveModelErrors {
+					if w.onEvent != nil {
+						w.onEvent(fmt.Sprintf("step=%d model_error circuit open after %d consecutive failures; stopping", step, consecutiveModelErrors))
+						w.onEvent("worker stopped model error")
+					}
+					return
+				}
+				continue
+			}
+			consecutiveModelErrors = 0
+			if modelResp.Done && modelResp.Content == "" && len(modelResp.ToolCalls) == 0 {
+				if w.onEvent != nil {
+					w.onEvent(fmt.Sprintf("step=%d model signaled done with no output", step))
+					w.onEvent("worker completed")
 				}
 				return
 			}
-			if consecutiveModelErrors >= maxConsecutiveModelErrors {
-				if w.onEvent != nil {
-					w.onEvent(fmt.Sprintf("step=%d model_error circuit open after %d consecutive failures; stopping", step, consecutiveModelErrors))
-					w.onEvent("worker stopped model error")
-				}
-				return
-			}
-			continue
-		}
-		consecutiveModelErrors = 0
-		if modelResp.Done && modelResp.Content == "" && len(modelResp.ToolCalls) == 0 {
-			if w.onEvent != nil {
-				w.onEvent(fmt.Sprintf("step=%d model signaled done with no output", step))
-				w.onEvent("worker completed")
-			}
-			return
-		}
-		modelOutput := strings.TrimSpace(modelResp.Content)
+			modelOutput := strings.TrimSpace(modelResp.Content)
 			modelUsage := normalizeModelUsageWithFallback(modelResp.Usage, w.agent, modelResp, step)
 			if w.onEvent != nil {
 				w.onEvent(fmt.Sprintf(
@@ -479,11 +496,11 @@ func (w *AgentWorker) Run(ctx context.Context) {
 				if w.onEvent != nil {
 					w.onEvent(fmt.Sprintf("step=%d tool=%s tool_contract=%s tool_request_id=%s tool_attempt=%d duration_ms=%d success", step, tool, contractVersion, toolRequestID, toolAttempt, toolDurationMS))
 				}
-			w.history = append(w.history, ChatMessage{
-				Role:       "tool",
-				Content:    sanitizeToolOutput(result),
-				ToolCallID: requested.ID,
-			})
+				w.history = append(w.history, ChatMessage{
+					Role:       "tool",
+					Content:    sanitizeToolOutput(result),
+					ToolCallID: requested.ID,
+				})
 				if strings.EqualFold(toolUseBehavior, resources.AgentToolUseBehaviorStopOnFirstTool) {
 					if w.onEvent != nil {
 						w.onEvent(fmt.Sprintf("step=%d tool=%s stop_on_first_tool", step, tool))

@@ -40,6 +40,7 @@ tags:
 - name: tool-permissions
 - name: tool-approvals
 - name: task-approvals
+- name: sessions
 - name: tasks
 - name: task-schedules
 - name: task-webhooks
@@ -47,7 +48,7 @@ tags:
 - name: mcp-servers
 - name: chat-completions
   description: OpenAI-compatible chat completions facade. `model` selects an AgentSystem;
-    requests create and wait on Orloj Tasks.
+    requests execute through one-turn Orloj Sessions.
 - name: a2a
   description: Agent-to-Agent (A2A) protocol endpoints. Provides Agent Card discovery,
     JSON-RPC task operations, and a registry of local and remote A2A agents.
@@ -5024,11 +5025,12 @@ paths:
       tags:
       - chat-completions
       summary: OpenAI-compatible chat completions facade
-      description: Maps `model` to an AgentSystem name, creates a Task from `messages`,
-        waits for a terminal phase, and returns an OpenAI-shaped completion. Namespace
-        is selected with `?namespace=` (default namespace when omitted). Requires
-        writer auth. `stream=true` opens SSE immediately, sends keepalives, and emits
-        final content (not token streaming). Unsupported OpenAI fields are ignored.
+      description: Maps `model` to an AgentSystem name, creates a one-turn Session
+        from `messages`, waits for completion, and returns an OpenAI-shaped response.
+        Namespace is selected with `?namespace=` (default namespace when omitted).
+        Requires writer auth. `stream=true` opens SSE immediately, forwards native
+        OpenAI-compatible and Anthropic deltas, and uses one-shot fallback for other
+        gateways. Unsupported OpenAI fields are ignored.
       parameters:
       - name: namespace
         in: query
@@ -5096,6 +5098,657 @@ paths:
             application/json:
               schema:
                 "$ref": "./schemas/chat_completions.yaml#/components/schemas/ChatCompletionErrorResponse"
+  "/v1/sessions":
+    get:
+      tags:
+      - sessions
+      parameters:
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+      - name: after
+        in: query
+        schema:
+          type: string
+      - name: labelSelector
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/session.yaml#/components/schemas/SessionList"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    post:
+      tags:
+      - sessions
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/session.yaml#/components/schemas/Session"
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/session.yaml#/components/schemas/Session"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/sessions/{name}":
+    get:
+      tags:
+      - sessions
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/session.yaml#/components/schemas/Session"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    put:
+      tags:
+      - sessions
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: If-Match
+        in: header
+        required: false
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/session.yaml#/components/schemas/Session"
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/session.yaml#/components/schemas/Session"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Conflict
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    delete:
+      tags:
+      - sessions
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '503':
+          description: Store unavailable
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/sessions/watch":
+    get:
+      tags:
+      - sessions
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: resourceVersion
+        in: query
+        schema:
+          type: string
+      - name: name
+        in: query
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: SSE resource watch for Sessions
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/sessions/{name}/turns":
+    get:
+      tags:
+      - sessions
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Ordered Session turns
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/session.yaml#/components/schemas/SessionTurnList"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+    post:
+      tags:
+      - sessions
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/session.yaml#/components/schemas/SessionTurnRequest"
+      responses:
+        '200':
+          description: Existing idempotent turn
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/session.yaml#/components/schemas/SessionTurnResponse"
+        '202':
+          description: Turn queued
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/session.yaml#/components/schemas/SessionTurnResponse"
+        '400':
+          description: Bad request
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Session cannot accept turns
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/sessions/{name}/events":
+    get:
+      tags:
+      - sessions
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: after
+        in: query
+        schema:
+          type: integer
+          format: int64
+          minimum: 0
+      - name: since
+        in: query
+        deprecated: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 0
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 1000
+      responses:
+        '200':
+          description: Replayable ordered Session events
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/session.yaml#/components/schemas/SessionEventList"
+        '400':
+          description: Bad cursor
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/sessions/{name}/stream":
+    get:
+      tags:
+      - sessions
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      - name: after
+        in: query
+        schema:
+          type: integer
+          format: int64
+          minimum: 0
+      - name: Last-Event-ID
+        in: header
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Replayable SSE; event id is the per-Session sequence
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/sessions/{name}/pause":
+    post:
+      tags:
+      - sessions
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/session.yaml#/components/schemas/SessionControlRequest"
+      responses:
+        '200':
+          description: Session pause applied
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/session.yaml#/components/schemas/Session"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Invalid state transition
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/sessions/{name}/resume":
+    post:
+      tags:
+      - sessions
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/session.yaml#/components/schemas/SessionControlRequest"
+      responses:
+        '200':
+          description: Session resume applied
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/session.yaml#/components/schemas/Session"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Invalid state transition
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/sessions/{name}/cancel":
+    post:
+      tags:
+      - sessions
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/session.yaml#/components/schemas/SessionControlRequest"
+      responses:
+        '200':
+          description: Session cancel applied
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/session.yaml#/components/schemas/Session"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Invalid state transition
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+  "/v1/sessions/{name}/complete":
+    post:
+      tags:
+      - sessions
+      security:
+      - bearerAuth: []
+      - sessionCookie: []
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: namespace
+        in: query
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              "$ref": "./schemas/session.yaml#/components/schemas/SessionControlRequest"
+      responses:
+        '200':
+          description: Session complete applied
+          content:
+            application/json:
+              schema:
+                "$ref": "./schemas/session.yaml#/components/schemas/Session"
+        '404':
+          description: Not found
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        '409':
+          description: Invalid state transition
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
+        default:
+          description: Error
+          content:
+            text/plain:
+              schema:
+                "$ref": "./schemas/common.yaml#/components/schemas/PlainTextError"
   "/v1/tasks":
     get:
       tags:

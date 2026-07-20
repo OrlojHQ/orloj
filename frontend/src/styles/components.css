@@ -4671,3 +4671,237 @@ button:focus-visible {
   color: var(--text-tertiary);
   font-size: var(--text-sm);
 }
+
+/* ============================================
+   SESSIONS
+   ============================================ */
+
+.session-create-dialog {
+  width: 460px;
+  max-width: calc(100vw - 32px);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.session-create-dialog__header,
+.session-create-dialog__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+}
+
+.session-create-dialog__header {
+  border-bottom: 1px solid var(--border);
+}
+
+.session-create-dialog__header h2 {
+  font-size: var(--text-lg);
+}
+
+.session-create-dialog__body {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+}
+
+.session-create-dialog__body label {
+  display: grid;
+  gap: 5px;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.session-create-dialog__footer {
+  justify-content: flex-end;
+  border-top: 1px solid var(--border);
+}
+
+.session-detail {
+  height: 100%;
+  min-height: 0;
+}
+
+.session-detail__actions .btn-secondary,
+.session-composer .btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.session-stream-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+
+.session-stream-state--open {
+  color: var(--green);
+}
+
+.session-stream-state--reconnecting {
+  color: var(--yellow);
+}
+
+.session-chat {
+  display: flex;
+  flex: 1;
+  min-height: 520px;
+  max-height: calc(100vh - 170px);
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+}
+
+.session-chat__timeline {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  padding: 24px;
+  overscroll-behavior: contain;
+}
+
+.session-chat__empty {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  color: var(--text-secondary);
+}
+
+.session-chat__empty p {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.session-chat__empty span {
+  font-size: var(--text-sm);
+}
+
+.session-chat__empty-icon {
+  margin-bottom: 8px;
+  color: var(--text-tertiary);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: var(--text-2xl);
+  letter-spacing: 0.2em;
+}
+
+.session-message {
+  align-self: flex-start;
+  max-width: min(78%, 820px);
+}
+
+.session-message--user {
+  align-self: flex-end;
+}
+
+.session-message__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 4px 4px;
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+  text-transform: capitalize;
+}
+
+.session-message--user .session-message__meta {
+  justify-content: flex-end;
+}
+
+.session-message__content {
+  margin: 0;
+  padding: 10px 14px;
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px var(--radius-lg) var(--radius-lg) var(--radius-lg);
+  font-family: inherit;
+  font-size: var(--text-md);
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.session-message--user .session-message__content {
+  background: var(--accent-alpha);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  border-radius: var(--radius-lg) 4px var(--radius-lg) var(--radius-lg);
+}
+
+.session-message--system {
+  align-self: center;
+  max-width: 90%;
+}
+
+.session-message--system .session-message__meta {
+  justify-content: center;
+}
+
+.session-message--system .session-message__content {
+  padding: 6px 10px;
+  color: var(--text-secondary);
+  background: transparent;
+  border-style: dashed;
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+}
+
+.session-composer {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border);
+}
+
+.session-composer textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 72px;
+  max-height: 220px;
+}
+
+.session-composer__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+@media (max-width: 768px) {
+  .session-chat {
+    min-height: 480px;
+    max-height: none;
+  }
+
+  .session-chat__timeline {
+    padding: 16px 12px;
+  }
+
+  .session-message {
+    max-width: 92%;
+  }
+
+  .session-detail__actions {
+    width: 100%;
+  }
+
+  .session-detail__actions .session-stream-state {
+    margin-right: auto;
+  }
+}

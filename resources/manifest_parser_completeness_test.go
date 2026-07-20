@@ -41,9 +41,9 @@ var skipPaths = map[string]map[string]bool{
 		"Metadata.CreatedAt":       true, // server-set on create
 	},
 	"Agent": {
-		"Spec.Model":                    true, // json:"-", internal
-		"Spec.Execution.OutputSchema":   true, // map[string]any, parsed via separate pass
-		"Status":                        true,
+		"Spec.Model":                  true, // json:"-", internal
+		"Spec.Execution.OutputSchema": true, // map[string]any, parsed via separate pass
+		"Status":                      true,
 	},
 	"Tool": {
 		"Spec.McpServerRef": true, // server-generated, not user-set
@@ -102,17 +102,17 @@ var skipPaths = map[string]map[string]bool{
 		"Status": true,
 	},
 	"TaskSchedule": {
-		"Status":                                  true,
-		"Spec.TaskRef":                            true, // mutually exclusive with task_template
+		"Status":       true,
+		"Spec.TaskRef": true, // mutually exclusive with task_template
 		"Spec.TaskTemplate.MessageRetry.NonRetryable": true, // list inside nested template — not wired yet
-		"Spec.TaskTemplate.Requirements":          true, // nested sub-object inside template — not wired yet
+		"Spec.TaskTemplate.Requirements":              true, // nested sub-object inside template — not wired yet
 	},
 	"TaskWebhook": {
-		"Status":                                  true,
-		"Spec.TaskRef":                            true, // mutually exclusive with task_template
+		"Status":       true,
+		"Spec.TaskRef": true, // mutually exclusive with task_template
 		"Spec.TaskTemplate.MessageRetry.NonRetryable": true,
-		"Spec.TaskTemplate.Requirements":          true,
-		"Spec.Idempotency.EventIDFromBody":        true, // mutually exclusive with event_id_header
+		"Spec.TaskTemplate.Requirements":              true,
+		"Spec.Idempotency.EventIDFromBody":            true, // mutually exclusive with event_id_header
 	},
 	"Task": {
 		"Status":            true,
@@ -850,10 +850,11 @@ func TestFixtureCoversAllResources(t *testing.T) {
 		"mcpserver":      true,
 		"agentpolicy":    true,
 		"agentrole":      true,
-		"toolpermission":  true,
+		"toolpermission": true,
 		"memory":         true,
 		"worker":         true,
 		"task":           true,
+		"session":        true, // uses full YAML library, not constrained parser
 		"taskschedule":   true,
 		"taskwebhook":    true,
 		"toolapproval":   true,
@@ -869,7 +870,7 @@ func TestFixtureCoversAllResources(t *testing.T) {
 	probeKinds := []string{
 		"Agent", "AgentSystem", "ModelEndpoint", "Tool", "Secret",
 		"SealedSecret", "Memory", "AgentPolicy", "AgentRole",
-		"ToolPermission", "ToolApproval", "TaskApproval", "Task",
+		"ToolPermission", "ToolApproval", "TaskApproval", "Task", "Session",
 		"TaskSchedule", "TaskWebhook", "Worker", "McpServer",
 		"ContextAdapter", "EvalDataset", "EvalRun",
 	}

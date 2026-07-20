@@ -413,6 +413,68 @@ export interface TaskStatus {
   observedGeneration?: number;
 }
 
+export interface Session {
+  apiVersion: string;
+  kind: string;
+  metadata: ObjectMeta;
+  spec: SessionSpec;
+  status?: SessionStatus;
+}
+
+export interface SessionSpec {
+  system: string;
+  idle_ttl?: string;
+  max_turns?: number;
+  input?: Record<string, string>;
+}
+
+export interface SessionStatus {
+  phase?: string;
+  lastError?: string;
+  startedAt?: string;
+  completedAt?: string;
+  lastActivityAt?: string;
+  expiresAt?: string;
+  activeTurnID?: string;
+  queuedTurns?: number;
+  completedTurns?: number;
+  lastEventSequence?: number;
+  claimedBy?: string;
+  leaseUntil?: string;
+  lastHeartbeat?: string;
+  fence?: number;
+  systemGeneration?: number;
+  blockedOn?: TaskBlockedOn;
+  observedGeneration?: number;
+}
+
+export interface SessionMessage {
+  id?: string;
+  message_id?: string;
+  turn_id?: string;
+  role?: string;
+  author?: string;
+  content?: string;
+  timestamp?: string;
+  created_at?: string;
+  [key: string]: unknown;
+}
+
+export interface SessionEvent {
+  seq: number;
+  event_id?: string;
+  session_name?: string;
+  namespace?: string;
+  type: string;
+  turn_id?: string;
+  message_id?: string;
+  attempt?: number;
+  causation_id?: string;
+  idempotency_key?: string;
+  timestamp?: string;
+  payload?: unknown;
+}
+
 export interface TaskBlockedOn {
   kind?: string;
   name?: string;
@@ -824,6 +886,7 @@ export type ResourceKind =
   | "ToolApproval"
   | "TaskApproval"
   | "Task"
+  | "Session"
   | "TaskSchedule"
   | "TaskWebhook"
   | "Worker"
@@ -846,6 +909,7 @@ export const RESOURCE_ENDPOINTS: Record<ResourceKind, string> = {
   ToolApproval: "tool-approvals",
   TaskApproval: "task-approvals",
   Task: "tasks",
+  Session: "sessions",
   TaskSchedule: "task-schedules",
   TaskWebhook: "task-webhooks",
   Worker: "workers",
@@ -870,6 +934,7 @@ export const RESOURCE_DETAIL_BASE_PATH: Record<ResourceKind, string> = {
   ToolApproval: "/approvals",
   TaskApproval: "/approvals/task",
   Task: "/tasks",
+  Session: "/sessions",
   TaskSchedule: "/task-schedules",
   TaskWebhook: "/task-webhooks",
   Worker: "/workers",

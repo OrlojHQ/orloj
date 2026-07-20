@@ -22,6 +22,8 @@ import { Agents } from "./pages/Agents";
 import { AgentDetail } from "./pages/AgentDetail";
 import { Tasks } from "./pages/Tasks";
 import { TaskDetail } from "./pages/TaskDetail";
+import { Sessions } from "./pages/Sessions";
+import { SessionDetail } from "./pages/SessionDetail";
 import { TaskSchedules } from "./pages/TaskSchedules";
 import { TaskScheduleDetail } from "./pages/TaskScheduleDetail";
 import { TaskWebhooks } from "./pages/TaskWebhooks";
@@ -159,6 +161,8 @@ function AppLayout({
               <Route path="/agents/:name" element={<AgentDetail />} />
               <Route path="/tasks" element={<Tasks />} />
               <Route path="/tasks/:name" element={<TaskDetail />} />
+              <Route path="/sessions" element={<Sessions />} />
+              <Route path="/sessions/:name" element={<SessionDetail />} />
               <Route path="/task-schedules" element={<TaskSchedules />} />
               <Route path="/task-schedules/:name" element={<TaskScheduleDetail />} />
               <Route path="/task-webhooks" element={<TaskWebhooks />} />

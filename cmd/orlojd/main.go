@@ -278,6 +278,10 @@ func main() {
 		stores.Memories, stores.Policies, stores.Workers, logger, *reconcile,
 	)
 	taskController.SetDebugLogger(debugLogger)
+	sessionController := controllers.NewSessionController(
+		stores.Sessions, stores.Tasks, stores.AgentSystems, logger, *reconcile,
+	)
+	sessionController.ConfigureWorker(*taskWorkerID, *taskLeaseDuration, *taskHeartbeatInterval)
 	taskSchedulerController := controllers.NewTaskSchedulerController(stores.Tasks, stores.Workers, logger, *reconcile, 20*time.Second)
 	taskScheduleController := controllers.NewTaskScheduleController(stores.TaskSchedules, stores.Tasks, logger, *reconcile)
 	workerController := controllers.NewWorkerController(stores.Workers, logger, *reconcile, 20*time.Second)
@@ -286,6 +290,7 @@ func main() {
 	taskController.SetGovernanceStores(stores.Roles, stores.ToolPerms)
 	taskController.SetToolApprovalStore(stores.ToolApprovals)
 	taskController.SetTaskApprovalStore(stores.TaskApprovals)
+	taskController.SetSessionStore(stores.Sessions)
 	taskController.SetModelEndpointStore(stores.ModelEPs)
 	taskController.SetContextAdapterStore(stores.ContextAdapters)
 	taskController.SetExecutor(taskExecutor)
@@ -488,6 +493,7 @@ func main() {
 		ToolApprovals:   stores.ToolApprovals,
 		TaskApprovals:   stores.TaskApprovals,
 		Tasks:           stores.Tasks,
+		Sessions:        stores.Sessions,
 		TaskSchedules:   stores.TaskSchedules,
 		TaskWebhooks:    stores.TaskWebhooks,
 		A2APushConfigs:  stores.A2APushConfigs,
@@ -531,6 +537,7 @@ func main() {
 	server.SetA2AConfig(a2aConfig)
 	logger.Printf("A2A protocol configured base_url=%s protocol_version=%s", a2aConfig.PublicBaseURL, a2aConfig.ProtocolVersion)
 	taskController.SetEventBus(bus)
+	sessionController.SetEventBus(bus)
 	taskController.SetAgentMessageBus(agentMessageBus)
 	taskSchedulerController.SetEventBus(bus)
 	taskScheduleController.SetEventBus(bus)
@@ -590,6 +597,7 @@ func main() {
 			}, *taskHeartbeatInterval)
 		})
 		startBackground(func() { taskController.Start(ctx) })
+		startBackground(func() { sessionController.Start(ctx) })
 		evalRunController := controllers.NewEvalRunController(
 			stores.EvalRuns, stores.EvalDatasets, stores.Tasks,
 			&agentruntime.EvalScorer{Gateway: modelGateway},

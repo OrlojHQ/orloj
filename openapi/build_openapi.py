@@ -852,11 +852,11 @@ def build() -> dict:
             "tags": ["chat-completions"],
             "summary": "OpenAI-compatible chat completions facade",
             "description": (
-                "Maps `model` to an AgentSystem name, creates a Task from `messages`, "
-                "waits for a terminal phase, and returns an OpenAI-shaped completion. "
+                "Maps `model` to an AgentSystem name, creates a one-turn Session from "
+                "`messages`, waits for completion, and returns an OpenAI-shaped response. "
                 "Namespace is selected with `?namespace=` (default namespace when omitted). "
-                "Requires writer auth. `stream=true` opens SSE immediately, sends "
-                "keepalives, and emits final content (not token streaming). "
+                "Requires writer auth. `stream=true` opens SSE immediately, forwards native "
+                "OpenAI-compatible and Anthropic deltas, and uses one-shot fallback for other gateways. "
                 "Unsupported OpenAI fields are ignored."
             ),
             "parameters": [
@@ -931,6 +931,144 @@ def build() -> dict:
             },
         }
     }
+
+    add_crud(
+        paths,
+        "/v1/sessions",
+        "sessions",
+        "./schemas/session.yaml#/components/schemas/SessionList",
+        "./schemas/session.yaml#/components/schemas/Session",
+    )
+    paths["/v1/sessions/watch"] = {
+        "get": {
+            "tags": ["sessions"],
+            "security": SEC_READER,
+            "parameters": watch_params(),
+            "responses": sse_response("SSE resource watch for Sessions"),
+        }
+    }
+    session_name_params = [
+        {
+            "name": "name",
+            "in": "path",
+            "required": True,
+            "schema": {"type": "string"},
+        },
+        {"name": "namespace", "in": "query", "schema": {"type": "string"}},
+    ]
+    paths["/v1/sessions/{name}/turns"] = {
+        "get": {
+            "tags": ["sessions"],
+            "security": SEC_READER,
+            "parameters": session_name_params,
+            "responses": {
+                "200": {
+                    "description": "Ordered Session turns",
+                    "content": json_body(
+                        "./schemas/session.yaml#/components/schemas/SessionTurnList"
+                    ),
+                },
+                "404": {"description": "Not found", "content": text_plain_error()},
+                "default": {"description": "Error", "content": text_plain_error()},
+            },
+        },
+        "post": {
+            "tags": ["sessions"],
+            "security": SEC_WRITER,
+            "parameters": session_name_params + [
+                {
+                    "name": "Idempotency-Key",
+                    "in": "header",
+                    "required": True,
+                    "schema": {"type": "string"},
+                }
+            ],
+            "requestBody": {
+                "required": True,
+                "content": json_body(
+                    "./schemas/session.yaml#/components/schemas/SessionTurnRequest"
+                ),
+            },
+            "responses": {
+                "200": {
+                    "description": "Existing idempotent turn",
+                    "content": json_body(
+                        "./schemas/session.yaml#/components/schemas/SessionTurnResponse"
+                    ),
+                },
+                "202": {
+                    "description": "Turn queued",
+                    "content": json_body(
+                        "./schemas/session.yaml#/components/schemas/SessionTurnResponse"
+                    ),
+                },
+                "400": {"description": "Bad request", "content": text_plain_error()},
+                "404": {"description": "Not found", "content": text_plain_error()},
+                "409": {"description": "Session cannot accept turns", "content": text_plain_error()},
+                "default": {"description": "Error", "content": text_plain_error()},
+            },
+        },
+    }
+    paths["/v1/sessions/{name}/events"] = {
+        "get": {
+            "tags": ["sessions"],
+            "security": SEC_READER,
+            "parameters": session_name_params + [
+                {"name": "after", "in": "query", "schema": {"type": "integer", "format": "int64", "minimum": 0}},
+                {"name": "since", "in": "query", "deprecated": True, "schema": {"type": "integer", "format": "int64", "minimum": 0}},
+                {"name": "limit", "in": "query", "schema": {"type": "integer", "minimum": 1, "maximum": 1000}},
+            ],
+            "responses": {
+                "200": {
+                    "description": "Replayable ordered Session events",
+                    "content": json_body(
+                        "./schemas/session.yaml#/components/schemas/SessionEventList"
+                    ),
+                },
+                "400": {"description": "Bad cursor", "content": text_plain_error()},
+                "404": {"description": "Not found", "content": text_plain_error()},
+                "default": {"description": "Error", "content": text_plain_error()},
+            },
+        }
+    }
+    paths["/v1/sessions/{name}/stream"] = {
+        "get": {
+            "tags": ["sessions"],
+            "security": SEC_READER,
+            "parameters": session_name_params + [
+                {"name": "after", "in": "query", "schema": {"type": "integer", "format": "int64", "minimum": 0}},
+                {"name": "Last-Event-ID", "in": "header", "schema": {"type": "string"}},
+            ],
+            "responses": sse_response(
+                "Replayable SSE; event id is the per-Session sequence"
+            ),
+        }
+    }
+    for action in ("pause", "resume", "cancel", "complete"):
+        paths[f"/v1/sessions/{{name}}/{action}"] = {
+            "post": {
+                "tags": ["sessions"],
+                "security": SEC_WRITER,
+                "parameters": session_name_params,
+                "requestBody": {
+                    "required": False,
+                    "content": json_body(
+                        "./schemas/session.yaml#/components/schemas/SessionControlRequest"
+                    ),
+                },
+                "responses": {
+                    "200": {
+                        "description": f"Session {action} applied",
+                        "content": json_body(
+                            "./schemas/session.yaml#/components/schemas/Session"
+                        ),
+                    },
+                    "404": {"description": "Not found", "content": text_plain_error()},
+                    "409": {"description": "Invalid state transition", "content": text_plain_error()},
+                    "default": {"description": "Error", "content": text_plain_error()},
+                },
+            }
+        }
 
     paths["/v1/tasks"] = {
         "get": list_tasks("tasks", "./schemas/task.yaml#/components/schemas/TaskList"),
@@ -1766,6 +1904,7 @@ def build() -> dict:
             {"name": "tool-permissions"},
             {"name": "tool-approvals"},
             {"name": "task-approvals"},
+            {"name": "sessions"},
             {"name": "tasks"},
             {"name": "task-schedules"},
             {"name": "task-webhooks"},
@@ -1775,7 +1914,7 @@ def build() -> dict:
                 "name": "chat-completions",
                 "description": (
                     "OpenAI-compatible chat completions facade. `model` selects an "
-                    "AgentSystem; requests create and wait on Orloj Tasks."
+                    "AgentSystem; requests execute through one-turn Orloj Sessions."
                 ),
             },
             {"name": "a2a", "description": (
