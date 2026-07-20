@@ -14,7 +14,7 @@ import { GraphView } from "../components/GraphView";
 import { MetricCard } from "../components/MetricCard";
 import { TraceView } from "../components/TraceView";
 import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
-import { ArrowLeft, Clock, Activity, Hash, Zap, Network, X } from "lucide-react";
+import { ArrowLeft, Clock, Activity, Hash, Zap, MessagesSquare, Network, X } from "lucide-react";
 import { EmptyState } from "../components/EmptyState";
 import clsx from "clsx";
 import type { Task, TaskTraceEvent } from "../api/types";
@@ -255,6 +255,7 @@ export function TaskDetail() {
 
   const persistedTrace = task.status?.trace ?? [];
   const traceEvents = mergeTrace(persistedTrace, streamedTrace);
+  const owningSession = task.metadata.labels?.["orloj.dev/session"];
 
   const tabs: { id: Tab; label: string }[] = [
     { id: "overview", label: "Overview" },
@@ -285,13 +286,26 @@ export function TaskDetail() {
             pulse={task.status?.phase === "Running"}
           />
         </div>
-        <button
-          className="btn-secondary text-red"
-          onClick={handleDelete}
-          disabled={deleteMutation.isPending}
-        >
-          {deleteMutation.isPending ? "Deleting..." : "Delete Task"}
-        </button>
+        <div className="page__header-actions">
+          {owningSession && (
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() =>
+                navigate(`/sessions/${encodeURIComponent(owningSession)}`)
+              }
+            >
+              <MessagesSquare size={14} /> Open live Session
+            </button>
+          )}
+          <button
+            className="btn-secondary text-red"
+            onClick={handleDelete}
+            disabled={deleteMutation.isPending}
+          >
+            {deleteMutation.isPending ? "Deleting..." : "Delete Task"}
+          </button>
+        </div>
       </div>
 
       <div className="tab-bar" role="tablist">

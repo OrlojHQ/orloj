@@ -426,6 +426,12 @@ export interface SessionSpec {
   idle_ttl?: string;
   max_turns?: number;
   input?: Record<string, string>;
+  checkpoint_retention?: SessionCheckpointRetention;
+}
+
+export interface SessionCheckpointRetention {
+  max_count?: number;
+  max_age?: string;
 }
 
 export interface SessionStatus {
@@ -439,6 +445,8 @@ export interface SessionStatus {
   queuedTurns?: number;
   completedTurns?: number;
   lastEventSequence?: number;
+  lastCheckpointID?: string;
+  restoredCheckpoint?: string;
   claimedBy?: string;
   leaseUntil?: string;
   lastHeartbeat?: string;
@@ -473,6 +481,66 @@ export interface SessionEvent {
   idempotency_key?: string;
   timestamp?: string;
   payload?: unknown;
+}
+
+export interface SessionCheckpoint {
+  id: string;
+  session_name: string;
+  namespace: string;
+  turn_id?: string;
+  task_name?: string;
+  agent?: string;
+  agent_index?: number;
+  message_id?: string;
+  branch_id?: string;
+  attempt?: number;
+  fence?: number;
+  system_generation?: number;
+  event_sequence: number;
+  parent_checkpoint_id?: string;
+  safe_point: "step.completed" | "agent.completed" | "turn.completed";
+  state_version: number;
+  state_hash: string;
+  state: unknown;
+  created_at: string;
+  expires_at?: string;
+}
+
+export interface SessionCheckpointList {
+  items: SessionCheckpoint[];
+}
+
+export interface SessionReplayResult {
+  session_name: string;
+  checkpoint_id: string;
+  state_version: number;
+  state_hash: string;
+  verified: boolean;
+  checkpoint_count: number;
+  events?: SessionEvent[];
+  final_checkpoint?: SessionCheckpoint;
+}
+
+export interface SessionCheckpointRewindRequest {
+  interrupt?: boolean;
+  resume?: boolean;
+}
+
+export interface SessionCheckpointForkRequest {
+  name: string;
+  resume?: boolean;
+}
+
+export interface SessionCheckpointRewindResponse {
+  session: Session;
+  checkpoint_id: string;
+  resumed: boolean;
+}
+
+export interface SessionCheckpointForkResponse {
+  session: Session;
+  checkpoint: SessionCheckpoint;
+  resumed: boolean;
 }
 
 export interface TaskBlockedOn {

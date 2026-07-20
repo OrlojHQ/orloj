@@ -380,6 +380,83 @@ export function useSessionAction() {
   });
 }
 
+export function useSessionCheckpoints(name: string) {
+  const ns = useNamespace();
+  return useQuery({
+    queryKey: ["SessionCheckpoints", ns, name],
+    queryFn: () => client.listSessionCheckpoints(name),
+    enabled: !!name,
+    refetchInterval: REFETCH_INTERVAL,
+    select: (data) => data.items ?? [],
+  });
+}
+
+export function useReplaySessionCheckpoint() {
+  return useMutation({
+    mutationFn: ({
+      name,
+      checkpointID,
+    }: {
+      name: string;
+      checkpointID: string;
+    }) => client.replaySessionCheckpoint(name, checkpointID),
+  });
+}
+
+export function useRewindSessionCheckpoint() {
+  const qc = useQueryClient();
+  const ns = useNamespace();
+  return useMutation({
+    mutationFn: ({
+      name,
+      checkpointID,
+      interrupt,
+      resume,
+    }: {
+      name: string;
+      checkpointID: string;
+      interrupt?: boolean;
+      resume?: boolean;
+    }) =>
+      client.rewindSessionCheckpoint(name, checkpointID, { interrupt, resume }),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ["Session", ns] });
+      qc.invalidateQueries({ queryKey: ["Session", ns, variables.name] });
+      qc.invalidateQueries({
+        queryKey: ["SessionCheckpoints", ns, variables.name],
+      });
+    },
+  });
+}
+
+export function useForkSessionCheckpoint() {
+  const qc = useQueryClient();
+  const ns = useNamespace();
+  return useMutation({
+    mutationFn: ({
+      name,
+      checkpointID,
+      forkName,
+      resume,
+    }: {
+      name: string;
+      checkpointID: string;
+      forkName: string;
+      resume?: boolean;
+    }) =>
+      client.forkSessionCheckpoint(name, checkpointID, {
+        name: forkName,
+        resume,
+      }),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ["Session", ns] });
+      qc.invalidateQueries({
+        queryKey: ["SessionCheckpoints", ns, variables.name],
+      });
+    },
+  });
+}
+
 export function useTaskSchedules() {
   return useResourceList<TaskSchedule>("TaskSchedule", RESOURCE_ENDPOINTS.TaskSchedule);
 }

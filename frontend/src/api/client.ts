@@ -3,7 +3,14 @@ import type {
   ListResponse,
   MemoryEntriesResponse,
   Session,
+  SessionCheckpoint,
+  SessionCheckpointForkRequest,
+  SessionCheckpointForkResponse,
+  SessionCheckpointList,
+  SessionCheckpointRewindRequest,
+  SessionCheckpointRewindResponse,
   SessionEvent,
+  SessionReplayResult,
 } from "./types";
 
 const GET_HEAD_TIMEOUT_MS = 30_000;
@@ -263,6 +270,72 @@ export async function postSessionAction(
   action: "pause" | "resume" | "cancel",
 ): Promise<Session> {
   return postAction<Session>("sessions", encodeURIComponent(name), action);
+}
+
+function sessionCheckpointPath(name: string, checkpointID?: string): string {
+  const base = `sessions/${encodeURIComponent(name)}/checkpoints`;
+  return checkpointID ? `${base}/${encodeURIComponent(checkpointID)}` : base;
+}
+
+export async function listSessionCheckpoints(
+  name: string,
+): Promise<SessionCheckpointList> {
+  const { namespace } = getConnection();
+  return request<SessionCheckpointList>(
+    buildUrl(sessionCheckpointPath(name), namespace),
+  );
+}
+
+export async function getSessionCheckpoint(
+  name: string,
+  checkpointID: string,
+): Promise<SessionCheckpoint> {
+  const { namespace } = getConnection();
+  return request<SessionCheckpoint>(
+    buildUrl(sessionCheckpointPath(name, checkpointID), namespace),
+  );
+}
+
+export async function replaySessionCheckpoint(
+  name: string,
+  checkpointID: string,
+): Promise<SessionReplayResult> {
+  const { namespace } = getConnection();
+  return request<SessionReplayResult>(
+    buildUrl(`${sessionCheckpointPath(name, checkpointID)}/replay`, namespace),
+  );
+}
+
+export async function rewindSessionCheckpoint(
+  name: string,
+  checkpointID: string,
+  body: SessionCheckpointRewindRequest,
+): Promise<SessionCheckpointRewindResponse> {
+  const { namespace } = getConnection();
+  return request<SessionCheckpointRewindResponse>(
+    buildUrl(`${sessionCheckpointPath(name, checkpointID)}/rewind`, namespace),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+}
+
+export async function forkSessionCheckpoint(
+  name: string,
+  checkpointID: string,
+  body: SessionCheckpointForkRequest,
+): Promise<SessionCheckpointForkResponse> {
+  const { namespace } = getConnection();
+  return request<SessionCheckpointForkResponse>(
+    buildUrl(`${sessionCheckpointPath(name, checkpointID)}/fork`, namespace),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
 }
 
 export function getSessionStreamUrl(name: string, afterSeq?: number): string {
