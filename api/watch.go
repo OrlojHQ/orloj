@@ -68,6 +68,26 @@ func (s *Server) watchTasks(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) watchSessions(w http.ResponseWriter, r *http.Request) {
+	s.watchResourceStream(w, r, "Session", func() []watchRecord {
+		items, err := s.stores.Sessions.List(r.Context())
+		if err != nil {
+			writeStoreFetchError(w, err)
+			return nil
+		}
+		records := make([]watchRecord, 0, len(items))
+		for _, item := range items {
+			records = append(records, watchRecord{
+				Name:            item.Metadata.Name,
+				Namespace:       resources.NormalizeNamespace(item.Metadata.Namespace),
+				ResourceVersion: parseResourceVersion(item.Metadata.ResourceVersion),
+				Resource:        item,
+			})
+		}
+		return records
+	})
+}
+
 func (s *Server) watchTaskSchedules(w http.ResponseWriter, r *http.Request) {
 	s.watchResourceStream(w, r, "TaskSchedule", func() []watchRecord {
 		items, err := s.stores.TaskSchedules.List(r.Context())

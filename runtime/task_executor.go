@@ -122,21 +122,52 @@ func (e *TaskExecutor) ExecuteAgent(ctx context.Context, agent resources.Agent, 
 	return e.ExecuteAgentWithRuntime(ctx, agent, input, nil)
 }
 
+// ExecuteAgentWithEventSink runs one agent with callbacks scoped to this
+// execution instead of mutating the executor or engine.
+func (e *TaskExecutor) ExecuteAgentWithEventSink(
+	ctx context.Context,
+	agent resources.Agent,
+	input map[string]string,
+	sink ExecutionEventSink,
+) (AgentExecutionResult, error) {
+	return e.ExecuteAgentWithRuntimeAndEventSink(ctx, agent, input, nil, sink)
+}
+
 func (e *TaskExecutor) ExecuteAgentWithRuntime(
 	ctx context.Context,
 	agent resources.Agent,
 	input map[string]string,
 	override ToolRuntime,
 ) (AgentExecutionResult, error) {
+	return e.ExecuteAgentWithRuntimeAndEventSink(
+		ctx,
+		agent,
+		input,
+		override,
+		ExecutionEventSink{StepEvent: e.OnStepEvent},
+	)
+}
+
+// ExecuteAgentWithRuntimeAndEventSink combines a per-call tool runtime override
+// with execution-scoped event delivery.
+func (e *TaskExecutor) ExecuteAgentWithRuntimeAndEventSink(
+	ctx context.Context,
+	agent resources.Agent,
+	input map[string]string,
+	override ToolRuntime,
+	sink ExecutionEventSink,
+) (AgentExecutionResult, error) {
 	engine := e.engine
 	if override != nil {
-		re := NewReActExecutionEngine(override, e.modelGateway, e.newMemoryStore, e.stepEvery)
-		re.OnStepEvent = e.OnStepEvent
-		engine = re
-	} else if re, ok := engine.(*ReActExecutionEngine); ok && e.OnStepEvent != nil {
-		re.OnStepEvent = e.OnStepEvent
+		engine = NewReActExecutionEngine(override, e.modelGateway, e.newMemoryStore, e.stepEvery)
 	}
-	result, err := engine.Execute(ctx, agent, input)
+	var result AgentExecutionResult
+	var err error
+	if eventEngine, ok := engine.(EventSinkingExecutionEngine); ok {
+		result, err = eventEngine.ExecuteWithEventSink(ctx, agent, input, sink)
+	} else {
+		result, err = engine.Execute(ctx, agent, input)
+	}
 	if err != nil {
 		return result, err
 	}

@@ -157,6 +157,10 @@ export default defineConfig({
           text: "OpenAI Chat Completions Facade",
           link: "/guides/openai-chat-completions",
         },
+        {
+          text: "Interactive Sessions",
+          link: "/guides/interactive-sessions",
+        },
       ],
     },
 
@@ -241,6 +245,7 @@ export default defineConfig({
               collapsed: false,
               items: [
                 { text: "Task", link: "/reference/resources/task" },
+                { text: "Session", link: "/reference/resources/session" },
                 { text: "TaskSchedule", link: "/reference/resources/task-schedule" },
                 { text: "TaskWebhook", link: "/reference/resources/task-webhook" },
               ],

@@ -29,8 +29,9 @@ components:
           default: false
           description: >
             When true, open an OpenAI-shaped SSE (`text/event-stream`) response immediately,
-            send keepalives while the Task runs, then emit the final content and `data: [DONE]`.
-            This is not token streaming.
+            forward native provider text deltas when supported, send keepalives while the
+            Session runs, then emit usage, a stop reason, and `data: [DONE]`. Providers
+            without native streaming emit one content chunk after completion.
       additionalProperties: true
     ChatCompletionMessageOut:
       type: object

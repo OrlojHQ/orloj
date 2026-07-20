@@ -42,6 +42,7 @@ type Stores struct {
 	ToolApprovals   *store.ToolApprovalStore
 	TaskApprovals   *store.TaskApprovalStore
 	Tasks           *store.TaskStore
+	Sessions        *store.SessionStore
 	TaskSchedules   *store.TaskScheduleStore
 	TaskWebhooks    *store.TaskWebhookStore
 	A2APushConfigs  *store.A2APushConfigStore
@@ -128,6 +129,9 @@ func NewServerWithOptions(stores Stores, runtime *agentruntime.Manager, logger *
 	}
 	if stores.TaskApprovals == nil {
 		stores.TaskApprovals = store.NewTaskApprovalStore()
+	}
+	if stores.Sessions == nil {
+		stores.Sessions = store.NewSessionStore()
 	}
 	if stores.TaskWebhooks == nil {
 		stores.TaskWebhooks = store.NewTaskWebhookStore()
@@ -373,7 +377,9 @@ func isStreamingWatchRequest(r *http.Request) bool {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		return false
 	}
-	return path == "/v1/events/watch" || strings.HasSuffix(path, "/watch")
+	return path == "/v1/events/watch" ||
+		strings.HasSuffix(path, "/watch") ||
+		(strings.HasPrefix(path, "/v1/sessions/") && strings.HasSuffix(path, "/stream"))
 }
 
 func (s *Server) routes() {
@@ -446,6 +452,10 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/v1/task-approvals/", s.handleTaskApprovalByName)
 
 	s.mux.HandleFunc("/v1/chat/completions", s.handleChatCompletions)
+
+	s.mux.HandleFunc("/v1/sessions", s.handleSessions)
+	s.mux.HandleFunc("/v1/sessions/watch", s.watchSessions)
+	s.mux.HandleFunc("/v1/sessions/", s.handleSessionByName)
 
 	s.mux.HandleFunc("/v1/tasks", s.handleTasks)
 	s.mux.HandleFunc("/v1/tasks/watch", s.watchTasks)

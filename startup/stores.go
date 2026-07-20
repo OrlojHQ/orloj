@@ -28,6 +28,7 @@ type StoreSet struct {
 	ToolApprovals   *store.ToolApprovalStore
 	TaskApprovals   *store.TaskApprovalStore
 	Tasks           *store.TaskStore
+	Sessions        *store.SessionStore
 	TaskSchedules   *store.TaskScheduleStore
 	TaskWebhooks    *store.TaskWebhookStore
 	A2APushConfigs  *store.A2APushConfigStore
@@ -83,6 +84,7 @@ func OpenStores(cfg StoreConfig, logger *log.Logger) (*StoreSet, error) {
 		s.ToolApprovals = store.NewToolApprovalStore()
 		s.TaskApprovals = store.NewTaskApprovalStore()
 		s.Tasks = store.NewTaskStore()
+		s.Sessions = store.NewSessionStore()
 		s.Workers = store.NewWorkerStore()
 		s.McpServers = store.NewMcpServerStore()
 		s.ContextAdapters = store.NewContextAdapterStore()
@@ -157,6 +159,7 @@ func OpenStores(cfg StoreConfig, logger *log.Logger) (*StoreSet, error) {
 		s.ToolApprovals = store.NewToolApprovalStoreWithDB(db)
 		s.TaskApprovals = store.NewTaskApprovalStoreWithDB(db)
 		s.Tasks = store.NewTaskStoreWithDB(db)
+		s.Sessions = store.NewSessionStoreWithDB(db)
 		s.Workers = store.NewWorkerStoreWithDB(db)
 		s.McpServers = store.NewMcpServerStoreWithDB(db)
 		s.ContextAdapters = store.NewContextAdapterStoreWithDB(db)

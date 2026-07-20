@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 )
@@ -221,47 +222,10 @@ func (g *AnthropicModelGateway) Complete(ctx context.Context, req ModelRequest) 
 	if g == nil {
 		return ModelResponse{}, fmt.Errorf("anthropic model gateway is nil")
 	}
-	model := strings.TrimSpace(req.Model)
-	if model == "" {
-		model = strings.TrimSpace(g.defaultModel)
+	body, toolAliases, err := g.buildRequest(req, false)
+	if err != nil {
+		return ModelResponse{}, err
 	}
-	if model == "" {
-		return ModelResponse{}, fmt.Errorf("model is required")
-	}
-
-	body := anthropicMessagesRequest{
-		Model:     model,
-		MaxTokens: g.maxTokens,
-	}
-	var toolAliases providerToolAliases
-	if len(req.Tools) > 0 {
-		body.Tools, toolAliases = buildAnthropicToolsWithAliases(req.Tools, req.ToolSchemas)
-	}
-	if len(req.Messages) > 0 {
-		body.System, body.Messages = chatMessagesToAnthropicWithAliases(req.Messages, toolAliases.RuntimeToProvider)
-	} else {
-		body.Messages = []anthropicMessagesInput{{
-			Role:    "user",
-			Content: buildOpenAIUserContent(req),
-		}}
-		if prompt := strings.TrimSpace(req.Prompt); prompt != "" {
-			body.System = []anthropicSystemBlock{{
-				Type:         "text",
-				Text:         prompt,
-				CacheControl: &anthropicCacheControl{Type: "ephemeral"},
-			}}
-		}
-	}
-	if len(req.OutputSchema) > 0 {
-		schema := ensureAdditionalPropertiesFalse(req.OutputSchema)
-		body.OutputConfig = &anthropicOutputConfig{
-			Format: &anthropicOutputFormat{
-				Type:   "json_schema",
-				Schema: schema,
-			},
-		}
-	}
-	body.System = ensureAnthropicOAuthSystemIdentity(body.System, g.apiKey)
 
 	payload, err := json.Marshal(body)
 	if err != nil {
@@ -351,6 +315,243 @@ func (g *AnthropicModelGateway) Complete(ctx context.Context, req ModelRequest) 
 	}, nil
 }
 
+// Stream calls the Anthropic Messages streaming endpoint.
+func (g *AnthropicModelGateway) Stream(ctx context.Context, req ModelRequest, sink ModelStreamEventSink) (ModelResponse, error) {
+	if g == nil {
+		err := fmt.Errorf("anthropic model gateway is nil")
+		return ModelResponse{}, emitModelStreamError(sink, err)
+	}
+	body, toolAliases, err := g.buildRequest(req, true)
+	if err != nil {
+		return ModelResponse{}, emitModelStreamError(sink, err)
+	}
+	payload, err := json.Marshal(body)
+	if err != nil {
+		err = fmt.Errorf("marshal model request: %w", err)
+		return ModelResponse{}, emitModelStreamError(sink, err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, anthropicMessagesURL(g.baseURL, g.apiKey), bytes.NewReader(payload))
+	if err != nil {
+		err = fmt.Errorf("build model request: %w", err)
+		return ModelResponse{}, emitModelStreamError(sink, err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "text/event-stream")
+	setAnthropicAuthHeaders(httpReq, g.apiKey)
+	setAnthropicOAuthClientHeaders(httpReq, g.apiKey)
+	httpReq.Header.Set("anthropic-version", g.anthropicVersion)
+
+	httpResp, err := streamingHTTPClient(g.client).Do(httpReq)
+	if err != nil {
+		err = fmt.Errorf("model request failed: %w", err)
+		return ModelResponse{}, emitModelStreamError(sink, err)
+	}
+	defer httpResp.Body.Close()
+	if httpResp.StatusCode >= http.StatusBadRequest {
+		respBody, readErr := io.ReadAll(io.LimitReader(httpResp.Body, 32*1024*1024))
+		if readErr != nil {
+			err = fmt.Errorf("read model response: %w", readErr)
+			return ModelResponse{}, emitModelStreamError(sink, err)
+		}
+		providerErr := parseAnthropicError(respBody)
+		if providerErr == "" {
+			providerErr = strings.TrimSpace(string(respBody))
+		}
+		err = &ModelGatewayError{StatusCode: httpResp.StatusCode, Provider: "anthropic", Message: providerErr}
+		return ModelResponse{}, emitModelStreamError(sink, err)
+	}
+
+	type partialToolUse struct {
+		ID        string
+		Name      string
+		Input     strings.Builder
+		HasDeltas bool
+		Emitted   bool
+	}
+	var content strings.Builder
+	partialTools := make(map[int]*partialToolUse)
+	toolCalls := make([]ModelToolCall, 0)
+	var usageRaw anthropicMessagesUsage
+	terminal := false
+
+	emitUsage := func() {
+		usage := parseAnthropicUsage(&usageRaw)
+		if modelUsagePresent(usage) {
+			emitModelStreamEvent(sink, ModelStreamEvent{Type: ModelStreamEventUsage, Usage: &usage})
+		}
+	}
+	finalizeTool := func(index int) {
+		partial := partialTools[index]
+		if partial == nil || partial.Emitted || strings.TrimSpace(partial.Name) == "" {
+			return
+		}
+		partial.Emitted = true
+		providerName := strings.TrimSpace(partial.Name)
+		name := providerName
+		if mapped := strings.TrimSpace(toolAliases.ProviderToRuntime[providerName]); mapped != "" {
+			name = mapped
+		}
+		call := ModelToolCall{
+			ID:           strings.TrimSpace(partial.ID),
+			Name:         name,
+			Input:        parseAnthropicToolUseJSON(partial.Input.String()),
+			ProviderName: providerName,
+		}
+		toolCalls = append(toolCalls, call)
+		callEvent := call
+		emitModelStreamEvent(sink, ModelStreamEvent{Type: ModelStreamEventToolCall, ToolCall: &callEvent})
+	}
+
+	err = readServerSentEvents(httpResp.Body, func(event serverSentEvent) error {
+		if strings.TrimSpace(event.Data) == "" {
+			return nil
+		}
+		var chunk anthropicMessagesStreamEvent
+		if decodeErr := json.Unmarshal([]byte(event.Data), &chunk); decodeErr != nil {
+			return fmt.Errorf("decode model stream event: %w", decodeErr)
+		}
+		eventType := strings.TrimSpace(chunk.Type)
+		if eventType == "" {
+			eventType = strings.TrimSpace(event.Type)
+		}
+		switch eventType {
+		case "message_start":
+			if chunk.Message != nil && chunk.Message.Usage != nil {
+				usageRaw = *chunk.Message.Usage
+				emitUsage()
+			}
+		case "content_block_start":
+			if chunk.ContentBlock == nil {
+				return nil
+			}
+			switch chunk.ContentBlock.Type {
+			case "text":
+				if chunk.ContentBlock.Text != "" {
+					content.WriteString(chunk.ContentBlock.Text)
+					emitModelStreamEvent(sink, ModelStreamEvent{Type: ModelStreamEventTextDelta, Delta: chunk.ContentBlock.Text})
+				}
+			case "tool_use":
+				partial := &partialToolUse{ID: chunk.ContentBlock.ID, Name: chunk.ContentBlock.Name}
+				if len(chunk.ContentBlock.Input) > 0 {
+					encoded, marshalErr := json.Marshal(chunk.ContentBlock.Input)
+					if marshalErr != nil {
+						return fmt.Errorf("encode streamed tool input: %w", marshalErr)
+					}
+					partial.Input.Write(encoded)
+				}
+				partialTools[chunk.Index] = partial
+			}
+		case "content_block_delta":
+			switch chunk.Delta.Type {
+			case "text_delta":
+				if chunk.Delta.Text != "" {
+					content.WriteString(chunk.Delta.Text)
+					emitModelStreamEvent(sink, ModelStreamEvent{Type: ModelStreamEventTextDelta, Delta: chunk.Delta.Text})
+				}
+			case "input_json_delta":
+				partial := partialTools[chunk.Index]
+				if partial == nil {
+					partial = &partialToolUse{}
+					partialTools[chunk.Index] = partial
+				}
+				if !partial.HasDeltas {
+					partial.Input.Reset()
+					partial.HasDeltas = true
+				}
+				partial.Input.WriteString(chunk.Delta.PartialJSON)
+			}
+		case "content_block_stop":
+			finalizeTool(chunk.Index)
+		case "message_delta":
+			if chunk.Usage != nil {
+				usageRaw.OutputTokens = chunk.Usage.OutputTokens
+				emitUsage()
+			}
+		case "message_stop":
+			terminal = true
+		case "error":
+			message := "unknown provider stream error"
+			if chunk.Error != nil && strings.TrimSpace(chunk.Error.Message) != "" {
+				message = strings.TrimSpace(chunk.Error.Message)
+			}
+			return fmt.Errorf("model provider error: %s", message)
+		}
+		return nil
+	})
+	if err != nil {
+		return ModelResponse{}, emitModelStreamError(sink, err)
+	}
+	if !terminal {
+		err = fmt.Errorf("model stream ended before completion")
+		return ModelResponse{}, emitModelStreamError(sink, err)
+	}
+	indexes := make([]int, 0, len(partialTools))
+	for index := range partialTools {
+		indexes = append(indexes, index)
+	}
+	sort.Ints(indexes)
+	for _, index := range indexes {
+		finalizeTool(index)
+	}
+
+	resp := ModelResponse{
+		Content:   strings.TrimSpace(content.String()),
+		Done:      content.Len() == 0 && len(toolCalls) == 0,
+		ToolCalls: toolCalls,
+		Usage:     parseAnthropicUsage(&usageRaw),
+	}
+	completed := resp
+	emitModelStreamEvent(sink, ModelStreamEvent{Type: ModelStreamEventCompletion, Response: &completed})
+	return resp, nil
+}
+
+func (g *AnthropicModelGateway) buildRequest(req ModelRequest, stream bool) (anthropicMessagesRequest, providerToolAliases, error) {
+	model := strings.TrimSpace(req.Model)
+	if model == "" {
+		model = strings.TrimSpace(g.defaultModel)
+	}
+	if model == "" {
+		return anthropicMessagesRequest{}, providerToolAliases{}, fmt.Errorf("model is required")
+	}
+
+	body := anthropicMessagesRequest{
+		Model:     model,
+		MaxTokens: g.maxTokens,
+		Stream:    stream,
+	}
+	var toolAliases providerToolAliases
+	if len(req.Tools) > 0 {
+		body.Tools, toolAliases = buildAnthropicToolsWithAliases(req.Tools, req.ToolSchemas)
+	}
+	if len(req.Messages) > 0 {
+		body.System, body.Messages = chatMessagesToAnthropicWithAliases(req.Messages, toolAliases.RuntimeToProvider)
+	} else {
+		body.Messages = []anthropicMessagesInput{{
+			Role:    "user",
+			Content: buildOpenAIUserContent(req),
+		}}
+		if prompt := strings.TrimSpace(req.Prompt); prompt != "" {
+			body.System = []anthropicSystemBlock{{
+				Type:         "text",
+				Text:         prompt,
+				CacheControl: &anthropicCacheControl{Type: "ephemeral"},
+			}}
+		}
+	}
+	if len(req.OutputSchema) > 0 {
+		schema := ensureAdditionalPropertiesFalse(req.OutputSchema)
+		body.OutputConfig = &anthropicOutputConfig{
+			Format: &anthropicOutputFormat{
+				Type:   "json_schema",
+				Schema: schema,
+			},
+		}
+	}
+	body.System = ensureAnthropicOAuthSystemIdentity(body.System, g.apiKey)
+	return body, toolAliases, nil
+}
+
 func parseAnthropicError(body []byte) string {
 	parsed := anthropicMessagesResponse{}
 	if err := json.Unmarshal(body, &parsed); err != nil {
@@ -369,6 +570,7 @@ type anthropicMessagesRequest struct {
 	MaxTokens    int                      `json:"max_tokens"`
 	Tools        []anthropicToolSpec      `json:"tools,omitempty"`
 	OutputConfig *anthropicOutputConfig   `json:"output_config,omitempty"`
+	Stream       bool                     `json:"stream,omitempty"`
 }
 
 type anthropicSystemBlock struct {
@@ -399,6 +601,27 @@ type anthropicMessagesResponse struct {
 	Content []anthropicMessagesOutput `json:"content,omitempty"`
 	Error   *anthropicProviderError   `json:"error,omitempty"`
 	Usage   *anthropicMessagesUsage   `json:"usage,omitempty"`
+}
+
+type anthropicMessagesStreamEvent struct {
+	Type         string                   `json:"type"`
+	Index        int                      `json:"index,omitempty"`
+	Message      *anthropicStreamMessage  `json:"message,omitempty"`
+	ContentBlock *anthropicMessagesOutput `json:"content_block,omitempty"`
+	Delta        anthropicStreamDelta     `json:"delta,omitempty"`
+	Usage        *anthropicMessagesUsage  `json:"usage,omitempty"`
+	Error        *anthropicProviderError  `json:"error,omitempty"`
+}
+
+type anthropicStreamMessage struct {
+	Usage *anthropicMessagesUsage `json:"usage,omitempty"`
+}
+
+type anthropicStreamDelta struct {
+	Type        string `json:"type,omitempty"`
+	Text        string `json:"text,omitempty"`
+	PartialJSON string `json:"partial_json,omitempty"`
+	StopReason  string `json:"stop_reason,omitempty"`
 }
 
 type anthropicMessagesOutput struct {
@@ -498,6 +721,18 @@ func parseAnthropicToolUseInput(input map[string]any) string {
 		return ""
 	}
 	return strings.TrimSpace(string(encoded))
+}
+
+func parseAnthropicToolUseJSON(input string) string {
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return ""
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(input), &parsed); err != nil {
+		return input
+	}
+	return parseAnthropicToolUseInput(parsed)
 }
 
 func chatMessagesToAnthropic(msgs []ChatMessage) ([]anthropicSystemBlock, []anthropicMessagesInput) {

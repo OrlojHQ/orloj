@@ -84,44 +84,9 @@ func (g *OpenAIModelGateway) Complete(ctx context.Context, req ModelRequest) (Mo
 	if g == nil {
 		return ModelResponse{}, fmt.Errorf("openai model gateway is nil")
 	}
-	model := strings.TrimSpace(req.Model)
-	if model == "" {
-		model = strings.TrimSpace(g.defaultModel)
-	}
-	if model == "" {
-		return ModelResponse{}, fmt.Errorf("model is required")
-	}
-
-	body := openAIChatCompletionRequest{
-		Model: model,
-	}
-	var toolAliases providerToolAliases
-	if len(req.Tools) > 0 {
-		var tools []openAIChatTool
-		tools, toolAliases = buildOpenAIChatToolsWithAliases(req.Tools, req.ToolSchemas)
-		body.Tools = tools
-		body.ToolChoice = "auto"
-	}
-	if len(req.Messages) > 0 {
-		body.Messages = chatMessagesToOpenAIWithAliases(req.Messages, toolAliases.RuntimeToProvider)
-	} else {
-		body.Messages = []openAIChatCompletionMessage{
-			{Role: "system", Content: strings.TrimSpace(req.Prompt)},
-			{Role: "user", Content: buildOpenAIUserContent(req)},
-		}
-		if strings.TrimSpace(req.Prompt) == "" {
-			body.Messages = body.Messages[1:]
-		}
-	}
-	if len(req.OutputSchema) > 0 {
-		body.ResponseFormat = &openAIResponseFormat{
-			Type: "json_schema",
-			JSONSchema: &openAIJSONSchema{
-				Name:   "agent_output",
-				Strict: true,
-				Schema: req.OutputSchema,
-			},
-		}
+	body, toolAliases, err := g.buildRequest(req, false)
+	if err != nil {
+		return ModelResponse{}, err
 	}
 
 	payload, err := json.Marshal(body)
@@ -183,6 +148,209 @@ func (g *OpenAIModelGateway) Complete(ctx context.Context, req ModelRequest) (Mo
 		ToolCalls: toolCalls,
 		Usage:     parseOpenAIUsage(parsed.Usage, "provider"),
 	}, nil
+}
+
+// Stream calls the OpenAI-compatible Chat Completions streaming endpoint.
+func (g *OpenAIModelGateway) Stream(ctx context.Context, req ModelRequest, sink ModelStreamEventSink) (ModelResponse, error) {
+	if g == nil {
+		err := fmt.Errorf("openai model gateway is nil")
+		return ModelResponse{}, emitModelStreamError(sink, err)
+	}
+	body, toolAliases, err := g.buildRequest(req, true)
+	if err != nil {
+		return ModelResponse{}, emitModelStreamError(sink, err)
+	}
+	payload, err := json.Marshal(body)
+	if err != nil {
+		err = fmt.Errorf("marshal model request: %w", err)
+		return ModelResponse{}, emitModelStreamError(sink, err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, g.baseURL+"/chat/completions", bytes.NewReader(payload))
+	if err != nil {
+		err = fmt.Errorf("build model request: %w", err)
+		return ModelResponse{}, emitModelStreamError(sink, err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "text/event-stream")
+	if g.apiKey != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+g.apiKey)
+	}
+
+	httpResp, err := streamingHTTPClient(g.client).Do(httpReq)
+	if err != nil {
+		err = fmt.Errorf("model request failed: %w", err)
+		return ModelResponse{}, emitModelStreamError(sink, err)
+	}
+	defer httpResp.Body.Close()
+	if httpResp.StatusCode >= http.StatusBadRequest {
+		respBody, readErr := io.ReadAll(io.LimitReader(httpResp.Body, 32*1024*1024))
+		if readErr != nil {
+			err = fmt.Errorf("read model response: %w", readErr)
+			return ModelResponse{}, emitModelStreamError(sink, err)
+		}
+		providerErr := parseOpenAIError(respBody)
+		if providerErr == "" {
+			providerErr = strings.TrimSpace(string(respBody))
+		}
+		err = &ModelGatewayError{StatusCode: httpResp.StatusCode, Provider: "openai", Message: providerErr}
+		return ModelResponse{}, emitModelStreamError(sink, err)
+	}
+
+	type partialToolCall struct {
+		ID        string
+		Name      string
+		Arguments string
+	}
+	var content strings.Builder
+	partialCalls := make(map[int]*partialToolCall)
+	var usage ModelUsage
+	terminal := false
+	err = readServerSentEvents(httpResp.Body, func(event serverSentEvent) error {
+		data := strings.TrimSpace(event.Data)
+		if data == "" {
+			return nil
+		}
+		if data == "[DONE]" {
+			terminal = true
+			return nil
+		}
+		var chunk openAIChatCompletionStreamChunk
+		if decodeErr := json.Unmarshal([]byte(data), &chunk); decodeErr != nil {
+			return fmt.Errorf("decode model stream event: %w", decodeErr)
+		}
+		if chunk.Error != nil {
+			return fmt.Errorf("model provider error: %s", strings.TrimSpace(chunk.Error.Message))
+		}
+		if strings.EqualFold(strings.TrimSpace(event.Type), "error") {
+			message := strings.TrimSpace(chunk.Message)
+			if message == "" {
+				message = "unknown provider stream error"
+			}
+			return fmt.Errorf("model provider error: %s", message)
+		}
+		if chunk.Usage != nil {
+			usage = parseOpenAIUsage(chunk.Usage, "provider")
+		}
+		for _, choice := range chunk.Choices {
+			if choice.FinishReason != nil {
+				terminal = true
+			}
+			if choice.Delta.Content != nil {
+				delta := *choice.Delta.Content
+				if delta != "" {
+					content.WriteString(delta)
+					emitModelStreamEvent(sink, ModelStreamEvent{Type: ModelStreamEventTextDelta, Delta: delta})
+				}
+			}
+			for _, streamedCall := range choice.Delta.ToolCalls {
+				partial := partialCalls[streamedCall.Index]
+				if partial == nil {
+					partial = &partialToolCall{}
+					partialCalls[streamedCall.Index] = partial
+				}
+				partial.ID += streamedCall.ID
+				partial.Name += streamedCall.Function.Name
+				partial.Arguments += streamedCall.Function.Arguments
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return ModelResponse{}, emitModelStreamError(sink, err)
+	}
+	if !terminal {
+		err = fmt.Errorf("model stream ended before completion")
+		return ModelResponse{}, emitModelStreamError(sink, err)
+	}
+
+	indexes := make([]int, 0, len(partialCalls))
+	for index := range partialCalls {
+		indexes = append(indexes, index)
+	}
+	sort.Ints(indexes)
+	toolCalls := make([]ModelToolCall, 0, len(indexes))
+	for _, index := range indexes {
+		partial := partialCalls[index]
+		providerName := strings.TrimSpace(partial.Name)
+		if providerName == "" {
+			continue
+		}
+		name := providerName
+		if mapped := strings.TrimSpace(toolAliases.ProviderToRuntime[providerName]); mapped != "" {
+			name = mapped
+		}
+		call := ModelToolCall{
+			ID:           strings.TrimSpace(partial.ID),
+			Name:         name,
+			Input:        parseOpenAIToolCallInput(partial.Arguments),
+			ProviderName: providerName,
+		}
+		toolCalls = append(toolCalls, call)
+		callEvent := call
+		emitModelStreamEvent(sink, ModelStreamEvent{Type: ModelStreamEventToolCall, ToolCall: &callEvent})
+	}
+	resp := ModelResponse{
+		Content:   strings.TrimSpace(content.String()),
+		ToolCalls: toolCalls,
+		Usage:     usage,
+	}
+	if resp.Content == "" && len(resp.ToolCalls) == 0 {
+		err = fmt.Errorf("model response missing message content")
+		return ModelResponse{}, emitModelStreamError(sink, err)
+	}
+	if modelUsagePresent(usage) {
+		usageEvent := usage
+		emitModelStreamEvent(sink, ModelStreamEvent{Type: ModelStreamEventUsage, Usage: &usageEvent})
+	}
+	completed := resp
+	emitModelStreamEvent(sink, ModelStreamEvent{Type: ModelStreamEventCompletion, Response: &completed})
+	return resp, nil
+}
+
+func (g *OpenAIModelGateway) buildRequest(req ModelRequest, stream bool) (openAIChatCompletionRequest, providerToolAliases, error) {
+	model := strings.TrimSpace(req.Model)
+	if model == "" {
+		model = strings.TrimSpace(g.defaultModel)
+	}
+	if model == "" {
+		return openAIChatCompletionRequest{}, providerToolAliases{}, fmt.Errorf("model is required")
+	}
+
+	body := openAIChatCompletionRequest{
+		Model:  model,
+		Stream: stream,
+	}
+	if stream {
+		body.StreamOptions = &openAIStreamOptions{IncludeUsage: true}
+	}
+	var toolAliases providerToolAliases
+	if len(req.Tools) > 0 {
+		body.Tools, toolAliases = buildOpenAIChatToolsWithAliases(req.Tools, req.ToolSchemas)
+		body.ToolChoice = "auto"
+	}
+	if len(req.Messages) > 0 {
+		body.Messages = chatMessagesToOpenAIWithAliases(req.Messages, toolAliases.RuntimeToProvider)
+	} else {
+		body.Messages = []openAIChatCompletionMessage{
+			{Role: "system", Content: strings.TrimSpace(req.Prompt)},
+			{Role: "user", Content: buildOpenAIUserContent(req)},
+		}
+		if strings.TrimSpace(req.Prompt) == "" {
+			body.Messages = body.Messages[1:]
+		}
+	}
+	if len(req.OutputSchema) > 0 {
+		body.ResponseFormat = &openAIResponseFormat{
+			Type: "json_schema",
+			JSONSchema: &openAIJSONSchema{
+				Name:   "agent_output",
+				Strict: true,
+				Schema: req.OutputSchema,
+			},
+		}
+	}
+	return body, toolAliases, nil
 }
 
 func buildOpenAIUserContent(req ModelRequest) string {
@@ -249,6 +417,12 @@ type openAIChatCompletionRequest struct {
 	Tools          []openAIChatTool              `json:"tools,omitempty"`
 	ToolChoice     string                        `json:"tool_choice,omitempty"`
 	ResponseFormat *openAIResponseFormat         `json:"response_format,omitempty"`
+	Stream         bool                          `json:"stream,omitempty"`
+	StreamOptions  *openAIStreamOptions          `json:"stream_options,omitempty"`
+}
+
+type openAIStreamOptions struct {
+	IncludeUsage bool `json:"include_usage"`
 }
 
 type openAIResponseFormat struct {
@@ -277,6 +451,29 @@ type openAIChatCompletionResponse struct {
 
 type openAIChatCompletionChoice struct {
 	Message openAIChatCompletionMessageResponse `json:"message"`
+}
+
+type openAIChatCompletionStreamChunk struct {
+	Choices []openAIChatCompletionStreamChoice `json:"choices"`
+	Error   *openAIProviderError               `json:"error,omitempty"`
+	Message string                             `json:"message,omitempty"`
+	Usage   *openAIUsage                       `json:"usage,omitempty"`
+}
+
+type openAIChatCompletionStreamChoice struct {
+	Delta        openAIChatCompletionStreamDelta `json:"delta"`
+	FinishReason *string                         `json:"finish_reason"`
+}
+
+type openAIChatCompletionStreamDelta struct {
+	Content   *string                   `json:"content"`
+	ToolCalls []openAIChatToolCallChunk `json:"tool_calls,omitempty"`
+}
+
+type openAIChatToolCallChunk struct {
+	Index    int                        `json:"index"`
+	ID       string                     `json:"id,omitempty"`
+	Function openAIChatToolFunctionCall `json:"function"`
 }
 
 type openAIChatCompletionMessageResponse struct {

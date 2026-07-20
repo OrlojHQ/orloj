@@ -292,12 +292,17 @@ func main() {
 		stores.Tasks, stores.AgentSystems, stores.Agents, stores.Tools,
 		stores.Memories, stores.Policies, stores.Workers, logger, *reconcile,
 	)
+	sessionController := controllers.NewSessionController(
+		stores.Sessions, stores.Tasks, stores.AgentSystems, logger, *reconcile,
+	)
+	sessionController.ConfigureWorker(*workerID, *leaseDuration, *heartbeatInterval)
 	taskController.SetDebugLogger(debugLogger)
 	taskController.ConfigureWorker(*workerID, *leaseDuration, *heartbeatInterval)
 	taskController.SetExecutionMode(*taskExecutionMode)
 	taskController.SetGovernanceStores(stores.Roles, stores.ToolPerms)
 	taskController.SetToolApprovalStore(stores.ToolApprovals)
 	taskController.SetTaskApprovalStore(stores.TaskApprovals)
+	taskController.SetSessionStore(stores.Sessions)
 	taskController.SetModelEndpointStore(stores.ModelEPs)
 	taskController.SetExecutor(taskExecutor)
 	taskController.SetExtensions(extensions)
@@ -479,11 +484,11 @@ func main() {
 					ToolApprovals:       stores.ToolApprovals,
 					TaskApprovals:       stores.TaskApprovals,
 					Policies:            stores.Policies,
-				ContextAdapters:     stores.ContextAdapters,
-				A2AToolRuntime:      a2aToolRT,
-				KubernetesToolRT:    k8sToolRT,
-				AgentK8sRuntime:     agentK8sRT,
-				DebugLogger:         debugLogger,
+					ContextAdapters:     stores.ContextAdapters,
+					A2AToolRuntime:      a2aToolRT,
+					KubernetesToolRT:    k8sToolRT,
+					AgentK8sRuntime:     agentK8sRT,
+					DebugLogger:         debugLogger,
 				},
 			)
 			go consumer.Start(ctx)
@@ -518,5 +523,6 @@ func main() {
 	}
 
 	logger.Printf("task worker starting id=%s lease=%s heartbeat=%s", *workerID, leaseDuration.String(), heartbeatInterval.String())
+	go sessionController.Start(ctx)
 	taskController.Start(ctx)
 }

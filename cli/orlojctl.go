@@ -2304,6 +2304,7 @@ var applyEndpoints = map[string]string{
 	"toolapproval":   "/v1/tool-approvals",
 	"taskapproval":   "/v1/task-approvals",
 	"task":           "/v1/tasks",
+	"session":        "/v1/sessions",
 	"taskschedule":   "/v1/task-schedules",
 	"taskwebhook":    "/v1/task-webhooks",
 	"worker":         "/v1/workers",
@@ -2371,6 +2372,8 @@ func normalizeResource(resource string) string {
 		return "task-approvals"
 	case "tasks", "task":
 		return "tasks"
+	case "sessions", "session":
+		return "sessions"
 	case "task-schedules", "taskschedules", "taskschedule":
 		return "task-schedules"
 	case "task-webhooks", "taskwebhooks", "taskwebhook":
@@ -2418,6 +2421,8 @@ func listEndpointForResource(resource string) (string, error) {
 		return "/v1/task-approvals", nil
 	case "tasks":
 		return "/v1/tasks", nil
+	case "sessions":
+		return "/v1/sessions", nil
 	case "task-schedules":
 		return "/v1/task-schedules", nil
 	case "task-webhooks":

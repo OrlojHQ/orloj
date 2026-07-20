@@ -36,6 +36,7 @@ type TaskController struct {
 	toolPermStore       *store.ToolPermissionStore
 	toolApprovalStore   *store.ToolApprovalStore
 	taskApprovalStore   *store.TaskApprovalStore
+	sessionStore        *store.SessionStore
 	workerStore         *store.WorkerStore
 	executor            *agentruntime.TaskExecutor
 	reconcileEvery      time.Duration
@@ -164,6 +165,10 @@ func (c *TaskController) SetTaskApprovalStore(s *store.TaskApprovalStore) {
 	c.taskApprovalStore = s
 }
 
+func (c *TaskController) SetSessionStore(s *store.SessionStore) {
+	c.sessionStore = s
+}
+
 func (c *TaskController) SetModelEndpointStore(modelEPStore *store.ModelEndpointStore) {
 	c.modelEPStore = modelEPStore
 }
@@ -181,6 +186,134 @@ func (c *TaskController) SetExtensions(ext agentruntime.Extensions) {
 
 func (c *TaskController) SetContextAdapterStore(s *store.ContextAdapterStore) {
 	c.contextAdapterStore = s
+}
+
+func (c *TaskController) executionEventSink(
+	ctx context.Context,
+	task *resources.Task,
+	agent, branchID, parentBranchID string,
+) agentruntime.ExecutionEventSink {
+	stepSink := func(evt agentruntime.AgentStepEvent) {
+		if c.eventBus == nil {
+			return
+		}
+		if strings.TrimSpace(evt.Agent) == "" {
+			evt.Agent = strings.TrimSpace(agent)
+		}
+		if strings.TrimSpace(evt.BranchID) == "" {
+			evt.BranchID = strings.TrimSpace(branchID)
+		}
+		if strings.TrimSpace(evt.ParentBranchID) == "" {
+			evt.ParentBranchID = strings.TrimSpace(parentBranchID)
+		}
+		c.eventBus.Publish(eventbus.Event{
+			Source:    "task-controller",
+			Type:      "task.trace",
+			Kind:      "Task",
+			Name:      task.Metadata.Name,
+			Namespace: resources.NormalizeNamespace(task.Metadata.Namespace),
+			Data:      evt,
+		})
+	}
+
+	sessionName := strings.TrimSpace(task.Metadata.Labels["orloj.dev/session"])
+	turnID := strings.TrimSpace(task.Metadata.Labels["orloj.dev/turn"])
+	streamAgent := strings.TrimSpace(task.Spec.Input["session.stream_agent"])
+	if c.sessionStore == nil || sessionName == "" || turnID == "" {
+		return agentruntime.ExecutionEventSink{StepEvent: stepSink}
+	}
+	key := store.ScopedName(task.Metadata.Namespace, sessionName)
+	messageID := ""
+	resolveMessageID := func() string {
+		if messageID != "" {
+			return messageID
+		}
+		turns, err := c.sessionStore.ListTurns(ctx, key)
+		if err != nil {
+			return ""
+		}
+		for _, turn := range turns {
+			if turn.ID == turnID {
+				messageID = turn.AssistantMessageID
+				break
+			}
+		}
+		return messageID
+	}
+	modelSink := func(modelEvent agentruntime.ModelStreamEvent) {
+		eventType := ""
+		payload := map[string]any{
+			"agent": strings.TrimSpace(agent),
+			"task":  task.Metadata.Name,
+		}
+		switch modelEvent.Type {
+		case agentruntime.ModelStreamEventTextDelta:
+			if streamAgent != "" && !strings.EqualFold(streamAgent, agent) {
+				return
+			}
+			if modelEvent.Delta == "" {
+				return
+			}
+			eventType = resources.SessionEventMessageDelta
+			payload["role"] = "assistant"
+			payload["delta"] = modelEvent.Delta
+		case agentruntime.ModelStreamEventToolCall:
+			if modelEvent.ToolCall == nil {
+				return
+			}
+			eventType = resources.SessionEventToolStarted
+			payload["tool"] = modelEvent.ToolCall.Name
+			payload["tool_call_id"] = modelEvent.ToolCall.ID
+			payload["input"] = modelEvent.ToolCall.Input
+		case agentruntime.ModelStreamEventError:
+			if modelEvent.Err == nil {
+				return
+			}
+			eventType = resources.SessionEventError
+			payload["message"] = modelEvent.Err.Error()
+		default:
+			return
+		}
+		session, ok, err := c.sessionStore.Get(ctx, key)
+		if err != nil || !ok {
+			return
+		}
+		evt, err := c.sessionStore.AppendEvent(
+			ctx,
+			key,
+			turnID,
+			session.Status.ClaimedBy,
+			session.Status.Fence,
+			resources.SessionEvent{
+				Type:      eventType,
+				TurnID:    turnID,
+				MessageID: resolveMessageID(),
+				Payload:   payload,
+			},
+		)
+		if err != nil {
+			lower := strings.ToLower(err.Error())
+			if !strings.Contains(lower, "fence changed") && !strings.Contains(lower, "not running") && c.logger != nil {
+				c.logger.Printf("session stream append failed task=%s session=%s turn=%s: %v", task.Metadata.Name, sessionName, turnID, err)
+			}
+			return
+		}
+		if c.eventBus != nil {
+			c.eventBus.Publish(eventbus.Event{
+				Source:    "task-controller",
+				Type:      evt.Type,
+				Kind:      "Session",
+				Name:      evt.SessionName,
+				Namespace: evt.Namespace,
+				Action:    evt.Type,
+				Data:      evt,
+			})
+		}
+	}
+	return agentruntime.ExecutionEventSink{
+		StepEvent:   stepSink,
+		ModelStream: modelSink,
+	}
 }
 
 func (c *TaskController) adaptRuntimeInput(ctx context.Context, task *resources.Task, system resources.AgentSystem, input map[string]string) (map[string]string, error) {
@@ -1804,35 +1937,10 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 	if adaptErr != nil {
 		return nil, fmt.Errorf("context adapter: %w", adaptErr)
 	}
-	currentAgent := ""
-	currentBranchID := ""
-	currentParentBranchID := ""
-	if c.eventBus != nil {
-		c.executor.OnStepEvent = func(evt agentruntime.AgentStepEvent) {
-			if strings.TrimSpace(evt.Agent) == "" {
-				evt.Agent = currentAgent
-			}
-			if strings.TrimSpace(evt.BranchID) == "" {
-				evt.BranchID = currentBranchID
-			}
-			if strings.TrimSpace(evt.ParentBranchID) == "" {
-				evt.ParentBranchID = currentParentBranchID
-			}
-			c.eventBus.Publish(eventbus.Event{
-				Source:    "task-controller",
-				Type:      "task.trace",
-				Kind:      "Task",
-				Name:      task.Metadata.Name,
-				Namespace: resources.NormalizeNamespace(task.Metadata.Namespace),
-				Data:      evt,
-			})
-		}
-	}
-	defer func() { c.executor.OnStepEvent = nil }()
 	for idx, agentName := range order {
-		currentAgent = strings.TrimSpace(agentName)
-		currentBranchID = strings.TrimSpace(runtimeInput["inbox.branch_id"])
-		currentParentBranchID = strings.TrimSpace(runtimeInput["inbox.parent_branch_id"])
+		currentAgent := strings.TrimSpace(agentName)
+		currentBranchID := strings.TrimSpace(runtimeInput["inbox.branch_id"])
+		currentParentBranchID := strings.TrimSpace(runtimeInput["inbox.parent_branch_id"])
 		agentInputBefore := copyStringMap(runtimeInput)
 		lastAgentInputBefore = copyStringMap(agentInputBefore)
 		agent, ok, err := c.agentStore.Get(ctx, store.ScopedName(task.Metadata.Namespace, agentName))
@@ -1937,12 +2045,13 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 		}
 
 		var result agentruntime.AgentExecutionResult
+		eventSink := c.executionEventSink(agentCtx, task, currentAgent, currentBranchID, currentParentBranchID)
 		if c.agentK8sRuntime != nil && c.canRunAgentAsJob(agentCtx, agent) {
 			syncMsgID := fmt.Sprintf("sync/a%d/%s", task.Status.Attempts, agentName)
 			jobResult, jobErr := c.agentK8sRuntime.ExecuteAgent(agentCtx, *task, agent, runtimeInput, task.Status.Attempts, syncMsgID)
 			if jobErr != nil {
 				c.logger.Printf("agent k8s job failed for %s (falling back to in-process): %v", agentName, jobErr)
-				result, err = c.executor.ExecuteAgentWithRuntime(agentCtx, agent, runtimeInput, finalRT)
+				result, err = c.executor.ExecuteAgentWithRuntimeAndEventSink(agentCtx, agent, runtimeInput, finalRT, eventSink)
 			} else if jobResult.Error != "" {
 				result = agentruntime.AgentJobResultToExecution(jobResult, agentName)
 				err = fmt.Errorf("%s", jobResult.Error)
@@ -1950,7 +2059,7 @@ func (c *TaskController) executeTask(ctx context.Context, task *resources.Task, 
 				result = agentruntime.AgentJobResultToExecution(jobResult, agentName)
 			}
 		} else {
-			result, err = c.executor.ExecuteAgentWithRuntime(agentCtx, agent, runtimeInput, finalRT)
+			result, err = c.executor.ExecuteAgentWithRuntimeAndEventSink(agentCtx, agent, runtimeInput, finalRT, eventSink)
 		}
 		if err != nil {
 			category := "failure"
@@ -2314,36 +2423,11 @@ func (c *TaskController) executeTaskFromResume(
 			return nil, fmt.Errorf("context adapter: %w", adaptErr)
 		}
 	}
-	currentAgent := ""
-	currentBranchID := ""
-	currentParentBranchID := ""
-	if c.eventBus != nil {
-		c.executor.OnStepEvent = func(evt agentruntime.AgentStepEvent) {
-			if strings.TrimSpace(evt.Agent) == "" {
-				evt.Agent = currentAgent
-			}
-			if strings.TrimSpace(evt.BranchID) == "" {
-				evt.BranchID = currentBranchID
-			}
-			if strings.TrimSpace(evt.ParentBranchID) == "" {
-				evt.ParentBranchID = currentParentBranchID
-			}
-			c.eventBus.Publish(eventbus.Event{
-				Source:    "task-controller",
-				Type:      "task.trace",
-				Kind:      "Task",
-				Name:      task.Metadata.Name,
-				Namespace: resources.NormalizeNamespace(task.Metadata.Namespace),
-				Data:      evt,
-			})
-		}
-	}
-	defer func() { c.executor.OnStepEvent = nil }()
 	for idx := startIndex; idx < len(order); idx++ {
 		agentName := order[idx]
-		currentAgent = strings.TrimSpace(agentName)
-		currentBranchID = strings.TrimSpace(runtimeInput["inbox.branch_id"])
-		currentParentBranchID = strings.TrimSpace(runtimeInput["inbox.parent_branch_id"])
+		currentAgent := strings.TrimSpace(agentName)
+		currentBranchID := strings.TrimSpace(runtimeInput["inbox.branch_id"])
+		currentParentBranchID := strings.TrimSpace(runtimeInput["inbox.parent_branch_id"])
 		agentInputBefore := copyStringMap(runtimeInput)
 		lastAgentInputBefore = copyStringMap(agentInputBefore)
 		agent, ok, err := c.agentStore.Get(ctx, store.ScopedName(task.Metadata.Namespace, agentName))
@@ -2415,11 +2499,12 @@ func (c *TaskController) executeTaskFromResume(
 		}
 
 		var result agentruntime.AgentExecutionResult
+		eventSink := c.executionEventSink(ctx, task, currentAgent, currentBranchID, currentParentBranchID)
 		if c.agentK8sRuntime != nil && c.canRunAgentAsJob(ctx, agent) {
 			jobResult, jobErr := c.agentK8sRuntime.ExecuteAgent(ctx, *task, agent, runtimeInput, task.Status.Attempts, syncMsgID)
 			if jobErr != nil {
 				c.logger.Printf("agent k8s job failed for %s (falling back to in-process): %v", agentName, jobErr)
-				result, err = c.executor.ExecuteAgentWithRuntime(ctx, agent, runtimeInput, finalRT)
+				result, err = c.executor.ExecuteAgentWithRuntimeAndEventSink(ctx, agent, runtimeInput, finalRT, eventSink)
 			} else if jobResult.Error != "" {
 				result = agentruntime.AgentJobResultToExecution(jobResult, agentName)
 				err = fmt.Errorf("%s", jobResult.Error)
@@ -2427,7 +2512,7 @@ func (c *TaskController) executeTaskFromResume(
 				result = agentruntime.AgentJobResultToExecution(jobResult, agentName)
 			}
 		} else {
-			result, err = c.executor.ExecuteAgentWithRuntime(ctx, agent, runtimeInput, finalRT)
+			result, err = c.executor.ExecuteAgentWithRuntimeAndEventSink(ctx, agent, runtimeInput, finalRT, eventSink)
 		}
 		if err != nil {
 			return nil, fmt.Errorf("agent %q execution failed: %w", agentName, err)

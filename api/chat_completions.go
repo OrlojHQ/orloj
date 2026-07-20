@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -25,11 +24,6 @@ const (
 	chatCompletionMaxDuration   = 30 * time.Minute
 	chatCompletionMaxConcurrent = 1000
 	chatCompletionHeartbeat     = 15 * time.Second
-)
-
-var (
-	chatModelOutputPrefixRegex = regexp.MustCompile(`^step=\d+\s+model_output=`)
-	chatAgentMessageContentKey = regexp.MustCompile(`^agent\.(\d+)\.message_content$`)
 )
 
 type chatCompletionRequest struct {
@@ -134,14 +128,14 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	r = r.WithContext(ctx)
 
 	completionID := "chatcmpl-" + randomHexID(12)
-	taskName := "chatcmpl-" + randomHexID(8)
+	sessionName := "chatcmpl-" + randomHexID(8)
 	now := time.Now().UTC()
 
-	task := resources.Task{
+	session := resources.Session{
 		APIVersion: "orloj.dev/v1",
-		Kind:       "Task",
+		Kind:       "Session",
 		Metadata: resources.ObjectMeta{
-			Name:      taskName,
+			Name:      sessionName,
 			Namespace: resources.NormalizeNamespace(system.Metadata.Namespace),
 			Labels: map[string]string{
 				chatCompletionsLabel: chatCompletionsCreatedBy,
@@ -151,52 +145,56 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 				"orloj.dev/chat-completion-id": completionID,
 			},
 		},
-		Spec: resources.TaskSpec{
-			System: system.Metadata.Name,
-			Mode:   "run",
-			Input: map[string]string{
-				"topic": prompt,
-			},
+		Spec: resources.SessionSpec{
+			System:   system.Metadata.Name,
+			IdleTTL:  chatCompletionMaxDuration.String(),
+			MaxTurns: 1,
 		},
-		Status: resources.TaskStatus{
-			Phase:     "Pending",
-			StartedAt: now.Format(time.RFC3339Nano),
-		},
+		Status: resources.SessionStatus{SystemGeneration: system.Metadata.Generation},
 	}
-	telemetry.InjectTraceContext(r.Context(), task.Metadata.Annotations)
+	telemetry.InjectTraceContext(r.Context(), session.Metadata.Annotations)
 
-	created, err := s.stores.Tasks.Upsert(r.Context(), task)
+	created, err := s.stores.Sessions.Upsert(r.Context(), session)
 	if err != nil {
-		writeChatCompletionError(w, http.StatusServiceUnavailable, "failed to create task", "server_error")
+		writeChatCompletionError(w, http.StatusServiceUnavailable, "failed to create session", "server_error")
 		return
 	}
-	s.publishResourceEvent("Task", created.Metadata.Name, "created", created)
+	s.publishResourceEvent("Session", created.Metadata.Name, "created", created)
+	if initial, listErr := s.stores.Sessions.ListEvents(r.Context(), store.ScopedName(created.Metadata.Namespace, created.Metadata.Name), 0, 1); listErr == nil {
+		s.publishSessionEvents(initial)
+	}
+	turn, turnEvents, _, err := s.stores.Sessions.EnqueueTurn(
+		r.Context(),
+		store.ScopedName(created.Metadata.Namespace, created.Metadata.Name),
+		resources.SessionTurn{
+			Content:        prompt,
+			IdempotencyKey: completionID,
+		},
+	)
+	if err != nil {
+		writeChatCompletionError(w, http.StatusServiceUnavailable, "failed to create session turn", "server_error")
+		return
+	}
+	s.publishSessionEvents(turnEvents)
 
 	if req.Stream {
-		s.streamChatCompletionTask(w, r, created, completionID, model, now.Unix())
+		s.streamChatCompletionSession(w, r, created, turn, completionID, model, now.Unix())
 		return
 	}
 
-	finished, err := s.waitForChatCompletionTask(r.Context(), created, nil)
+	_, content, usage, err := s.waitForChatCompletionSession(r.Context(), created, turn, nil, nil)
 	if err != nil {
 		if r.Context().Err() != nil {
-			writeChatCompletionError(w, http.StatusGatewayTimeout, "request cancelled or timed out while waiting for task", "server_error")
+			writeChatCompletionError(w, http.StatusGatewayTimeout, "request cancelled or timed out while waiting for session", "server_error")
 			return
 		}
-		writeChatCompletionError(w, http.StatusInternalServerError, err.Error(), "server_error")
-		return
-	}
-
-	content, mapErr := chatCompletionContentFromTask(finished)
-	if mapErr != nil {
 		status := http.StatusInternalServerError
 		errType := "server_error"
-		phase := strings.TrimSpace(finished.Status.Phase)
-		if phase == "WaitingApproval" {
+		if strings.Contains(strings.ToLower(err.Error()), "approval") {
 			status = http.StatusConflict
 			errType = "invalid_request_error"
 		}
-		writeChatCompletionError(w, status, mapErr.Error(), errType)
+		writeChatCompletionError(w, status, err.Error(), errType)
 		return
 	}
 
@@ -213,6 +211,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 			},
 			FinishReason: stringPtr("stop"),
 		}},
+		Usage: usage,
 	}
 
 	writeJSON(w, http.StatusOK, resp)
@@ -239,27 +238,26 @@ func (s *Server) acquireChatCompletion(w http.ResponseWriter, r *http.Request) (
 	return ctx, cancel, true
 }
 
-func (s *Server) waitForChatCompletionTask(
+func (s *Server) waitForChatCompletionSession(
 	ctx context.Context,
-	task resources.Task,
+	session resources.Session,
+	turn resources.SessionTurn,
 	heartbeat func(),
-) (resources.Task, error) {
-	key := store.ScopedName(task.Metadata.Namespace, task.Metadata.Name)
-	namespace := resources.NormalizeNamespace(task.Metadata.Namespace)
-
-	var events <-chan eventbus.Event
+	onEvent func(resources.SessionEvent) error,
+) (resources.Session, string, *chatCompletionUsage, error) {
+	key := store.ScopedName(session.Metadata.Namespace, session.Metadata.Name)
+	namespace := resources.NormalizeNamespace(session.Metadata.Namespace)
+	var wake <-chan eventbus.Event
 	if s.bus != nil {
-		since := s.bus.LatestID()
-		events = s.bus.Subscribe(ctx, eventbus.Filter{
-			SinceID:   since,
-			Kind:      "Task",
-			Name:      task.Metadata.Name,
+		wake = s.bus.Subscribe(ctx, eventbus.Filter{
+			SinceID:   s.bus.LatestID(),
+			Kind:      "Session",
+			Name:      session.Metadata.Name,
 			Namespace: namespace,
 		})
 	}
-
-	ticker := time.NewTicker(500 * time.Millisecond)
-	defer ticker.Stop()
+	poll := time.NewTicker(500 * time.Millisecond)
+	defer poll.Stop()
 	var heartbeatC <-chan time.Time
 	var heartbeatTicker *time.Ticker
 	if heartbeat != nil {
@@ -268,110 +266,99 @@ func (s *Server) waitForChatCompletionTask(
 		defer heartbeatTicker.Stop()
 	}
 
+	var cursor uint64
+	var content string
+	var usage *chatCompletionUsage
 	for {
-		current, ok, err := s.stores.Tasks.Get(ctx, key)
+		events, err := s.stores.Sessions.ListEvents(ctx, key, cursor, 500)
 		if err != nil {
-			return resources.Task{}, fmt.Errorf("failed to load task: %w", err)
+			return resources.Session{}, "", nil, fmt.Errorf("failed to load session events: %w", err)
 		}
-		if !ok {
-			return resources.Task{}, fmt.Errorf("task %q not found", task.Metadata.Name)
-		}
-		if isChatCompletionTerminal(current.Status.Phase) {
-			return current, nil
+		for _, evt := range events {
+			cursor = evt.Sequence
+			if evt.TurnID != "" && evt.TurnID != turn.ID {
+				continue
+			}
+			if evt.Type == resources.SessionEventMessageCompleted && evt.MessageID == turn.AssistantMessageID {
+				if value, ok := evt.Payload["content"].(string); ok {
+					content = strings.TrimSpace(value)
+				}
+				usage = chatCompletionUsageFromSessionEvent(evt)
+			}
+			if onEvent != nil {
+				if err := onEvent(evt); err != nil {
+					return resources.Session{}, "", nil, err
+				}
+			}
 		}
 
-		if events == nil {
-			select {
-			case <-ctx.Done():
-				return resources.Task{}, ctx.Err()
-			case <-ticker.C:
-			case <-heartbeatC:
-				heartbeat()
+		current, ok, err := s.stores.Sessions.Get(ctx, key)
+		if err != nil {
+			return resources.Session{}, "", nil, fmt.Errorf("failed to load session: %w", err)
+		}
+		if !ok {
+			return resources.Session{}, "", nil, fmt.Errorf("session %q not found", session.Metadata.Name)
+		}
+		if current.Status.CompletedTurns > 0 || strings.EqualFold(current.Status.Phase, resources.SessionPhaseCompleted) {
+			if content == "" {
+				return current, "", usage, fmt.Errorf("session %q completed but produced no assistant content", session.Metadata.Name)
 			}
-			continue
+			return current, content, usage, nil
+		}
+		if strings.EqualFold(current.Status.Phase, resources.SessionPhaseWaitingApproval) {
+			return current, "", usage, fmt.Errorf("session %q is waiting for approval", session.Metadata.Name)
+		}
+		if resources.IsTerminalSessionPhase(current.Status.Phase) {
+			message := strings.TrimSpace(current.Status.LastError)
+			if message == "" {
+				message = fmt.Sprintf("session %q ended in phase %s", session.Metadata.Name, current.Status.Phase)
+			}
+			return current, "", usage, fmt.Errorf("%s", message)
 		}
 
 		select {
 		case <-ctx.Done():
-			return resources.Task{}, ctx.Err()
-		case _, ok := <-events:
-			if !ok {
-				if ctx.Err() != nil {
-					return resources.Task{}, ctx.Err()
-				}
-				events = nil
-			}
-		case <-ticker.C:
-			// periodic re-check in case an update was missed between subscribe and first get
+			return resources.Session{}, "", usage, ctx.Err()
+		case <-wake:
+		case <-poll.C:
 		case <-heartbeatC:
 			heartbeat()
 		}
 	}
 }
 
-func isChatCompletionTerminal(phase string) bool {
-	switch strings.TrimSpace(phase) {
-	case "Succeeded", "Failed", "DeadLetter", "WaitingApproval":
-		return true
-	default:
-		return false
+func chatCompletionUsageFromSessionEvent(evt resources.SessionEvent) *chatCompletionUsage {
+	raw, ok := evt.Payload["usage"].(map[string]any)
+	if !ok || raw == nil {
+		return nil
 	}
-}
-
-func chatCompletionContentFromTask(task resources.Task) (string, error) {
-	phase := strings.TrimSpace(task.Status.Phase)
-	switch phase {
-	case "Succeeded":
-		content := flattenChatCompletionOutput(task.Status.Output)
-		if strings.TrimSpace(content) == "" {
-			return "", fmt.Errorf("task %q succeeded but produced no assistant content", task.Metadata.Name)
-		}
-		return content, nil
-	case "WaitingApproval":
-		return "", fmt.Errorf("task %q is waiting for approval and cannot complete a chat completion", task.Metadata.Name)
-	case "Failed", "DeadLetter":
-		msg := strings.TrimSpace(task.Status.LastError)
-		if msg == "" {
-			msg = fmt.Sprintf("task %q ended in phase %s", task.Metadata.Name, phase)
-		}
-		return "", fmt.Errorf("%s", msg)
-	default:
-		return "", fmt.Errorf("task %q ended in unexpected phase %q", task.Metadata.Name, phase)
-	}
-}
-
-func flattenChatCompletionOutput(output map[string]string) string {
-	if len(output) == 0 {
-		return ""
-	}
-	if v, ok := output["last_output"]; ok && strings.TrimSpace(v) != "" {
-		v = chatModelOutputPrefixRegex.ReplaceAllString(v, "")
-		return resources.UnwrapFencedCodeBlock(strings.TrimSpace(v))
-	}
-	if v, ok := output["response"]; ok && strings.TrimSpace(v) != "" {
-		return strings.TrimSpace(v)
-	}
-	if v, ok := output["result"]; ok && strings.TrimSpace(v) != "" && v != "executed" {
-		return strings.TrimSpace(v)
-	}
-
-	bestIdx := -1
-	bestContent := ""
-	for key, value := range output {
-		match := chatAgentMessageContentKey.FindStringSubmatch(key)
-		if match == nil {
-			continue
-		}
-		idx, err := strconv.Atoi(match[1])
-		if err != nil || strings.TrimSpace(value) == "" {
-			continue
-		}
-		if idx >= bestIdx {
-			bestIdx = idx
-			bestContent = strings.TrimSpace(value)
+	asInt := func(key string) int {
+		switch value := raw[key].(type) {
+		case int:
+			return value
+		case int64:
+			return int(value)
+		case float64:
+			return int(value)
+		case json.Number:
+			parsed, _ := strconv.Atoi(value.String())
+			return parsed
+		default:
+			return 0
 		}
 	}
-	return bestContent
+	usage := &chatCompletionUsage{
+		PromptTokens:     asInt("input_tokens"),
+		CompletionTokens: asInt("output_tokens"),
+		TotalTokens:      asInt("total_tokens"),
+	}
+	if usage.TotalTokens == 0 {
+		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
+	}
+	if usage.TotalTokens == 0 {
+		return nil
+	}
+	return usage
 }
 
 func flattenChatMessages(messages []chatCompletionMessage) (string, error) {
@@ -421,10 +408,11 @@ func writeChatCompletionError(w http.ResponseWriter, status int, message, errTyp
 	})
 }
 
-func (s *Server) streamChatCompletionTask(
+func (s *Server) streamChatCompletionSession(
 	w http.ResponseWriter,
 	r *http.Request,
-	task resources.Task,
+	session resources.Session,
+	turn resources.SessionTurn,
 	completionID string,
 	model string,
 	created int64,
@@ -434,13 +422,11 @@ func (s *Server) streamChatCompletionTask(
 		writeChatCompletionError(w, http.StatusInternalServerError, "streaming is not supported", "server_error")
 		return
 	}
-
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 	w.WriteHeader(http.StatusOK)
-
 	writeChatCompletionChunk(w, flusher, chatCompletionResponse{
 		ID:      completionID,
 		Object:  "chat.completion.chunk",
@@ -452,14 +438,53 @@ func (s *Server) streamChatCompletionTask(
 		}},
 	})
 
-	finished, err := s.waitForChatCompletionTask(r.Context(), task, func() {
-		_, _ = fmt.Fprint(w, ": keep-alive\n\n")
-		flusher.Flush()
-	})
+	sentContent := false
+	var streamedContent strings.Builder
+	_, content, usage, err := s.waitForChatCompletionSession(
+		r.Context(),
+		session,
+		turn,
+		func() {
+			_, _ = fmt.Fprint(w, ": keep-alive\n\n")
+			flusher.Flush()
+		},
+		func(evt resources.SessionEvent) error {
+			if evt.TurnID != "" && evt.TurnID != turn.ID {
+				return nil
+			}
+			switch evt.Type {
+			case resources.SessionEventMessageDelta:
+				if evt.MessageID != "" && evt.MessageID != turn.AssistantMessageID {
+					return nil
+				}
+				delta, _ := evt.Payload["delta"].(string)
+				if delta == "" {
+					return nil
+				}
+				sentContent = true
+				streamedContent.WriteString(delta)
+				writeChatCompletionChunk(w, flusher, chatCompletionResponse{
+					ID:      completionID,
+					Object:  "chat.completion.chunk",
+					Created: created,
+					Model:   model,
+					Choices: []chatCompletionChoice{{
+						Index: 0,
+						Delta: &chatCompletionMsgOut{Content: delta},
+					}},
+				})
+			case resources.SessionEventMessageReset:
+				if sentContent {
+					return fmt.Errorf("session execution restarted after partial content was streamed")
+				}
+			}
+			return nil
+		},
+	)
 	if err != nil {
 		message := err.Error()
 		if r.Context().Err() != nil {
-			message = "request cancelled or timed out while waiting for task"
+			message = "request cancelled or timed out while waiting for session"
 		}
 		writeChatCompletionSSE(w, flusher, chatCompletionErrorBody{
 			Error: chatCompletionError{Message: message, Type: "server_error"},
@@ -467,26 +492,33 @@ func (s *Server) streamChatCompletionTask(
 		writeChatCompletionDone(w, flusher)
 		return
 	}
-
-	content, err := chatCompletionContentFromTask(finished)
-	if err != nil {
-		writeChatCompletionSSE(w, flusher, chatCompletionErrorBody{
-			Error: chatCompletionError{Message: err.Error(), Type: "server_error"},
-		})
-		writeChatCompletionDone(w, flusher)
-		return
+	remaining := content
+	if sentContent {
+		emitted := streamedContent.String()
+		if !strings.HasPrefix(content, emitted) {
+			writeChatCompletionSSE(w, flusher, chatCompletionErrorBody{
+				Error: chatCompletionError{
+					Message: "durable completed content diverged from streamed model output",
+					Type:    "server_error",
+				},
+			})
+			writeChatCompletionDone(w, flusher)
+			return
+		}
+		remaining = strings.TrimPrefix(content, emitted)
 	}
-
-	writeChatCompletionChunk(w, flusher, chatCompletionResponse{
-		ID:      completionID,
-		Object:  "chat.completion.chunk",
-		Created: created,
-		Model:   model,
-		Choices: []chatCompletionChoice{{
-			Index: 0,
-			Delta: &chatCompletionMsgOut{Content: content},
-		}},
-	})
+	if remaining != "" {
+		writeChatCompletionChunk(w, flusher, chatCompletionResponse{
+			ID:      completionID,
+			Object:  "chat.completion.chunk",
+			Created: created,
+			Model:   model,
+			Choices: []chatCompletionChoice{{
+				Index: 0,
+				Delta: &chatCompletionMsgOut{Content: remaining},
+			}},
+		})
+	}
 	writeChatCompletionChunk(w, flusher, chatCompletionResponse{
 		ID:      completionID,
 		Object:  "chat.completion.chunk",
@@ -497,6 +529,7 @@ func (s *Server) streamChatCompletionTask(
 			Delta:        &chatCompletionMsgOut{},
 			FinishReason: stringPtr("stop"),
 		}},
+		Usage: usage,
 	})
 	writeChatCompletionDone(w, flusher)
 }

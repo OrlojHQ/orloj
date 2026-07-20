@@ -90,6 +90,12 @@ func ParseManifest(kind string, raw []byte) (normKind string, name string, obj a
 			return "", "", nil, e
 		}
 		return normKind, o.Metadata.Name, o, nil
+	case "session":
+		o, e := ParseSessionManifest(raw)
+		if e != nil {
+			return "", "", nil, e
+		}
+		return normKind, o.Metadata.Name, o, nil
 	case "taskschedule":
 		o, e := ParseTaskScheduleManifest(raw)
 		if e != nil {

@@ -1,0 +1,138 @@
+components:
+  schemas:
+    SessionSpec:
+      type: object
+      required: [system]
+      properties:
+        system:
+          type: string
+          description: AgentSystem that handles each conversational turn.
+        idle_ttl:
+          type: string
+          default: 24h
+        max_turns:
+          type: integer
+          minimum: 0
+        input:
+          type: object
+          additionalProperties: { type: string }
+    SessionStatus:
+      type: object
+      properties:
+        phase:
+          type: string
+          enum: [WaitingInput, Running, Paused, WaitingApproval, Failed, Cancelled, Completed, Expired]
+        lastError: { type: string }
+        startedAt: { type: string }
+        completedAt: { type: string }
+        lastActivityAt: { type: string }
+        expiresAt: { type: string }
+        activeTurnID: { type: string }
+        queuedTurns: { type: integer }
+        completedTurns: { type: integer }
+        lastEventSequence: { type: integer, format: int64, minimum: 0 }
+        claimedBy: { type: string }
+        leaseUntil: { type: string }
+        lastHeartbeat: { type: string }
+        fence: { type: integer, format: int64 }
+        systemGeneration: { type: integer, format: int64 }
+        blockedOn:
+          $ref: "task.yaml#/components/schemas/TaskBlockedOn"
+        observedGeneration: { type: integer, format: int64 }
+    Session:
+      type: object
+      required: [apiVersion, kind, metadata, spec]
+      properties:
+        apiVersion: { type: string, enum: [orloj.dev/v1] }
+        kind: { type: string, enum: [Session] }
+        metadata:
+          $ref: "common.yaml#/components/schemas/ObjectMeta"
+        spec:
+          $ref: "#/components/schemas/SessionSpec"
+        status:
+          $ref: "#/components/schemas/SessionStatus"
+    SessionList:
+      allOf:
+        - $ref: "common.yaml#/components/schemas/ListMeta"
+        - type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/Session"
+    SessionTurn:
+      type: object
+      required: [id, content]
+      properties:
+        id: { type: string }
+        session_name: { type: string }
+        namespace: { type: string }
+        queue_sequence: { type: integer, format: int64 }
+        message_id: { type: string }
+        assistant_message_id: { type: string }
+        content: { type: string }
+        interrupt: { type: boolean }
+        idempotency_key: { type: string }
+        phase:
+          type: string
+          enum: [Queued, Running, Succeeded, Failed, Cancelled]
+        attempt: { type: integer }
+        claimed_by: { type: string }
+        lease_until: { type: string }
+        fence: { type: integer, format: int64 }
+        created_at: { type: string }
+        started_at: { type: string }
+        completed_at: { type: string }
+        last_error: { type: string }
+    SessionTurnRequest:
+      type: object
+      required: [content]
+      properties:
+        content: { type: string, minLength: 1 }
+        interrupt: { type: boolean, default: false }
+    SessionTurnResponse:
+      type: object
+      required: [turn, created]
+      properties:
+        turn:
+          $ref: "#/components/schemas/SessionTurn"
+        created: { type: boolean }
+    SessionTurnList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SessionTurn"
+    SessionEvent:
+      type: object
+      required: [seq, event_id, session_name, namespace, type, timestamp]
+      properties:
+        seq: { type: integer, format: int64, minimum: 1 }
+        event_id: { type: string }
+        session_name: { type: string }
+        namespace: { type: string }
+        turn_id: { type: string }
+        message_id: { type: string }
+        attempt: { type: integer }
+        causation_id: { type: string }
+        idempotency_key: { type: string }
+        type: { type: string }
+        timestamp: { type: string }
+        payload:
+          type: object
+          additionalProperties: true
+    SessionEventList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SessionEvent"
+    SessionControlRequest:
+      type: object
+      properties:
+        reason: { type: string }

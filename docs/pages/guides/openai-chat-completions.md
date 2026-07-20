@@ -4,8 +4,9 @@ Orloj exposes an OpenAI-compatible `POST /v1/chat/completions` facade so existin
 OpenAI client libraries can invoke an AgentSystem by setting `base_url` and
 `model`.
 
-Under the hood Orloj creates a Task, waits for a terminal phase, and maps
-`status.output` into an OpenAI-shaped completion.
+Under the hood Orloj creates a one-turn Session. The Session executes through
+the normal AgentSystem Task runtime and maps its completed assistant message
+into an OpenAI-shaped completion.
 
 ## Prerequisites
 
@@ -34,7 +35,7 @@ curl -sS "$OPENAI_BASE_URL/chat/completions" \
 
 - `model` is the **AgentSystem name**, not a foundation model id
 - Namespace defaults to `default`; pass `?namespace=<ns>` when needed
-- Message text is flattened into the Task input key `topic`
+- Message text is flattened into the Session turn content
 
 With the official Python OpenAI SDK:
 
@@ -56,28 +57,26 @@ print(completion.choices[0].message.content)
 ## Streaming
 
 `stream: true` opens an OpenAI-shaped SSE (`text/event-stream`) response
-immediately, sends keepalives while the Task runs, emits the final content, and
-then sends `data: [DONE]`. This is not token streaming from the model loop.
+immediately, forwards model text deltas as completion chunks, sends keepalives
+while no output is available, and ends with `data: [DONE]`.
+OpenAI-compatible and Anthropic endpoints stream natively; other model
+gateways currently emit one content chunk after their blocking call completes.
 
 ## How the answer is chosen
 
-On success, assistant content is taken from Task `status.output` in this order:
-
-1. `last_output` (message-driven runs)
-2. `response`
-3. `result` when it is not the sentinel value `executed`
-4. highest `agent.N.message_content` (sequential pipeline handoffs)
-
-If none of those keys contain usable text, the request fails even when the Task
-phase is `Succeeded`.
+The response uses the Session turn's durable `message.completed` event. For
+streaming requests, `message.delta` events are forwarded as they arrive and the
+completed event provides the authoritative final message. If durable completion
+diverges from already-emitted text, the stream ends with an error because the
+OpenAI SSE format cannot retract prior chunks.
 
 ## Limitations
 
 - Multimodal `content` arrays (for example `image_url` parts) are rejected; use string content only
 - OpenAI fields such as `tools`, `tool_choice`, `temperature`, and `n` are ignored
 - Multi-agent systems return a best-effort final output (usually `last_output`)
-- Tasks that enter `WaitingApproval` return `409 Conflict` instead of hanging
-- Failed / dead-letter tasks return an OpenAI-style error body with the task error
+- Runs that require an approval return `409 Conflict` instead of hanging
+- Failed Sessions return an OpenAI-style error body with the runtime error
 
 For Orloj-native control (templates, approvals, message inspection), use the
-Task API (`POST /v1/tasks`) or the SDKs instead of this facade.
+Session API (`POST /v1/sessions`) or the SDKs instead of this facade.

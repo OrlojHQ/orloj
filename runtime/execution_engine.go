@@ -15,6 +15,17 @@ type ExecutionEngine interface {
 	Execute(ctx context.Context, agent resources.Agent, input map[string]string) (AgentExecutionResult, error)
 }
 
+// ExecutionEventSink contains callbacks scoped to one agent execution.
+type ExecutionEventSink struct {
+	StepEvent   func(AgentStepEvent)
+	ModelStream ModelStreamEventSink
+}
+
+// EventSinkingExecutionEngine optionally accepts execution-scoped event sinks.
+type EventSinkingExecutionEngine interface {
+	ExecuteWithEventSink(ctx context.Context, agent resources.Agent, input map[string]string, sink ExecutionEventSink) (AgentExecutionResult, error)
+}
+
 // ReActExecutionEngine is the default runtime engine: model call + optional tool actions in bounded steps.
 type ReActExecutionEngine struct {
 	toolRuntime    ToolRuntime
@@ -51,8 +62,23 @@ func NewReActExecutionEngine(
 }
 
 func (e *ReActExecutionEngine) Execute(ctx context.Context, agent resources.Agent, input map[string]string) (AgentExecutionResult, error) {
+	return e.ExecuteWithEventSink(ctx, agent, input, ExecutionEventSink{StepEvent: e.OnStepEvent})
+}
+
+// ExecuteWithEventSink executes one agent with callbacks that are not stored on
+// the shared engine. A nil callback falls back to the legacy OnStepEvent field.
+func (e *ReActExecutionEngine) ExecuteWithEventSink(
+	ctx context.Context,
+	agent resources.Agent,
+	input map[string]string,
+	sink ExecutionEventSink,
+) (AgentExecutionResult, error) {
 	if err := agent.Normalize(); err != nil {
 		return AgentExecutionResult{}, err
+	}
+	stepSink := sink.StepEvent
+	if stepSink == nil {
+		stepSink = e.OnStepEvent
 	}
 
 	runCtx := ctx
@@ -79,9 +105,9 @@ func (e *ReActExecutionEngine) Execute(ctx context.Context, agent resources.Agen
 			Message:   msg,
 		}
 		observed = append(observed, evt)
-		if e.OnStepEvent != nil {
+		if stepSink != nil {
 			if parsed := parseAgentStepEvents([]observedAgentEvent{evt}); len(parsed) > 0 {
-				e.OnStepEvent(parsed[0])
+				stepSink(parsed[0])
 			}
 		}
 	}
@@ -100,7 +126,11 @@ func (e *ReActExecutionEngine) Execute(ctx context.Context, agent resources.Agen
 	if resolver, ok := e.toolRuntime.(ToolSchemaResolver); ok {
 		worker.SetToolSchemas(resolver.ResolveToolSchemas(agent.Spec.Tools))
 	}
-	worker.Run(runCtx)
+	if sink.ModelStream != nil {
+		worker.RunWithEventSink(runCtx, sink.ModelStream)
+	} else {
+		worker.Run(runCtx)
+	}
 
 	duration := time.Since(start)
 	rawEvents := observedMessages(observed)

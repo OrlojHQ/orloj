@@ -24,6 +24,7 @@ const (
 	tableAgentRoles      = "agent_roles"
 	tableToolPermissions = "tool_permissions"
 	tableTasks           = "tasks"
+	tableSessions        = "sessions"
 	tableTaskSchedules   = "task_schedules"
 	tableTaskWebhooks    = "task_webhooks"
 	tableWorkers         = "workers"

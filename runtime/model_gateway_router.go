@@ -120,6 +120,128 @@ func (r *ModelRouter) Complete(ctx context.Context, req ModelRequest) (ModelResp
 	return ModelResponse{}, lastErr
 }
 
+// Stream routes a streaming request through ModelEndpoint fallbacks. A
+// fallback is only attempted before the selected provider emits content, so a
+// consumer never sees a partial answer replayed by another provider.
+func (r *ModelRouter) Stream(ctx context.Context, req ModelRequest, sink ModelStreamEventSink) (ModelResponse, error) {
+	if r == nil {
+		err := fmt.Errorf("model router is not configured")
+		return ModelResponse{}, emitModelStreamError(sink, err)
+	}
+	modelRef := strings.TrimSpace(req.ModelRef)
+	if modelRef == "" {
+		err := fmt.Errorf("model_ref is required; configure spec.model_ref on the agent")
+		return ModelResponse{}, emitModelStreamError(sink, err)
+	}
+	if r.endpoints == nil {
+		err := fmt.Errorf("model endpoint store is not configured")
+		return ModelResponse{}, emitModelStreamError(sink, err)
+	}
+
+	refs := make([]string, 0, 1+len(req.FallbackModelRefs))
+	refs = append(refs, modelRef)
+	for _, ref := range req.FallbackModelRefs {
+		if normalized := strings.TrimSpace(ref); normalized != "" {
+			refs = append(refs, normalized)
+		}
+	}
+
+	var lastErr error
+	var finalBuffered []ModelStreamEvent
+	for _, ref := range refs {
+		if ctx.Err() != nil {
+			if lastErr == nil {
+				lastErr = ctx.Err()
+			}
+			break
+		}
+		endpoint, endpointKey, ok, err := r.resolveEndpoint(ctx, req.Namespace, ref)
+		if err != nil {
+			lastErr = fmt.Errorf("model endpoint %q lookup failed: %w", ref, err)
+			finalBuffered = nil
+			continue
+		}
+		if !ok {
+			lastErr = fmt.Errorf("model endpoint %q not found in namespace %q", ref, resources.NormalizeNamespace(req.Namespace))
+			finalBuffered = nil
+			continue
+		}
+		gateway, err := r.gatewayForEndpoint(ctx, endpoint, endpointKey)
+		if err != nil {
+			lastErr = fmt.Errorf("configure model endpoint %s failed: %w", ref, err)
+			finalBuffered = nil
+			continue
+		}
+
+		routedReq := req
+		routedReq.ModelRef = ref
+		if strings.TrimSpace(routedReq.Model) == "" {
+			routedReq.Model = strings.TrimSpace(endpoint.Spec.DefaultModel)
+		}
+
+		buffered := make([]ModelStreamEvent, 0, 4)
+		emittedContent := false
+		attemptSink := func(event ModelStreamEvent) {
+			content := modelStreamEventHasContent(event)
+			if !emittedContent && !content {
+				buffered = append(buffered, event)
+				return
+			}
+			if !emittedContent {
+				for _, pending := range buffered {
+					emitModelStreamEvent(sink, pending)
+				}
+				buffered = nil
+				emittedContent = true
+			}
+			emitModelStreamEvent(sink, event)
+		}
+		resp, streamErr := streamModelResponse(ctx, gateway, routedReq, attemptSink)
+		if streamErr == nil {
+			for _, pending := range buffered {
+				emitModelStreamEvent(sink, pending)
+			}
+			return resp, nil
+		}
+		if emittedContent {
+			return ModelResponse{}, streamErr
+		}
+		lastErr = streamErr
+		finalBuffered = buffered
+		if mge, retryable := IsModelGatewayError(streamErr); mge != nil && !retryable {
+			for _, pending := range buffered {
+				emitModelStreamEvent(sink, pending)
+			}
+			return ModelResponse{}, streamErr
+		}
+	}
+
+	if lastErr == nil {
+		lastErr = fmt.Errorf("model routing failed")
+	}
+	if len(finalBuffered) > 0 {
+		for _, pending := range finalBuffered {
+			emitModelStreamEvent(sink, pending)
+		}
+	} else {
+		emitModelStreamEvent(sink, ModelStreamEvent{Type: ModelStreamEventError, Err: lastErr})
+	}
+	return ModelResponse{}, lastErr
+}
+
+func modelStreamEventHasContent(event ModelStreamEvent) bool {
+	switch event.Type {
+	case ModelStreamEventTextDelta:
+		return event.Delta != ""
+	case ModelStreamEventToolCall:
+		return event.ToolCall != nil
+	case ModelStreamEventCompletion:
+		return event.Response != nil && (event.Response.Content != "" || len(event.Response.ToolCalls) > 0)
+	default:
+		return false
+	}
+}
+
 func (r *ModelRouter) resolveEndpoint(ctx context.Context, namespace string, modelRef string) (resources.ModelEndpoint, string, bool, error) {
 	lookupNamespace, lookupName := parseModelEndpointRef(namespace, modelRef)
 	lookupKey := scopedName(lookupNamespace, lookupName)
