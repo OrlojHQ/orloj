@@ -18,23 +18,26 @@ import (
 const defaultSessionEventLimit = 1000
 
 type SessionStore struct {
-	mu     sync.RWMutex
-	items  map[string]resources.Session
-	turns  map[string][]resources.SessionTurn
-	events map[string][]resources.SessionEvent
-	db     *sql.DB
+	mu          sync.RWMutex
+	items       map[string]resources.Session
+	turns       map[string][]resources.SessionTurn
+	events      map[string][]resources.SessionEvent
+	checkpoints map[string][]resources.SessionCheckpoint
+	db          *sql.DB
 }
 
 type SessionClaim struct {
-	Session resources.Session
-	Turn    resources.SessionTurn
+	Session    resources.Session
+	Turn       resources.SessionTurn
+	Checkpoint *resources.SessionCheckpoint
 }
 
 func NewSessionStore() *SessionStore {
 	return &SessionStore{
-		items:  make(map[string]resources.Session),
-		turns:  make(map[string][]resources.SessionTurn),
-		events: make(map[string][]resources.SessionEvent),
+		items:       make(map[string]resources.Session),
+		turns:       make(map[string][]resources.SessionTurn),
+		events:      make(map[string][]resources.SessionEvent),
+		checkpoints: make(map[string][]resources.SessionCheckpoint),
 	}
 }
 
@@ -209,6 +212,7 @@ func (s *SessionStore) Delete(ctx context.Context, name string) error {
 	delete(s.items, key)
 	delete(s.turns, key)
 	delete(s.events, key)
+	delete(s.checkpoints, key)
 	return nil
 }
 
@@ -581,14 +585,36 @@ func (s *SessionStore) ClaimNextTurn(ctx context.Context, workerID string, lease
 	}
 	session := s.items[chosenKey]
 	turn := s.turns[chosenKey][chosenIndex]
-	events := applyTurnClaim(&session, &turn, workerID, lease, now)
+	var latestCheckpoint *resources.SessionCheckpoint
+	if candidate, found, err := selectExecutionCheckpointFromLineage(
+		session,
+		s.checkpoints[chosenKey],
+		turn.ID,
+		"",
+		-1,
+		"",
+		"",
+	); err != nil {
+		return SessionClaim{}, false, nil, err
+	} else if found {
+		if checkpointStateHash(candidate.State) != candidate.StateHash {
+			return SessionClaim{}, false, nil, fmt.Errorf("checkpoint %q state hash mismatch", candidate.ID)
+		}
+		copied := candidate.DeepCopy()
+		latestCheckpoint = &copied
+	}
+	checkpointID := ""
+	if latestCheckpoint != nil {
+		checkpointID = latestCheckpoint.ID
+	}
+	events := applyTurnClaim(&session, &turn, workerID, lease, now, checkpointID)
 	if err := bumpSessionStatusMetadata(&session, s.items[chosenKey].Metadata); err != nil {
 		return SessionClaim{}, false, nil, err
 	}
 	s.items[chosenKey] = session.DeepCopy()
 	s.turns[chosenKey][chosenIndex] = turn
 	s.events[chosenKey] = append(s.events[chosenKey], events...)
-	return SessionClaim{Session: session.DeepCopy(), Turn: turn}, true, copySessionEvents(events), nil
+	return SessionClaim{Session: session.DeepCopy(), Turn: turn, Checkpoint: latestCheckpoint}, true, copySessionEvents(events), nil
 }
 
 func sessionCanClaim(session resources.Session, now time.Time) bool {
@@ -618,7 +644,14 @@ func turnCanClaim(turn resources.SessionTurn, now time.Time) bool {
 	return err != nil || !until.After(now)
 }
 
-func applyTurnClaim(session *resources.Session, turn *resources.SessionTurn, workerID string, lease time.Duration, now time.Time) []resources.SessionEvent {
+func applyTurnClaim(
+	session *resources.Session,
+	turn *resources.SessionTurn,
+	workerID string,
+	lease time.Duration,
+	now time.Time,
+	checkpointID string,
+) []resources.SessionEvent {
 	retry := strings.EqualFold(turn.Phase, resources.SessionTurnPhaseRunning)
 	turn.Phase = resources.SessionTurnPhaseRunning
 	turn.Attempt++
@@ -645,12 +678,30 @@ func applyTurnClaim(session *resources.Session, turn *resources.SessionTurn, wor
 		}, now)
 		retrying.Sequence = session.Status.LastEventSequence + 1
 		events = append(events, retrying)
-		reset := newSessionEventAt(*session, resources.SessionEventMessageReset, turn.ID, turn.AssistantMessageID, turn.Attempt, map[string]any{
-			"role": "assistant",
-		}, now)
-		reset.Sequence = retrying.Sequence + 1
-		reset.CausationID = retrying.ID
-		events = append(events, reset)
+		if checkpointID != "" {
+			reset := newSessionEventAt(*session, resources.SessionEventMessageReset, turn.ID, turn.AssistantMessageID, turn.Attempt, map[string]any{
+				"role":          "assistant",
+				"checkpoint_id": checkpointID,
+				"reason":        "discard output emitted after the recovered checkpoint",
+			}, now)
+			reset.Sequence = retrying.Sequence + 1
+			reset.CausationID = retrying.ID
+			events = append(events, reset)
+			recovered := newSessionEventAt(*session, resources.SessionEventSessionRecovered, turn.ID, turn.AssistantMessageID, turn.Attempt, map[string]any{
+				"checkpoint_id": checkpointID,
+			}, now)
+			recovered.Sequence = reset.Sequence + 1
+			recovered.CausationID = reset.ID
+			events = append(events, recovered)
+			session.Status.RestoredCheckpoint = checkpointID
+		} else {
+			reset := newSessionEventAt(*session, resources.SessionEventMessageReset, turn.ID, turn.AssistantMessageID, turn.Attempt, map[string]any{
+				"role": "assistant",
+			}, now)
+			reset.Sequence = retrying.Sequence + 1
+			reset.CausationID = retrying.ID
+			events = append(events, reset)
+		}
 	}
 	started := newSessionEventAt(*session, resources.SessionEventTurnStarted, turn.ID, turn.AssistantMessageID, turn.Attempt, map[string]any{
 		"worker": workerID,
@@ -708,7 +759,55 @@ func (s *SessionStore) claimNextTurnSQL(ctx context.Context, workerID string, le
 	if err := json.Unmarshal(raw, &turn); err != nil {
 		return SessionClaim{}, false, nil, err
 	}
-	events := applyTurnClaim(&session, &turn, workerID, lease, now)
+	var latestCheckpoint *resources.SessionCheckpoint
+	checkpointRows, err := tx.QueryContext(ctx, `
+		SELECT payload
+		FROM session_checkpoints
+		WHERE session_name = $1
+		ORDER BY event_seq DESC, created_at DESC`,
+		key,
+	)
+	if err != nil {
+		return SessionClaim{}, false, nil, err
+	}
+	checkpoints := make([]resources.SessionCheckpoint, 0)
+	for checkpointRows.Next() {
+		var checkpointRaw []byte
+		if err := checkpointRows.Scan(&checkpointRaw); err != nil {
+			checkpointRows.Close()
+			return SessionClaim{}, false, nil, err
+		}
+		var checkpoint resources.SessionCheckpoint
+		if err := json.Unmarshal(checkpointRaw, &checkpoint); err != nil {
+			checkpointRows.Close()
+			return SessionClaim{}, false, nil, err
+		}
+		checkpoints = append(checkpoints, checkpoint)
+	}
+	if err := checkpointRows.Close(); err != nil {
+		return SessionClaim{}, false, nil, err
+	}
+	if checkpoint, found, err := selectExecutionCheckpointFromLineage(
+		session,
+		checkpoints,
+		turn.ID,
+		"",
+		-1,
+		"",
+		"",
+	); err != nil {
+		return SessionClaim{}, false, nil, err
+	} else if found {
+		if checkpointStateHash(checkpoint.State) != checkpoint.StateHash {
+			return SessionClaim{}, false, nil, fmt.Errorf("checkpoint %q state hash mismatch", checkpoint.ID)
+		}
+		latestCheckpoint = &checkpoint
+	}
+	checkpointID := ""
+	if latestCheckpoint != nil {
+		checkpointID = latestCheckpoint.ID
+	}
+	events := applyTurnClaim(&session, &turn, workerID, lease, now, checkpointID)
 	if err := bumpSessionStatusMetadata(&session, session.Metadata); err != nil {
 		return SessionClaim{}, false, nil, err
 	}
@@ -726,7 +825,7 @@ func (s *SessionStore) claimNextTurnSQL(ctx context.Context, workerID string, le
 	if err := tx.Commit(); err != nil {
 		return SessionClaim{}, false, nil, err
 	}
-	return SessionClaim{Session: session, Turn: turn}, true, events, nil
+	return SessionClaim{Session: session, Turn: turn, Checkpoint: latestCheckpoint}, true, events, nil
 }
 
 func (s *SessionStore) AppendEvent(ctx context.Context, name, turnID, workerID string, fence int64, evt resources.SessionEvent) (resources.SessionEvent, error) {

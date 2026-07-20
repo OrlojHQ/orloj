@@ -19,19 +19,19 @@ type MemoryStore interface {
 
 // ChatMessage represents one message in a multi-turn conversation.
 type ChatMessage struct {
-	Role       string // "system", "user", "assistant", "tool"
-	Content    string
-	ToolCallID string         // role="tool": the ID of the tool call this result answers
-	ToolCalls  []ChatToolCall // role="assistant": tool calls the model made this turn
-	IsError    bool           // role="tool": true when this tool result represents a failure
+	Role       string         `json:"role"` // "system", "user", "assistant", "tool"
+	Content    string         `json:"content,omitempty"`
+	ToolCallID string         `json:"tool_call_id,omitempty"` // role="tool": the ID of the tool call this result answers
+	ToolCalls  []ChatToolCall `json:"tool_calls,omitempty"`   // role="assistant": tool calls the model made this turn
+	IsError    bool           `json:"is_error,omitempty"`     // role="tool": true when this tool result represents a failure
 }
 
 // ChatToolCall captures one tool invocation from an assistant message.
 type ChatToolCall struct {
-	ID           string
-	Name         string
-	Input        string
-	ProviderName string
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Input        string `json:"input,omitempty"`
+	ProviderName string `json:"provider_name,omitempty"`
 }
 
 // ToolSchemaInfo carries optional description and JSON Schema for a tool.

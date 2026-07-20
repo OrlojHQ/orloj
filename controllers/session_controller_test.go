@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log"
+	"strconv"
 	"testing"
 	"time"
 
@@ -129,6 +130,10 @@ func TestTaskControllerStreamsModelDeltasIntoSessionEvents(t *testing.T) {
 				"orloj.dev/session": "stream-chat",
 				"orloj.dev/turn":    claim.Turn.ID,
 			},
+			Annotations: map[string]string{
+				"orloj.dev/session-worker": claim.Turn.ClaimedBy,
+				"orloj.dev/session-fence":  strconv.FormatInt(claim.Turn.Fence, 10),
+			},
 		},
 		Spec: resources.TaskSpec{Input: map[string]string{"session.stream_agent": "writer"}},
 	}
@@ -157,5 +162,52 @@ func TestTaskControllerStreamsModelDeltasIntoSessionEvents(t *testing.T) {
 	}
 	if len(events) != before {
 		t.Fatalf("non-final agent delta was persisted: before=%d after=%d", before, len(events))
+	}
+}
+
+func TestTaskControllerCancelsExecutionWhenSessionFenceChanges(t *testing.T) {
+	sessions := store.NewSessionStore()
+	if _, err := sessions.Upsert(context.Background(), resources.Session{
+		Metadata: resources.ObjectMeta{Name: "fenced-chat"},
+		Spec:     resources.SessionSpec{System: "support"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := sessions.EnqueueTurn(context.Background(), "fenced-chat", resources.SessionTurn{
+		Content:        "hello",
+		IdempotencyKey: "fenced-turn",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	claim, claimed, _, err := sessions.ClaimNextTurn(context.Background(), "session-worker", time.Minute)
+	if err != nil || !claimed {
+		t.Fatalf("claim claimed=%v err=%v", claimed, err)
+	}
+	controller := NewTaskController(nil, nil, nil, nil, nil, nil, nil, log.New(io.Discard, "", 0), time.Second)
+	controller.SetSessionStore(sessions)
+	task := resources.Task{Metadata: resources.ObjectMeta{
+		Name:      "session-task",
+		Namespace: resources.DefaultNamespace,
+		Labels: map[string]string{
+			"orloj.dev/session": "fenced-chat",
+			"orloj.dev/turn":    claim.Turn.ID,
+		},
+		Annotations: map[string]string{
+			"orloj.dev/session-worker": claim.Turn.ClaimedBy,
+			"orloj.dev/session-fence":  strconv.FormatInt(claim.Turn.Fence, 10),
+		},
+	}}
+	ctx, cancel := controller.withSessionFenceContext(context.Background(), task)
+	defer cancel()
+	if ctx.Err() != nil {
+		t.Fatalf("execution context started canceled: %v", ctx.Err())
+	}
+	if _, _, err := sessions.ApplyControl(context.Background(), "fenced-chat", "pause", "rewind"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-ctx.Done():
+	case <-time.After(time.Second):
+		t.Fatal("execution context was not canceled after Session fence changed")
 	}
 }

@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -94,6 +95,9 @@ func (c *SessionController) ReconcileOnce(ctx context.Context) error {
 		return err
 	}
 	c.publishSessionEvents(expired)
+	if err := c.pruneCheckpoints(ctx); err != nil {
+		return err
+	}
 	claim, claimed, events, err := c.sessions.ClaimNextTurn(ctx, c.workerID, c.leaseDuration)
 	if err != nil {
 		return err
@@ -105,6 +109,29 @@ func (c *SessionController) ReconcileOnce(ctx context.Context) error {
 	return c.executeTurn(ctx, claim)
 }
 
+func (c *SessionController) pruneCheckpoints(ctx context.Context) error {
+	sessions, err := c.sessions.List(ctx)
+	if err != nil {
+		return err
+	}
+	for _, session := range sessions {
+		key := store.ScopedName(session.Metadata.Namespace, session.Metadata.Name)
+		pruned, err := c.sessions.PruneCheckpoints(ctx, key)
+		if err != nil {
+			return err
+		}
+		if len(pruned) == 0 {
+			continue
+		}
+		events, err := c.sessions.ListEvents(ctx, key, session.Status.LastEventSequence, 10)
+		if err != nil {
+			return err
+		}
+		c.publishSessionEvents(events)
+	}
+	return nil
+}
+
 func (c *SessionController) executeTurn(ctx context.Context, claim store.SessionClaim) error {
 	systemKey := store.ScopedName(claim.Session.Metadata.Namespace, claim.Session.Spec.System)
 	system, ok, err := c.systems.Get(ctx, systemKey)
@@ -113,6 +140,25 @@ func (c *SessionController) executeTurn(ctx context.Context, claim store.Session
 	}
 	if !ok {
 		return c.failClaim(ctx, claim, fmt.Errorf("AgentSystem %q not found", claim.Session.Spec.System))
+	}
+	if claim.Checkpoint != nil &&
+		claim.Checkpoint.SystemGeneration > 0 &&
+		system.Metadata.Generation != claim.Checkpoint.SystemGeneration {
+		events, _, pauseErr := c.sessions.ApplyControl(
+			ctx,
+			store.ScopedName(claim.Session.Metadata.Namespace, claim.Session.Metadata.Name),
+			"pause",
+			fmt.Sprintf(
+				"checkpoint generation %d is incompatible with AgentSystem generation %d",
+				claim.Checkpoint.SystemGeneration,
+				system.Metadata.Generation,
+			),
+		)
+		if pauseErr != nil {
+			return pauseErr
+		}
+		c.publishSessionEvents(events)
+		return nil
 	}
 
 	taskName := sessionTurnTaskName(claim.Session.Metadata.Name, claim.Turn.ID)
@@ -142,7 +188,9 @@ func (c *SessionController) executeTurn(ctx context.Context, claim store.Session
 					"orloj.dev/turn":       claim.Turn.ID,
 				},
 				Annotations: map[string]string{
-					"orloj.dev/session-turn": claim.Turn.ID,
+					"orloj.dev/session-turn":   claim.Turn.ID,
+					"orloj.dev/session-worker": claim.Turn.ClaimedBy,
+					"orloj.dev/session-fence":  strconv.FormatInt(claim.Turn.Fence, 10),
 				},
 			},
 			Spec: resources.TaskSpec{
@@ -164,6 +212,18 @@ func (c *SessionController) executeTurn(ctx context.Context, claim store.Session
 			return c.failClaim(ctx, claim, fmt.Errorf("create turn task: %w", err))
 		}
 		c.publishTaskCreated(task)
+	} else {
+		if task.Metadata.Annotations == nil {
+			task.Metadata.Annotations = map[string]string{}
+		}
+		expectedFence := strconv.FormatInt(claim.Turn.Fence, 10)
+		if task.Metadata.Annotations["orloj.dev/session-worker"] != claim.Turn.ClaimedBy ||
+			task.Metadata.Annotations["orloj.dev/session-fence"] != expectedFence {
+			if err := c.tasks.Delete(ctx, taskKey); err != nil {
+				return c.failClaim(ctx, claim, fmt.Errorf("replace stale turn task: %w", err))
+			}
+			return c.executeTurn(ctx, claim)
+		}
 	}
 
 	turnCtx, cancel := context.WithCancel(ctx)
@@ -221,6 +281,9 @@ func (c *SessionController) executeTurn(ctx context.Context, claim store.Session
 			if output == "" {
 				return c.failClaim(turnCtx, claim, fmt.Errorf("turn task %q produced no assistant output", taskName))
 			}
+			if checkpointErr := c.checkpointCompletedTurn(turnCtx, claim, task); checkpointErr != nil {
+				return c.failClaim(turnCtx, claim, checkpointErr)
+			}
 			events, _, err := c.sessions.CompleteTurn(turnCtx, claim, output, sessionTaskUsage(task))
 			if err != nil {
 				return err
@@ -241,6 +304,48 @@ func (c *SessionController) executeTurn(ctx context.Context, claim store.Session
 		case <-ticker.C:
 		}
 	}
+}
+
+func (c *SessionController) checkpointCompletedTurn(
+	ctx context.Context,
+	claim store.SessionClaim,
+	task resources.Task,
+) error {
+	state, err := json.Marshal(map[string]any{
+		"version":   resources.SessionCheckpointStateVersion,
+		"completed": true,
+		"output":    task.Status.Output,
+		"trace":     task.Status.Trace,
+	})
+	if err != nil {
+		return err
+	}
+	systemGeneration, _ := strconv.ParseInt(
+		strings.TrimSpace(task.Spec.Input["session.system_generation"]),
+		10,
+		64,
+	)
+	_, event, err := c.sessions.CreateCheckpoint(
+		ctx,
+		store.ScopedName(claim.Session.Metadata.Namespace, claim.Session.Metadata.Name),
+		claim.Turn.ID,
+		claim.Turn.ClaimedBy,
+		claim.Turn.Fence,
+		resources.SessionCheckpoint{
+			TurnID:           claim.Turn.ID,
+			TaskName:         task.Metadata.Name,
+			Attempt:          claim.Turn.Attempt,
+			SafePoint:        resources.SessionCheckpointSafePointTurn,
+			StateVersion:     resources.SessionCheckpointStateVersion,
+			SystemGeneration: systemGeneration,
+			State:            state,
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("checkpoint completed turn: %w", err)
+	}
+	c.publishSessionEvents([]resources.SessionEvent{event})
+	return nil
 }
 
 func (c *SessionController) heartbeat(ctx context.Context, claim store.SessionClaim, done chan<- struct{}) {
@@ -293,8 +398,31 @@ func (c *SessionController) sessionTranscript(ctx context.Context, session resou
 	if err != nil {
 		return "", fmt.Errorf("load session transcript: %w", err)
 	}
+	var rewindEventSequence uint64
+	var rewindCheckpointSequence uint64
+	for _, evt := range events {
+		if evt.Type != resources.SessionEventSessionRewound {
+			continue
+		}
+		rewindEventSequence = evt.Sequence
+		switch value := evt.Payload["checkpoint_sequence"].(type) {
+		case float64:
+			rewindCheckpointSequence = uint64(value)
+		case uint64:
+			rewindCheckpointSequence = value
+		case int:
+			if value > 0 {
+				rewindCheckpointSequence = uint64(value)
+			}
+		}
+	}
 	lines := make([]string, 0)
 	for _, evt := range events {
+		if rewindEventSequence > 0 &&
+			evt.Sequence > rewindCheckpointSequence &&
+			evt.Sequence < rewindEventSequence {
+			continue
+		}
 		if evt.TurnID == currentTurnID {
 			continue
 		}

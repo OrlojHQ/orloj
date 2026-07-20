@@ -153,8 +153,12 @@ Both profiles support replay protection through timestamp skew and/or event-id d
 - `GET /v1/sessions/{name}/events?after=<seq>` — replay durable ordered events.
 - `GET /v1/sessions/{name}/stream` — replay and follow events as SSE. Resume with `Last-Event-ID` or `?after=<seq>`.
 - `POST /v1/sessions/{name}/pause|resume|cancel|complete` — control Session execution.
+- `GET /v1/sessions/{name}/checkpoints` and `GET /v1/sessions/{name}/checkpoints/{checkpoint_id}` — inspect safe-point snapshots.
+- `GET /v1/sessions/{name}/checkpoints/{checkpoint_id}/replay` — verify and replay recorded state without external calls.
+- `POST /v1/sessions/{name}/checkpoints/{checkpoint_id}/rewind` — restore the Session to a paused checkpoint, optionally interrupting and resuming the active turn.
+- `POST /v1/sessions/{name}/checkpoints/{checkpoint_id}/fork` — create an independent Session from the checkpoint.
 
-Only one turn runs at a time per Session. Concurrent submissions remain queued in durable order. Session SSE uses each event's per-Session sequence as the SSE `id`, so reconnect does not depend on an individual API process retaining in-memory history.
+Only one turn runs at a time per Session. Concurrent submissions remain queued in durable order. Session SSE uses each event's per-Session sequence as the SSE `id`, so reconnect does not depend on an individual API process retaining in-memory history. Checkpoint replay is deterministic and side-effect free; live execution after rewind or fork can differ as models and external tools change.
 
 See [Build an Interactive Agent Session](../guides/interactive-sessions.md) and the [Session resource](./resources/session.md).
 

@@ -1070,6 +1070,116 @@ def build() -> dict:
             }
         }
 
+    paths["/v1/sessions/{name}/checkpoints"] = {
+        "get": {
+            "tags": ["sessions"],
+            "security": SEC_READER,
+            "parameters": session_name_params,
+            "responses": {
+                "200": {
+                    "description": "Session checkpoints, newest first",
+                    "content": json_body(
+                        "./schemas/session.yaml#/components/schemas/SessionCheckpointList"
+                    ),
+                },
+                "404": {"description": "Not found", "content": text_plain_error()},
+                "default": {"description": "Error", "content": text_plain_error()},
+            },
+        }
+    }
+    checkpoint_params = session_name_params + [
+        {
+            "name": "checkpoint_id",
+            "in": "path",
+            "required": True,
+            "schema": {"type": "string"},
+        }
+    ]
+    paths["/v1/sessions/{name}/checkpoints/{checkpoint_id}"] = {
+        "get": {
+            "tags": ["sessions"],
+            "security": SEC_READER,
+            "parameters": checkpoint_params,
+            "responses": {
+                "200": {
+                    "description": "Durable Session checkpoint",
+                    "content": json_body(
+                        "./schemas/session.yaml#/components/schemas/SessionCheckpoint"
+                    ),
+                },
+                "404": {"description": "Not found", "content": text_plain_error()},
+                "default": {"description": "Error", "content": text_plain_error()},
+            },
+        }
+    }
+    paths["/v1/sessions/{name}/checkpoints/{checkpoint_id}/replay"] = {
+        "get": {
+            "tags": ["sessions"],
+            "security": SEC_READER,
+            "parameters": checkpoint_params,
+            "responses": {
+                "200": {
+                    "description": "Read-only verified replay through the checkpoint",
+                    "content": json_body(
+                        "./schemas/session.yaml#/components/schemas/SessionReplayResult"
+                    ),
+                },
+                "404": {"description": "Not found", "content": text_plain_error()},
+                "409": {"description": "Replay verification failed", "content": text_plain_error()},
+                "default": {"description": "Error", "content": text_plain_error()},
+            },
+        }
+    }
+    paths["/v1/sessions/{name}/checkpoints/{checkpoint_id}/rewind"] = {
+        "post": {
+            "tags": ["sessions"],
+            "security": SEC_WRITER,
+            "parameters": checkpoint_params,
+            "requestBody": {
+                "required": False,
+                "content": json_body(
+                    "./schemas/session.yaml#/components/schemas/SessionCheckpointRewindRequest"
+                ),
+            },
+            "responses": {
+                "200": {
+                    "description": "Session rewound to the selected checkpoint",
+                    "content": json_body(
+                        "./schemas/session.yaml#/components/schemas/SessionCheckpointRewindResponse"
+                    ),
+                },
+                "404": {"description": "Not found", "content": text_plain_error()},
+                "409": {"description": "Active turn or state conflict", "content": text_plain_error()},
+                "default": {"description": "Error", "content": text_plain_error()},
+            },
+        }
+    }
+    paths["/v1/sessions/{name}/checkpoints/{checkpoint_id}/fork"] = {
+        "post": {
+            "tags": ["sessions"],
+            "security": SEC_WRITER,
+            "parameters": checkpoint_params,
+            "requestBody": {
+                "required": True,
+                "content": json_body(
+                    "./schemas/session.yaml#/components/schemas/SessionCheckpointForkRequest"
+                ),
+            },
+            "responses": {
+                "201": {
+                    "description": "Independent Session forked from the checkpoint",
+                    "content": json_body(
+                        "./schemas/session.yaml#/components/schemas/SessionCheckpointForkResponse"
+                    ),
+                },
+                "400": {"description": "Bad request", "content": text_plain_error()},
+                "404": {"description": "Not found", "content": text_plain_error()},
+                "409": {"description": "Target Session exists", "content": text_plain_error()},
+                "default": {"description": "Error", "content": text_plain_error()},
+            },
+        }
+    }
+
     paths["/v1/tasks"] = {
         "get": list_tasks("tasks", "./schemas/task.yaml#/components/schemas/TaskList"),
         "post": post_create("tasks", "./schemas/task.yaml#/components/schemas/Task"),

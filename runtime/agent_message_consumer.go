@@ -2,6 +2,7 @@ package agentruntime
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"hash/fnv"
@@ -83,6 +84,7 @@ type AgentMessageConsumerOptions struct {
 	KubernetesToolRT    ToolRuntime
 	A2AToolRuntime      ToolRuntime
 	AgentK8sRuntime     *KubernetesAgentRuntime
+	Sessions            SessionCheckpointStore
 	OnStepEvent         func(taskName, namespace string, evt AgentStepEvent)
 	DebugLogger         *log.Logger
 }
@@ -96,6 +98,22 @@ type ToolApprovalUpserter interface {
 type TaskApprovalUpserter interface {
 	Upsert(ctx context.Context, item resources.TaskApproval) (resources.TaskApproval, error)
 	Get(ctx context.Context, key string) (resources.TaskApproval, bool, error)
+}
+
+type SessionCheckpointStore interface {
+	Get(ctx context.Context, key string) (resources.Session, bool, error)
+	LatestExecutionCheckpoint(
+		ctx context.Context,
+		name, turnID, agent string,
+		agentIndex int,
+		messageID, branchID string,
+	) (resources.SessionCheckpoint, bool, error)
+	CreateCheckpoint(
+		ctx context.Context,
+		name, turnID, workerID string,
+		fence int64,
+		checkpoint resources.SessionCheckpoint,
+	) (resources.SessionCheckpoint, resources.SessionEvent, error)
 }
 
 // AgentMessageConsumerManager watches agents and consumes runtime inbox messages per agent.
@@ -133,6 +151,7 @@ type AgentMessageConsumerManager struct {
 	kubernetesTools ToolRuntime
 	a2aTools        ToolRuntime
 	agentK8sRuntime *KubernetesAgentRuntime
+	sessions        SessionCheckpointStore
 	onStepEvent     func(taskName, namespace string, evt AgentStepEvent)
 	mu              sync.Mutex
 	consumers       map[string]context.CancelFunc
@@ -202,6 +221,7 @@ func NewAgentMessageConsumerManager(
 		kubernetesTools: opts.KubernetesToolRT,
 		a2aTools:        opts.A2AToolRuntime,
 		agentK8sRuntime: opts.AgentK8sRuntime,
+		sessions:        opts.Sessions,
 		onStepEvent:     opts.OnStepEvent,
 		extensions:      NormalizeExtensions(opts.Extensions),
 		consumers:       make(map[string]context.CancelFunc),
@@ -214,6 +234,54 @@ func (m *AgentMessageConsumerManager) debugf(format string, args ...any) {
 	if m != nil && m.debugLogger != nil {
 		m.debugLogger.Printf(format, args...)
 	}
+}
+
+func (m *AgentMessageConsumerManager) withSessionFenceContext(
+	parent context.Context,
+	task resources.Task,
+) (context.Context, context.CancelFunc) {
+	if m.sessions == nil {
+		return parent, func() {}
+	}
+	sessionName := strings.TrimSpace(task.Metadata.Labels["orloj.dev/session"])
+	workerID := strings.TrimSpace(task.Metadata.Annotations["orloj.dev/session-worker"])
+	fence, err := strconv.ParseInt(
+		strings.TrimSpace(task.Metadata.Annotations["orloj.dev/session-fence"]),
+		10,
+		64,
+	)
+	if sessionName == "" || workerID == "" || err != nil || fence <= 0 {
+		return parent, func() {}
+	}
+	key := scopedTaskName(task.Metadata.Namespace, sessionName)
+	ctx, cancel := context.WithCancel(parent)
+	valid := func() bool {
+		session, found, getErr := m.sessions.Get(ctx, key)
+		return getErr == nil &&
+			found &&
+			session.Status.Fence == fence &&
+			session.Status.ClaimedBy == workerID
+	}
+	if !valid() {
+		cancel()
+		return ctx, cancel
+	}
+	go func() {
+		ticker := time.NewTicker(250 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if !valid() {
+					cancel()
+					return
+				}
+			}
+		}
+	}()
+	return ctx, cancel
 }
 
 func (m *AgentMessageConsumerManager) Start(ctx context.Context) {
@@ -637,7 +705,9 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 		agent.Spec.Tools = append(agent.Spec.Tools, resources.MemoryToolNamesForOperations(agent.Spec.Memory.Allow)...)
 		agent.Spec.Tools = dedupeStrings(agent.Spec.Tools)
 	}
-	agentCtx, agentSpan := telemetry.StartAgentSpan(ctx, agent.Metadata.Name, msg.MessageID, msg.Attempt)
+	executionCtx, cancelSessionFence := m.withSessionFenceContext(ctx, task)
+	defer cancelSessionFence()
+	agentCtx, agentSpan := telemetry.StartAgentSpan(executionCtx, agent.Metadata.Name, msg.MessageID, msg.Attempt)
 	executionSink := ExecutionEventSink{}
 	if m.onStepEvent != nil {
 		ns, taskName := splitTaskKey(taskKey)
@@ -657,9 +727,105 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 			m.onStepEvent(taskName, ns, evt)
 		}
 	}
+	sessionName := strings.TrimSpace(task.Metadata.Labels["orloj.dev/session"])
+	turnID := strings.TrimSpace(task.Metadata.Labels["orloj.dev/turn"])
+	if m.sessions != nil && sessionName != "" && turnID != "" {
+		sessionKey := scopedTaskName(ns, sessionName)
+		sessionWorker := strings.TrimSpace(task.Metadata.Annotations["orloj.dev/session-worker"])
+		sessionFence, fenceErr := strconv.ParseInt(
+			strings.TrimSpace(task.Metadata.Annotations["orloj.dev/session-fence"]),
+			10,
+			64,
+		)
+		if fenceErr != nil {
+			sessionFence = 0
+		}
+		systemGeneration, _ := strconv.ParseInt(
+			strings.TrimSpace(task.Spec.Input["session.system_generation"]),
+			10,
+			64,
+		)
+		checkpoint, found, checkpointErr := m.sessions.LatestExecutionCheckpoint(
+			ctx,
+			sessionKey,
+			turnID,
+			agent.Metadata.Name,
+			-1,
+			msg.MessageID,
+			msg.BranchID,
+		)
+		if checkpointErr != nil {
+			executionSink.ResumeError = checkpointErr
+		} else if found {
+			if checkpoint.TaskName != task.Metadata.Name {
+				executionSink.ResumeError = fmt.Errorf(
+					"checkpoint %q belongs to task %q, not %q",
+					checkpoint.ID,
+					checkpoint.TaskName,
+					task.Metadata.Name,
+				)
+			} else if checkpoint.StateVersion != resources.SessionCheckpointStateVersion {
+				executionSink.ResumeError = fmt.Errorf(
+					"checkpoint %q has unsupported state version %d",
+					checkpoint.ID,
+					checkpoint.StateVersion,
+				)
+			}
+			var state AgentExecutionCheckpoint
+			if executionSink.ResumeError == nil {
+				if err := json.Unmarshal(checkpoint.State, &state); err != nil {
+					executionSink.ResumeError = fmt.Errorf("decode checkpoint %q: %w", checkpoint.ID, err)
+				} else if state.Version != AgentExecutionCheckpointVersion {
+					executionSink.ResumeError = fmt.Errorf(
+						"checkpoint %q has unsupported runtime version %d",
+						checkpoint.ID,
+						state.Version,
+					)
+				} else {
+					executionSink.Resume = &state
+				}
+			}
+		}
+		executionSink.Checkpoint = func(state AgentExecutionCheckpoint) error {
+			raw, err := json.Marshal(state)
+			if err != nil {
+				return err
+			}
+			if sessionWorker == "" || sessionFence <= 0 {
+				return fmt.Errorf("task %q is missing Session checkpoint fence metadata", task.Metadata.Name)
+			}
+			safePoint := resources.SessionCheckpointSafePointStep
+			if state.Completed {
+				safePoint = resources.SessionCheckpointSafePointAgent
+			}
+			_, _, err = m.sessions.CreateCheckpoint(
+				ctx,
+				sessionKey,
+				turnID,
+				sessionWorker,
+				sessionFence,
+				resources.SessionCheckpoint{
+					TurnID:           turnID,
+					TaskName:         task.Metadata.Name,
+					Agent:            strings.TrimSpace(agent.Metadata.Name),
+					MessageID:        strings.TrimSpace(msg.MessageID),
+					BranchID:         strings.TrimSpace(msg.BranchID),
+					Attempt:          msg.Attempt,
+					SafePoint:        safePoint,
+					StateVersion:     resources.SessionCheckpointStateVersion,
+					SystemGeneration: systemGeneration,
+					State:            raw,
+				},
+			)
+			return err
+		}
+	}
 
 	var result AgentExecutionResult
-	if m.agentK8sRuntime != nil && m.canRunAgentAsJob(ctx, agent) {
+	checkpointK8sResult := false
+	if executionSink.Resume != nil || executionSink.ResumeError != nil {
+		result, err = m.executor.ExecuteAgentWithRuntimeAndEventSink(agentCtx, agent, input, toolRT, executionSink)
+	} else if m.agentK8sRuntime != nil && m.canRunAgentAsJob(ctx, agent) {
 		jobStore, ok := m.tasks.(AgentJobStore)
 		if !ok {
 			m.debugf("agent k8s runtime configured but task store does not implement AgentJobStore; falling back to in-process")
@@ -677,10 +843,14 @@ func (m *AgentMessageConsumerManager) processMessage(ctx context.Context, taskKe
 				err = fmt.Errorf("%s", jobResult.Error)
 			} else {
 				result = AgentJobResultToExecution(jobResult, agent.Metadata.Name)
+				checkpointK8sResult = true
 			}
 		}
 	} else {
 		result, err = m.executor.ExecuteAgentWithRuntimeAndEventSink(agentCtx, agent, input, toolRT, executionSink)
+	}
+	if err == nil && checkpointK8sResult && executionSink.Checkpoint != nil {
+		err = executionSink.Checkpoint(CheckpointFromExecutionResult(result))
 	}
 	if err != nil {
 		telemetry.EndSpanError(agentSpan, err)

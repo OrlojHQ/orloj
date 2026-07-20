@@ -17,15 +17,18 @@ import (
 
 // AgentWorker runs the core execution loop for one agent.
 type AgentWorker struct {
-	agent        resources.Agent
-	toolRuntime  ToolRuntime
-	memory       MemoryStore
-	modelGateway ModelGateway
-	onEvent      func(string)
-	stepEvery    time.Duration
-	input        map[string]string
-	toolSchemas  map[string]ToolSchemaInfo
-	history      []ChatMessage
+	agent          resources.Agent
+	toolRuntime    ToolRuntime
+	memory         MemoryStore
+	modelGateway   ModelGateway
+	onEvent        func(string)
+	stepEvery      time.Duration
+	input          map[string]string
+	toolSchemas    map[string]ToolSchemaInfo
+	history        []ChatMessage
+	resume         *AgentExecutionCheckpoint
+	onCheckpoint   ExecutionCheckpointSink
+	lastCheckpoint *AgentExecutionCheckpoint
 }
 
 func NewAgentWorker(agent resources.Agent, toolRuntime ToolRuntime, memory MemoryStore, onEvent func(string)) *AgentWorker {
@@ -86,17 +89,33 @@ func (w *AgentWorker) SetToolSchemas(schemas map[string]ToolSchemaInfo) {
 	w.toolSchemas = schemas
 }
 
-func (w *AgentWorker) Run(ctx context.Context) {
-	w.run(ctx, nil)
+func (w *AgentWorker) SetCheckpointing(resume *AgentExecutionCheckpoint, sink ExecutionCheckpointSink) {
+	if resume != nil {
+		copied := copyAgentExecutionCheckpoint(*resume)
+		w.resume = &copied
+	}
+	w.onCheckpoint = sink
+}
+
+func (w *AgentWorker) LastCheckpoint() *AgentExecutionCheckpoint {
+	if w.lastCheckpoint == nil {
+		return nil
+	}
+	copied := copyAgentExecutionCheckpoint(*w.lastCheckpoint)
+	return &copied
+}
+
+func (w *AgentWorker) Run(ctx context.Context) error {
+	return w.run(ctx, nil)
 }
 
 // RunWithEventSink runs the worker while forwarding incremental model events
 // to the execution-scoped sink.
-func (w *AgentWorker) RunWithEventSink(ctx context.Context, sink ModelStreamEventSink) {
-	w.run(ctx, sink)
+func (w *AgentWorker) RunWithEventSink(ctx context.Context, sink ModelStreamEventSink) error {
+	return w.run(ctx, sink)
 }
 
-func (w *AgentWorker) run(ctx context.Context, streamSink ModelStreamEventSink) {
+func (w *AgentWorker) run(ctx context.Context, streamSink ModelStreamEventSink) error {
 	maxSteps := w.agent.Spec.Limits.MaxSteps
 	if maxSteps <= 0 {
 		maxSteps = 10
@@ -129,6 +148,96 @@ func (w *AgentWorker) run(ctx context.Context, streamSink ModelStreamEventSink) 
 	// fails closed instead of hanging until the outer agent timeout.
 	const maxConsecutiveModelErrors = 3
 	consecutiveModelErrors := 0
+	startStep := 1
+	lastOutput := ""
+	totalTokens := 0
+	totalInputTokens := 0
+	totalOutputTokens := 0
+
+	if w.resume != nil {
+		if w.resume.Version != AgentExecutionCheckpointVersion {
+			return fmt.Errorf("unsupported agent checkpoint version %d", w.resume.Version)
+		}
+		w.history = append([]ChatMessage(nil), w.resume.History...)
+		for key, value := range w.resume.Memory {
+			w.memory.Put(key, value)
+		}
+		for key, value := range w.resume.ToolResultCache {
+			toolResultCache[key] = value
+		}
+		for _, key := range w.resume.ToolCalled {
+			toolCalled[key] = true
+		}
+		if contractEnabled {
+			contractRemaining = make(map[string]bool, len(w.resume.ContractRemaining))
+			for _, key := range w.resume.ContractRemaining {
+				contractRemaining[key] = true
+			}
+		}
+		consecutiveModelErrors = w.resume.ConsecutiveModelErrors
+		startStep = max(1, w.resume.NextStep)
+		lastOutput = w.resume.LastOutput
+		totalTokens = w.resume.TokensUsed
+		totalInputTokens = w.resume.InputTokens
+		totalOutputTokens = w.resume.OutputTokens
+		if w.resume.Completed {
+			completed := copyAgentExecutionCheckpoint(*w.resume)
+			w.lastCheckpoint = &completed
+			return nil
+		}
+	}
+
+	persistCheckpoint := func(nextStep int, completed bool) error {
+		remaining := make([]string, 0, len(contractRemaining))
+		for key := range contractRemaining {
+			remaining = append(remaining, key)
+		}
+		sort.Strings(remaining)
+		called := make([]string, 0, len(toolCalled))
+		for key := range toolCalled {
+			called = append(called, key)
+		}
+		sort.Strings(called)
+		checkpoint := AgentExecutionCheckpoint{
+			Version:                AgentExecutionCheckpointVersion,
+			NextStep:               nextStep,
+			Completed:              completed,
+			History:                append([]ChatMessage(nil), w.history...),
+			Memory:                 w.memory.Snapshot(),
+			ToolResultCache:        copyStringMap(toolResultCache),
+			ToolCalled:             called,
+			ContractRemaining:      remaining,
+			ConsecutiveModelErrors: consecutiveModelErrors,
+			LastOutput:             lastOutput,
+			Steps:                  max(0, nextStep-1),
+			ToolCalls:              len(toolCalled),
+			TokensUsed:             totalTokens,
+			InputTokens:            totalInputTokens,
+			OutputTokens:           totalOutputTokens,
+		}
+		copied := copyAgentExecutionCheckpoint(checkpoint)
+		w.lastCheckpoint = &copied
+		if w.onCheckpoint != nil {
+			if err := w.onCheckpoint(checkpoint); err != nil {
+				return fmt.Errorf("persist execution checkpoint: %w", err)
+			}
+		}
+		return nil
+	}
+	toolRequestID := func(step int, tool, callID string) string {
+		parts := []string{resources.NormalizeNamespace(w.agent.Metadata.Namespace)}
+		if sessionID := strings.TrimSpace(w.input["session.id"]); sessionID != "" {
+			parts = append(parts, "session", sessionID)
+		}
+		if turnID := strings.TrimSpace(w.input["session.turn_id"]); turnID != "" {
+			parts = append(parts, "turn", turnID)
+		}
+		parts = append(parts, strings.TrimSpace(w.agent.Metadata.Name), fmt.Sprintf("s%03d", step), normalizeToolKey(tool))
+		if callID = strings.TrimSpace(callID); callID != "" {
+			parts = append(parts, callID)
+		}
+		return strings.Join(parts, "/")
+	}
 
 	normalizeContractMessage := func(message string) string {
 		message = strings.TrimSpace(message)
@@ -173,20 +282,22 @@ func (w *AgentWorker) run(ctx context.Context, streamSink ModelStreamEventSink) 
 		w.onEvent(fmt.Sprintf("worker started model=%s max_steps=%d", w.agent.Spec.Model, maxSteps))
 	}
 
-	if prompt := strings.TrimSpace(w.agent.Spec.Prompt); prompt != "" {
-		w.history = append(w.history, ChatMessage{Role: "system", Content: prompt})
+	if len(w.history) == 0 {
+		if prompt := strings.TrimSpace(w.agent.Spec.Prompt); prompt != "" {
+			w.history = append(w.history, ChatMessage{Role: "system", Content: prompt})
+		}
 	}
 
 	ticker := time.NewTicker(w.stepEvery)
 	defer ticker.Stop()
 
-	for step := 1; step <= maxSteps; step++ {
+	for step := startStep; step <= maxSteps; step++ {
 		select {
 		case <-ctx.Done():
 			if w.onEvent != nil {
 				w.onEvent("worker stopped")
 			}
-			return
+			return nil
 		case <-ticker.C:
 			availableTools := w.agent.Spec.Tools
 			if strings.EqualFold(duplicatePolicy, resources.AgentDuplicateToolCallPolicyShortCircuit) && len(toolCalled) > 0 {
@@ -237,14 +348,14 @@ func (w *AgentWorker) run(ctx context.Context, streamSink ModelStreamEventSink) 
 						w.onEvent(fmt.Sprintf("step=%d model_error non-retryable status=%d; stopping", step, mge.StatusCode))
 						w.onEvent("worker stopped model error")
 					}
-					return
+					return nil
 				}
 				if consecutiveModelErrors >= maxConsecutiveModelErrors {
 					if w.onEvent != nil {
 						w.onEvent(fmt.Sprintf("step=%d model_error circuit open after %d consecutive failures; stopping", step, consecutiveModelErrors))
 						w.onEvent("worker stopped model error")
 					}
-					return
+					return nil
 				}
 				continue
 			}
@@ -254,10 +365,16 @@ func (w *AgentWorker) run(ctx context.Context, streamSink ModelStreamEventSink) 
 					w.onEvent(fmt.Sprintf("step=%d model signaled done with no output", step))
 					w.onEvent("worker completed")
 				}
-				return
+				return persistCheckpoint(step+1, true)
 			}
 			modelOutput := strings.TrimSpace(modelResp.Content)
 			modelUsage := normalizeModelUsageWithFallback(modelResp.Usage, w.agent, modelResp, step)
+			totalTokens += modelUsage.TotalTokens
+			totalInputTokens += modelUsage.InputTokens
+			totalOutputTokens += modelUsage.OutputTokens
+			if modelOutput != "" {
+				lastOutput = modelOutput
+			}
 			if w.onEvent != nil {
 				w.onEvent(fmt.Sprintf(
 					"step=%d model success tokens=%d input_tokens=%d output_tokens=%d usage_source=%s latency_ms=%d",
@@ -288,7 +405,7 @@ func (w *AgentWorker) run(ctx context.Context, streamSink ModelStreamEventSink) 
 				if w.onEvent != nil {
 					w.onEvent("worker completed")
 				}
-				return
+				return persistCheckpoint(step+1, true)
 			}
 
 			if len(availableTools) == 0 {
@@ -300,23 +417,26 @@ func (w *AgentWorker) run(ctx context.Context, streamSink ModelStreamEventSink) 
 						if len(contractRemaining) > 0 {
 							next := anyMapKey(contractRemaining)
 							if emitContractViolation(step, fmt.Sprintf("expected tool=%s before completion", next)) {
-								return
+								return persistCheckpoint(step+1, true)
 							}
 						}
 						if !markersSatisfied(modelOutput) {
+							if err := persistCheckpoint(step+1, false); err != nil {
+								return err
+							}
 							continue
 						}
 					}
 					if w.onEvent != nil {
 						w.onEvent("worker completed")
 					}
-					return
+					return persistCheckpoint(step+1, true)
 				}
 				if w.onEvent != nil {
 					w.onEvent(fmt.Sprintf("step=%d no tools and no output, completing", step))
 					w.onEvent("worker completed")
 				}
-				return
+				return persistCheckpoint(step+1, true)
 			}
 
 			requestedCalls, selectErr := selectAuthorizedToolCalls(modelResp, w.agent.Spec.Tools)
@@ -333,13 +453,7 @@ func (w *AgentWorker) run(ctx context.Context, streamSink ModelStreamEventSink) 
 						if IsToolDeniedError(selectErr) {
 							status = ToolStatusDenied
 						}
-						reqID := fmt.Sprintf(
-							"%s/%s/s%03d/%s",
-							resources.NormalizeNamespace(w.agent.Metadata.Namespace),
-							strings.TrimSpace(w.agent.Metadata.Name),
-							step,
-							normalizeToolKey(failedTool),
-						)
+						reqID := toolRequestID(step, failedTool, "")
 						w.onEvent(fmt.Sprintf("step=%d tool=%s tool_contract=%s tool_request_id=%s tool_attempt=%d status=%s tool_code=%s tool_reason=%s retryable=%t error=%s", step, failedTool, ToolContractVersionV1, reqID, 1, status, code, reason, retryable, selectErr))
 					}
 				}
@@ -348,14 +462,17 @@ func (w *AgentWorker) run(ctx context.Context, streamSink ModelStreamEventSink) 
 						w.onEvent(fmt.Sprintf("step=%d tool=%s permission denied error=%v", step, failedTool, selectErr))
 						w.onEvent("worker stopped permission denied")
 					}
-					return
+					return nil
 				}
 				if IsApprovalRequiredError(selectErr) {
 					if w.onEvent != nil {
 						w.onEvent(fmt.Sprintf("step=%d tool=%s approval required error=%v", step, failedTool, selectErr))
 						w.onEvent("worker stopped approval required")
 					}
-					return
+					return nil
+				}
+				if err := persistCheckpoint(step+1, false); err != nil {
+					return err
 				}
 				continue
 			}
@@ -367,7 +484,10 @@ func (w *AgentWorker) run(ctx context.Context, streamSink ModelStreamEventSink) 
 					if w.onEvent != nil {
 						w.onEvent("worker completed")
 					}
-					return
+					return persistCheckpoint(step+1, true)
+				}
+				if err := persistCheckpoint(step+1, false); err != nil {
+					return err
 				}
 				continue
 			}
@@ -388,14 +508,14 @@ func (w *AgentWorker) run(ctx context.Context, streamSink ModelStreamEventSink) 
 				if toolCalled[toolKey] {
 					if contractEnabled && strings.EqualFold(duplicatePolicy, resources.AgentDuplicateToolCallPolicyDeny) {
 						if emitContractViolation(step, fmt.Sprintf("duplicate successful tool call denied tool=%s", tool)) {
-							return
+							return persistCheckpoint(step+1, true)
 						}
 						continue
 					}
 					if priorResult, seen := toolResultCache[cacheKey]; seen {
 						w.memory.Put(fmt.Sprintf("%s:%d", tool, step), priorResult)
 						if w.onEvent != nil {
-							w.onEvent(fmt.Sprintf("step=%d tool=%s tool_contract=%s tool_request_id=%s tool_attempt=%d duration_ms=%d success short_circuit=true", step, tool, ToolContractVersionV1, fmt.Sprintf("%s/%s/s%03d/%s", resources.NormalizeNamespace(w.agent.Metadata.Namespace), strings.TrimSpace(w.agent.Metadata.Name), step, normalizeToolKey(tool)), 1, 0))
+							w.onEvent(fmt.Sprintf("step=%d tool=%s tool_contract=%s tool_request_id=%s tool_attempt=%d duration_ms=%d success short_circuit=true", step, tool, ToolContractVersionV1, toolRequestID(step, tool, requested.ID), 1, 0))
 						}
 						w.history = append(w.history, ChatMessage{
 							Role:       "tool",
@@ -408,16 +528,10 @@ func (w *AgentWorker) run(ctx context.Context, streamSink ModelStreamEventSink) 
 
 				if contractEnabled && !contractSequenceSet[toolKey] {
 					if emitContractViolation(step, fmt.Sprintf("tool not in declared sequence tool=%s", tool)) {
-						return
+						return persistCheckpoint(step+1, true)
 					}
 				}
-				reqID := fmt.Sprintf(
-					"%s/%s/s%03d/%s",
-					resources.NormalizeNamespace(w.agent.Metadata.Namespace),
-					strings.TrimSpace(w.agent.Metadata.Name),
-					step,
-					normalizeToolKey(tool),
-				)
+				reqID := toolRequestID(step, tool, requested.ID)
 				toolStart := time.Now()
 				response, execErr := ExecuteToolContract(ctx, w.toolRuntime, ToolExecutionRequest{
 					ToolContractVersion: ToolContractVersionV1,
@@ -467,14 +581,14 @@ func (w *AgentWorker) run(ctx context.Context, streamSink ModelStreamEventSink) 
 							w.onEvent(fmt.Sprintf("step=%d tool=%s tool_contract=%s tool_request_id=%s tool_attempt=%d permission denied duration_ms=%d error=%v", step, tool, contractVersion, toolRequestID, toolAttempt, toolDurationMS, err))
 							w.onEvent("worker stopped permission denied")
 						}
-						return
+						return nil
 					}
 					if IsApprovalRequiredError(err) {
 						if w.onEvent != nil {
 							w.onEvent(fmt.Sprintf("step=%d tool=%s tool_contract=%s tool_request_id=%s tool_attempt=%d duration_ms=%d error=%v", step, tool, contractVersion, toolRequestID, toolAttempt, toolDurationMS, err))
 							w.onEvent("worker stopped approval required")
 						}
-						return
+						return nil
 					}
 					if w.onEvent != nil {
 						w.onEvent(fmt.Sprintf("step=%d tool=%s tool_contract=%s tool_request_id=%s tool_attempt=%d duration_ms=%d error=%v", step, tool, contractVersion, toolRequestID, toolAttempt, toolDurationMS, err))
@@ -506,14 +620,17 @@ func (w *AgentWorker) run(ctx context.Context, streamSink ModelStreamEventSink) 
 						w.onEvent(fmt.Sprintf("step=%d tool=%s stop_on_first_tool", step, tool))
 						w.onEvent("worker completed")
 					}
-					return
+					return persistCheckpoint(step+1, true)
 				}
 			}
 			if contractEnabled && len(contractRemaining) == 0 && markersSatisfied(modelOutput) {
 				if w.onEvent != nil {
 					w.onEvent("worker completed")
 				}
-				return
+				return persistCheckpoint(step+1, true)
+			}
+			if err := persistCheckpoint(step+1, false); err != nil {
+				return err
 			}
 		}
 	}
@@ -522,19 +639,20 @@ func (w *AgentWorker) run(ctx context.Context, streamSink ModelStreamEventSink) 
 		if len(contractRemaining) > 0 {
 			next := anyMapKey(contractRemaining)
 			if emitContractViolation(maxSteps, fmt.Sprintf("max_steps reached before tool sequence completion expected tool=%s", next)) {
-				return
+				return persistCheckpoint(maxSteps+1, true)
 			}
 		} else {
 			if w.onEvent != nil {
 				w.onEvent("contract_warning max_steps reached before required output markers were satisfied")
 				w.onEvent("worker completed")
 			}
-			return
+			return persistCheckpoint(maxSteps+1, true)
 		}
 	}
 	if w.onEvent != nil {
 		w.onEvent("max steps reached")
 	}
+	return persistCheckpoint(maxSteps+1, true)
 }
 
 func anyMapKey(m map[string]bool) string {
