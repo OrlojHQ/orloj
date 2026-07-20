@@ -66,6 +66,37 @@ Orloj first replays events `43` onward, then follows live events. You can also i
 curl -sS "http://127.0.0.1:8080/v1/sessions/support-chat/events?after=42"
 ```
 
+## Supervise a Session in the Console
+
+Open **Sessions** in the Console and select a Session to follow its durable event
+stream. The live timeline combines assistant output with turn lifecycle, tool,
+approval, error, and Session checkpoint events. The connection badge shows when
+the stream is live or reconnecting; after reconnecting, the Console resumes from
+the latest event sequence without duplicating activity.
+
+You can intervene while a turn is running:
+
+- Send new steering input and select **Interrupt active turn** to replace the
+  in-flight turn.
+- Pause execution to fence the current worker and retain the turn for another
+  attempt.
+- Resume a paused Session or cancel it permanently.
+
+Session checkpoint markers appear at safe execution boundaries. Select a marker
+to:
+
+- **Replay** the checkpoint read-only and verify its state hash and event
+  history. Replay never calls a model or tool.
+- **Rewind** the Session to that point, optionally interrupting the active turn
+  and resuming immediately.
+- **Fork** an independent Session from that point, leaving the source unchanged.
+
+After a rewind, superseded events remain available in a collapsed **Abandoned
+timeline** section for audit. The active checkpoint lineage and current live tail
+remain visually distinct. This is different from an AgentSystem review
+checkpoint, which pauses a Task for human approval rather than storing
+time-travel state.
+
 ## Pause, resume, and cancel
 
 ```bash

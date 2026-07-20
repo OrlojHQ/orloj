@@ -4751,6 +4751,13 @@ button:focus-visible {
   color: var(--yellow);
 }
 
+.session-live-layout {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: minmax(0, 1fr) minmax(290px, 340px);
+  gap: 16px;
+}
+
 .session-chat {
   display: flex;
   flex: 1;
@@ -4772,6 +4779,194 @@ button:focus-visible {
   overflow-y: auto;
   padding: 24px;
   overscroll-behavior: contain;
+}
+
+.session-timeline__active,
+.session-timeline__abandoned-items {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.session-timeline__abandoned {
+  width: 100%;
+  overflow: hidden;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+}
+
+.session-timeline__abandoned > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+  color: var(--text-tertiary);
+  background: var(--bg-secondary);
+  cursor: pointer;
+  font-size: var(--text-xs);
+  list-style: none;
+}
+
+.session-timeline__abandoned > summary::-webkit-details-marker {
+  display: none;
+}
+
+.session-timeline__abandoned > summary span:first-child {
+  color: var(--yellow);
+  font-weight: 600;
+}
+
+.session-timeline__abandoned-items {
+  padding: 12px;
+  opacity: 0.62;
+  filter: saturate(0.55);
+}
+
+.session-timeline__reset-label {
+  color: var(--yellow);
+  font-weight: 600;
+}
+
+.session-message--reset .session-message__content {
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--text-tertiary) 55%, transparent);
+}
+
+.session-activity {
+  display: flex;
+  width: min(94%, 880px);
+  align-self: center;
+  gap: 10px;
+  padding: 9px 12px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-tertiary) 72%, transparent);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.session-activity__icon {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  padding-top: 2px;
+  color: var(--accent);
+}
+
+.session-activity__copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.session-activity__title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  font-size: var(--text-xs);
+}
+
+.session-activity__title strong {
+  color: var(--text-primary);
+}
+
+.session-activity__title span,
+.session-activity__title time {
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+}
+
+.session-activity__copy > pre {
+  max-height: 180px;
+  margin: 7px 0 0;
+  overflow: auto;
+  color: var(--text-secondary);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.session-activity--error,
+.session-activity--turn-failed {
+  border-color: color-mix(in srgb, var(--red) 40%, var(--border));
+}
+
+.session-checkpoint-marker {
+  position: relative;
+  display: grid;
+  width: 100%;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  color: var(--text-secondary);
+  text-align: left;
+  background: color-mix(in srgb, var(--accent) 5%, var(--bg-secondary));
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.session-checkpoint-marker:hover,
+.session-checkpoint-marker--selected {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--accent) 11%, var(--bg-secondary));
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+}
+
+.session-checkpoint-marker:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.session-checkpoint-marker__line {
+  position: absolute;
+  top: 50%;
+  right: 100%;
+  left: -24px;
+  border-top: 1px dashed color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+
+.session-checkpoint-marker__icon {
+  display: flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  background: var(--bg-tertiary);
+  border-radius: 50%;
+}
+
+.session-checkpoint-marker__copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.session-checkpoint-marker__copy strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-checkpoint-marker__copy span,
+.session-checkpoint-marker__state {
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+}
+
+.session-checkpoint-marker__state {
+  color: var(--green);
+}
+
+.session-timeline__abandoned .session-checkpoint-marker__state {
+  color: var(--yellow);
 }
 
 .session-chat__empty {
@@ -4883,9 +5078,321 @@ button:focus-visible {
   gap: 12px;
 }
 
+.session-checkpoint-panel {
+  display: flex;
+  min-height: 520px;
+  max-height: calc(100vh - 170px);
+  flex-direction: column;
+  gap: 14px;
+  overflow: auto;
+  padding: 16px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-lg);
+}
+
+.session-checkpoint-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.session-checkpoint-panel__header h2 {
+  color: var(--text-primary);
+  font-size: var(--text-md);
+}
+
+.session-checkpoint-panel__header p {
+  margin-top: 2px;
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+}
+
+.session-checkpoint-panel__header > svg {
+  color: var(--accent);
+}
+
+.session-runtime-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.session-runtime-summary > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  padding: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.session-runtime-summary span {
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+}
+
+.session-runtime-summary strong {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+}
+
+.session-checkpoint-list {
+  display: grid;
+  max-height: 180px;
+  gap: 5px;
+  overflow-y: auto;
+}
+
+.session-checkpoint-list__item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 8px;
+  color: var(--text-secondary);
+  text-align: left;
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.session-checkpoint-list__item:hover,
+.session-checkpoint-list__item--selected {
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+.session-checkpoint-list__item span {
+  overflow: hidden;
+  font-size: var(--text-2xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-checkpoint-list__item span:last-child {
+  color: var(--text-tertiary);
+}
+
+.session-checkpoint-panel__empty {
+  padding: 12px;
+  color: var(--text-tertiary);
+  text-align: center;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.session-checkpoint-inspector,
+.session-replay-panel {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.session-checkpoint-inspector__title {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.session-checkpoint-inspector__title strong {
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  text-transform: capitalize;
+}
+
+.session-checkpoint-inspector__title span {
+  overflow: hidden;
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+  text-overflow: ellipsis;
+}
+
+.session-checkpoint-inspector dl,
+.session-replay-panel dl {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.session-checkpoint-inspector dl > div,
+.session-replay-panel dl > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.session-checkpoint-inspector dt,
+.session-replay-panel dt {
+  color: var(--text-tertiary);
+  font-size: var(--text-2xs);
+}
+
+.session-checkpoint-inspector dd,
+.session-replay-panel dd {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-checkpoint-inspector__actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.session-checkpoint-inspector__actions .btn-secondary,
+.session-action-dialog__footer .btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+}
+
+.session-checkpoint-inspector__actions .btn-secondary {
+  padding: 6px 7px;
+  font-size: var(--text-xs);
+}
+
+.session-replay-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.session-replay-panel__header strong {
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+}
+
+.session-replay-panel p {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+.session-replay-panel__verified,
+.session-replay-panel__failed {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--green);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.session-replay-panel__failed {
+  color: var(--red);
+}
+
+.session-replay-panel details {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+.session-replay-panel summary {
+  cursor: pointer;
+}
+
+.session-replay-events {
+  display: grid;
+  max-height: 180px;
+  gap: 4px;
+  overflow-y: auto;
+  margin-top: 8px;
+}
+
+.session-replay-events > div {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 6px;
+  padding: 4px 6px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+}
+
+.session-action-dialog {
+  width: min(520px, calc(100vw - 32px));
+  overflow: hidden;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+.session-action-dialog__header,
+.session-action-dialog__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+}
+
+.session-action-dialog__header {
+  border-bottom: 1px solid var(--border);
+}
+
+.session-action-dialog__header h2 {
+  color: var(--text-primary);
+  font-size: var(--text-lg);
+}
+
+.session-action-dialog__header p,
+.session-action-dialog__body > p {
+  margin-top: 3px;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+.session-action-dialog__body {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+}
+
+.session-action-dialog__body > label:not(.checkbox-inline) {
+  display: grid;
+  gap: 5px;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.session-action-dialog__footer {
+  justify-content: flex-end;
+  border-top: 1px solid var(--border);
+}
+
 @media (max-width: 768px) {
+  .session-live-layout {
+    grid-template-columns: 1fr;
+  }
+
   .session-chat {
     min-height: 480px;
+    max-height: none;
+  }
+
+  .session-checkpoint-panel {
+    min-height: auto;
     max-height: none;
   }
 
