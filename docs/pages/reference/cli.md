@@ -10,6 +10,7 @@ For server and worker daemon flags, see [Server Flags](./server-flags.md). For l
 
 ```text
 orlojctl apply -f <file-or-directory> [--run] [--dry-run] [--namespace <ns>]
+orlojctl dev -f <file-or-directory> [--run] [--task <name>] [--namespace <ns>]
 orlojctl validate -f <file|dir>
 orlojctl create secret <name> --from-literal key=value [...]
 orlojctl create token <name> --role <role>
@@ -104,6 +105,44 @@ Behavior matrix:
 | `orlojctl apply -f task.yaml` | Applied | Applied | Applied |
 | `orlojctl apply -f <dir>` | Skipped | Applied | Applied |
 | `orlojctl apply -f <dir> --run` | Applied | Applied | Applied |
+
+## `orlojctl dev`
+
+`orlojctl dev` provides a local edit loop around the existing apply, task-watch, and log commands:
+
+```text
+watch manifests -> apply changes -> optionally rerun a task -> follow phase and logs
+```
+
+The command applies the watched manifests once, then recursively watches YAML and JSON files and reapplies them after changes settle. Invalid intermediate saves are reported without stopping the watcher. Press Ctrl+C to stop.
+
+| Flag | Default | Description |
+|---|---|---|
+| `-f` | none | Manifest file or directory to apply and watch (required). |
+| `--run` | `false` | Rerun one runnable `Task` after each successful apply and follow its phase and logs. |
+| `--task` | inferred | Runnable Task manifest to use. Required when the watched path contains more than one runnable Task. |
+| `--debounce` | `400ms` | Quiet period used to coalesce editor filesystem events before applying. |
+| `--follow-interval` | `2s` | Polling interval for task logs. Task phase updates use the task watch stream. |
+| `--namespace` / `-n` | global namespace (if set) | Namespace used for apply, task watch, and task logs. |
+
+Without `--run`, runnable Task manifests are skipped—even when `-f` points directly to one—so saving a task cannot accidentally start work. Other resources and template Tasks are still applied.
+
+With `--run`, the selected runnable Task is included using task rerun semantics. If its previous execution is still active, the new rerun is skipped and the watcher continues instead of retrying repeatedly. When the API creates a suffixed rerun name, `dev` automatically follows that task instance.
+
+Examples:
+
+```bash
+# Watch and reapply resources safely
+orlojctl dev -f ./demo
+
+# Run the directory's only runnable task and follow it
+orlojctl dev -f ./demo --run
+
+# Select one task when the directory contains several
+orlojctl dev -f ./demo --run --task nightly-report
+```
+
+File removal or rename does not delete previously applied API resources. `dev` reapplies the manifests that remain; delete resources explicitly when needed.
 
 ## `orlojctl validate`
 
