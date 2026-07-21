@@ -48,3 +48,7 @@ Point an OpenAI client at Orloj, set `model` to an AgentSystem name, and invoke 
 **[Build an Interactive Agent Session](./interactive-sessions.md)**
 *For teams building copilots, support chats, and human-steered agent workflows.*
 Create a durable multi-turn Session, submit idempotent messages, consume replayable SSE, and pause or resume execution.
+
+**[Chat with an AgentSystem](./chat-with-agent-systems.md)**
+*For operators and developers collaborating with an AgentSystem from the terminal.*
+Learn the Session mental model, design a conversational coordinator, stream turns with `orlojctl chat`, review tool actions inline, and resume a durable conversation.

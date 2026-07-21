@@ -34,6 +34,7 @@ orlojctl cancel task <name> [--reason <text>]
 orlojctl retry task <name> [--with-overrides key=value ...]
 orlojctl top workers|tasks
 orlojctl run --system <name> [key=value ...]
+orlojctl chat <agent-system> [--session <name>] [--decided-by <id>]
 orlojctl init <name> [--blueprint pipeline|hierarchical|swarm-loop]
 orlojctl logs <agent-name>|task/<task-name>
 orlojctl trace task <task-name>
@@ -331,6 +332,51 @@ See the [Connect an MCP Server](../guides/connect-mcp-server.md) guide for full 
 | `--timeout` | `5m` | Max wait time for task completion. |
 
 Positional args after flags are parsed as `key=value` task input.
+
+## `orlojctl chat`
+
+Starts a line-oriented, multi-turn conversation with an AgentSystem:
+
+```bash
+orlojctl chat support-system
+```
+
+The command creates an unlimited-turn Session, submits each user message as a
+new Session turn, and streams the assistant response. It prints the generated
+Session name and a resume command when it starts.
+
+```bash
+orlojctl chat support-system --session chat-support-system-a8f32c
+```
+
+`--session` reconnects to an existing, non-terminal Session. The Session must
+belong to the positional AgentSystem and selected namespace. If a turn is still
+running, the CLI reattaches to its event stream.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--session` | empty | Existing Session name to resume. Without it, create a new Session. |
+| `--decided-by` | empty | Identity recorded on inline ToolApproval decisions. |
+| `--server` | resolved server | API server URL. |
+| `--namespace` | global namespace (if set), else `default` | Session and AgentSystem namespace. |
+| `-n` | global namespace (if set), else `default` | Shorthand for `--namespace`. |
+
+REPL commands:
+
+- `/help` lists commands.
+- `/session` prints the Session, AgentSystem, and namespace.
+- `/exit` or `/quit` disconnects without deleting the Session.
+- Ctrl-C disconnects the CLI and preserves the Session for later resume.
+
+When a turn blocks on a ToolApproval, interactive terminals show the exact tool
+input and prompt to approve, deny, or quit. Non-interactive input exits with
+explicit standalone approval commands instead. TaskApproval checkpoints remain
+available through `orlojctl approve`, `deny`, and `request-changes`.
+
+Every message can execute the AgentSystem graph; chat is best for systems
+designed for interactive work. See [Chat with an AgentSystem](../guides/chat-with-agent-systems.md)
+for the Session mental model, routing patterns, safety guidance, and a complete
+example.
 
 ## `orlojctl events`
 
