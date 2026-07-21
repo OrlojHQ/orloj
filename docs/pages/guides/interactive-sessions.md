@@ -2,6 +2,26 @@
 
 Sessions add a durable, multi-turn conversation around an existing AgentSystem. The AgentSystem still defines the agents, graph, tools, and governance. The Session remembers the conversation, queues user turns, and exposes a reconnectable event stream.
 
+For an interactive terminal client, use:
+
+```bash
+orlojctl chat support-system
+```
+
+The command creates the Session, submits turns with idempotency keys, renders
+the event stream, reconnects after transient disconnects, and prompts for
+ToolApproval decisions. It prints the generated Session name so you can leave
+and reconnect later:
+
+```bash
+orlojctl chat support-system --session chat-support-system-a8f32c
+```
+
+Exiting or pressing Ctrl-C preserves the Session. For guidance on when chat is
+appropriate, which agent receives a message, and how to design a coordinator
+with safe action routes, see [Chat with an AgentSystem](./chat-with-agent-systems.md).
+The API examples below are for clients that need to manage Sessions directly.
+
 ## Create a Session
 
 ```bash

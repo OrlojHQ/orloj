@@ -81,6 +81,7 @@ func newRootCommand() *cobra.Command {
 		newRetryCommand(),
 		newTopCommand(),
 		newRunCommand(),
+		newChatCommand(),
 		newInitCommand(),
 		newLogsCommand(),
 		newTraceCommand(),

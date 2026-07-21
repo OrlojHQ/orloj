@@ -161,6 +161,10 @@ export default defineConfig({
           text: "Interactive Sessions",
           link: "/guides/interactive-sessions",
         },
+        {
+          text: "Chat with an AgentSystem",
+          link: "/guides/chat-with-agent-systems",
+        },
       ],
     },
 
