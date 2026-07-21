@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"text/tabwriter"
 	"time"
 
@@ -65,6 +66,7 @@ func newRootCommand() *cobra.Command {
 
 	root.AddCommand(
 		newApplyCommand(),
+		newDevCommand(),
 		newCreateCommand(),
 		newApproveCommand(),
 		newDenyCommand(),
@@ -162,167 +164,15 @@ func runApply(cmd *cobra.Command, args []string) error {
 	manifestPath, _ := cmd.Flags().GetString("file")
 	includeRunnable, _ := cmd.Flags().GetBool("run")
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
-	server := resolveServer(cmd)
-	ns := resolveNamespace(cmd)
-
-	if manifestPath == "" {
-		return errors.New("-f is required")
-	}
-
-	info, err := os.Stat(manifestPath)
-	if err != nil {
-		return fmt.Errorf("cannot access %s: %w", manifestPath, err)
-	}
-	isDir := info.IsDir()
-
-	files, err := manifestPaths(manifestPath)
-	if err != nil {
-		return err
-	}
-	if len(files) == 0 {
-		return fmt.Errorf("no manifest files found in %s", manifestPath)
-	}
-
-	skippedRunnableTasks := 0
-	skippedNonManifest := 0
-	if isDir && !includeRunnable {
-		filtered := make([]string, 0, len(files))
-		for _, f := range files {
-			raw, readErr := os.ReadFile(f)
-			if readErr != nil {
-				filtered = append(filtered, f)
-				continue
-			}
-			kind, detectErr := resources.DetectKind(raw)
-			if detectErr != nil || !strings.EqualFold(strings.TrimSpace(kind), "task") {
-				filtered = append(filtered, f)
-				continue
-			}
-			task, taskErr := resources.ParseTaskManifest(raw)
-			if taskErr != nil {
-				filtered = append(filtered, f)
-				continue
-			}
-			if task.Spec.Mode == "template" {
-				filtered = append(filtered, f)
-				continue
-			}
-			skippedRunnableTasks++
-			fmt.Printf("skipped task/%s (mode: %s) from %s; use --run to include\n", task.Metadata.Name, task.Spec.Mode, f)
-		}
-		files = filtered
-	}
-
-	var applyErrs []string
-	applied := 0
-	created := 0
-	updated := 0
-	unchanged := 0
-	for _, f := range files {
-		raw, err := os.ReadFile(f)
-		if err != nil {
-			applyErrs = append(applyErrs, fmt.Sprintf("%s: %v", f, err))
-			continue
-		}
-
-		kind, err := resources.DetectKind(raw)
-		if err != nil {
-			if isDir {
-				skippedNonManifest++
-				continue
-			}
-			applyErrs = append(applyErrs, fmt.Sprintf("%s: %v", f, err))
-			continue
-		}
-
-		endpoint, payload, name, err := buildApplyRequest(kind, raw)
-		if err != nil {
-			applyErrs = append(applyErrs, fmt.Sprintf("%s: %v", f, err))
-			continue
-		}
-		if strings.TrimSpace(ns) != "" {
-			payload, err = overridePayloadNamespace(payload, ns)
-			if err != nil {
-				applyErrs = append(applyErrs, fmt.Sprintf("%s: %v", f, err))
-				continue
-			}
-		}
-		if dryRun {
-			action, previewErr := previewApplyChange(server, endpoint, name, payload)
-			if previewErr != nil {
-				applyErrs = append(applyErrs, fmt.Sprintf("%s: %v", f, previewErr))
-				continue
-			}
-			switch action {
-			case "create":
-				created++
-			case "update":
-				updated++
-			default:
-				unchanged++
-			}
-			fmt.Printf("dry-run %s %s/%s\n", action, strings.ToLower(kind), name)
-			applied++
-			continue
-		}
-
-		postURL := server + endpoint
-		if includeRunnable && endpoint == "/v1/tasks" {
-			postURL += "?rerun=true"
-		}
-		if includeRunnable && endpoint == "/v1/eval-runs" {
-			postURL += "?run=true"
-		}
-		resp, err := http.Post(postURL, "application/json", bytes.NewReader(payload))
-		if err != nil {
-			applyErrs = append(applyErrs, fmt.Sprintf("%s: apply request failed: %v", f, err))
-			continue
-		}
-		body, _ := io.ReadAll(resp.Body)
-		resp.Body.Close()
-
-		if resp.StatusCode >= 300 {
-			applyErrs = append(applyErrs, fmt.Sprintf("%s: %s", f, bytes.TrimSpace(body)))
-			continue
-		}
-
-		actualName := nameFromResponseBody(body, name)
-		isSuspendedEvalRun := !includeRunnable && endpoint == "/v1/eval-runs"
-		if actualName != name {
-			fmt.Printf("applied %s/%s (rerun as %s)\n", strings.ToLower(kind), name, actualName)
-		} else if isSuspendedEvalRun {
-			fmt.Printf("applied %s/%s (suspended; use --run or 'orlojctl eval start %s' to execute)\n", strings.ToLower(kind), name, name)
-		} else {
-			fmt.Printf("applied %s/%s\n", strings.ToLower(kind), name)
-		}
-		applied++
-	}
-
-	if len(applyErrs) > 0 {
-		if skippedRunnableTasks > 0 {
-			fmt.Printf("\n%d applied, %d skipped runnable task(s), %d failed:\n", applied, skippedRunnableTasks, len(applyErrs))
-		} else {
-			fmt.Printf("\n%d applied, %d failed:\n", applied, len(applyErrs))
-		}
-		for _, e := range applyErrs {
-			fmt.Printf("  error  %s\n", e)
-		}
-		return fmt.Errorf("apply failed for %d file(s)", len(applyErrs))
-	}
-
-	if dryRun {
-		fmt.Printf("\ndry-run summary: %d checked, %d create, %d update, %d unchanged\n", applied, created, updated, unchanged)
-		return nil
-	}
-
-	if isDir || applied > 1 || skippedRunnableTasks > 0 {
-		if skippedRunnableTasks > 0 {
-			fmt.Printf("\n%d file(s) applied, %d runnable task(s) skipped\n", applied, skippedRunnableTasks)
-		} else {
-			fmt.Printf("\n%d file(s) applied\n", applied)
-		}
-	}
-	return nil
+	_, err := applyManifests(applyOptions{
+		Server:          resolveServer(cmd),
+		Namespace:       resolveNamespace(cmd),
+		ManifestPath:    manifestPath,
+		IncludeRunnable: includeRunnable,
+		DryRun:          dryRun,
+		Out:             os.Stdout,
+	})
+	return err
 }
 
 type stringSliceFlag []string
@@ -1010,13 +860,14 @@ func newLogsCommand() *cobra.Command {
 
 func runLogs(cmd *cobra.Command, args []string) error {
 	server := resolveServer(cmd)
+	namespace := resolveNamespace(cmd)
 	follow, _ := cmd.Flags().GetBool("follow")
 	interval, _ := cmd.Flags().GetDuration("follow-interval")
 	if interval <= 0 {
 		return errors.New("--follow-interval must be > 0")
 	}
 
-	_, endpoint, err := logsEndpoint(server, args[0])
+	_, endpoint, err := logsEndpointWithNamespace(server, args[0], namespace)
 	if err != nil {
 		return err
 	}
@@ -1043,6 +894,10 @@ func runLogs(cmd *cobra.Command, args []string) error {
 // logsEndpoint resolves a "task/<name>" or "<agent-name>" logs target into
 // the resource name and the server endpoint that returns its logs.
 func logsEndpoint(server, target string) (name, endpoint string, err error) {
+	return logsEndpointWithNamespace(server, target, "")
+}
+
+func logsEndpointWithNamespace(server, target, namespace string) (name, endpoint string, err error) {
 	name = target
 	if strings.HasPrefix(strings.ToLower(target), "task/") {
 		name = strings.TrimSpace(target[len("task/"):])
@@ -1052,6 +907,9 @@ func logsEndpoint(server, target string) (name, endpoint string, err error) {
 	}
 	if strings.TrimSpace(name) == "" {
 		return "", "", errors.New("logs target name is required")
+	}
+	if strings.TrimSpace(namespace) != "" {
+		endpoint += "?namespace=" + url.QueryEscape(strings.TrimSpace(namespace))
 	}
 	return name, endpoint, nil
 }
@@ -1096,8 +954,41 @@ func fetchLogs(ctx context.Context, endpoint string) ([]string, error) {
 // rotated out entirely, everything currently returned is printed instead
 // of nothing.
 func streamLogs(ctx context.Context, out io.Writer, fetch func(context.Context) ([]string, error), interval time.Duration) error {
-	var lastPrinted string
-	haveLast := false
+	return streamLogsWithCursor(ctx, out, fetch, interval, &logStreamCursor{})
+}
+
+type logStreamCursor struct {
+	mu          sync.Mutex
+	lastPrinted string
+	haveLast    bool
+}
+
+func (c *logStreamCursor) printNew(out io.Writer, logs []string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	start := 0
+	if c.haveLast {
+		if idx := lastIndexOf(logs, c.lastPrinted); idx >= 0 {
+			start = idx + 1
+		}
+	}
+	for _, line := range logs[start:] {
+		fmt.Fprintln(out, line)
+	}
+	if len(logs) > 0 {
+		c.lastPrinted = logs[len(logs)-1]
+		c.haveLast = true
+	}
+}
+
+func streamLogsWithCursor(
+	ctx context.Context,
+	out io.Writer,
+	fetch func(context.Context) ([]string, error),
+	interval time.Duration,
+	cursor *logStreamCursor,
+) error {
 	for {
 		logs, err := fetch(ctx)
 		if err != nil {
@@ -1107,19 +998,7 @@ func streamLogs(ctx context.Context, out io.Writer, fetch func(context.Context) 
 			return err
 		}
 
-		start := 0
-		if haveLast {
-			if idx := lastIndexOf(logs, lastPrinted); idx >= 0 {
-				start = idx + 1
-			}
-		}
-		for _, line := range logs[start:] {
-			fmt.Fprintln(out, line)
-		}
-		if len(logs) > 0 {
-			lastPrinted = logs[len(logs)-1]
-			haveLast = true
-		}
+		cursor.printNew(out, logs)
 
 		select {
 		case <-ctx.Done():
