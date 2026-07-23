@@ -1,8 +1,10 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -76,6 +78,35 @@ func TestSessionCheckpointCreateReplayAndLeaseRecovery(t *testing.T) {
 	}
 	if recovered.Turn.Fence == claim.Turn.Fence {
 		t.Fatal("recovery did not advance fence")
+	}
+}
+
+func TestSessionCheckpointRejectsOversizedStateAtomically(t *testing.T) {
+	s := NewSessionStore()
+	newTestSession(t, s, "bounded")
+	state := append([]byte(`{"value":"`), bytes.Repeat([]byte("x"), MaxSessionCheckpointStateBytes)...)
+	state = append(state, []byte(`"}`)...)
+	_, _, err := s.CreateCheckpoint(
+		context.Background(),
+		"bounded",
+		"turn",
+		"worker",
+		1,
+		resources.SessionCheckpoint{
+			SafePoint:    resources.SessionCheckpointSafePointStep,
+			StateVersion: resources.SessionCheckpointStateVersion,
+			State:        state,
+		},
+	)
+	if err == nil || !strings.Contains(err.Error(), "exceeds maximum size") {
+		t.Fatalf("CreateCheckpoint() error = %v", err)
+	}
+	checkpoints, listErr := s.ListCheckpoints(context.Background(), "bounded")
+	if listErr != nil {
+		t.Fatal(listErr)
+	}
+	if len(checkpoints) != 0 {
+		t.Fatalf("stored checkpoints = %d, want 0", len(checkpoints))
 	}
 }
 

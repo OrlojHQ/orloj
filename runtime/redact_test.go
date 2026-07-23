@@ -72,3 +72,17 @@ func TestRedactSensitive(t *testing.T) {
 		})
 	}
 }
+
+func TestSanitizeToolOutputRedactsAndUTF8Truncates(t *testing.T) {
+	input := "token=super-secret " + strings.Repeat("界", maxToolOutputBytes)
+	got := sanitizeToolOutput(input)
+	if strings.Contains(got, "super-secret") || !strings.Contains(got, "[REDACTED]") {
+		t.Fatalf("sensitive value was not redacted")
+	}
+	if !strings.Contains(got, "[output truncated]") {
+		t.Fatalf("oversized output was not truncated")
+	}
+	if strings.ToValidUTF8(got, "") != got {
+		t.Fatalf("sanitized output is not valid UTF-8")
+	}
+}

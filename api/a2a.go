@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -31,6 +32,35 @@ type A2AConfig struct {
 	AllowPrivateEndpoints  bool
 	RateLimitRPM           int
 	MaxConcurrentSubscribe int
+	MaxWaitDuration        time.Duration
+}
+
+const (
+	maxA2AConcurrentWaiters = 10
+	maxA2AWaitDuration      = 30 * time.Minute
+)
+
+func (s *Server) acquireA2AWaiter(ctx context.Context) (context.Context, func(), bool) {
+	limit := maxA2AConcurrentWaiters
+	waitDuration := maxA2AWaitDuration
+	if s.a2aConfig != nil {
+		if configured := s.a2aConfig.MaxConcurrentSubscribe; configured > 0 && configured < limit {
+			limit = configured
+		}
+		if configured := s.a2aConfig.MaxWaitDuration; configured > 0 && configured < waitDuration {
+			waitDuration = configured
+		}
+	}
+	if current := s.a2aSubscribeCount.Add(1); int(current) > limit {
+		s.a2aSubscribeCount.Add(-1)
+		return ctx, func() {}, false
+	}
+	waitCtx, cancel := context.WithTimeout(ctx, waitDuration)
+	release := func() {
+		cancel()
+		s.a2aSubscribeCount.Add(-1)
+	}
+	return waitCtx, release, true
 }
 
 // handleWellKnownAgentCard serves GET /.well-known/agent-card.json and legacy /.well-known/agent.json
@@ -433,18 +463,14 @@ func (s *Server) handleA2ATaskSubscribe(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
-	if s.a2aConfig != nil && s.a2aConfig.MaxConcurrentSubscribe > 0 {
-		cur := s.a2aSubscribeCount.Add(1)
-		if int(cur) > s.a2aConfig.MaxConcurrentSubscribe {
-			s.a2aSubscribeCount.Add(-1)
-			status = "error"
-			writeA2AError(w, req.ID, a2a.ErrCodeInternal, "too many concurrent subscribe connections")
-			return
-		}
-	} else {
-		s.a2aSubscribeCount.Add(1)
+	waitCtx, releaseWaiter, acquired := s.acquireA2AWaiter(r.Context())
+	if !acquired {
+		status = "error"
+		writeA2AError(w, req.ID, a2a.ErrCodeInternal, "too many concurrent A2A wait connections")
+		return
 	}
-	defer s.a2aSubscribeCount.Add(-1)
+	defer releaseWaiter()
+	r = r.WithContext(waitCtx)
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {

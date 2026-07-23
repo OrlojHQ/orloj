@@ -178,7 +178,7 @@ func (s *Server) handleSessionByName(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, obj)
 	case http.MethodDelete:
 		if err := s.stores.Sessions.Delete(r.Context(), key); err != nil {
-			http.Error(w, err.Error(), http.StatusNotFound)
+			s.writeSessionError(w, r, err)
 			return
 		}
 		s.publishResourceEvent("Session", name, "deleted", map[string]any{
@@ -196,7 +196,7 @@ func (s *Server) handleSessionTurns(w http.ResponseWriter, r *http.Request, name
 	case http.MethodGet:
 		turns, err := s.stores.Sessions.ListTurns(r.Context(), key)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusNotFound)
+			s.writeSessionError(w, r, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"items": turns})
@@ -217,11 +217,7 @@ func (s *Server) handleSessionTurns(w http.ResponseWriter, r *http.Request, name
 			IdempotencyKey: idempotencyKey,
 		})
 		if err != nil {
-			status := http.StatusConflict
-			if strings.Contains(strings.ToLower(err.Error()), "required") {
-				status = http.StatusBadRequest
-			}
-			http.Error(w, err.Error(), status)
+			s.writeSessionError(w, r, err)
 			return
 		}
 		s.publishSessionEvents(events)
@@ -258,7 +254,7 @@ func (s *Server) handleSessionEvents(w http.ResponseWriter, r *http.Request, nam
 	}
 	events, err := s.stores.Sessions.ListEvents(r.Context(), scopedNameForRequest(r, name), after, limit)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		s.writeSessionError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": events})
@@ -277,11 +273,7 @@ func (s *Server) handleSessionControl(w http.ResponseWriter, r *http.Request, na
 	}
 	events, session, err := s.stores.Sessions.ApplyControl(r.Context(), scopedNameForRequest(r, name), action, body.Reason)
 	if err != nil {
-		status := http.StatusConflict
-		if strings.Contains(strings.ToLower(err.Error()), "not found") {
-			status = http.StatusNotFound
-		}
-		http.Error(w, err.Error(), status)
+		s.writeSessionError(w, r, err)
 		return
 	}
 	s.publishSessionEvents(events)
@@ -344,10 +336,18 @@ func (s *Server) handleSessionStream(w http.ResponseWriter, r *http.Request, nam
 	for {
 		events, listErr := s.stores.Sessions.ListEvents(ctx, key, after, 500)
 		if listErr != nil {
+			if s.logger != nil {
+				s.logger.Printf(
+					"Session event stream failed session=%s namespace=%s error=%v",
+					name,
+					namespace,
+					listErr,
+				)
+			}
 			writeSessionSSE(w, flusher, resources.SessionEvent{
 				Type:      resources.SessionEventError,
 				Timestamp: time.Now().UTC().Format(time.RFC3339Nano),
-				Payload:   map[string]any{"message": listErr.Error()},
+				Payload:   map[string]any{"message": "session event stream failed"},
 			})
 			return
 		}

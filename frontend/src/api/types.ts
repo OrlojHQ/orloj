@@ -501,7 +501,6 @@ export interface SessionCheckpoint {
   safe_point: "step.completed" | "agent.completed" | "turn.completed";
   state_version: number;
   state_hash: string;
-  state: unknown;
   created_at: string;
   expires_at?: string;
 }

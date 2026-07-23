@@ -2,9 +2,13 @@ package api_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"testing"
+
+	"github.com/OrlojHQ/orloj/resources"
+	orloja2a "github.com/OrlojHQ/orloj/runtime/a2a"
 )
 
 func postA2AV1JSONRPC(t *testing.T, url, method string, params any, version string) *http.Response {
@@ -207,6 +211,58 @@ func TestA2AV1PushConfigCRUD(t *testing.T) {
 	deleteRPC := decodeJSONRPCResponse(t, deleteResp)
 	if deleteRPC.Error != nil {
 		t.Fatalf("DeleteTaskPushNotificationConfig error = %#v", deleteRPC.Error)
+	}
+}
+
+func TestA2AV1PushConfigCannotCrossSystemTaskIDCollision(t *testing.T) {
+	ts, stores := newA2ATestServer(t, true)
+	defer ts.Close()
+	seedAgent(t, stores, "red-system", "red", nil)
+	seedAgent(t, stores, "blue-system", "blue", nil)
+	for _, task := range []resources.Task{
+		{
+			Metadata: resources.ObjectMeta{
+				Name:   "red-internal",
+				Labels: map[string]string{orloja2a.LabelA2ATaskID: "shared-external"},
+			},
+			Spec: resources.TaskSpec{System: "red-system", Input: map[string]string{"prompt": "red"}},
+		},
+		{
+			Metadata: resources.ObjectMeta{
+				Name:   "blue-internal",
+				Labels: map[string]string{orloja2a.LabelA2ATaskID: "shared-external"},
+			},
+			Spec: resources.TaskSpec{System: "blue-system", Input: map[string]string{"prompt": "blue"}},
+		},
+	} {
+		if _, err := stores.Tasks.Upsert(context.Background(), task); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	create := postA2AV1JSONRPC(
+		t,
+		ts.URL+"/v1/agent-systems/red-system/a2a",
+		"CreateTaskPushNotificationConfig",
+		map[string]any{
+			"taskId": "shared-external",
+			"id":     "shared-config",
+			"url":    "https://red.example.com/a2a",
+		},
+		"1.0",
+	)
+	if rpc := decodeJSONRPCResponse(t, create); rpc.Error != nil {
+		t.Fatalf("red create error = %#v", rpc.Error)
+	}
+	getBlue := postA2AV1JSONRPC(
+		t,
+		ts.URL+"/v1/agent-systems/blue-system/a2a",
+		"GetTaskPushNotificationConfig",
+		map[string]any{"taskId": "shared-external", "id": "shared-config"},
+		"1.0",
+	)
+	if rpc := decodeJSONRPCResponse(t, getBlue); rpc.Error == nil {
+		t.Fatal("blue system read red system push configuration")
 	}
 }
 

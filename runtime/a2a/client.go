@@ -173,7 +173,11 @@ func (c *Client) cacheError(url string, err error) {
 
 // SendTask sends a task to a remote A2A agent via JSON-RPC.
 func (c *Client) SendTask(ctx context.Context, agentURL string, params TaskSendParams, extraHeaders map[string]string) (TaskResult, error) {
-	if card, err := c.FetchCard(ctx, agentURL, extraHeaders); err == nil && cardSupportsV1(card) {
+	card, err := c.FetchCard(ctx, agentURL, extraHeaders)
+	if err != nil && c.requireSigned {
+		return TaskResult{}, fmt.Errorf("a2a: required Agent Card verification failed: %w", err)
+	}
+	if err == nil && cardSupportsV1(card) {
 		return c.sendTaskV1(ctx, card, params, extraHeaders)
 	}
 	return c.callMethod(ctx, agentURL, MethodTaskSend, params, extraHeaders)
@@ -181,7 +185,11 @@ func (c *Client) SendTask(ctx context.Context, agentURL string, params TaskSendP
 
 // GetTask retrieves a task status from a remote A2A agent.
 func (c *Client) GetTask(ctx context.Context, agentURL string, params TaskGetParams, extraHeaders map[string]string) (TaskResult, error) {
-	if card, err := c.FetchCard(ctx, agentURL, extraHeaders); err == nil && cardSupportsV1(card) {
+	card, err := c.FetchCard(ctx, agentURL, extraHeaders)
+	if err != nil && c.requireSigned {
+		return TaskResult{}, fmt.Errorf("a2a: required Agent Card verification failed: %w", err)
+	}
+	if err == nil && cardSupportsV1(card) {
 		client, callCtx, err := c.v1Client(ctx, card, extraHeaders)
 		if err != nil {
 			return TaskResult{}, err
@@ -197,7 +205,11 @@ func (c *Client) GetTask(ctx context.Context, agentURL string, params TaskGetPar
 
 // CancelTask cancels a task on a remote A2A agent.
 func (c *Client) CancelTask(ctx context.Context, agentURL string, params TaskCancelParams, extraHeaders map[string]string) (TaskResult, error) {
-	if card, err := c.FetchCard(ctx, agentURL, extraHeaders); err == nil && cardSupportsV1(card) {
+	card, err := c.FetchCard(ctx, agentURL, extraHeaders)
+	if err != nil && c.requireSigned {
+		return TaskResult{}, fmt.Errorf("a2a: required Agent Card verification failed: %w", err)
+	}
+	if err == nil && cardSupportsV1(card) {
 		client, callCtx, err := c.v1Client(ctx, card, extraHeaders)
 		if err != nil {
 			return TaskResult{}, err

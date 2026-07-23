@@ -3,6 +3,7 @@ package agentruntime
 import (
 	"regexp"
 	"strings"
+	"unicode/utf8"
 )
 
 var sensitivePatterns = []*regexp.Regexp{
@@ -43,8 +44,19 @@ const maxToolOutputBytes = 64 * 1024 // 64 KB
 // structural delimiters so the model can distinguish tool data from
 // instructions, reducing the surface for prompt injection attacks.
 func sanitizeToolOutput(result string) string {
-	if len(result) > maxToolOutputBytes {
-		result = result[:maxToolOutputBytes] + "\n[output truncated]"
+	const (
+		prefix           = "<tool_result>\n"
+		suffix           = "\n</tool_result>"
+		truncatedMessage = "\n[output truncated]"
+	)
+	result = RedactSensitive(result)
+	contentLimit := maxToolOutputBytes - len(prefix) - len(suffix)
+	if len(result) > contentLimit {
+		limit := contentLimit - len(truncatedMessage)
+		for limit > 0 && !utf8.ValidString(result[:limit]) {
+			limit--
+		}
+		result = result[:limit] + truncatedMessage
 	}
-	return "<tool_result>\n" + result + "\n</tool_result>"
+	return prefix + result + suffix
 }

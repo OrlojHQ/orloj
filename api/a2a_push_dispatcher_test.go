@@ -50,7 +50,7 @@ func TestDispatchA2APushEventDeliversLatestTask(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create task: %v", err)
 	}
-	config, err := server.stores.A2APushConfigs.Save(ctx, "task-1", &lf.PushConfig{
+	config, err := server.stores.A2APushConfigs.SaveForTask(ctx, "team/internal-task", "task-1", &lf.PushConfig{
 		URL: "https://callbacks.example.com/a2a",
 	})
 	if err != nil {

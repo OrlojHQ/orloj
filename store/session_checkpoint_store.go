@@ -15,6 +15,8 @@ import (
 	"github.com/OrlojHQ/orloj/resources"
 )
 
+const MaxSessionCheckpointStateBytes = 4 * 1024 * 1024
+
 func (s *SessionStore) CreateCheckpoint(
 	ctx context.Context,
 	name, turnID, workerID string,
@@ -22,6 +24,12 @@ func (s *SessionStore) CreateCheckpoint(
 	checkpoint resources.SessionCheckpoint,
 ) (resources.SessionCheckpoint, resources.SessionEvent, error) {
 	key := normalizeLookupName(name)
+	if len(checkpoint.State) > MaxSessionCheckpointStateBytes {
+		return resources.SessionCheckpoint{}, resources.SessionEvent{}, fmt.Errorf(
+			"checkpoint state exceeds maximum size of %d bytes",
+			MaxSessionCheckpointStateBytes,
+		)
+	}
 	if len(checkpoint.State) == 0 || !json.Valid(checkpoint.State) {
 		return resources.SessionCheckpoint{}, resources.SessionEvent{}, fmt.Errorf("checkpoint state must be valid JSON")
 	}
@@ -372,7 +380,7 @@ func (s *SessionStore) ReplayCheckpoint(
 		result.CheckpointID = checkpoint.ID
 		result.StateVersion = checkpoint.StateVersion
 		result.StateHash = checkpoint.StateHash
-		final := checkpoint.DeepCopy()
+		final := checkpoint.MetadataView()
 		result.FinalCheckpoint = &final
 		events, listErr := s.listEventsThrough(ctx, name, checkpoint.EventSequence)
 		if listErr != nil {

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -65,6 +66,58 @@ func TestFetchCard_RejectsUnsignedWhenRequired(t *testing.T) {
 	client := newTestClient(func(client *Client) { client.requireSigned = true })
 	if _, err := client.FetchCard(context.Background(), server.URL, nil); err == nil {
 		t.Fatal("expected unsigned card rejection")
+	}
+}
+
+func TestRequiredSignedCardFailureNeverFallsBackToLegacyOperations(t *testing.T) {
+	var legacyCalls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			legacyCalls.Add(1)
+		}
+		_ = json.NewEncoder(w).Encode(AgentCard{Name: "unsigned"})
+	}))
+	defer server.Close()
+
+	operations := []struct {
+		name string
+		call func(*Client) error
+	}{
+		{
+			name: "send",
+			call: func(client *Client) error {
+				_, err := client.SendTask(context.Background(), server.URL, TaskSendParams{
+					ID:      "task-1",
+					Message: TaskMessage{Role: "user", Parts: []TaskPart{{Type: "text", Text: "hello"}}},
+				}, nil)
+				return err
+			},
+		},
+		{
+			name: "get",
+			call: func(client *Client) error {
+				_, err := client.GetTask(context.Background(), server.URL, TaskGetParams{ID: "task-1"}, nil)
+				return err
+			},
+		},
+		{
+			name: "cancel",
+			call: func(client *Client) error {
+				_, err := client.CancelTask(context.Background(), server.URL, TaskCancelParams{ID: "task-1"}, nil)
+				return err
+			},
+		},
+	}
+	for _, operation := range operations {
+		t.Run(operation.name, func(t *testing.T) {
+			client := newTestClient(func(client *Client) { client.requireSigned = true })
+			if err := operation.call(client); err == nil || !strings.Contains(err.Error(), "verification failed") {
+				t.Fatalf("operation error = %v", err)
+			}
+		})
+	}
+	if calls := legacyCalls.Load(); calls != 0 {
+		t.Fatalf("legacy POST calls = %d, want 0", calls)
 	}
 }
 

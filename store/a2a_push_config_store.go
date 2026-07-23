@@ -19,27 +19,31 @@ import (
 // from Orloj's inbound TaskWebhook resources.
 type A2APushConfigStore struct {
 	mu            sync.RWMutex
-	items         map[lf.TaskID]map[string]*lf.PushConfig
+	items         map[string]map[string]*lf.PushConfig
 	db            *sql.DB
 	encryptionKey []byte
 }
 
-var _ push.ConfigStore = (*A2APushConfigStore)(nil)
-
 func NewA2APushConfigStore() *A2APushConfigStore {
-	return &A2APushConfigStore{items: make(map[lf.TaskID]map[string]*lf.PushConfig)}
+	return &A2APushConfigStore{items: make(map[string]map[string]*lf.PushConfig)}
 }
 
 func NewA2APushConfigStoreWithDB(db *sql.DB, encryptionKey []byte) *A2APushConfigStore {
 	return &A2APushConfigStore{
-		items:         make(map[lf.TaskID]map[string]*lf.PushConfig),
+		items:         make(map[string]map[string]*lf.PushConfig),
 		db:            db,
 		encryptionKey: append([]byte(nil), encryptionKey...),
 	}
 }
 
-func (s *A2APushConfigStore) Save(ctx context.Context, taskID lf.TaskID, config *lf.PushConfig) (*lf.PushConfig, error) {
-	if taskID == "" || config == nil || strings.TrimSpace(config.URL) == "" {
+func (s *A2APushConfigStore) SaveForTask(
+	ctx context.Context,
+	taskName string,
+	taskID lf.TaskID,
+	config *lf.PushConfig,
+) (*lf.PushConfig, error) {
+	taskName = strings.TrimSpace(taskName)
+	if taskName == "" || taskID == "" || config == nil || strings.TrimSpace(config.URL) == "" {
 		return nil, lf.ErrInvalidParams
 	}
 	item, err := clonePushConfig(config)
@@ -57,11 +61,13 @@ func (s *A2APushConfigStore) Save(ctx context.Context, taskID lf.TaskID, config 
 			return nil, err
 		}
 		_, err = s.db.ExecContext(ctx,
-			`INSERT INTO a2a_push_configs(task_id, config_id, payload, updated_at)
-			 VALUES($1, $2, $3, NOW())
-			 ON CONFLICT(task_id, config_id)
-			 DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()`,
-			string(taskID), item.ID, payload,
+			`INSERT INTO a2a_push_configs(task_name, task_id, config_id, payload, updated_at)
+			 VALUES($1, $2, $3, $4, NOW())
+			 ON CONFLICT(task_name, config_id)
+			 DO UPDATE SET task_id = EXCLUDED.task_id,
+			               payload = EXCLUDED.payload,
+			               updated_at = NOW()`,
+			taskName, string(taskID), item.ID, payload,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("save A2A push config: %w", err)
@@ -71,19 +77,26 @@ func (s *A2APushConfigStore) Save(ctx context.Context, taskID lf.TaskID, config 
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.items[taskID] == nil {
-		s.items[taskID] = make(map[string]*lf.PushConfig)
+	if s.items[taskName] == nil {
+		s.items[taskName] = make(map[string]*lf.PushConfig)
 	}
-	s.items[taskID][item.ID] = item
+	s.items[taskName][item.ID] = item
 	return clonePushConfig(item)
 }
 
-func (s *A2APushConfigStore) Get(ctx context.Context, taskID lf.TaskID, configID string) (*lf.PushConfig, error) {
+func (s *A2APushConfigStore) GetForTask(
+	ctx context.Context,
+	taskName string,
+	taskID lf.TaskID,
+	configID string,
+) (*lf.PushConfig, error) {
+	taskName = strings.TrimSpace(taskName)
 	if s.db != nil {
 		var payload string
 		err := s.db.QueryRowContext(ctx,
-			`SELECT payload FROM a2a_push_configs WHERE task_id = $1 AND config_id = $2`,
-			string(taskID), configID,
+			`SELECT payload FROM a2a_push_configs
+			 WHERE task_name = $1 AND task_id = $2 AND config_id = $3`,
+			taskName, string(taskID), configID,
 		).Scan(&payload)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, push.ErrPushConfigNotFound
@@ -96,18 +109,27 @@ func (s *A2APushConfigStore) Get(ctx context.Context, taskID lf.TaskID, configID
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	item := s.items[taskID][configID]
+	item := s.items[taskName][configID]
 	if item == nil {
+		return nil, push.ErrPushConfigNotFound
+	}
+	if item.TaskID != taskID {
 		return nil, push.ErrPushConfigNotFound
 	}
 	return clonePushConfig(item)
 }
 
-func (s *A2APushConfigStore) List(ctx context.Context, taskID lf.TaskID) ([]*lf.PushConfig, error) {
+func (s *A2APushConfigStore) ListForTask(
+	ctx context.Context,
+	taskName string,
+	taskID lf.TaskID,
+) ([]*lf.PushConfig, error) {
+	taskName = strings.TrimSpace(taskName)
 	if s.db != nil {
 		rows, err := s.db.QueryContext(ctx,
-			`SELECT config_id, payload FROM a2a_push_configs WHERE task_id = $1 ORDER BY config_id`,
-			string(taskID),
+			`SELECT config_id, payload FROM a2a_push_configs
+			 WHERE task_name = $1 AND task_id = $2 ORDER BY config_id`,
+			taskName, string(taskID),
 		)
 		if err != nil {
 			return nil, fmt.Errorf("list A2A push configs: %w", err)
@@ -130,8 +152,11 @@ func (s *A2APushConfigStore) List(ctx context.Context, taskID lf.TaskID) ([]*lf.
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	result := make([]*lf.PushConfig, 0, len(s.items[taskID]))
-	for _, item := range s.items[taskID] {
+	result := make([]*lf.PushConfig, 0, len(s.items[taskName]))
+	for _, item := range s.items[taskName] {
+		if item.TaskID != taskID {
+			continue
+		}
 		copy, err := clonePushConfig(item)
 		if err != nil {
 			return nil, err
@@ -142,31 +167,41 @@ func (s *A2APushConfigStore) List(ctx context.Context, taskID lf.TaskID) ([]*lf.
 	return result, nil
 }
 
-func (s *A2APushConfigStore) Delete(ctx context.Context, taskID lf.TaskID, configID string) error {
+func (s *A2APushConfigStore) DeleteForTask(
+	ctx context.Context,
+	taskName string,
+	taskID lf.TaskID,
+	configID string,
+) error {
+	taskName = strings.TrimSpace(taskName)
 	if s.db != nil {
 		_, err := s.db.ExecContext(ctx,
-			`DELETE FROM a2a_push_configs WHERE task_id = $1 AND config_id = $2`,
-			string(taskID), configID,
+			`DELETE FROM a2a_push_configs
+			 WHERE task_name = $1 AND task_id = $2 AND config_id = $3`,
+			taskName, string(taskID), configID,
 		)
 		return err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	delete(s.items[taskID], configID)
-	if len(s.items[taskID]) == 0 {
-		delete(s.items, taskID)
+	if item := s.items[taskName][configID]; item != nil && item.TaskID == taskID {
+		delete(s.items[taskName], configID)
+	}
+	if len(s.items[taskName]) == 0 {
+		delete(s.items, taskName)
 	}
 	return nil
 }
 
-func (s *A2APushConfigStore) DeleteAll(ctx context.Context, taskID lf.TaskID) error {
+func (s *A2APushConfigStore) DeleteAllForTask(ctx context.Context, taskName string) error {
+	taskName = strings.TrimSpace(taskName)
 	if s.db != nil {
-		_, err := s.db.ExecContext(ctx, `DELETE FROM a2a_push_configs WHERE task_id = $1`, string(taskID))
+		_, err := s.db.ExecContext(ctx, `DELETE FROM a2a_push_configs WHERE task_name = $1`, taskName)
 		return err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	delete(s.items, taskID)
+	delete(s.items, taskName)
 	return nil
 }
 

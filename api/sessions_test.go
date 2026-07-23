@@ -242,6 +242,21 @@ func TestSessionCheckpointReplayRewindAndForkAPI(t *testing.T) {
 	if resp.StatusCode != http.StatusOK || len(list.Items) != 1 || list.Items[0].ID != checkpoint.ID {
 		t.Fatalf("checkpoint list status=%d items=%#v", resp.StatusCode, list.Items)
 	}
+	resp = sessionRequest(
+		t,
+		http.MethodGet,
+		server.URL+"/v1/sessions/time-travel/checkpoints/"+checkpoint.ID,
+		nil,
+		nil,
+	)
+	var publicCheckpoint map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&publicCheckpoint); err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if _, exposed := publicCheckpoint["state"]; exposed {
+		t.Fatalf("checkpoint API exposed runtime state: %#v", publicCheckpoint)
+	}
 
 	resp = sessionRequest(
 		t,

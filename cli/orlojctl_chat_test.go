@@ -687,6 +687,24 @@ func TestScanChatEventStreamSupportsCommentsAndMultilineData(t *testing.T) {
 	}
 }
 
+func TestChatRendererEscapesTerminalControlSequences(t *testing.T) {
+	var out bytes.Buffer
+	renderer := chatTurnRenderer{out: &out}
+	renderer.delta("safe\x1b]8;;https://evil.example\a link\rhidden\u202E")
+	renderer.complete("safe\x1b]8;;https://evil.example\a link\rhidden\u202E")
+	renderer.finishLine()
+	got := out.String()
+	if strings.ContainsRune(got, '\x1b') || strings.ContainsRune(got, '\a') ||
+		strings.ContainsRune(got, '\r') || strings.ContainsRune(got, '\u202e') {
+		t.Fatalf("terminal controls reached output: %q", got)
+	}
+	for _, want := range []string{`\x1b`, `\u0007`, `\r`, `\u202E`} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("safe output missing %q: %q", want, got)
+		}
+	}
+}
+
 func writeChatTestJSON(t *testing.T, w http.ResponseWriter, status int, value any) {
 	t.Helper()
 	w.Header().Set("Content-Type", "application/json")

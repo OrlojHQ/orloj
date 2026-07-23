@@ -53,6 +53,8 @@ const (
 	SessionEventError             = "error"
 
 	SessionCheckpointStateVersion   = 1
+	SessionCheckpointMaxCount       = 100
+	SessionCheckpointMaxAge         = 720 * time.Hour
 	SessionCheckpointSafePointStep  = "step.completed"
 	SessionCheckpointSafePointAgent = "agent.completed"
 	SessionCheckpointSafePointTurn  = "turn.completed"
@@ -174,19 +176,68 @@ type SessionCheckpoint struct {
 	ExpiresAt          string          `json:"expires_at,omitempty" yaml:"expires_at,omitempty"`
 }
 
+// SessionCheckpointMetadata is the public checkpoint representation. Runtime
+// state is deliberately excluded because it may contain tool results and other
+// execution-only data.
+type SessionCheckpointMetadata struct {
+	ID                 string `json:"id" yaml:"id"`
+	SessionName        string `json:"session_name" yaml:"session_name"`
+	Namespace          string `json:"namespace" yaml:"namespace"`
+	TurnID             string `json:"turn_id,omitempty" yaml:"turn_id,omitempty"`
+	TaskName           string `json:"task_name,omitempty" yaml:"task_name,omitempty"`
+	Agent              string `json:"agent,omitempty" yaml:"agent,omitempty"`
+	AgentIndex         int    `json:"agent_index,omitempty" yaml:"agent_index,omitempty"`
+	MessageID          string `json:"message_id,omitempty" yaml:"message_id,omitempty"`
+	BranchID           string `json:"branch_id,omitempty" yaml:"branch_id,omitempty"`
+	Attempt            int    `json:"attempt,omitempty" yaml:"attempt,omitempty"`
+	Fence              int64  `json:"fence,omitempty" yaml:"fence,omitempty"`
+	SystemGeneration   int64  `json:"system_generation,omitempty" yaml:"system_generation,omitempty"`
+	EventSequence      uint64 `json:"event_sequence" yaml:"event_sequence"`
+	ParentCheckpointID string `json:"parent_checkpoint_id,omitempty" yaml:"parent_checkpoint_id,omitempty"`
+	SafePoint          string `json:"safe_point" yaml:"safe_point"`
+	StateVersion       int    `json:"state_version" yaml:"state_version"`
+	StateHash          string `json:"state_hash" yaml:"state_hash"`
+	CreatedAt          string `json:"created_at" yaml:"created_at"`
+	ExpiresAt          string `json:"expires_at,omitempty" yaml:"expires_at,omitempty"`
+}
+
+func (c SessionCheckpoint) MetadataView() SessionCheckpointMetadata {
+	return SessionCheckpointMetadata{
+		ID:                 c.ID,
+		SessionName:        c.SessionName,
+		Namespace:          c.Namespace,
+		TurnID:             c.TurnID,
+		TaskName:           c.TaskName,
+		Agent:              c.Agent,
+		AgentIndex:         c.AgentIndex,
+		MessageID:          c.MessageID,
+		BranchID:           c.BranchID,
+		Attempt:            c.Attempt,
+		Fence:              c.Fence,
+		SystemGeneration:   c.SystemGeneration,
+		EventSequence:      c.EventSequence,
+		ParentCheckpointID: c.ParentCheckpointID,
+		SafePoint:          c.SafePoint,
+		StateVersion:       c.StateVersion,
+		StateHash:          c.StateHash,
+		CreatedAt:          c.CreatedAt,
+		ExpiresAt:          c.ExpiresAt,
+	}
+}
+
 type SessionCheckpointList struct {
-	Items []SessionCheckpoint `json:"items" yaml:"items"`
+	Items []SessionCheckpointMetadata `json:"items" yaml:"items"`
 }
 
 type SessionReplayResult struct {
-	SessionName     string             `json:"session_name" yaml:"session_name"`
-	CheckpointID    string             `json:"checkpoint_id" yaml:"checkpoint_id"`
-	StateVersion    int                `json:"state_version" yaml:"state_version"`
-	StateHash       string             `json:"state_hash" yaml:"state_hash"`
-	Verified        bool               `json:"verified" yaml:"verified"`
-	CheckpointCount int                `json:"checkpoint_count" yaml:"checkpoint_count"`
-	Events          []SessionEvent     `json:"events,omitempty" yaml:"events,omitempty"`
-	FinalCheckpoint *SessionCheckpoint `json:"final_checkpoint,omitempty" yaml:"final_checkpoint,omitempty"`
+	SessionName     string                     `json:"session_name" yaml:"session_name"`
+	CheckpointID    string                     `json:"checkpoint_id" yaml:"checkpoint_id"`
+	StateVersion    int                        `json:"state_version" yaml:"state_version"`
+	StateHash       string                     `json:"state_hash" yaml:"state_hash"`
+	Verified        bool                       `json:"verified" yaml:"verified"`
+	CheckpointCount int                        `json:"checkpoint_count" yaml:"checkpoint_count"`
+	Events          []SessionEvent             `json:"events,omitempty" yaml:"events,omitempty"`
+	FinalCheckpoint *SessionCheckpointMetadata `json:"final_checkpoint,omitempty" yaml:"final_checkpoint,omitempty"`
 }
 
 func (s *Session) Normalize() error {
@@ -222,7 +273,13 @@ func (s *Session) Normalize() error {
 		return fmt.Errorf("spec.checkpoint_retention.max_count cannot be negative")
 	}
 	if s.Spec.CheckpointRetention.MaxCount == 0 {
-		s.Spec.CheckpointRetention.MaxCount = 100
+		s.Spec.CheckpointRetention.MaxCount = SessionCheckpointMaxCount
+	}
+	if s.Spec.CheckpointRetention.MaxCount > SessionCheckpointMaxCount {
+		return fmt.Errorf(
+			"spec.checkpoint_retention.max_count cannot exceed %d",
+			SessionCheckpointMaxCount,
+		)
 	}
 	s.Spec.CheckpointRetention.MaxAge = strings.TrimSpace(s.Spec.CheckpointRetention.MaxAge)
 	if s.Spec.CheckpointRetention.MaxAge == "" {
@@ -233,6 +290,12 @@ func (s *Session) Normalize() error {
 		return fmt.Errorf(
 			"invalid spec.checkpoint_retention.max_age %q: expected a positive duration",
 			s.Spec.CheckpointRetention.MaxAge,
+		)
+	}
+	if checkpointMaxAge > SessionCheckpointMaxAge {
+		return fmt.Errorf(
+			"spec.checkpoint_retention.max_age cannot exceed %s",
+			SessionCheckpointMaxAge,
 		)
 	}
 	if s.Spec.Input == nil {

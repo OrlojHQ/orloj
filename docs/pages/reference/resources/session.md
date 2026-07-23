@@ -12,8 +12,10 @@ Sessions do not replace Tasks. A Session turn creates a Task internally so exist
 - `idle_ttl` (duration string): expiry window after the last activity. Defaults to `24h`.
 - `max_turns` (int, >= 0): optional completed-turn limit. `0` means unlimited.
 - `input` (map[string]string): values added to each turn's internal Task input.
-- `checkpoint_retention.max_count` (int, >= 0): maximum retained safe-point snapshots. Defaults to `100`.
-- `checkpoint_retention.max_age` (duration string): maximum checkpoint age. Defaults to `168h`.
+- `checkpoint_retention.max_count` (int, `0`–`100`): maximum retained safe-point snapshots. Defaults to `100`.
+- `checkpoint_retention.max_age` (positive duration string, at most `720h`): maximum checkpoint age. Defaults to `168h`.
+
+Checkpoint runtime state is limited to 4 MiB and remains server-private. Checkpoint APIs expose metadata and integrity hashes for replay, rewind, and fork operations, but never return raw runtime or tool-result state.
 
 ## status
 

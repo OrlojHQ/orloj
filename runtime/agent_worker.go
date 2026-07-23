@@ -513,7 +513,6 @@ func (w *AgentWorker) run(ctx context.Context, streamSink ModelStreamEventSink) 
 						continue
 					}
 					if priorResult, seen := toolResultCache[cacheKey]; seen {
-						w.memory.Put(fmt.Sprintf("%s:%d", tool, step), priorResult)
 						if w.onEvent != nil {
 							w.onEvent(fmt.Sprintf("step=%d tool=%s tool_contract=%s tool_request_id=%s tool_attempt=%d duration_ms=%d success short_circuit=true", step, tool, ToolContractVersionV1, toolRequestID(step, tool, requested.ID), 1, 0))
 						}
@@ -601,18 +600,18 @@ func (w *AgentWorker) run(ctx context.Context, streamSink ModelStreamEventSink) 
 					})
 					continue
 				}
-				toolResultCache[cacheKey] = result
+				safeResult := sanitizeToolOutput(result)
+				toolResultCache[cacheKey] = safeResult
 				toolCalled[toolKey] = true
 				if contractEnabled {
 					delete(contractRemaining, toolKey)
 				}
-				w.memory.Put(fmt.Sprintf("%s:%d", tool, step), result)
 				if w.onEvent != nil {
 					w.onEvent(fmt.Sprintf("step=%d tool=%s tool_contract=%s tool_request_id=%s tool_attempt=%d duration_ms=%d success", step, tool, contractVersion, toolRequestID, toolAttempt, toolDurationMS))
 				}
 				w.history = append(w.history, ChatMessage{
 					Role:       "tool",
-					Content:    sanitizeToolOutput(result),
+					Content:    safeResult,
 					ToolCallID: requested.ID,
 				})
 				if strings.EqualFold(toolUseBehavior, resources.AgentToolUseBehaviorStopOnFirstTool) {

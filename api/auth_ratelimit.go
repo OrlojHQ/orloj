@@ -231,7 +231,10 @@ func newIPRateLimiter(r rate.Limit, burst int, trustedProxies []*net.IPNet) *ipR
 }
 
 func (rl *ipRateLimiter) Allow(r *http.Request) bool {
-	ip := extractClientIP(r, rl.trustedProxies)
+	return rl.allowIP(extractClientIP(r, rl.trustedProxies))
+}
+
+func (rl *ipRateLimiter) allowIP(ip string) bool {
 	if ip == "" {
 		return true
 	}

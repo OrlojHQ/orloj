@@ -15,6 +15,7 @@ import (
 	"github.com/a2aproject/a2a-go/v2/a2asrv"
 	"github.com/a2aproject/a2a-go/v2/a2asrv/push"
 	"google.golang.org/grpc/metadata"
+	grpcpeer "google.golang.org/grpc/peer"
 
 	"github.com/OrlojHQ/orloj/eventbus"
 	"github.com/OrlojHQ/orloj/resources"
@@ -161,24 +162,45 @@ func (h *a2aV1Handler) CancelTask(ctx context.Context, req *lf.CancelTaskRequest
 }
 
 func (h *a2aV1Handler) SendMessage(ctx context.Context, req *lf.SendMessageRequest) (lf.SendMessageResult, error) {
-	task, call, err := h.createTask(ctx, req)
+	if req == nil || req.Message == nil {
+		return nil, lf.ErrInvalidParams
+	}
+	if req != nil && req.Config != nil && req.Config.ReturnImmediately {
+		task, _, err := h.createTask(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		return orloja2a.OrlojTaskToV1(task), nil
+	}
+	waitCtx, release, ok := h.server.acquireA2AWaiter(ctx)
+	if !ok {
+		return nil, lf.NewError(lf.ErrInternalError, "too many concurrent A2A wait connections")
+	}
+	defer release()
+	task, call, err := h.createTask(waitCtx, req)
 	if err != nil {
 		return nil, err
 	}
-	result := orloja2a.OrlojTaskToV1(task)
-	if req.Config != nil && req.Config.ReturnImmediately {
-		return result, nil
-	}
-	return h.waitForTask(ctx, call, task, nil)
+	return h.waitForTask(waitCtx, call, task, nil)
 }
 
 func (h *a2aV1Handler) SendStreamingMessage(ctx context.Context, req *lf.SendMessageRequest) iter.Seq2[lf.Event, error] {
 	return func(yield func(lf.Event, error) bool) {
+		if req == nil || req.Message == nil {
+			yield(nil, lf.ErrInvalidParams)
+			return
+		}
 		if h.server.a2aConfig != nil && !h.server.a2aConfig.StreamingEnabled {
 			yield(nil, lf.ErrUnsupportedOperation)
 			return
 		}
-		task, call, err := h.createTask(ctx, req)
+		waitCtx, release, ok := h.server.acquireA2AWaiter(ctx)
+		if !ok {
+			yield(nil, lf.NewError(lf.ErrInternalError, "too many concurrent A2A wait connections"))
+			return
+		}
+		defer release()
+		task, call, err := h.createTask(waitCtx, req)
 		if err != nil {
 			yield(nil, err)
 			return
@@ -187,7 +209,9 @@ func (h *a2aV1Handler) SendStreamingMessage(ctx context.Context, req *lf.SendMes
 		if !yield(initial, nil) || initial.Status.State.Terminal() {
 			return
 		}
-		_, _ = h.waitForTask(ctx, call, task, yield)
+		if _, err := h.waitForTask(waitCtx, call, task, yield); errors.Is(err, context.DeadlineExceeded) {
+			yield(nil, lf.NewError(lf.ErrInternalError, "maximum A2A wait duration exceeded"))
+		}
 	}
 }
 
@@ -203,7 +227,13 @@ func (h *a2aV1Handler) SubscribeToTask(ctx context.Context, req *lf.SubscribeToT
 			yield(nil, lf.ErrUnsupportedOperation)
 			return
 		}
-		task, err := h.server.findTaskByA2AID(call.request, string(req.ID), call.systemName)
+		waitCtx, release, ok := h.server.acquireA2AWaiter(ctx)
+		if !ok {
+			yield(nil, lf.NewError(lf.ErrInternalError, "too many concurrent A2A wait connections"))
+			return
+		}
+		defer release()
+		task, err := h.server.findTaskByA2AID(call.request.WithContext(waitCtx), string(req.ID), call.systemName)
 		if err != nil {
 			yield(nil, lf.ErrTaskNotFound)
 			return
@@ -216,7 +246,9 @@ func (h *a2aV1Handler) SubscribeToTask(ctx context.Context, req *lf.SubscribeToT
 		if !yield(initial, nil) {
 			return
 		}
-		_, _ = h.waitForTask(ctx, call, task, yield)
+		if _, err := h.waitForTask(waitCtx, call, task, yield); errors.Is(err, context.DeadlineExceeded) {
+			yield(nil, lf.NewError(lf.ErrInternalError, "maximum A2A wait duration exceeded"))
+		}
 	}
 }
 
@@ -226,10 +258,12 @@ func (h *a2aV1Handler) GetTaskPushConfig(ctx context.Context, req *lf.GetTaskPus
 		return nil, lf.ErrInvalidParams
 	}
 	call = v1CallForTenant(call, req.Tenant)
-	if _, err := h.server.findTaskByA2AID(call.request, string(req.TaskID), call.systemName); err != nil {
+	task, err := h.server.findTaskByA2AID(call.request, string(req.TaskID), call.systemName)
+	if err != nil {
 		return nil, lf.ErrTaskNotFound
 	}
-	config, err := h.server.stores.A2APushConfigs.Get(ctx, req.TaskID, req.ID)
+	taskKey := store.ScopedName(task.Metadata.Namespace, task.Metadata.Name)
+	config, err := h.server.stores.A2APushConfigs.GetForTask(ctx, taskKey, req.TaskID, req.ID)
 	if err != nil {
 		if errors.Is(err, push.ErrPushConfigNotFound) {
 			return nil, lf.ErrTaskNotFound
@@ -245,10 +279,12 @@ func (h *a2aV1Handler) ListTaskPushConfigs(ctx context.Context, req *lf.ListTask
 		return nil, lf.ErrInvalidParams
 	}
 	call = v1CallForTenant(call, req.Tenant)
-	if _, err := h.server.findTaskByA2AID(call.request, string(req.TaskID), call.systemName); err != nil {
+	task, err := h.server.findTaskByA2AID(call.request, string(req.TaskID), call.systemName)
+	if err != nil {
 		return nil, lf.ErrTaskNotFound
 	}
-	configs, err := h.server.stores.A2APushConfigs.List(ctx, req.TaskID)
+	taskKey := store.ScopedName(task.Metadata.Namespace, task.Metadata.Name)
+	configs, err := h.server.stores.A2APushConfigs.ListForTask(ctx, taskKey, req.TaskID)
 	if err != nil {
 		return nil, lf.ErrInternalError
 	}
@@ -291,13 +327,15 @@ func (h *a2aV1Handler) CreateTaskPushConfig(ctx context.Context, req *lf.PushCon
 		return nil, lf.ErrInvalidParams
 	}
 	call = v1CallForTenant(call, req.Tenant)
-	if _, err := h.server.findTaskByA2AID(call.request, string(req.TaskID), call.systemName); err != nil {
+	task, err := h.server.findTaskByA2AID(call.request, string(req.TaskID), call.systemName)
+	if err != nil {
 		return nil, lf.ErrTaskNotFound
 	}
 	if err := h.validatePushConfig(req); err != nil {
 		return nil, err
 	}
-	saved, err := h.server.stores.A2APushConfigs.Save(ctx, req.TaskID, req)
+	taskKey := store.ScopedName(task.Metadata.Namespace, task.Metadata.Name)
+	saved, err := h.server.stores.A2APushConfigs.SaveForTask(ctx, taskKey, req.TaskID, req)
 	if err != nil {
 		return nil, lf.ErrInternalError
 	}
@@ -310,16 +348,21 @@ func (h *a2aV1Handler) DeleteTaskPushConfig(ctx context.Context, req *lf.DeleteT
 		return lf.ErrInvalidParams
 	}
 	call = v1CallForTenant(call, req.Tenant)
-	if _, err := h.server.findTaskByA2AID(call.request, string(req.TaskID), call.systemName); err != nil {
+	task, err := h.server.findTaskByA2AID(call.request, string(req.TaskID), call.systemName)
+	if err != nil {
 		return lf.ErrTaskNotFound
 	}
-	if err := h.server.stores.A2APushConfigs.Delete(ctx, req.TaskID, req.ID); err != nil {
+	taskKey := store.ScopedName(task.Metadata.Namespace, task.Metadata.Name)
+	if err := h.server.stores.A2APushConfigs.DeleteForTask(ctx, taskKey, req.TaskID, req.ID); err != nil {
 		return lf.ErrInternalError
 	}
 	return nil
 }
 
-func (h *a2aV1Handler) GetExtendedAgentCard(context.Context, *lf.GetExtendedAgentCardRequest) (*lf.AgentCard, error) {
+func (h *a2aV1Handler) GetExtendedAgentCard(ctx context.Context, _ *lf.GetExtendedAgentCardRequest) (*lf.AgentCard, error) {
+	if _, err := h.callFromContext(ctx); err != nil {
+		return nil, err
+	}
 	return nil, lf.ErrExtendedCardNotConfigured
 }
 
@@ -384,7 +427,8 @@ func (h *a2aV1Handler) createTask(ctx context.Context, req *lf.SendMessageReques
 	if req.Config != nil && req.Config.PushConfig != nil {
 		config := req.Config.PushConfig
 		config.TaskID = lf.TaskID(created.Metadata.Labels[orloja2a.LabelA2ATaskID])
-		if _, err := h.server.stores.A2APushConfigs.Save(ctx, config.TaskID, config); err != nil {
+		taskKey := store.ScopedName(created.Metadata.Namespace, created.Metadata.Name)
+		if _, err := h.server.stores.A2APushConfigs.SaveForTask(ctx, taskKey, config.TaskID, config); err != nil {
 			return resources.Task{}, call, lf.ErrInternalError
 		}
 	}
@@ -487,6 +531,12 @@ func (h *a2aV1Handler) callFromContext(ctx context.Context) (a2aV1CallContext, e
 		if values := md.Get("authorization"); len(values) > 0 {
 			request.Header.Set("Authorization", values[0])
 		}
+	}
+	if peer, present := grpcpeer.FromContext(ctx); present && peer.Addr != nil {
+		request.RemoteAddr = peer.Addr.String()
+	}
+	if h.server.a2aRateLimiter != nil && !h.server.a2aRateLimiter.Allow(request) {
+		return a2aV1CallContext{}, lf.NewError(lf.ErrInternalError, "rate limit exceeded")
 	}
 	allowed, statusCode, _, identity := authorizeWithIdentity(h.server.authorizer, request, "a2a")
 	if allowed {

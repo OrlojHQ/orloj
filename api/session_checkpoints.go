@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -39,10 +40,14 @@ func (s *Server) handleSessionCheckpoints(
 		}
 		checkpoints, err := s.stores.Sessions.ListCheckpoints(r.Context(), key)
 		if err != nil {
-			writeSessionCheckpointError(w, err)
+			s.writeSessionError(w, r, err)
 			return
 		}
-		writeJSON(w, http.StatusOK, resources.SessionCheckpointList{Items: checkpoints})
+		items := make([]resources.SessionCheckpointMetadata, 0, len(checkpoints))
+		for _, checkpoint := range checkpoints {
+			items = append(items, checkpoint.MetadataView())
+		}
+		writeJSON(w, http.StatusOK, resources.SessionCheckpointList{Items: items})
 		return
 	}
 
@@ -54,14 +59,14 @@ func (s *Server) handleSessionCheckpoints(
 		}
 		checkpoint, found, err := s.stores.Sessions.GetCheckpoint(r.Context(), key, checkpointID)
 		if err != nil {
-			writeSessionCheckpointError(w, err)
+			s.writeSessionError(w, r, err)
 			return
 		}
 		if !found {
 			http.Error(w, fmt.Sprintf("checkpoint %q not found", checkpointID), http.StatusNotFound)
 			return
 		}
-		writeJSON(w, http.StatusOK, checkpoint)
+		writeJSON(w, http.StatusOK, checkpoint.MetadataView())
 		return
 	}
 	if len(parts) != 2 {
@@ -77,7 +82,7 @@ func (s *Server) handleSessionCheckpoints(
 		}
 		result, err := s.stores.Sessions.ReplayCheckpoint(r.Context(), key, checkpointID)
 		if err != nil {
-			writeSessionCheckpointError(w, err)
+			s.writeSessionError(w, r, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, result)
@@ -95,7 +100,7 @@ func (s *Server) handleSessionCheckpoints(
 		}
 		checkpoint, found, err := s.stores.Sessions.GetCheckpoint(r.Context(), key, checkpointID)
 		if err != nil {
-			writeSessionCheckpointError(w, err)
+			s.writeSessionError(w, r, err)
 			return
 		}
 		if !found {
@@ -104,18 +109,18 @@ func (s *Server) handleSessionCheckpoints(
 		}
 		session, event, err := s.stores.Sessions.RewindSession(r.Context(), key, checkpointID, req.Interrupt)
 		if err != nil {
-			writeSessionCheckpointError(w, err)
+			s.writeSessionError(w, r, err)
 			return
 		}
 		s.publishSessionEvents([]resources.SessionEvent{event})
 		if err := s.deleteRewoundSessionTasks(r, session, checkpoint.TurnID); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			s.writeSessionError(w, r, err)
 			return
 		}
 		if req.Resume {
 			resumeEvents, resumed, resumeErr := s.stores.Sessions.ApplyControl(r.Context(), key, "resume", "resume from checkpoint")
 			if resumeErr != nil {
-				writeSessionCheckpointError(w, resumeErr)
+				s.writeSessionError(w, r, resumeErr)
 				return
 			}
 			s.publishSessionEvents(resumeEvents)
@@ -149,7 +154,7 @@ func (s *Server) handleSessionCheckpoints(
 			req.Name,
 		)
 		if err != nil {
-			writeSessionCheckpointError(w, err)
+			s.writeSessionError(w, r, err)
 			return
 		}
 		s.publishSessionEvents(events)
@@ -161,7 +166,7 @@ func (s *Server) handleSessionCheckpoints(
 				"resume forked session",
 			)
 			if resumeErr != nil {
-				writeSessionCheckpointError(w, resumeErr)
+				s.writeSessionError(w, r, resumeErr)
 				return
 			}
 			s.publishSessionEvents(resumeEvents)
@@ -170,7 +175,7 @@ func (s *Server) handleSessionCheckpoints(
 		s.publishResourceEvent("Session", session.Metadata.Name, "created", session)
 		writeJSON(w, http.StatusCreated, map[string]any{
 			"session":    session,
-			"checkpoint": checkpoint,
+			"checkpoint": checkpoint.MetadataView(),
 			"resumed":    req.Resume,
 		})
 	default:
@@ -225,18 +230,24 @@ func splitCheckpointPath(path string) []string {
 	return out
 }
 
-func writeSessionCheckpointError(w http.ResponseWriter, err error) {
-	lower := strings.ToLower(err.Error())
-	status := http.StatusInternalServerError
+func (s *Server) writeSessionError(w http.ResponseWriter, r *http.Request, err error) {
+	classified := store.ClassifySessionError(err)
 	switch {
-	case strings.Contains(lower, "not found"):
-		status = http.StatusNotFound
-	case strings.Contains(lower, "required"), strings.Contains(lower, "invalid"), strings.Contains(lower, "unsupported"):
-		status = http.StatusBadRequest
-	case strings.Contains(lower, "active turn"), strings.Contains(lower, "already exists"), strings.Contains(lower, "fence"):
-		status = http.StatusConflict
-	case strings.Contains(lower, "hash mismatch"), strings.Contains(lower, "lineage"):
-		status = http.StatusConflict
+	case errors.Is(classified, store.ErrSessionNotFound):
+		http.Error(w, classified.Error(), http.StatusNotFound)
+	case errors.Is(classified, store.ErrSessionInvalid):
+		http.Error(w, classified.Error(), http.StatusBadRequest)
+	case errors.Is(classified, store.ErrSessionConflict):
+		http.Error(w, classified.Error(), http.StatusConflict)
+	default:
+		if s.logger != nil {
+			s.logger.Printf(
+				"Session request failed method=%s path=%s error=%v",
+				r.Method,
+				r.URL.Path,
+				err,
+			)
+		}
+		http.Error(w, "internal server error", http.StatusInternalServerError)
 	}
-	http.Error(w, err.Error(), status)
 }

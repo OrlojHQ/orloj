@@ -64,6 +64,26 @@ func TestSessionNormalizeRejectsInvalidValues(t *testing.T) {
 			},
 		},
 		{
+			name: "checkpoint count above hard limit",
+			session: Session{
+				Metadata: ObjectMeta{Name: "chat"},
+				Spec: SessionSpec{
+					System:              "support",
+					CheckpointRetention: SessionCheckpointRetention{MaxCount: 101},
+				},
+			},
+		},
+		{
+			name: "checkpoint age above hard limit",
+			session: Session{
+				Metadata: ObjectMeta{Name: "chat"},
+				Spec: SessionSpec{
+					System:              "support",
+					CheckpointRetention: SessionCheckpointRetention{MaxAge: "721h"},
+				},
+			},
+		},
+		{
 			name: "invalid phase",
 			session: Session{
 				Metadata: ObjectMeta{Name: "chat"},

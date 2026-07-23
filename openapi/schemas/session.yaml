@@ -24,10 +24,12 @@ components:
         max_count:
           type: integer
           minimum: 0
+          maximum: 100
           default: 100
         max_age:
           type: string
           default: 168h
+          description: Positive duration no greater than 720h.
     SessionStatus:
       type: object
       properties:
@@ -152,8 +154,9 @@ components:
         reason: { type: string }
     SessionCheckpoint:
       type: object
+      description: Checkpoint metadata. Runtime state is private to the server.
       required:
-        [id, session_name, namespace, event_sequence, safe_point, state_version, state_hash, state, created_at]
+        [id, session_name, namespace, event_sequence, safe_point, state_version, state_hash, created_at]
       properties:
         id: { type: string }
         session_name: { type: string }
@@ -174,9 +177,6 @@ components:
           enum: [step.completed, agent.completed, turn.completed]
         state_version: { type: integer, minimum: 1 }
         state_hash: { type: string }
-        state:
-          type: object
-          additionalProperties: true
         created_at: { type: string }
         expires_at: { type: string }
     SessionCheckpointList:

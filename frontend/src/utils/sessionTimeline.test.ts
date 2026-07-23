@@ -37,7 +37,6 @@ function checkpoint(
     safe_point: "step.completed",
     state_version: 1,
     state_hash: `${id}-hash`,
-    state: { version: 1 },
     created_at: `2026-07-20T12:00:${String(eventSequence).padStart(2, "0")}Z`,
     agent: "researcher",
   };

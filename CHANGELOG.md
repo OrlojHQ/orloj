@@ -30,6 +30,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A2A push notifications**: v1 JSON-RPC and gRPC clients can create, get, list, and delete persistent per-task callback configurations. Task events are delivered with bounded retries through SSRF-safe HTTP; credentials are encrypted in PostgreSQL when secret encryption is configured.
 - **A2A v1.0 Agent Cards**: generated cards now advertise `supportedInterfaces`, required default content modes, v1 security schemes and requirements, agent versions, and normative skill fields while retaining legacy discovery fields. Operators can sign cards with RFC 8785 canonicalization and detached JWS using RSA, P-256 ECDSA, or Ed25519 keys, and can require trusted signatures on fetched remote cards.
 
+### Security
+
+- **A2A ownership and availability hardening**: push configurations are keyed by the authorized internal Task instead of caller-controlled external IDs; required Agent Card verification now fails closed; and per-IP rate limits, a global 10-waiter ceiling, and a 30-minute maximum wait apply across JSON-RPC and gRPC.
+- **Session checkpoint hardening**: checkpoint APIs expose metadata instead of raw runtime state, serialized state is capped at 4 MiB, retained tool results are redacted and truncated to 64 KiB without duplicate memory copies, and retention is capped at 100 checkpoints or 720 hours.
+- **Interactive output and error hardening**: `orlojctl chat` renders terminal control characters as inert text, while Session and checkpoint APIs log internal store failures without returning SQL or driver details.
+
 ## [0.18.0] - 2026-07-09
 
 ### Added

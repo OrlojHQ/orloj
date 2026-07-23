@@ -162,6 +162,17 @@ func TestTaskExecutorResumesFromSafeStepCheckpoint(t *testing.T) {
 	if saved.NextStep != 2 || saved.Completed {
 		t.Fatalf("saved checkpoint = %#v", saved)
 	}
+	if len(saved.Memory) != 0 {
+		t.Fatalf("checkpoint duplicated tool results in memory: %#v", saved.Memory)
+	}
+	if len(saved.ToolResultCache) != 1 {
+		t.Fatalf("checkpoint tool result cache = %#v", saved.ToolResultCache)
+	}
+	for _, value := range saved.ToolResultCache {
+		if !strings.HasPrefix(value, "<tool_result>\n") {
+			t.Fatalf("checkpoint stored unsanitized tool result %q", value)
+		}
+	}
 	if tools.calls["web_search"] != 1 {
 		t.Fatalf("tool calls after first execution = %d", tools.calls["web_search"])
 	}

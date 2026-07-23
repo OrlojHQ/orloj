@@ -512,7 +512,12 @@ func followChatTurn(
 		if opened {
 			delay = opts.InitialReconnect
 		}
-		fmt.Fprintf(opts.ErrOut, "chat: stream disconnected (%v); reconnecting from event %d\n", err, *cursor)
+		fmt.Fprintf(
+			opts.ErrOut,
+			"chat: stream disconnected (%s); reconnecting from event %d\n",
+			terminalSafeText(err.Error()),
+			*cursor,
+		)
 		timer := time.NewTimer(delay)
 		select {
 		case <-ctx.Done():
@@ -567,7 +572,7 @@ func followChatTurnOnce(
 	err = scanChatEventStream(resp.Body, func(frame chatEventFrame) error {
 		var event resources.SessionEvent
 		if err := json.Unmarshal([]byte(frame.Data), &event); err != nil {
-			fmt.Fprintf(opts.ErrOut, "chat: ignored malformed Session event: %v\n", err)
+			fmt.Fprintf(opts.ErrOut, "chat: ignored malformed Session event: %s\n", terminalSafeText(err.Error()))
 			return nil
 		}
 		if event.Sequence == 0 && frame.ID != "" {
@@ -748,8 +753,8 @@ func handleChatApproval(
 		fmt.Fprintf(
 			opts.Out,
 			"approval: tool-approval/%s is already %s; waiting for Session to continue\n",
-			name,
-			phase,
+			terminalSafeText(name),
+			terminalSafeText(phase),
 		)
 		return nil
 	}
@@ -758,24 +763,24 @@ func handleChatApproval(
 	}
 	fmt.Fprintln(opts.Out)
 	fmt.Fprintln(opts.Out, "approval: tool action requires review")
-	fmt.Fprintf(opts.Out, "  name: %s\n", approval.Metadata.Name)
-	fmt.Fprintf(opts.Out, "  tool: %s\n", approval.Spec.Tool)
+	fmt.Fprintf(opts.Out, "  name: %s\n", terminalSafeText(approval.Metadata.Name))
+	fmt.Fprintf(opts.Out, "  tool: %s\n", terminalSafeText(approval.Spec.Tool))
 	if approval.Spec.Agent != "" {
-		fmt.Fprintf(opts.Out, "  agent: %s\n", approval.Spec.Agent)
+		fmt.Fprintf(opts.Out, "  agent: %s\n", terminalSafeText(approval.Spec.Agent))
 	}
 	if approval.Spec.OperationClass != "" {
-		fmt.Fprintf(opts.Out, "  operation: %s\n", approval.Spec.OperationClass)
+		fmt.Fprintf(opts.Out, "  operation: %s\n", terminalSafeText(approval.Spec.OperationClass))
 	}
 	if reason != "" {
-		fmt.Fprintf(opts.Out, "  reason: %s\n", reason)
+		fmt.Fprintf(opts.Out, "  reason: %s\n", terminalSafeText(reason))
 	}
 	if approval.Status.ExpiresAt != "" {
-		fmt.Fprintf(opts.Out, "  expires: %s\n", approval.Status.ExpiresAt)
+		fmt.Fprintf(opts.Out, "  expires: %s\n", terminalSafeText(approval.Status.ExpiresAt))
 	}
 	if approval.Spec.Input != "" {
 		fmt.Fprintln(opts.Out, "  input:")
 		for _, line := range strings.Split(formatChatApprovalInput(approval.Spec.Input), "\n") {
-			fmt.Fprintf(opts.Out, "    %s\n", line)
+			fmt.Fprintf(opts.Out, "    %s\n", terminalSafeText(line))
 		}
 	}
 
@@ -981,6 +986,7 @@ func sanitizeChatName(value string) string {
 }
 
 func (r *chatTurnRenderer) delta(content string) {
+	content = terminalSafeText(content)
 	if content == "" {
 		return
 	}
@@ -991,6 +997,7 @@ func (r *chatTurnRenderer) delta(content string) {
 }
 
 func (r *chatTurnRenderer) complete(content string) {
+	content = terminalSafeText(content)
 	if content == "" {
 		return
 	}
@@ -1020,15 +1027,38 @@ func (r *chatTurnRenderer) reset(reason string) {
 	if reason == "" {
 		reason = "execution restarted"
 	}
-	fmt.Fprintf(r.out, "chat: tentative assistant output reset (%s)\n", reason)
+	fmt.Fprintf(r.out, "chat: tentative assistant output reset (%s)\n", terminalSafeText(reason))
 	r.started = false
 	r.streamedContent.Reset()
 }
 
 func (r *chatTurnRenderer) status(prefix string, message string) {
 	r.finishLine()
-	fmt.Fprintf(r.out, "%s: %s\n", prefix, message)
+	fmt.Fprintf(r.out, "%s: %s\n", terminalSafeText(prefix), terminalSafeText(message))
 	r.started = false
+}
+
+func terminalSafeText(value string) string {
+	var out strings.Builder
+	for _, char := range value {
+		switch char {
+		case '\n', '\t':
+			out.WriteRune(char)
+		case '\r':
+			out.WriteString(`\r`)
+		case '\x1b':
+			out.WriteString(`\x1b`)
+		default:
+			if char < 0x20 || (char >= 0x7f && char <= 0x9f) ||
+				(char >= 0x202a && char <= 0x202e) ||
+				(char >= 0x2066 && char <= 0x2069) {
+				fmt.Fprintf(&out, `\u%04X`, char)
+				continue
+			}
+			out.WriteRune(char)
+		}
+	}
+	return out.String()
 }
 
 func (r *chatTurnRenderer) ensureAssistantPrefix() {

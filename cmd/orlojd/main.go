@@ -90,7 +90,8 @@ func main() {
 	a2aTrustedCardKeys := flag.String("a2a-trusted-card-keys", env("ORLOJ_A2A_TRUSTED_CARD_KEYS", ""), "JSON object mapping Agent Card JWS key IDs to PEM public key files (env: ORLOJ_A2A_TRUSTED_CARD_KEYS)")
 	a2aRateLimitEnabled := flag.Bool("a2a-rate-limit-enabled", envBool("ORLOJ_A2A_RATE_LIMIT_ENABLED", true), "enable per-IP rate limiting on A2A endpoints (env: ORLOJ_A2A_RATE_LIMIT_ENABLED)")
 	a2aRateLimitRPM := flag.Int("a2a-rate-limit-rpm", envInt("ORLOJ_A2A_RATE_LIMIT_RPM", 30), "A2A requests per minute per IP (env: ORLOJ_A2A_RATE_LIMIT_RPM)")
-	a2aRateLimitMaxSubscribe := flag.Int("a2a-rate-limit-max-subscribe", envInt("ORLOJ_A2A_RATE_LIMIT_MAX_SUBSCRIBE", 10), "max concurrent A2A SSE subscriptions globally (env: ORLOJ_A2A_RATE_LIMIT_MAX_SUBSCRIBE)")
+	a2aRateLimitMaxSubscribe := flag.Int("a2a-rate-limit-max-subscribe", envInt("ORLOJ_A2A_RATE_LIMIT_MAX_SUBSCRIBE", 10), "max concurrent blocking or streaming A2A wait connections globally (1-10; env: ORLOJ_A2A_RATE_LIMIT_MAX_SUBSCRIBE)")
+	a2aMaxWaitDuration := flag.Duration("a2a-max-wait-duration", envDuration("ORLOJ_A2A_MAX_WAIT_DURATION", 30*time.Minute), "maximum duration of a blocking or streaming A2A wait connection (max 30m; env: ORLOJ_A2A_MAX_WAIT_DURATION)")
 	a2aGRPCAddr := flag.String("a2a-grpc-addr", env("ORLOJ_A2A_GRPC_ADDR", ""), "separate listen address for the A2A v1 gRPC service (env: ORLOJ_A2A_GRPC_ADDR)")
 	a2aGRPCPublicURL := flag.String("a2a-grpc-public-url", env("ORLOJ_A2A_GRPC_PUBLIC_URL", ""), "public gRPC URL advertised in A2A Agent Cards (env: ORLOJ_A2A_GRPC_PUBLIC_URL)")
 	a2aCardSigningKeyFile := flag.String("a2a-card-signing-key-file", env("ORLOJ_A2A_CARD_SIGNING_KEY_FILE", ""), "PEM private key for signing A2A Agent Cards (env: ORLOJ_A2A_CARD_SIGNING_KEY_FILE)")
@@ -163,6 +164,12 @@ func main() {
 	authMode, authModeErr := parseAuthMode(*authModeRaw)
 	if authModeErr != nil {
 		fatalLogger.Fatalf("%v", authModeErr)
+	}
+	if *a2aRateLimitMaxSubscribe < 1 || *a2aRateLimitMaxSubscribe > 10 {
+		fatalLogger.Fatalf("--a2a-rate-limit-max-subscribe must be between 1 and 10")
+	}
+	if *a2aMaxWaitDuration <= 0 || *a2aMaxWaitDuration > 30*time.Minute {
+		fatalLogger.Fatalf("--a2a-max-wait-duration must be greater than zero and no more than 30m")
 	}
 
 	debugLogger.Printf(
@@ -430,10 +437,8 @@ func main() {
 	}
 
 	rateLimitRPM := 0
-	maxConcurrentSubscribe := 0
 	if *a2aRateLimitEnabled {
 		rateLimitRPM = *a2aRateLimitRPM
-		maxConcurrentSubscribe = *a2aRateLimitMaxSubscribe
 	}
 	var cardSigner a2a.CardSigner
 	if keyFile := strings.TrimSpace(*a2aCardSigningKeyFile); keyFile != "" {
@@ -452,7 +457,8 @@ func main() {
 		AllowPrivateEndpoints:  *a2aAllowPrivateEndpoints,
 		Registry:               a2aRegistry,
 		RateLimitRPM:           rateLimitRPM,
-		MaxConcurrentSubscribe: maxConcurrentSubscribe,
+		MaxConcurrentSubscribe: *a2aRateLimitMaxSubscribe,
+		MaxWaitDuration:        *a2aMaxWaitDuration,
 	}
 
 	debugLogger.Printf(

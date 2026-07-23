@@ -52,8 +52,9 @@ go run ./cmd/orlojd -h
 | `--a2a-require-signed-cards` | `false` | Require at least one trusted JWS signature on fetched remote Agent Cards. | Env `ORLOJ_A2A_REQUIRE_SIGNED_CARDS`; requires trusted keys. |
 | `--a2a-trusted-card-keys` | empty | JSON object mapping JWS `kid` values to PEM public key or certificate files. | Env `ORLOJ_A2A_TRUSTED_CARD_KEYS`. |
 | `--a2a-rate-limit-enabled` | `true` | Enable per-IP rate limiting for A2A endpoints. | Env `ORLOJ_A2A_RATE_LIMIT_ENABLED`. |
-| `--a2a-rate-limit-rpm` | `30` | Max A2A JSON-RPC requests per minute per IP. | Env `ORLOJ_A2A_RATE_LIMIT_RPM`. |
-| `--a2a-rate-limit-max-subscribe` | `10` | Max concurrent SSE subscribe connections globally (server-wide). | Env `ORLOJ_A2A_RATE_LIMIT_MAX_SUBSCRIBE`. |
+| `--a2a-rate-limit-rpm` | `30` | Max A2A requests per minute per IP across JSON-RPC and gRPC. | Env `ORLOJ_A2A_RATE_LIMIT_RPM`. |
+| `--a2a-rate-limit-max-subscribe` | `10` | Max concurrent blocking or streaming A2A wait connections globally (`1`–`10`). | Env `ORLOJ_A2A_RATE_LIMIT_MAX_SUBSCRIBE`; enforced even when per-IP limiting is disabled. |
+| `--a2a-max-wait-duration` | `30m` | Max lifetime of a blocking or streaming A2A wait connection. | Env `ORLOJ_A2A_MAX_WAIT_DURATION`; must be positive and no greater than `30m`. |
 | `--a2a-grpc-addr` | empty | Separate listen address for the normative A2A v1 gRPC service. | Env `ORLOJ_A2A_GRPC_ADDR`; empty disables gRPC. |
 | `--a2a-grpc-public-url` | empty | Externally reachable gRPC URL advertised in Agent Cards. | Env `ORLOJ_A2A_GRPC_PUBLIC_URL`; set with `--a2a-grpc-addr`. |
 | `--a2a-card-signing-key-file` | empty | PEM private key used to JWS-sign Agent Cards. | Env `ORLOJ_A2A_CARD_SIGNING_KEY_FILE`; supports RSA (2048+), P-256 ECDSA, and Ed25519. |

@@ -56,7 +56,7 @@ func (s *Server) dispatchA2APushEvent(ctx context.Context, sender push.Sender, e
 	if taskID == "" {
 		return
 	}
-	configs, err := s.stores.A2APushConfigs.List(ctx, taskID)
+	configs, err := s.stores.A2APushConfigs.ListForTask(ctx, key, taskID)
 	if err != nil || len(configs) == 0 {
 		return
 	}
