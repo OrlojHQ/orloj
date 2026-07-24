@@ -39,14 +39,19 @@ func (b *lockedBuffer) String() string {
 
 func waitFor(t *testing.T, condition func() bool, message string) {
 	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
+	waitForDuration(t, 3*time.Second, condition, func() string { return message })
+}
+
+func waitForDuration(t *testing.T, timeout time.Duration, condition func() bool, message func() string) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		if condition() {
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatal(message)
+	t.Fatal(message())
 }
 
 func TestSelectRunnableTask(t *testing.T) {
@@ -203,6 +208,8 @@ func TestRunDevLoopFollowsRerunNameAndNamespace(t *testing.T) {
 
 	var queryMu sync.Mutex
 	var applyQuery, watchQuery, logsQuery string
+	logsRequested := make(chan struct{})
+	var logsRequestedOnce sync.Once
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method == http.MethodPost && r.URL.Path == "/v1/tasks":
@@ -216,6 +223,7 @@ func TestRunDevLoopFollowsRerunNameAndNamespace(t *testing.T) {
 			queryMu.Lock()
 			logsQuery = r.URL.RawQuery
 			queryMu.Unlock()
+			logsRequestedOnce.Do(func() { close(logsRequested) })
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"name": "run-task-run-123",
 				"logs": []string{"started"},
@@ -224,6 +232,11 @@ func TestRunDevLoopFollowsRerunNameAndNamespace(t *testing.T) {
 			queryMu.Lock()
 			watchQuery = r.URL.RawQuery
 			queryMu.Unlock()
+			select {
+			case <-logsRequested:
+			case <-r.Context().Done():
+				return
+			}
 			w.Header().Set("Content-Type", "text/event-stream")
 			_, _ = fmt.Fprint(w, "data: {\"type\":\"updated\",\"resource\":{\"metadata\":{\"name\":\"run-task-run-123\"},\"status\":{\"phase\":\"Succeeded\"}}}\n\n")
 		default:
@@ -249,12 +262,18 @@ func TestRunDevLoopFollowsRerunNameAndNamespace(t *testing.T) {
 		})
 	}()
 
-	waitFor(t, func() bool {
+	waitForDuration(t, 10*time.Second, func() bool {
 		text := out.String()
 		return strings.Contains(text, "task: following run-task-run-123") &&
 			strings.Contains(text, "logs: started") &&
 			strings.Contains(text, "phase=Succeeded")
-	}, "dev loop did not follow the server-generated task name")
+	}, func() string {
+		return fmt.Sprintf(
+			"dev loop did not follow the server-generated task name; stdout=%q stderr=%q",
+			out.String(),
+			errOut.String(),
+		)
+	})
 
 	queryMu.Lock()
 	queries := map[string]string{
