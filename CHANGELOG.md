@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-07-23
+
 ### Added
 
 - **`orlojctl dev` local development loop**: watch manifest files or directories, debounce and reapply changes, and optionally rerun one selected Task with live phase and log output. Runnable Tasks are skipped unless `--run` is explicit, invalid intermediate saves do not stop the watcher, and non-default namespaces flow through apply, watch, and log requests.
@@ -22,8 +24,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **Console visual refresh**: layered dark-theme surfaces (distinct canvas, panel, and card tones), higher-contrast secondary text, softer sidebar active state, design tokens for radius/spacing/typography (including migration of hard-coded sizes in component CSS), keyboard focus rings, reduced-motion support, self-hosted Inter/JetBrains Mono fonts, skeleton loading states on detail pages (and A2A Registry / Capabilities), task detail tabs deep-linkable via `?tab=`, and message filters as dismissible chips with debounced apply (no Apply button). Dashboard bento sidebar uses denser count tiles.
-
-
 - **`orlojctl logs --follow` / `-f`**: polls task/agent logs and prints new lines as they appear, until interrupted with Ctrl+C. `--follow-interval` sets the poll period (default `2s`).
 - **A2A v1.0 JSON-RPC compatibility**: the existing A2A endpoint now accepts the v1 `SendMessage`, `SendStreamingMessage`, `GetTask`, `ListTasks`, `CancelTask`, and `SubscribeToTask` methods while preserving Orloj's legacy `tasks/*` methods. Outbound A2A tools negotiate v1 JSON-RPC from `supportedInterfaces` and retain legacy fallback.
 - **A2A v1.0 gRPC binding**: `orlojd` can expose the normative A2A service on a separate listener with shared task handling, bearer authorization, TLS configuration, and Agent Card discovery.
@@ -562,7 +562,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Homebrew tap distribution (`OrlojHQ/orloj`)
 - Blueprint scaffolding via `orlojctl init`
 
-[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.18.0...HEAD
+[Unreleased]: https://github.com/OrlojHQ/orloj/compare/v0.19.0...HEAD
+[0.19.0]: https://github.com/OrlojHQ/orloj/compare/v0.18.0...v0.19.0
 [0.18.0]: https://github.com/OrlojHQ/orloj/compare/v0.17.0...v0.18.0
 [0.17.0]: https://github.com/OrlojHQ/orloj/compare/v0.16.1...v0.17.0
 [0.16.1]: https://github.com/OrlojHQ/orloj/compare/v0.16.0...v0.16.1
