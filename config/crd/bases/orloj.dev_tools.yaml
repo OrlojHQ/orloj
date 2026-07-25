@@ -59,6 +59,12 @@ spec:
                   protocol_version:
                     type: string
                 type: object
+              allowPrivate:
+                description: |-
+                  AllowPrivate permits trusted HTTP/external tool endpoints to connect to
+                  private/internal network addresses. Metadata, link-local, and unspecified
+                  addresses remain blocked by the runtime safe HTTP client.
+                type: boolean
               auth:
                 properties:
                   headerName:
