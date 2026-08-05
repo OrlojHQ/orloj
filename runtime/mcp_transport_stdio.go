@@ -19,11 +19,12 @@ type StdioMcpTransport struct {
 	env     []string
 	onClose func()
 
-	mu      sync.Mutex
-	cmd     *exec.Cmd
-	stdin   io.WriteCloser
-	scanner *bufio.Scanner
-	ctx     context.Context
+	mu        sync.Mutex
+	cmd       *exec.Cmd
+	stdin     io.WriteCloser
+	scanner   *bufio.Scanner
+	ctx       context.Context
+	closeOnce sync.Once
 
 	pending   map[int64]chan jsonrpcResponse
 	pendingMu sync.Mutex
@@ -51,6 +52,7 @@ func NewStdioMcpTransport(cfg StdioMcpTransportConfig) *StdioMcpTransport {
 
 func (t *StdioMcpTransport) Initialize(ctx context.Context) (*McpInitResult, error) {
 	if err := t.startProcess(ctx); err != nil {
+		t.runOnClose()
 		return nil, fmt.Errorf("mcp stdio: failed to start process: %w", err)
 	}
 
@@ -130,10 +132,14 @@ func (t *StdioMcpTransport) Close() error {
 	default:
 		close(t.done)
 	}
-	if t.onClose != nil {
-		t.onClose()
-	}
+	t.runOnClose()
 	return nil
+}
+
+func (t *StdioMcpTransport) runOnClose() {
+	if t.onClose != nil {
+		t.closeOnce.Do(t.onClose)
+	}
 }
 
 func (t *StdioMcpTransport) startProcess(ctx context.Context) error {

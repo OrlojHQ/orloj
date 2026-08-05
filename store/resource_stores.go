@@ -2974,6 +2974,70 @@ func (s *McpServerStore) Upsert(ctx context.Context, item resources.McpServer) (
 	return item, nil
 }
 
+// UpdateStatus updates only the observed status for an MCP server.
+// It preserves spec and metadata.generation so controller reconciliation does
+// not turn an observed-state write into a desired-state generation change.
+func (s *McpServerStore) UpdateStatus(ctx context.Context, name string, status resources.McpServerStatus) (resources.McpServer, error) {
+	key := normalizeLookupName(name)
+	if s.db != nil {
+		tx, err := s.db.Begin()
+		if err != nil {
+			return resources.McpServer{}, err
+		}
+		defer tx.Rollback()
+
+		item, found, err := getFromTableForUpdate[resources.McpServer](ctx, tx, tableMcpServers, key)
+		if err != nil {
+			return resources.McpServer{}, err
+		}
+		if !found {
+			return resources.McpServer{}, fmt.Errorf("mcp-server %q not found", name)
+		}
+
+		nextVersion, err := nextResourceVersion(item.Metadata.ResourceVersion)
+		if err != nil {
+			return resources.McpServer{}, fmt.Errorf("invalid McpServer current resourceVersion %q: %w", item.Metadata.ResourceVersion, err)
+		}
+		item.Metadata.ResourceVersion = nextVersion
+		if item.Metadata.Generation <= 0 {
+			item.Metadata.Generation = 1
+		}
+		if strings.TrimSpace(item.Metadata.CreatedAt) == "" {
+			item.Metadata.CreatedAt = time.Now().UTC().Format(time.RFC3339)
+		}
+		item.Status = status
+
+		if err := upsertMcpServerSQL(ctx, tx, key, item); err != nil {
+			return resources.McpServer{}, err
+		}
+		if err := tx.Commit(); err != nil {
+			return resources.McpServer{}, err
+		}
+		return item, nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	item, ok := s.items[key]
+	if !ok {
+		return resources.McpServer{}, fmt.Errorf("mcp-server %q not found", name)
+	}
+	nextVersion, err := nextResourceVersion(item.Metadata.ResourceVersion)
+	if err != nil {
+		return resources.McpServer{}, fmt.Errorf("invalid McpServer current resourceVersion %q: %w", item.Metadata.ResourceVersion, err)
+	}
+	item.Metadata.ResourceVersion = nextVersion
+	if item.Metadata.Generation <= 0 {
+		item.Metadata.Generation = 1
+	}
+	if strings.TrimSpace(item.Metadata.CreatedAt) == "" {
+		item.Metadata.CreatedAt = time.Now().UTC().Format(time.RFC3339)
+	}
+	item.Status = status
+	s.items[key] = item
+	return item, nil
+}
+
 func (s *McpServerStore) Get(ctx context.Context, name string) (resources.McpServer, bool, error) {
 	key := normalizeLookupName(name)
 	if s.db != nil {
