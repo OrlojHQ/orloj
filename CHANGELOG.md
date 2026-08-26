@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Console AI transparency disclosures**: direct Session interaction and generated Session, Task, Trace, and Eval output now show accessible, disclosure-localized labels with Article 50 metadata and safe provider/model attribution when an exact agent-to-endpoint mapping exists.
+
 ## [0.19.0] - 2026-07-23
 
 ### Added

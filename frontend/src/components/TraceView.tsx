@@ -1,6 +1,8 @@
 import { useState, useMemo } from "react";
 import type { TaskTraceEvent } from "../api/types";
+import { AiDisclosure } from "./AiDisclosure";
 import { StatusBadge } from "./StatusBadge";
+import type { AiAttribution } from "../compliance/aiAttribution";
 import {
   Clock, Cpu, Wrench, AlertTriangle, ChevronDown, ChevronRight,
   Zap, Download, Search, Activity, Copy,
@@ -10,6 +12,7 @@ import clsx from "clsx";
 
 interface TraceViewProps {
   trace: TaskTraceEvent[];
+  resolveAttribution?: (agent?: string | null) => AiAttribution | undefined;
 }
 
 type EventDot = "green" | "blue" | "yellow" | "red" | "orange" | "purple" | "gray" | "accent";
@@ -319,7 +322,7 @@ function generateTokenSparkPath(series: number[], width: number, height: number)
 const SPARK_WIDTH = 120;
 const SPARK_HEIGHT = 28;
 
-export function TraceView({ trace }: TraceViewProps) {
+export function TraceView({ trace, resolveAttribution }: TraceViewProps) {
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [collapsedLanes, setCollapsedLanes] = useState<Set<string>>(new Set());
@@ -443,6 +446,8 @@ export function TraceView({ trace }: TraceViewProps) {
     const style = getEventStyle(ev.type);
     const isExpanded = expandedKeys.has(row.key);
     const isError = !!ev.error_code || ev.type === "agent_error";
+    const isGeneratedEvent = Boolean(ev.message) && (ev.type === "model_output" || ev.type === "agent_message");
+    const attribution = isGeneratedEvent ? resolveAttribution?.(ev.agent) : undefined;
     return (
       <div key={row.key}>
         <div
@@ -465,6 +470,7 @@ export function TraceView({ trace }: TraceViewProps) {
             </span>
           </div>
           <div className="trace-view__col-detail text-ellipsis">
+            {isGeneratedEvent ? <AiDisclosure kind="generated-output" provider={attribution?.provider} modelId={attribution?.modelId} compact /> : null}
             {ev.tool ?? ev.message ?? ev.step_id ?? ""}
           </div>
           <div className="trace-view__col-start mono">{formatOffset(row.startMs)}</div>

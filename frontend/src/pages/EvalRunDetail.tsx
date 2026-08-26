@@ -5,6 +5,7 @@ import { useDetailReturnNav } from "../hooks/useDetailReturnNav";
 import { useEvalRun, useDeleteResource, useUpdateResource } from "../api/hooks";
 import { useAppStore } from "../store";
 import { saveNamespacedResourceYaml } from "../hooks/saveDetailYamlWithFreshRv";
+import { AiDisclosure } from "../components/AiDisclosure";
 import { StatusBadge } from "../components/StatusBadge";
 import { DetailSkeleton } from "../components/DetailSkeleton";
 import { MetricCard } from "../components/MetricCard";
@@ -227,6 +228,7 @@ export function EvalRunDetail() {
 
         {tab === "results" && (
           <div className="detail-table-wrap">
+            {results.length > 0 ? <AiDisclosure kind="ai-assisted-analysis" className="ai-disclosure--table" /> : null}
             {results.length === 0 ? (
               <p className="text-secondary" style={{ padding: "1rem" }}>No results yet.</p>
             ) : (

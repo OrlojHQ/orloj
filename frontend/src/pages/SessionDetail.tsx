@@ -28,6 +28,7 @@ import {
   type SessionStreamState,
 } from "../api/sessionStream";
 import type { SessionCheckpoint, SessionEvent } from "../api/types";
+import { AiDisclosure } from "../components/AiDisclosure";
 import { confirmDialog } from "../components/ConfirmDialog";
 import { DetailSkeleton } from "../components/DetailSkeleton";
 import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
@@ -350,6 +351,7 @@ export function SessionDetail() {
 
       <div className="session-live-layout">
         <section className="session-chat" aria-label="Session live execution timeline">
+          <AiDisclosure kind="ai-interaction" />
           <div className="session-chat__timeline" aria-live="polite">
             <SessionTimeline
               items={timeline}

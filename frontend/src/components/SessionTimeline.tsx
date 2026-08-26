@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import type { RefObject } from "react";
 import type { SessionTimelineItem } from "../utils/sessionTimeline";
+import { AiDisclosure } from "./AiDisclosure";
 
 interface SessionTimelineProps {
   items: SessionTimelineItem[];
@@ -107,6 +108,7 @@ function TimelineEntry({
           )}
           {item.reset && <span className="session-timeline__reset-label">Reset</span>}
         </div>
+        {item.role === "assistant" ? <AiDisclosure kind="generated-output" compact /> : null}
         <pre className="session-message__content">{item.content}</pre>
       </article>
     );

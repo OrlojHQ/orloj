@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useDetailReturnNav } from "../hooks/useDetailReturnNav";
-import { useTask, useTaskMessages, useTaskMetrics, useTaskLogs, useAgentSystem, useDeleteResource, useUpdateResource } from "../api/hooks";
+import { useTask, useTaskMessages, useTaskMetrics, useTaskLogs, useAgentSystem, useAgents, useModelEndpoints, useDeleteResource, useUpdateResource } from "../api/hooks";
 import { useAppStore } from "../store";
 import { saveNamespacedResourceYaml } from "../hooks/saveDetailYamlWithFreshRv";
 import { toast } from "../components/Toast";
@@ -12,7 +12,9 @@ import { YamlEditor } from "../components/YamlEditor";
 import { LogViewer } from "../components/LogViewer";
 import { GraphView } from "../components/GraphView";
 import { MetricCard } from "../components/MetricCard";
+import { AiDisclosure } from "../components/AiDisclosure";
 import { TraceView } from "../components/TraceView";
+import { resolveAgentAiAttribution } from "../compliance/aiAttribution";
 import { ResourceDetailLoadError } from "../components/ResourceDetailLoadError";
 import { ArrowLeft, Clock, Activity, Hash, Zap, MessagesSquare, Network, X } from "lucide-react";
 import { EmptyState } from "../components/EmptyState";
@@ -207,6 +209,11 @@ export function TaskDetail() {
   const metrics = useTaskMetrics(routeName);
   const logs = useTaskLogs(routeName);
   const system = useAgentSystem(task?.spec.system ?? "");
+  const agents = useAgents();
+  const modelEndpoints = useModelEndpoints();
+  const resolveAttribution = useCallback((agentName?: string | null) => (
+    resolveAgentAiAttribution(agentName, agents.data ?? [], modelEndpoints.data ?? [])
+  ), [agents.data, modelEndpoints.data]);
   const confirmDelete = useDeleteConfirm();
   const deleteMutation = useDeleteResource("Task");
   const updateMutation = useUpdateResource("Task");
@@ -429,6 +436,7 @@ export function TaskDetail() {
             {task.status?.output && Object.keys(task.status.output).length > 0 && (
               <div className="detail-field detail-field--full">
                 <span className="detail-field__label">Output</span>
+                <AiDisclosure kind="generated-output" compact />
                 <pre className="detail-field__pre">{JSON.stringify(task.status.output, null, 2)}</pre>
               </div>
             )}
@@ -505,7 +513,10 @@ export function TaskDetail() {
                   : "No messages yet"}
               </p>
             )}
-            {(messages.data ?? []).map((msg, i) => (
+            {(messages.data ?? []).map((msg, i) => {
+              const attribution = resolveAttribution(msg.from_agent);
+              const isAgentMessage = Boolean(msg.content && msg.from_agent && msg.from_agent.toLowerCase() !== "system");
+              return (
               <div key={msg.message_id ?? i} className="message-item">
                 <div className="message-item__header">
                   <span className="mono">{msg.from_agent ?? "system"}</span>
@@ -516,10 +527,12 @@ export function TaskDetail() {
                     <span className="text-muted text-xs">{new Date(msg.timestamp).toLocaleString()}</span>
                   )}
                 </div>
+                {isAgentMessage ? <AiDisclosure kind="generated-output" provider={attribution?.provider} modelId={attribution?.modelId} compact /> : null}
                 {msg.content && <pre className="message-item__content">{msg.content}</pre>}
                 {msg.last_error && <p className="text-red text-xs">{msg.last_error}</p>}
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
@@ -560,7 +573,7 @@ export function TaskDetail() {
           )
         )}
 
-        {tab === "trace" && <TraceView trace={traceEvents} />}
+        {tab === "trace" && <TraceView trace={traceEvents} resolveAttribution={resolveAttribution} />}
 
         {tab === "logs" && logs.isError && (
           <p className="text-red">

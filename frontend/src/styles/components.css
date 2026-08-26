@@ -5412,3 +5412,26 @@ button:focus-visible {
     margin-right: auto;
   }
 }
+
+/* Disclosure-only localization is intentionally scoped to this component; the
+   remainder of the Orloj console is still English-only. */
+.ai-disclosure {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.35;
+}
+
+.ai-disclosure--compact {
+  gap: 0.25rem;
+  font-size: var(--text-2xs);
+}
+
+.ai-disclosure__attribution {
+  overflow-wrap: anywhere;
+  color: var(--text-tertiary);
+}
