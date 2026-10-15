@@ -39,6 +39,11 @@ go run ./cmd/orlojd -h
 | `--postgres-max-open-conns` | `20` | Max open Postgres connections. | Postgres backend only. |
 | `--postgres-max-idle-conns` | `10` | Max idle Postgres connections. | Postgres backend only. |
 | `--postgres-conn-max-lifetime` | `30m` | Max Postgres connection lifetime. | Postgres backend only. |
+| `--audit-store-enabled` | `true` | Persist audit events to the `audit_events` table. | Postgres backend only; env `ORLOJ_AUDIT_STORE_ENABLED`. Set `false` to fall back to the no-op sink. |
+| `--audit-retention` | `2160h` (90 days) | Delete persisted audit events older than this, checked hourly. | Env `ORLOJ_AUDIT_RETENTION`; `0` keeps events forever. Runs with the Postgres backend even when `--audit-store-enabled=false`. |
+| `--audit-export-file` | empty | One-shot: write persisted audit events as JSON lines to this file (mode `0600`) and exit. | Postgres backend only; written atomically; cannot be combined with `--auth-reset-admin-password`. |
+| `--audit-export-since` | empty | Lower bound (inclusive, RFC3339) for `--audit-export-file`. | Empty means unbounded. |
+| `--audit-export-until` | empty | Upper bound (exclusive, RFC3339) for `--audit-export-file`. | Empty means unbounded. |
 
 ### A2A protocol
 
@@ -179,6 +184,7 @@ go run ./cmd/orlojworker -h
 | `--postgres-max-open-conns` | `20` | Max open Postgres connections. | Postgres backend only. |
 | `--postgres-max-idle-conns` | `10` | Max idle Postgres connections. | Postgres backend only. |
 | `--postgres-conn-max-lifetime` | `30m` | Max Postgres connection lifetime. | Postgres backend only. |
+| `--audit-store-enabled` | `true` | Persist audit events to the `audit_events` table. | Postgres backend only; env `ORLOJ_AUDIT_STORE_ENABLED`. Retention runs in `orlojd`. |
 | `--secret-encryption-key` | empty | AES-256-GCM key for Secret encryption at rest. | Env fallback: `ORLOJ_SECRET_ENCRYPTION_KEY`. Workers do not use the `SealedSecret` private key. |
 
 ### Task execution and runtime inbox consumers

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Built-in durable audit sink**: with `--storage-backend=postgres`, `orlojd` and `orlojworker` now persist audit events to a new `audit_events` table by default (disable with `--audit-store-enabled=false` / `ORLOJ_AUDIT_STORE_ENABLED=false`). `orlojd` prunes events older than `--audit-retention` (default 90 days; `0` keeps them forever; runs even when recording is disabled) and can export a time range as JSON lines with the one-shot `--audit-export-file`, `--audit-export-since`, and `--audit-export-until` flags. See [Audit Logging](docs/pages/operations/security.md#audit-logging).
+
 ## [0.19.0] - 2026-07-23
 
 ### Added

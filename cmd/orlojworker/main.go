@@ -96,6 +96,7 @@ func main() {
 	postgresMaxOpenConns := flag.Int("postgres-max-open-conns", 20, "max open postgres connections")
 	postgresMaxIdleConns := flag.Int("postgres-max-idle-conns", 10, "max idle postgres connections")
 	postgresConnMaxLifetime := flag.Duration("postgres-conn-max-lifetime", 30*time.Minute, "max lifetime of postgres connections")
+	auditStoreEnabled := flag.Bool("audit-store-enabled", envBool("ORLOJ_AUDIT_STORE_ENABLED", true), "persist audit events to the audit_events table when --storage-backend=postgres (env: ORLOJ_AUDIT_STORE_ENABLED)")
 	flag.Parse()
 
 	if *showVersion {
@@ -285,7 +286,9 @@ func main() {
 		SecretEnvPrefix: *modelSecretEnvPrefix,
 	})
 	taskExecutor := agentruntime.NewTaskExecutorWithRuntime(logger, nil, modelGateway, nil)
-	extensions := agentruntime.DefaultExtensions()
+	auditSink, closeAuditSink := startup.NewAuditSink(stores, *auditStoreEnabled, logger)
+	defer closeAuditSink()
+	extensions := agentruntime.NormalizeExtensions(agentruntime.Extensions{Audit: auditSink})
 	logger.Printf("model routing: endpoint-driven secret_env_prefix=%s", *modelSecretEnvPrefix)
 
 	taskController := controllers.NewTaskController(
