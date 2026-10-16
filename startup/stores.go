@@ -40,6 +40,7 @@ type StoreSet struct {
 	LocalAdmins     *store.LocalAdminStore
 	APITokens       *store.APITokenStore
 	AuthSessions    *store.AuthSessionStore
+	Audit           *store.AuditStore
 	DB              *sql.DB
 }
 
@@ -168,6 +169,7 @@ func OpenStores(cfg StoreConfig, logger *log.Logger) (*StoreSet, error) {
 		s.LocalAdmins = store.NewLocalAdminStoreWithDB(db)
 		s.APITokens = store.NewAPITokenStoreWithDB(db)
 		s.AuthSessions = store.NewAuthSessionStoreWithDB(db)
+		s.Audit = store.NewAuditStoreWithDB(db)
 		if cfg.IncludeScheduleStores {
 			s.TaskSchedules = store.NewTaskScheduleStoreWithDB(db)
 			s.TaskWebhooks = store.NewTaskWebhookStoreWithDB(db)

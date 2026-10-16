@@ -20,6 +20,8 @@ Example:
 | Variable | Used By | Flag Overrides | Purpose / Conditions |
 |---|---|---|---|
 | `ORLOJ_POSTGRES_DSN` | `orlojd`, `orlojworker` | `--postgres-dsn` | Postgres DSN when `--storage-backend=postgres`. |
+| `ORLOJ_AUDIT_STORE_ENABLED` | `orlojd`, `orlojworker` | `--audit-store-enabled` | Persist audit events to Postgres (default `true`; Postgres backend only). |
+| `ORLOJ_AUDIT_RETENTION` | `orlojd` | `--audit-retention` | Max age of persisted audit events (default `2160h`; `0` keeps forever). |
 | `ORLOJ_TASK_EXECUTION_MODE` | `orlojd`, `orlojworker` | `--task-execution-mode` | Task execution mode: `sequential` or `message-driven`. |
 | `ORLOJ_EMBEDDED_WORKER_MAX_CONCURRENT_TASKS` | `orlojd` | `--embedded-worker-max-concurrent-tasks` | Embedded worker default concurrency. |
 | `ORLOJ_TASK_WORKER_REGION` | `orlojd` | `--task-worker-region` | Region for embedded worker registration. |

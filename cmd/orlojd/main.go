@@ -127,6 +127,11 @@ func main() {
 	postgresMaxOpenConns := flag.Int("postgres-max-open-conns", 20, "max open postgres connections")
 	postgresMaxIdleConns := flag.Int("postgres-max-idle-conns", 10, "max idle postgres connections")
 	postgresConnMaxLifetime := flag.Duration("postgres-conn-max-lifetime", 30*time.Minute, "max lifetime of postgres connections")
+	auditStoreEnabled := flag.Bool("audit-store-enabled", envBool("ORLOJ_AUDIT_STORE_ENABLED", true), "persist audit events to the audit_events table when --storage-backend=postgres (env: ORLOJ_AUDIT_STORE_ENABLED)")
+	auditRetention := flag.Duration("audit-retention", envDuration("ORLOJ_AUDIT_RETENTION", startup.DefaultAuditRetention), "delete persisted audit events older than this; 0 keeps them forever (env: ORLOJ_AUDIT_RETENTION)")
+	auditExportFile := flag.String("audit-export-file", "", "one-shot: write persisted audit events as JSON lines to this file and exit (postgres backend only)")
+	auditExportSince := flag.String("audit-export-since", "", "with --audit-export-file: only events at or after this RFC3339 time")
+	auditExportUntil := flag.String("audit-export-until", "", "with --audit-export-file: only events before this RFC3339 time")
 	flag.Parse()
 
 	warnIfSecretFlagSet("api-key", "ORLOJ_API_TOKEN")
@@ -164,6 +169,9 @@ func main() {
 	authMode, authModeErr := parseAuthMode(*authModeRaw)
 	if authModeErr != nil {
 		fatalLogger.Fatalf("%v", authModeErr)
+	}
+	if err := validateOneShotFlags(*authResetAdminPassword, *auditExportFile); err != nil {
+		fatalLogger.Fatalf("%v", err)
 	}
 	if *a2aRateLimitMaxSubscribe < 1 || *a2aRateLimitMaxSubscribe > 10 {
 		fatalLogger.Fatalf("--a2a-rate-limit-max-subscribe must be between 1 and 10")
@@ -246,6 +254,20 @@ func main() {
 		logger.Printf("admin password reset completed")
 		return
 	}
+	if path := strings.TrimSpace(*auditExportFile); path != "" {
+		var exporter auditExporter
+		if stores.Audit != nil {
+			exporter = stores.Audit
+		}
+		exportCtx, stopExport := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		n, err := runAuditExport(exportCtx, exporter, path, *auditExportSince, *auditExportUntil)
+		stopExport()
+		if err != nil {
+			fatalLogger.Fatalf("audit export failed: %v", err)
+		}
+		logger.Printf("audit export completed events=%d file=%s", n, path)
+		return
+	}
 
 	modelGateway := agentruntime.NewModelRouter(agentruntime.ModelRouterConfig{
 		Endpoints:       stores.ModelEPs,
@@ -253,7 +275,9 @@ func main() {
 		SecretEnvPrefix: *modelSecretEnvPrefix,
 	})
 	taskExecutor := agentruntime.NewTaskExecutorWithRuntime(logger, nil, modelGateway, nil)
-	extensions := agentruntime.DefaultExtensions()
+	auditSink, closeAuditSink := startup.NewAuditSink(stores, *auditStoreEnabled, logger)
+	defer closeAuditSink()
+	extensions := agentruntime.NormalizeExtensions(agentruntime.Extensions{Audit: auditSink})
 	logger.Printf("model routing: endpoint-driven secret_env_prefix=%s", *modelSecretEnvPrefix)
 
 	runtime := agentruntime.NewManager(logger)
@@ -595,6 +619,13 @@ func main() {
 			}
 		}
 	})
+	// Retention runs whenever the audit table exists, even with
+	// --audit-store-enabled=false, so previously recorded events still expire.
+	if stores.Audit != nil {
+		startBackground(func() {
+			startup.RunAuditRetention(ctx, stores.Audit, *auditRetention, startup.DefaultAuditPruneInterval, logger)
+		})
+	}
 	if *runTaskWorker || *embeddedWorker {
 		startBackground(func() {
 			startup.HeartbeatWorkerRegistration(ctx, stores.Workers, logger, *taskWorkerID, resources.WorkerSpec{

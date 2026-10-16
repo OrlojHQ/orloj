@@ -475,11 +475,26 @@ Every tool invocation records `tool_auth_profile` and `tool_auth_secret_ref` (th
 
 Orloj emits normalized audit events for security-relevant operations — admin token/user CRUD, approval decisions (`approved`, `denied`, `expired`, `changes_requested`) with reviewer identity, and other governed runtime actions. Each event carries a timestamp, component, action, outcome, principal, and the affected resource.
 
-**Audit logging is off by default.** The runtime uses a no-op `AuditSink`, so unless you wire a sink, these events are produced but not persisted anywhere durable. This is intentional — Orloj does not assume a particular log destination — but it means **operators must opt in to retain an audit trail**.
+**Audit logging is on by default with the Postgres backend.** When `--storage-backend=postgres`, `orlojd` and `orlojworker` write audit events to the `audit_events` table through a built-in sink. The sink queues events in memory and writes them in the background, so a slow database never blocks a request; if the queue fills up, events are dropped and a warning is logged. On shutdown the sink spends at most 10 seconds flushing queued events; anything still queued after that is dropped. With the memory backend, or with `--audit-store-enabled=false` (env `ORLOJ_AUDIT_STORE_ENABLED=false`), the runtime uses a no-op `AuditSink` and events are not persisted.
+
+### Built-in Postgres audit store
+
+- **Volume:** every bearer-authenticated `/v1/` request is audited, including read-only `GET`s, so the table can grow quickly on a busy deployment. Size `--audit-retention` for your traffic and compliance needs.
+- **Retention:** `orlojd` deletes events older than `--audit-retention` (env `ORLOJ_AUDIT_RETENTION`, default `2160h` / 90 days) at startup and then hourly. Pruning runs whenever the Postgres backend is used, even with `--audit-store-enabled=false`, so events recorded earlier still expire. Set it to `0` to keep events forever and manage retention yourself.
+- **Export:** run `orlojd` once with `--audit-export-file` to write events as JSON lines (one `AuditEvent` per line, file mode `0600`) and exit. The file is written to a temporary file and renamed into place, so a failed export leaves any existing file untouched. It cannot be combined with `--auth-reset-admin-password`. Narrow the range with `--audit-export-since` (inclusive) and `--audit-export-until` (exclusive), both RFC3339:
+
+```bash
+orlojd --storage-backend=postgres \
+  --audit-export-file=audit-2026-01.jsonl \
+  --audit-export-since=2026-01-01T00:00:00Z \
+  --audit-export-until=2026-02-01T00:00:00Z
+```
+
+Ship exports to append-only storage if your compliance regime needs a longer or tamper-resistant trail than the database provides.
 
 ### Reference: structured audit sink
 
-A reference sink, `SlogAuditSink` (`runtime/audit_sink_slog.go`), writes audit events as structured JSON via `log/slog`. Wire it through `Extensions`:
+For embedders that build their own server, a reference sink, `SlogAuditSink` (`runtime/audit_sink_slog.go`), writes audit events as structured JSON via `log/slog`. Wire it through `Extensions`:
 
 ```go
 ext := agentruntime.Extensions{

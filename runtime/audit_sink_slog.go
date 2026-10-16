@@ -11,8 +11,9 @@ import (
 // dependency-free so operators can adopt it directly or use it as a template
 // for a SIEM/forwarder integration.
 //
-// Audit logging is OFF by default in Orloj (the runtime uses a no-op sink).
-// Wire this sink explicitly when you need a durable audit trail:
+// orlojd and orlojworker persist audit events to Postgres by default when the
+// Postgres backend is used (see startup.PostgresAuditSink). Embedders that
+// build their own server get a no-op sink unless they wire one, for example:
 //
 //	ext := agentruntime.Extensions{
 //	    Audit: agentruntime.NewSlogAuditSink(nil), // JSON to stdout
