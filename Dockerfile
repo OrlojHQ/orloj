@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # --- Frontend (only required for orlojd embed) ---
-FROM oven/bun:1.3-alpine AS ui
+FROM oven/bun:1.4-alpine AS ui
 WORKDIR /frontend
 COPY frontend/package.json frontend/bun.lock ./
 RUN bun install --frozen-lockfile
@@ -9,7 +9,7 @@ COPY frontend/ ./
 RUN bun run build
 
 # --- Go module cache ---
-FROM golang:1.26.9-alpine@sha256:3082400e369fa24d5fc60bca20edab3f6d604e0c5a690ec66b295eff4dd87ade AS base
+FROM golang:1.27.2-alpine@sha256:f92b6ef800e499660581efdabdf25d9d817a9d124eaf900924f0504e7e27e12d AS base
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
@@ -57,7 +57,7 @@ FROM scratch AS orloj-legal
 COPY LICENSE NOTICE TRADEMARKS.md /usr/share/doc/orloj/
 
 # --- Runtime images (default final stage: orlojd) ---
-FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b AS orlojworker
+FROM alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS orlojworker
 RUN apk add --no-cache ca-certificates tzdata wget docker-cli \
     && adduser -D -u 10001 appuser
 COPY --from=orloj-legal /usr/share/doc/orloj /usr/share/doc/orloj
@@ -65,7 +65,7 @@ COPY --from=build-orlojworker /out/orlojworker /usr/local/bin/app
 USER appuser
 ENTRYPOINT ["/usr/local/bin/app"]
 
-FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b AS orloj-operator
+FROM alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS orloj-operator
 RUN apk add --no-cache ca-certificates tzdata \
     && adduser -D -u 10001 appuser
 COPY --from=orloj-legal /usr/share/doc/orloj /usr/share/doc/orloj
@@ -73,7 +73,7 @@ COPY --from=build-operator /out/orloj-operator /usr/local/bin/app
 USER appuser
 ENTRYPOINT ["/usr/local/bin/app"]
 
-FROM alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b AS orlojd
+FROM alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS orlojd
 RUN apk add --no-cache ca-certificates tzdata wget docker-cli \
     && adduser -D -u 10001 appuser
 COPY --from=orloj-legal /usr/share/doc/orloj /usr/share/doc/orloj
