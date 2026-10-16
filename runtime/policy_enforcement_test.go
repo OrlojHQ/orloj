@@ -77,6 +77,24 @@ func TestMatchedPolicies_Global(t *testing.T) {
 	}
 }
 
+func TestMatchedPolicies_IgnoresPoliciesFromOtherNamespaces(t *testing.T) {
+	task := resources.Task{Metadata: resources.ObjectMeta{Name: "task-1"}}
+	system := resources.AgentSystem{Metadata: resources.ObjectMeta{Name: "system-1"}}
+	globalDefault := resources.AgentPolicy{
+		Metadata: resources.ObjectMeta{Name: "default-global"},
+		Spec:     resources.AgentPolicySpec{ApplyMode: "global"},
+	}
+	globalOtherNamespace := resources.AgentPolicy{
+		Metadata: resources.ObjectMeta{Name: "other-global", Namespace: "other-namespace"},
+		Spec:     resources.AgentPolicySpec{ApplyMode: "global"},
+	}
+
+	matched := MatchedPolicies(task, system, []resources.AgentPolicy{globalDefault, globalOtherNamespace})
+	if len(matched) != 1 || matched[0].Metadata.Name != "default-global" {
+		t.Fatalf("expected only default namespace global policy, got %d policies", len(matched))
+	}
+}
+
 func TestMatchedPolicies_ScopedBySystem(t *testing.T) {
 	task := resources.Task{Metadata: resources.ObjectMeta{Name: "task-1"}}
 	system := resources.AgentSystem{Metadata: resources.ObjectMeta{Name: "research-system"}}

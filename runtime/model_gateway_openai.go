@@ -14,12 +14,13 @@ import (
 
 // OpenAIModelGatewayConfig defines OpenAI-compatible model gateway settings.
 type OpenAIModelGatewayConfig struct {
-	APIKey        string
-	RequireAPIKey bool
-	BaseURL       string
-	DefaultModel  string
-	Timeout       time.Duration
-	HTTPClient    *http.Client
+	APIKey          string
+	RequireAPIKey   bool
+	BaseURL         string
+	DefaultModel    string
+	ReasoningEffort string
+	Timeout         time.Duration
+	HTTPClient      *http.Client
 }
 
 // DefaultOpenAIModelGatewayConfig returns OpenAI gateway defaults.
@@ -33,10 +34,11 @@ func DefaultOpenAIModelGatewayConfig() OpenAIModelGatewayConfig {
 
 // OpenAIModelGateway calls an OpenAI-compatible Chat Completions endpoint.
 type OpenAIModelGateway struct {
-	apiKey       string
-	baseURL      string
-	defaultModel string
-	client       *http.Client
+	apiKey          string
+	baseURL         string
+	defaultModel    string
+	reasoningEffort string
+	client          *http.Client
 }
 
 func NewOpenAIModelGateway(cfg OpenAIModelGatewayConfig) (*OpenAIModelGateway, error) {
@@ -51,10 +53,11 @@ func NewOpenAIModelGateway(cfg OpenAIModelGatewayConfig) (*OpenAIModelGateway, e
 		return nil, fmt.Errorf("openai HTTP client is required")
 	}
 	return &OpenAIModelGateway{
-		apiKey:       strings.TrimSpace(normalized.APIKey),
-		baseURL:      strings.TrimRight(strings.TrimSpace(normalized.BaseURL), "/"),
-		defaultModel: strings.TrimSpace(normalized.DefaultModel),
-		client:       normalized.client(),
+		apiKey:          strings.TrimSpace(normalized.APIKey),
+		baseURL:         strings.TrimRight(strings.TrimSpace(normalized.BaseURL), "/"),
+		defaultModel:    strings.TrimSpace(normalized.DefaultModel),
+		reasoningEffort: strings.TrimSpace(normalized.ReasoningEffort),
+		client:          normalized.client(),
 	}, nil
 }
 
@@ -321,6 +324,9 @@ func (g *OpenAIModelGateway) buildRequest(req ModelRequest, stream bool) (openAI
 		Model:  model,
 		Stream: stream,
 	}
+	if strings.TrimSpace(g.reasoningEffort) != "" {
+		body.ReasoningEffort = strings.TrimSpace(g.reasoningEffort)
+	}
 	if stream {
 		body.StreamOptions = &openAIStreamOptions{IncludeUsage: true}
 	}
@@ -412,13 +418,14 @@ func parseOpenAIMessageContent(raw json.RawMessage) string {
 }
 
 type openAIChatCompletionRequest struct {
-	Model          string                        `json:"model"`
-	Messages       []openAIChatCompletionMessage `json:"messages"`
-	Tools          []openAIChatTool              `json:"tools,omitempty"`
-	ToolChoice     string                        `json:"tool_choice,omitempty"`
-	ResponseFormat *openAIResponseFormat         `json:"response_format,omitempty"`
-	Stream         bool                          `json:"stream,omitempty"`
-	StreamOptions  *openAIStreamOptions          `json:"stream_options,omitempty"`
+	Model           string                        `json:"model"`
+	Messages        []openAIChatCompletionMessage `json:"messages"`
+	ReasoningEffort string                        `json:"reasoning_effort,omitempty"`
+	Tools           []openAIChatTool              `json:"tools,omitempty"`
+	ToolChoice      string                        `json:"tool_choice,omitempty"`
+	ResponseFormat  *openAIResponseFormat         `json:"response_format,omitempty"`
+	Stream          bool                          `json:"stream,omitempty"`
+	StreamOptions   *openAIStreamOptions          `json:"stream_options,omitempty"`
 }
 
 type openAIStreamOptions struct {
