@@ -118,22 +118,24 @@ func (c *McpServerController) reconcileByName(ctx context.Context, name string) 
 		server.Status.Phase = "Ready"
 		server.Status.LastError = ""
 		server.Status.ObservedGeneration = server.Metadata.Generation
-		_, err = c.store.Upsert(ctx, server)
+		_, err = c.store.UpdateStatus(ctx, name, server.Status)
 		return err
 	}
 
 	server.Status.Phase = "Connecting"
 	server.Status.LastError = ""
-	if updated, err := c.store.Upsert(ctx, server); err == nil {
+	if updated, err := c.store.UpdateStatus(ctx, name, server.Status); err == nil {
 		server = updated
+	} else {
+		return err
 	}
 
 	session, err := c.sessionManager.GetOrCreate(ctx, server)
 	if err != nil {
 		server.Status.Phase = "Error"
 		server.Status.LastError = err.Error()
-		if updated, uErr := c.store.Upsert(ctx, server); uErr == nil {
-			server = updated
+		if _, uErr := c.store.UpdateStatus(ctx, name, server.Status); uErr != nil {
+			return fmt.Errorf("connect to mcp server %s: %w; additionally failed to update status: %v", name, err, uErr)
 		}
 		return fmt.Errorf("connect to mcp server %s: %w", name, err)
 	}
@@ -142,8 +144,8 @@ func (c *McpServerController) reconcileByName(ctx context.Context, name string) 
 	if err != nil {
 		server.Status.Phase = "Error"
 		server.Status.LastError = fmt.Sprintf("tools/list: %s", err.Error())
-		if updated, uErr := c.store.Upsert(ctx, server); uErr == nil {
-			server = updated
+		if _, uErr := c.store.UpdateStatus(ctx, name, server.Status); uErr != nil {
+			return fmt.Errorf("list tools from mcp server %s: %w; additionally failed to update status: %v", name, err, uErr)
 		}
 		return fmt.Errorf("list tools from mcp server %s: %w", name, err)
 	}
@@ -158,8 +160,8 @@ func (c *McpServerController) reconcileByName(ctx context.Context, name string) 
 	if err != nil {
 		server.Status.Phase = "Error"
 		server.Status.LastError = fmt.Sprintf("sync tools: %s", err.Error())
-		if updated, uErr := c.store.Upsert(ctx, server); uErr == nil {
-			server = updated
+		if _, uErr := c.store.UpdateStatus(ctx, name, server.Status); uErr != nil {
+			return fmt.Errorf("%w; additionally failed to update status: %v", err, uErr)
 		}
 		return err
 	}
@@ -172,7 +174,7 @@ func (c *McpServerController) reconcileByName(ctx context.Context, name string) 
 	server.Status.GeneratedTools = generatedNames
 	server.Status.LastSyncedAt = time.Now().UTC().Format(time.RFC3339)
 	server.Status.ObservedGeneration = server.Metadata.Generation
-	_, err = c.store.Upsert(ctx, server)
+	_, err = c.store.UpdateStatus(ctx, name, server.Status)
 	return err
 }
 

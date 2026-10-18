@@ -51,6 +51,12 @@ func newModelGatewayFromConfigWithRegistry(cfg ModelGatewayConfig, registry *Mod
 	if registry == nil {
 		return nil, fmt.Errorf("%w: model provider registry is not configured", ErrModelGatewayConfiguration)
 	}
+	if timeout, ok, err := modelGatewayTimeoutFromOptions(cfg.Options); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrModelGatewayConfiguration, err)
+	} else if ok {
+		cfg.Timeout = timeout
+	}
+
 	plugin, ok := registry.Lookup(provider)
 	if !ok {
 		return nil, fmt.Errorf("%w: unsupported provider %q", ErrModelGatewayConfiguration, cfg.Provider)
@@ -94,6 +100,10 @@ func (p *openAIModelProviderPlugin) BuildGateway(cfg ModelGatewayConfig) (ModelG
 	if strings.TrimSpace(cfg.DefaultModel) != "" {
 		openaiCfg.DefaultModel = strings.TrimSpace(cfg.DefaultModel)
 	}
+	options := normalizeModelProviderOptions(cfg.Options)
+	if value, ok := modelProviderOption(options, "reasoning_effort", "reasoning.effort"); ok {
+		openaiCfg.ReasoningEffort = strings.ToLower(strings.TrimSpace(value))
+	}
 	if cfg.Timeout > 0 {
 		openaiCfg.Timeout = cfg.Timeout
 	}
@@ -122,6 +132,10 @@ func (p *openAICompatibleModelProviderPlugin) BuildGateway(cfg ModelGatewayConfi
 	}
 	if strings.TrimSpace(cfg.DefaultModel) != "" {
 		openaiCfg.DefaultModel = strings.TrimSpace(cfg.DefaultModel)
+	}
+	options := normalizeModelProviderOptions(cfg.Options)
+	if value, ok := modelProviderOption(options, "reasoning_effort", "reasoning.effort"); ok {
+		openaiCfg.ReasoningEffort = strings.ToLower(strings.TrimSpace(value))
 	}
 	if cfg.Timeout > 0 {
 		openaiCfg.Timeout = cfg.Timeout
@@ -305,6 +319,15 @@ func resolveGatewayHTTPClient(cfg ModelGatewayConfig) *http.Client {
 	return SafeModelGatewayHTTPClient(cfg.AllowPrivate, cfg.Timeout)
 }
 
+func modelProviderOption(options map[string]string, keys ...string) (string, bool) {
+	for _, key := range keys {
+		if value, ok := options[key]; ok && strings.TrimSpace(value) != "" {
+			return value, true
+		}
+	}
+	return "", false
+}
+
 func normalizeModelProviderOptions(options map[string]string) map[string]string {
 	if len(options) == 0 {
 		return map[string]string{}
@@ -318,4 +341,17 @@ func normalizeModelProviderOptions(options map[string]string) map[string]string 
 		out[k] = strings.TrimSpace(value)
 	}
 	return out
+}
+
+func modelGatewayTimeoutFromOptions(options map[string]string) (time.Duration, bool, error) {
+	normalized := normalizeModelProviderOptions(options)
+	value := strings.TrimSpace(normalized["timeout"])
+	if value == "" {
+		return 0, false, nil
+	}
+	timeout, err := time.ParseDuration(value)
+	if err != nil || timeout <= 0 {
+		return 0, false, fmt.Errorf("invalid model endpoint timeout %q", value)
+	}
+	return timeout, true, nil
 }
