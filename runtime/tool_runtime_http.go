@@ -145,7 +145,11 @@ func (r *HTTPToolClient) Call(ctx context.Context, tool string, input string) (s
 		)
 	}
 
-	if err := ValidateEndpointURL(endpoint, r.allowPrivate); err != nil {
+	allowPrivate := r.allowPrivate
+	if spec.AllowPrivate != nil && *spec.AllowPrivate {
+		allowPrivate = true
+	}
+	if err := ValidateEndpointURL(endpoint, allowPrivate); err != nil {
 		return "", NewToolError(
 			ToolStatusError,
 			ToolCodeRuntimePolicyInvalid,
@@ -181,7 +185,11 @@ func (r *HTTPToolClient) Call(ctx context.Context, tool string, input string) (s
 		}
 	}
 
-	resp, err := r.client.Do(req)
+	client := r.client
+	if !r.clientInjected && allowPrivate != r.allowPrivate {
+		client = defaultToolHTTPClient(allowPrivate)
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
 			return "", NewToolError(

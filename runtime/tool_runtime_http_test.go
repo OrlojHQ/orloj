@@ -145,6 +145,27 @@ func TestHTTPToolClientInjectsAuthBearer(t *testing.T) {
 	}
 }
 
+func TestHTTPToolClientAllowsPrivateEndpointWhenToolSpecAllowsIt(t *testing.T) {
+	allowPrivate := true
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
+		"web_search": {
+			Type:         "http",
+			Endpoint:     "http://10.0.0.5:18083/search",
+			AllowPrivate: &allowPrivate,
+		},
+	})
+	doer := &fakeHTTPDoer{statusCode: 200, body: "ok"}
+	client := NewHTTPToolClient(registry, nil, doer)
+
+	out, err := client.Call(context.Background(), "web_search", `{"q":"orloj"}`)
+	if err != nil {
+		t.Fatalf("expected private endpoint with allowPrivate=true to succeed, got %v", err)
+	}
+	if out != "ok" {
+		t.Fatalf("expected 'ok', got %q", out)
+	}
+}
+
 func TestHTTPToolClientFailsWhenSecretResolutionFails(t *testing.T) {
 	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"web_search": {

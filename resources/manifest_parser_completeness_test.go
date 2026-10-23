@@ -281,6 +281,7 @@ metadata:
     env: test
 spec:
   type: cli
+  allowPrivate: true
   description: A CLI test tool
   risk_level: medium
   capabilities:
@@ -329,6 +330,7 @@ spec:
   type: http
   description: An HTTP test tool
   endpoint: https://example.com/tool
+  allowPrivate: true
   risk_level: medium
   capabilities:
     - web.search.invoke
@@ -360,6 +362,7 @@ metadata:
     env: test
 spec:
   type: wasm
+  allowPrivate: true
   description: A WASM test tool
   risk_level: medium
   capabilities:
@@ -390,6 +393,7 @@ metadata:
     env: test
 spec:
   type: a2a
+  allowPrivate: true
   description: An A2A test tool
   risk_level: medium
   capabilities:

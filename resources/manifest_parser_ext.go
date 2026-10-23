@@ -681,6 +681,9 @@ func ParseToolManifest(data []byte) (Tool, error) {
 			out.Spec.Description = value
 		case section == "spec" && subsection == "" && key == "endpoint":
 			out.Spec.Endpoint = value
+		case section == "spec" && subsection == "" && (key == "allowPrivate" || key == "allow_private"):
+			parsed := strings.EqualFold(strings.TrimSpace(value), "true") || value == "1"
+			out.Spec.AllowPrivate = &parsed
 		case section == "spec" && subsection == "" && (key == "risk_level" || key == "riskLevel"):
 			out.Spec.RiskLevel = value
 		case section == "spec" && subsection == "auth" && key == "profile":
