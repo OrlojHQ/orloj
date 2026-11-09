@@ -169,7 +169,7 @@ brews:
       - orlojctl
     repository:
       owner: OrlojHQ
-      name: homebrew-orloj
+      name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     directory: Formula
     homepage: "https://github.com/OrlojHQ/orloj"

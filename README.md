@@ -230,7 +230,7 @@ Debug model calls, tool calls, latency, errors, and output.
 Install the CLI:
 
 ```bash
-brew tap OrlojHQ/orloj
+brew tap OrlojHQ/tap
 brew install orlojctl
 ```
 

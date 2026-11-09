@@ -9,7 +9,7 @@ For deeper security context (generation, rotation, threat model), see [Control p
 You need the CLI on **your** machine (or in CI), not inside the server container. The easiest path is Homebrew:
 
 ```bash
-brew tap OrlojHQ/orloj
+brew tap OrlojHQ/tap
 brew install orlojctl
 ```
 
