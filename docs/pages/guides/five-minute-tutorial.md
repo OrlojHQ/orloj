@@ -6,7 +6,7 @@ If you prefer to work from the repository’s checked-in examples instead of sca
 
 ## Prerequisites
 
-- **orlojctl** installed — [Homebrew](../getting-started/install.md#homebrew-macos--linux) (`brew tap OrlojHQ/orloj && brew install orlojctl`) or the [install script](../getting-started/install.md#install-script-all-binaries)
+- **orlojctl** installed — [Homebrew](../getting-started/install.md#homebrew-macos--linux) (`brew tap OrlojHQ/tap && brew install orlojctl`) or the [install script](../getting-started/install.md#install-script-all-binaries)
 - **orlojd** — same install script, [release binaries](https://github.com/OrlojHQ/orloj/releases), or `go run ./cmd/orlojd` from a clone
 - An **OpenAI API key** (or change the scaffolded `model-endpoint.yaml` to another [supported provider](../guides/configure-model-routing.md))
 

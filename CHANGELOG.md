@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Built-in durable audit sink**: with `--storage-backend=postgres`, `orlojd` and `orlojworker` now persist audit events to a new `audit_events` table by default (disable with `--audit-store-enabled=false` / `ORLOJ_AUDIT_STORE_ENABLED=false`). `orlojd` prunes events older than `--audit-retention` (default 90 days; `0` keeps them forever; runs even when recording is disabled) and can export a time range as JSON lines with the one-shot `--audit-export-file`, `--audit-export-since`, and `--audit-export-until` flags. See [Audit Logging](docs/pages/operations/security.md#audit-logging).
 
+### Changed
+
+- **Homebrew tap renamed** from `OrlojHQ/orloj` to `OrlojHQ/tap`, which now also hosts Meridian. Install with `brew tap OrlojHQ/tap && brew install orlojctl`. Existing taps keep working through GitHub's redirect; see [Install](docs/pages/getting-started/install.md#homebrew-macos--linux) to switch.
+
 ### Security
 
 - **Go toolchain** bumped to 1.26.10 across `go.mod`, CI, and Docker builds (`golang:1.26.10-alpine`, pinned by digest), picking up the `crypto/x509` fix that distrusts compromised intermediate certificates (GO-2026-6809). Dependencies bumped: `golang.org/x/net` v0.62.0 (CVE-2026-78661, an `x/net/html` denial of service), `golang.org/x/text` v0.42.0, `google.golang.org/grpc` v1.83.2, and OpenTelemetry v1.45.0. Resolves the 23 advisories reported by `govulncheck`, including `net/http` and `x/net/http2` DoS issues (GO-2026-6617), a gRPC server panic on missing `:authority`/`Host` (GO-2026-6443), gRPC HTTP/2 memory exhaustion (GO-2026-6348), OTLP exporter endpoint URLs leaking into logs (GO-2026-6505), and an `x/text` panic (GO-2026-6629).
