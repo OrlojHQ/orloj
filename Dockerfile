@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 
 # --- Frontend (only required for orlojd embed) ---
-FROM oven/bun:1.3-alpine AS ui
+FROM oven/bun:1.4-alpine AS ui
 WORKDIR /frontend
 COPY frontend/package.json frontend/bun.lock ./
 RUN bun install --frozen-lockfile
@@ -9,7 +9,7 @@ COPY frontend/ ./
 RUN bun run build
 
 # --- Go module cache ---
-FROM golang:1.26.10-alpine@sha256:87c65a688975c0b1d4585d204874c45ca78354670e3a5f11368c5a492303d696 AS base
+FROM golang:1.27.3-alpine@sha256:fa3d596898d9f126af7c01d14ee7597bab3f39cccf392ef36b69fe77cd681f18 AS base
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
