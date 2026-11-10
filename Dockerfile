@@ -9,7 +9,7 @@ COPY frontend/ ./
 RUN bun run build
 
 # --- Go module cache ---
-FROM golang:1.26.9-alpine@sha256:3082400e369fa24d5fc60bca20edab3f6d604e0c5a690ec66b295eff4dd87ade AS base
+FROM golang:1.26.10-alpine@sha256:87c65a688975c0b1d4585d204874c45ca78354670e3a5f11368c5a492303d696 AS base
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
