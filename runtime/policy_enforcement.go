@@ -61,6 +61,11 @@ func MinimumTokenBudget(policies []resources.AgentPolicy) int {
 }
 
 func policyAppliesTo(policy resources.AgentPolicy, task resources.Task, system resources.AgentSystem) bool {
+	policyNamespace := resources.NormalizeNamespace(policy.Metadata.Namespace)
+	taskNamespace := resources.NormalizeNamespace(task.Metadata.Namespace)
+	if policyNamespace != taskNamespace {
+		return false
+	}
 	mode := strings.ToLower(strings.TrimSpace(policy.Spec.ApplyMode))
 	if mode == "" {
 		mode = "scoped"

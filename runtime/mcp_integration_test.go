@@ -742,6 +742,15 @@ func TestMcpServerNormalizeMountPath(t *testing.T) {
 	})
 }
 
+func argValueAfter(args []string, flag string) string {
+	for i, arg := range args {
+		if arg == flag && i+1 < len(args) {
+			return args[i+1]
+		}
+	}
+	return ""
+}
+
 func TestBuildContainerStdioTransport(t *testing.T) {
 	mgr := NewMcpSessionManager(nil)
 	mgr.SetContainerConfig(ContainerToolRuntimeConfig{
@@ -836,15 +845,28 @@ func TestBuildContainerStdioTransport(t *testing.T) {
 			t.Fatalf("build failed: %v", err)
 		}
 		stdio := transport.(*StdioMcpTransport)
-		envCount := 0
+		envFile := argValueAfter(stdio.args, "--env-file")
+		if envFile == "" {
+			t.Fatalf("expected --env-file in args: %v", stdio.args)
+		}
 		for _, arg := range stdio.args {
 			if arg == "FOO=bar" || arg == "BAZ=qux" {
-				envCount++
+				t.Fatalf("env var leaked into docker args: %v", stdio.args)
 			}
 		}
-		if envCount != 2 {
-			t.Errorf("expected 2 env vars in args, found %d: %v", envCount, stdio.args)
+		envBytes, err := os.ReadFile(envFile)
+		if err != nil {
+			t.Fatalf("read env file: %v", err)
 		}
+		for _, expected := range []string{"FOO=bar", "BAZ=qux"} {
+			if !strings.Contains(string(envBytes), expected+"\n") {
+				t.Fatalf("expected %q in env file, got %q", expected, string(envBytes))
+			}
+		}
+		if cidFile := argValueAfter(stdio.args, "--cidfile"); cidFile == "" {
+			t.Fatalf("expected --cidfile in args: %v", stdio.args)
+		}
+		stdio.onClose()
 	})
 
 	t.Run("container_config_applied", func(t *testing.T) {
@@ -911,14 +933,21 @@ func TestBuildContainerStdioTransport(t *testing.T) {
 			t.Errorf("expected --mount with bind,target=/secrets/creds.json,readonly in args: %v", stdio.args)
 		}
 
-		hasEnv := false
+		envFile := argValueAfter(stdio.args, "--env-file")
+		if envFile == "" {
+			t.Fatalf("expected --env-file in args: %v", stdio.args)
+		}
 		for _, arg := range stdio.args {
 			if arg == "CREDS_PATH=/secrets/creds.json" {
-				hasEnv = true
+				t.Fatalf("env var leaked into docker args: %v", stdio.args)
 			}
 		}
-		if !hasEnv {
-			t.Errorf("expected env var CREDS_PATH=/secrets/creds.json in args: %v", stdio.args)
+		envBytes, err := os.ReadFile(envFile)
+		if err != nil {
+			t.Fatalf("read env file: %v", err)
+		}
+		if !strings.Contains(string(envBytes), "CREDS_PATH=/secrets/creds.json\n") {
+			t.Fatalf("expected CREDS_PATH in env file, got %q", string(envBytes))
 		}
 
 		if stdio.onClose == nil {
@@ -974,10 +1003,22 @@ func TestBuildContainerStdioTransport(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read temp dir: %v", err)
 		}
-		if len(files) != 1 {
-			t.Fatalf("expected 1 file in temp dir, got %d", len(files))
+		var secretFile string
+		for _, file := range files {
+			if strings.HasPrefix(file.Name(), "mount_") {
+				secretFile = file.Name()
+			}
 		}
-		content, err := os.ReadFile(filepath.Join(tmpDir, files[0].Name()))
+		if secretFile == "" {
+			t.Fatalf("expected secret mount file in temp dir, got %v", files)
+		}
+		if argValueAfter(stdio.args, "--env-file") == "" {
+			t.Fatalf("expected --env-file in args: %v", stdio.args)
+		}
+		if argValueAfter(stdio.args, "--cidfile") == "" {
+			t.Fatalf("expected --cidfile in args: %v", stdio.args)
+		}
+		content, err := os.ReadFile(filepath.Join(tmpDir, secretFile))
 		if err != nil {
 			t.Fatalf("read secret file: %v", err)
 		}

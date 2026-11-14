@@ -1300,16 +1300,18 @@ func upsertMcpServerSQL(ctx context.Context, db dbExecer, name string, item reso
 		return err
 	}
 	_, err = db.ExecContext(ctx,
-		`INSERT INTO mcp_servers(name, namespace, status_phase, payload, updated_at)
-		 VALUES($1, $2, $3, $4::jsonb, NOW())
+		`INSERT INTO mcp_servers(name, namespace, status_phase, spec_hash, payload, updated_at)
+		 VALUES($1, $2, $3, $4, $5::jsonb, NOW())
 		 ON CONFLICT(name) DO UPDATE SET
 		     namespace = EXCLUDED.namespace,
 		     status_phase = EXCLUDED.status_phase,
+		     spec_hash = EXCLUDED.spec_hash,
 		     payload = EXCLUDED.payload,
 		     updated_at = NOW()`,
 		name,
 		resources.NormalizeNamespace(item.Metadata.Namespace),
 		strings.ToLower(strings.TrimSpace(item.Status.Phase)),
+		specHash(item.Spec),
 		string(payload),
 	)
 	return err

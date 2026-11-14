@@ -105,6 +105,45 @@ func TestOpenAIModelGatewayCompleteSuccess(t *testing.T) {
 	}
 }
 
+func TestOpenAIModelGatewaySendsReasoningEffort(t *testing.T) {
+	var captured map[string]interface{}
+	client := &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			body, err := io.ReadAll(req.Body)
+			if err != nil {
+				return nil, err
+			}
+			if err := json.Unmarshal(body, &captured); err != nil {
+				return nil, err
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(`{"choices":[{"message":{"content":"ok"}}]}`)),
+				Header:     make(http.Header),
+			}, nil
+		}),
+		Timeout: time.Second,
+	}
+
+	cfg := DefaultOpenAIModelGatewayConfig()
+	cfg.APIKey = "test-key"
+	cfg.BaseURL = "https://example.invalid/v1"
+	cfg.ReasoningEffort = "xhigh"
+	cfg.HTTPClient = client
+
+	gateway, err := NewOpenAIModelGateway(cfg)
+	if err != nil {
+		t.Fatalf("new gateway failed: %v", err)
+	}
+	_, err = gateway.Complete(context.Background(), ModelRequest{Model: "gpt-5.5", Prompt: "test", Step: 1})
+	if err != nil {
+		t.Fatalf("complete failed: %v", err)
+	}
+	if got, _ := captured["reasoning_effort"].(string); got != "xhigh" {
+		t.Fatalf("expected reasoning_effort xhigh, got %q in %#v", got, captured)
+	}
+}
+
 func TestOpenAIModelGatewayCompleteWithoutAuthHeaderWhenKeyNotProvided(t *testing.T) {
 	var capturedAuth string
 	client := &http.Client{
