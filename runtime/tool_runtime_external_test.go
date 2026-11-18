@@ -130,6 +130,34 @@ func TestExternalToolRuntimeInjectsAuth(t *testing.T) {
 	}
 }
 
+func TestExternalToolRuntimeAllowsPrivateEndpointWhenToolSpecAllowsIt(t *testing.T) {
+	allowPrivate := true
+	contractResp := ToolExecutionResponse{
+		ToolContractVersion: "v1",
+		Status:              "ok",
+		Output:              ToolExecutionOutput{Result: "private endpoint ok"},
+		Usage:               ToolExecutionUsage{Attempt: 1},
+	}
+	body, _ := json.Marshal(contractResp)
+	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
+		"ext_tool": {
+			Type:         "external",
+			Endpoint:     "http://10.0.0.5:18083/v1/tools/ext_tool",
+			AllowPrivate: &allowPrivate,
+		},
+	})
+	doer := &fakeHTTPDoer{statusCode: 200, body: string(body)}
+	runtime := NewExternalToolRuntime(registry, nil, doer)
+
+	out, err := runtime.Call(context.Background(), "ext_tool", "input")
+	if err != nil {
+		t.Fatalf("expected private endpoint with allowPrivate=true to succeed, got %v", err)
+	}
+	if out != "private endpoint ok" {
+		t.Fatalf("expected private endpoint result, got %q", out)
+	}
+}
+
 func TestExternalToolRuntimeFailsOnMissingEndpoint(t *testing.T) {
 	registry := NewStaticToolCapabilityRegistry(map[string]resources.ToolSpec{
 		"ext_tool": {Type: "external"},
@@ -277,7 +305,7 @@ func TestExternalToolRuntimeSecretResolutionFailure(t *testing.T) {
 
 // Override fakeHTTPDoer.Do to capture the request body before it's read.
 type bodyCapturingDoer struct {
-	inner   *fakeHTTPDoer
+	inner    *fakeHTTPDoer
 	lastBody []byte
 }
 

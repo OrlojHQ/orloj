@@ -14,6 +14,7 @@ metadata:
 spec:
   type: http
   endpoint: https://api.search.example
+  allowPrivate: true
   capabilities:
     - web.read
     - docs.search
@@ -36,6 +37,9 @@ spec:
 	}
 	if tool.Spec.RiskLevel != "medium" {
 		t.Fatalf("expected risk_level=medium, got %q", tool.Spec.RiskLevel)
+	}
+	if tool.Spec.AllowPrivate == nil || !*tool.Spec.AllowPrivate {
+		t.Fatalf("expected allowPrivate=true, got %+v", tool.Spec.AllowPrivate)
 	}
 	if len(tool.Spec.Capabilities) != 2 {
 		t.Fatalf("expected 2 capabilities, got %d", len(tool.Spec.Capabilities))

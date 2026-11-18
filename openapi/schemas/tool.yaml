@@ -71,6 +71,9 @@ components:
       properties:
         type: { type: string, enum: [http, external, grpc, webhook-callback, mcp, wasm, cli, a2a] }
         endpoint: { type: string }
+        allowPrivate:
+          type: boolean
+          description: Permit this trusted HTTP/external tool endpoint to connect to private/internal addresses. Link-local, cloud metadata, and unspecified addresses remain blocked.
         description: { type: string }
         input_schema: { type: object, additionalProperties: true }
         mcp_server_ref: { type: string }
