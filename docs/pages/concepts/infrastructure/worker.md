@@ -39,6 +39,10 @@ Workers connect to the Orloj server and participate in task assignment:
 
 Workers can run as separate processes (`orlojworker`) or embedded in the server process (`orlojd --embedded-worker`) for single-process development.
 
+Each worker capacity reservation has an owner and an expiry. The worker renews the reservation while it runs a task; if it crashes or loses the lease, the reservation can expire and capacity becomes available again. Task claims also have distinct identities so an earlier owner cannot renew or update a claim after takeover, even when the worker ID is reused.
+
+On lease loss, Orloj requests cancellation of the task. An external action that has already started may still complete, so use idempotent operations or downstream idempotency controls when duplicate effects matter.
+
 ## Status
 
 | Field | Description |

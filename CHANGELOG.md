@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Recover crashed workers using expiring, owner-specific capacity reservations and fenced task claims. Stop all old-version workers before upgrading; mixed versions cannot safely share anonymous legacy reservations.
+- Allow PostgreSQL workers to reclaim expired tasks assigned to a different worker.
+- Return the sanitized tool result from agents using `stop_on_first_tool`.
+- Fail relay tasks when the required tool fails, and release worker slots during shutdown.
 
 ### Security
 
@@ -73,10 +76,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Container CLI tools** default to the operator-configured container network (`none` by default) instead of implicit `bridge` access.
 
 ### Fixed
-
-- Allow PostgreSQL workers to reclaim expired tasks assigned to a different worker.
-- Return the sanitized tool result from agents using `stop_on_first_tool`.
-- Fail relay tasks when the required tool fails, and release worker slots during shutdown.
 
 - **gRPC tool runtime SSRF**: outbound gRPC dials now route through `SafeDialer`, blocking DNS-rebind to private/metadata IPs at connection time.
 - **Container HTTP tool endpoints** are validated with `ValidateEndpointURL` before sandbox execution.

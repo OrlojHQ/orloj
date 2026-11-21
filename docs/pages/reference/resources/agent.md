@@ -70,7 +70,7 @@ spec:
   # Raw tool output becomes the agent's output -- no extra model call.
 ```
 
-Step 1: model calls `external-api-tool` → done (1 model call). The next agent in the pipeline receives the raw tool response as context.
+Step 1: model calls `external-api-tool` → done (1 model call). The next agent in the pipeline receives the sanitized tool result as context. If the tool call fails, the agent execution fails and the task follows its configured retry policy.
 
 **When NOT to use `stop_on_first_tool`:**
 - The agent needs to produce structured/labeled output from the tool result.
