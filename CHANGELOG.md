@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Homebrew tap renamed** from `OrlojHQ/orloj` to `OrlojHQ/tap`, which now also hosts Meridian. Install with `brew tap OrlojHQ/tap && brew install orlojctl`. Existing taps keep working through GitHub's redirect; see [Install](docs/pages/getting-started/install.md#homebrew-macos--linux) to switch.
 
+### Fixed
+
+- Recover crashed workers using expiring, owner-specific capacity reservations and fenced task claims. Stop all old-version workers before upgrading; mixed versions cannot safely share anonymous legacy reservations.
+
 ### Security
 
 - **Go toolchain** bumped to 1.26.10 across `go.mod`, CI, and Docker builds (`golang:1.26.10-alpine`, pinned by digest), picking up the `crypto/x509` fix that distrusts compromised intermediate certificates (GO-2026-6809). Dependencies bumped: `golang.org/x/net` v0.62.0 (CVE-2026-78661, an `x/net/html` denial of service), `golang.org/x/text` v0.42.0, `google.golang.org/grpc` v1.83.2, and OpenTelemetry v1.45.0. Resolves the 23 advisories reported by `govulncheck`, including `net/http` and `x/net/http2` DoS issues (GO-2026-6617), a gRPC server panic on missing `:authority`/`Host` (GO-2026-6443), gRPC HTTP/2 memory exhaustion (GO-2026-6348), OTLP exporter endpoint URLs leaking into logs (GO-2026-6505), and an `x/text` panic (GO-2026-6629).
@@ -69,6 +73,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Container CLI tools** default to the operator-configured container network (`none` by default) instead of implicit `bridge` access.
 
 ### Fixed
+
+- Allow PostgreSQL workers to reclaim expired tasks assigned to a different worker.
+- Return the sanitized tool result from agents using `stop_on_first_tool`.
+- Fail relay tasks when the required tool fails, and release worker slots during shutdown.
 
 - **gRPC tool runtime SSRF**: outbound gRPC dials now route through `SafeDialer`, blocking DNS-rebind to private/metadata IPs at connection time.
 - **Container HTTP tool endpoints** are validated with `ValidateEndpointURL` before sandbox execution.

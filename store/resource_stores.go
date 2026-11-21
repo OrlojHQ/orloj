@@ -1788,9 +1788,10 @@ type TaskWebhookStore struct {
 }
 
 type WorkerStore struct {
-	mu    sync.RWMutex
-	items map[string]resources.Worker
-	db    *sql.DB
+	slotLeases map[string]map[string]time.Time
+	mu         sync.RWMutex
+	items      map[string]resources.Worker
+	db         *sql.DB
 }
 
 func NewTaskScheduleStore() *TaskScheduleStore {
@@ -2291,6 +2292,30 @@ func NewTaskStoreWithDB(db *sql.DB) *TaskStore {
 }
 
 func (s *TaskStore) Upsert(ctx context.Context, item resources.Task) (resources.Task, error) {
+	return s.upsert(ctx, item, false)
+}
+
+// UpsertClaim rejects a worker update if its task claim has expired or changed.
+func (s *TaskStore) UpsertClaim(ctx context.Context, item resources.Task) (resources.Task, error) {
+	return s.upsert(ctx, item, true)
+}
+
+func validateTaskClaim(existing, proposed resources.Task) error {
+	if !strings.EqualFold(existing.Status.Phase, "running") {
+		return nil
+	}
+	claim := proposed.Metadata.Annotations[TaskClaimAnnotation]
+	if claim == "" || existing.Metadata.Annotations[TaskClaimAnnotation] != claim {
+		return fmt.Errorf("task %q claim has changed", existing.Metadata.Name)
+	}
+	expiry, err := parseTimestamp(existing.Status.LeaseUntil)
+	if err != nil || !expiry.After(time.Now()) {
+		return fmt.Errorf("task %q claim has expired", existing.Metadata.Name)
+	}
+	return nil
+}
+
+func (s *TaskStore) upsert(ctx context.Context, item resources.Task, fenced bool) (resources.Task, error) {
 	if err := item.Normalize(); err != nil {
 		return resources.Task{}, err
 	}
@@ -2305,6 +2330,15 @@ func (s *TaskStore) Upsert(ctx context.Context, item resources.Task) (resources.
 		meta, found, err := getUpsertMetaForUpdate(ctx, tx, tableTasks, key)
 		if err != nil {
 			return resources.Task{}, err
+		}
+		if found && fenced {
+			existing, _, err := getFromTable[resources.Task](ctx, tx, tableTasks, key)
+			if err != nil {
+				return resources.Task{}, err
+			}
+			if err := validateTaskClaim(existing, item); err != nil {
+				return resources.Task{}, err
+			}
 		}
 		if !found {
 			if err := initializeCreateMetadata("Task", &item.Metadata); err != nil {
@@ -2333,6 +2367,12 @@ func (s *TaskStore) Upsert(ctx context.Context, item resources.Task) (resources.
 
 	s.mu.Lock()
 	existing, found := s.items[key]
+	if found && fenced {
+		if err := validateTaskClaim(existing, item); err != nil {
+			s.mu.Unlock()
+			return resources.Task{}, err
+		}
+	}
 	if !found {
 		if err := initializeCreateMetadata("Task", &item.Metadata); err != nil {
 			s.mu.Unlock()
@@ -2708,9 +2748,21 @@ func (s *TaskStore) ClaimNextDue(ctx context.Context, workerID string, lease tim
 }
 
 func (s *TaskStore) RenewLease(ctx context.Context, name, workerID string, lease time.Duration) error {
+	return s.renewLease(ctx, name, workerID, "", lease)
+}
+
+// RenewClaimLease renews only the exact claim represented by claimID.
+func (s *TaskStore) RenewClaimLease(ctx context.Context, name, workerID, claimID string, lease time.Duration) error {
+	if claimID == "" {
+		return fmt.Errorf("task claim ID is required")
+	}
+	return s.renewLease(ctx, name, workerID, claimID, lease)
+}
+
+func (s *TaskStore) renewLease(ctx context.Context, name, workerID, claimID string, lease time.Duration) error {
 	key := normalizeLookupName(name)
 	if s.db != nil {
-		return renewTaskLeaseSQL(ctx, s.db, key, workerID, lease)
+		return renewTaskLeaseSQL(ctx, s.db, key, workerID, claimID, lease)
 	}
 
 	if lease <= 0 {
@@ -2726,6 +2778,15 @@ func (s *TaskStore) RenewLease(ctx context.Context, name, workerID string, lease
 	}
 	if !strings.EqualFold(strings.TrimSpace(task.Status.ClaimedBy), strings.TrimSpace(workerID)) {
 		return fmt.Errorf("task %q is claimed by %q, not %q", name, task.Status.ClaimedBy, workerID)
+	}
+	if claimID != "" && task.Metadata.Annotations[TaskClaimAnnotation] != claimID {
+		return fmt.Errorf("task %q claim has changed", name)
+	}
+	if claimID != "" {
+		expiry, err := parseTimestamp(task.Status.LeaseUntil)
+		if err != nil || !expiry.After(now) {
+			return fmt.Errorf("task %q claim has expired", name)
+		}
 	}
 	if !strings.EqualFold(strings.TrimSpace(task.Status.Phase), "running") {
 		return fmt.Errorf("task %q is not running", name)
@@ -2813,12 +2874,20 @@ func (s *TaskStore) ClearAgentJobFields(ctx context.Context, name string) error 
 	return nil
 }
 
+// TaskClaimAnnotation identifies one particular task claim, including claims by
+// successive processes that happen to use the same worker ID.
+const TaskClaimAnnotation = "orloj.dev/task-claim"
+
 func applyTaskClaim(task resources.Task, workerID string, lease time.Duration, now time.Time) (resources.Task, error) {
 	current := task.Metadata
 	previousPhase := strings.ToLower(strings.TrimSpace(task.Status.Phase))
 	previousWorker := strings.TrimSpace(task.Status.ClaimedBy)
-	takeover := previousPhase == "running" && previousWorker != "" && !strings.EqualFold(previousWorker, strings.TrimSpace(workerID))
+	takeover := previousPhase == "running" && previousWorker != ""
 
+	if task.Metadata.Annotations == nil {
+		task.Metadata.Annotations = make(map[string]string)
+	}
+	task.Metadata.Annotations[TaskClaimAnnotation] = newUUID()
 	task.Status.Phase = "Running"
 	task.Status.NextAttemptAt = ""
 	task.Status.CompletedAt = ""
@@ -2865,9 +2934,6 @@ func isTaskClaimable(task resources.Task, workerID string, now time.Time) bool {
 		claimedBy := strings.TrimSpace(task.Status.ClaimedBy)
 		if claimedBy == "" {
 			return true
-		}
-		if strings.EqualFold(claimedBy, strings.TrimSpace(workerID)) {
-			return false
 		}
 		if strings.TrimSpace(task.Status.LeaseUntil) == "" {
 			return true

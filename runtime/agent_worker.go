@@ -592,6 +592,9 @@ func (w *AgentWorker) run(ctx context.Context, streamSink ModelStreamEventSink) 
 					if w.onEvent != nil {
 						w.onEvent(fmt.Sprintf("step=%d tool=%s tool_contract=%s tool_request_id=%s tool_attempt=%d duration_ms=%d error=%v", step, tool, contractVersion, toolRequestID, toolAttempt, toolDurationMS, err))
 					}
+					if strings.EqualFold(toolUseBehavior, resources.AgentToolUseBehaviorStopOnFirstTool) {
+						return fmt.Errorf("required tool %s failed: %w", tool, err)
+					}
 					w.history = append(w.history, ChatMessage{
 						Role:       "tool",
 						Content:    fmt.Sprintf("<tool_error>\n%s\n</tool_error>", err.Error()),
@@ -615,6 +618,7 @@ func (w *AgentWorker) run(ctx context.Context, streamSink ModelStreamEventSink) 
 					ToolCallID: requested.ID,
 				})
 				if strings.EqualFold(toolUseBehavior, resources.AgentToolUseBehaviorStopOnFirstTool) {
+					lastOutput = safeResult
 					if w.onEvent != nil {
 						w.onEvent(fmt.Sprintf("step=%d tool=%s stop_on_first_tool", step, tool))
 						w.onEvent("worker completed")

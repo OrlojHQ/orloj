@@ -539,37 +539,48 @@ func (c *TaskController) ReconcileOnce(ctx context.Context) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		slotAcquired := false
+		slotToken := ""
+		taskCtx, cancelTask := context.WithCancel(ctx)
+		stopSlotHeartbeat := func() {}
 		if c.workerStore != nil {
-			acquired, err := c.tryAcquireWorkerSlot(ctx)
+			worker, token, acquired, err := c.workerStore.AcquireLeasedSlot(taskCtx, c.workerID, c.leaseDuration)
 			if err != nil {
+				cancelTask()
 				return err
 			}
-			if !acquired {
-				c.debugf("task scheduler idle worker=%s reason=worker_slot_unavailable", c.workerID)
+			if !acquired && worker.Metadata.Name != "" {
+				cancelTask()
 				return nil
 			}
-			slotAcquired = true
-		}
-		task, claimed, err := c.taskStore.ClaimNextDue(ctx, c.workerID, c.leaseDuration, c.workerClaimHints(), c.taskMatchesWorker)
-		if err != nil {
-			if slotAcquired {
-				_ = c.workerStore.ReleaseSlot(ctx, c.workerID)
+			slotToken = token
+			if slotToken != "" {
+				stopSlotHeartbeat = c.startSlotHeartbeat(taskCtx, cancelTask, slotToken)
 			}
+		}
+		cleanupSlot := func() {
+			stopSlotHeartbeat()
+			cancelTask()
+			if slotToken != "" {
+				cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+				defer cancel()
+				if err := c.workerStore.ReleaseLeasedSlot(cleanup, c.workerID, slotToken); err != nil && c.logger != nil {
+					c.logger.Printf("worker=%s release slot failed: %v", c.workerID, err)
+				}
+			}
+		}
+		task, claimed, err := c.taskStore.ClaimNextDue(taskCtx, c.workerID, c.leaseDuration, c.workerClaimHints(), c.taskMatchesWorker)
+		if err != nil {
+			cleanupSlot()
 			return err
 		}
 		if !claimed {
-			if slotAcquired {
-				_ = c.workerStore.ReleaseSlot(ctx, c.workerID)
-				c.debugf("worker=%s released empty claim slot", c.workerID)
-			}
-			c.debugf("task scheduler idle worker=%s reason=no_due_matching_task", c.workerID)
+			cleanupSlot()
 			return nil
 		}
 
 		taskKey := taskScopedName(task)
 		c.debugf("task claimed task=%s worker=%s phase=%s attempt=%d lease=%s execution_mode=%s", taskKey, c.workerID, task.Status.Phase, task.Status.Attempts, c.leaseDuration.String(), c.executionMode)
-		stopHeartbeat := c.startHeartbeat(ctx, taskKey)
+		stopHeartbeat := c.startHeartbeat(taskCtx, cancelTask, taskKey, task.Metadata.Annotations[store.TaskClaimAnnotation])
 		c.appendTaskLog(taskKey, fmt.Sprintf("task claimed by worker=%s lease=%s", c.workerID, c.leaseDuration))
 		c.appendTaskHistory(&task, "claim", fmt.Sprintf("task claimed by worker=%s lease=%s", c.workerID, c.leaseDuration))
 		c.publishTaskEvent(task, "task.claimed", "task claimed by worker")
@@ -595,17 +606,9 @@ func (c *TaskController) ReconcileOnce(ctx context.Context) error {
 			Principal:    c.workerID,
 			Message:      fmt.Sprintf("task %s claimed for attempt %d", task.Metadata.Name, task.Status.Attempts),
 		})
-		reconcileErr := c.reconcileTask(ctx, task)
+		reconcileErr := c.reconcileTask(taskCtx, task)
 		stopHeartbeat()
-		if slotAcquired {
-			if err := c.workerStore.ReleaseSlot(ctx, c.workerID); err != nil {
-				if c.logger != nil {
-					c.logger.Printf("worker=%s release slot failed: %v", c.workerID, err)
-				}
-			} else {
-				c.debugf("worker=%s released task slot task=%s", c.workerID, taskKey)
-			}
-		}
+		cleanupSlot()
 		if reconcileErr != nil {
 			if c.logger != nil {
 				c.logger.Printf("task=%s reconcile failed: %v", task.Metadata.Name, reconcileErr)
@@ -715,6 +718,9 @@ func (c *TaskController) reconcileRunning(ctx context.Context, task resources.Ta
 	c.appendTaskLog(taskScopedName(task), fmt.Sprintf("task execution started system=%s", system.Metadata.Name))
 
 	output, err := c.executeTask(ctx, &task, system)
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
 	if err != nil {
 		var reviewPauseErr *taskApprovalPauseError
 		if errors.As(err, &reviewPauseErr) {
@@ -3085,6 +3091,14 @@ func (c *TaskController) workerClaimHints() store.WorkerClaimHints {
 	}
 }
 
+// releaseWorkerSlot must survive cancellation of the task-controller context.
+// Otherwise shutdown can strand a persisted capacity slot after a task exits.
+func (c *TaskController) releaseWorkerSlot(ctx context.Context) error {
+	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	return c.workerStore.ReleaseSlot(cleanup, c.workerID)
+}
+
 func (c *TaskController) tryAcquireWorkerSlot(ctx context.Context) (bool, error) {
 	worker, acquired, err := c.workerStore.TryAcquireSlot(ctx, c.workerID)
 	if err != nil {
@@ -3392,7 +3406,13 @@ func (c *TaskController) upsertTask(task resources.Task) (resources.Task, error)
 	ctx := context.Background()
 	var lastErr error
 	for i := 0; i < 5; i++ {
-		updated, err := c.taskStore.Upsert(ctx, task)
+		var updated resources.Task
+		var err error
+		if task.Metadata.Annotations[store.TaskClaimAnnotation] != "" {
+			updated, err = c.taskStore.UpsertClaim(ctx, task)
+		} else {
+			updated, err = c.taskStore.Upsert(ctx, task)
+		}
 		if err == nil {
 			return updated, nil
 		}
@@ -3406,6 +3426,10 @@ func (c *TaskController) upsertTask(task resources.Task) (resources.Task, error)
 		}
 		if !ok {
 			return resources.Task{}, lastErr
+		}
+		claimID := task.Metadata.Annotations[store.TaskClaimAnnotation]
+		if claimID != "" && current.Metadata.Annotations[store.TaskClaimAnnotation] != claimID {
+			return resources.Task{}, fmt.Errorf("task %q claim has changed", taskScopedName(task))
 		}
 		task.Metadata.ResourceVersion = current.Metadata.ResourceVersion
 		task.Metadata.Generation = current.Metadata.Generation
@@ -3441,23 +3465,31 @@ func (c *TaskController) emitAudit(ctx context.Context, event agentruntime.Audit
 	c.extensions.Audit.RecordAudit(ctx, event)
 }
 
-func (c *TaskController) startHeartbeat(ctx context.Context, taskName string) func() {
+func (c *TaskController) startHeartbeat(ctx context.Context, cancelTask context.CancelFunc, taskName, claimID string) func() {
 	if c.heartbeatEvery <= 0 {
 		return func() {}
 	}
 	hbCtx, cancel := context.WithCancel(ctx)
 	go func() {
-		ticker := time.NewTicker(c.heartbeatEvery)
+		interval := c.heartbeatEvery
+		if interval >= c.leaseDuration {
+			interval = c.leaseDuration / 3
+		}
+		if interval <= 0 {
+			interval = time.Second
+		}
+		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-hbCtx.Done():
 				return
 			case <-ticker.C:
-				if err := c.taskStore.RenewLease(hbCtx, taskName, c.workerID, c.leaseDuration); err != nil {
+				if err := c.taskStore.RenewClaimLease(hbCtx, taskName, c.workerID, claimID, c.leaseDuration); err != nil {
 					if c.logger != nil {
 						c.logger.Printf("task=%s lease heartbeat failed: %v", taskName, err)
 					}
+					cancelTask()
 					return
 				}
 				c.debugf("task=%s lease heartbeat renewed worker=%s lease=%s", taskName, c.workerID, c.leaseDuration.String())
@@ -3465,6 +3497,38 @@ func (c *TaskController) startHeartbeat(ctx context.Context, taskName string) fu
 		}
 	}()
 	return cancel
+}
+
+func (c *TaskController) startSlotHeartbeat(ctx context.Context, cancelTask context.CancelFunc, token string) func() {
+	heartbeatCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		interval := c.heartbeatEvery
+		if interval <= 0 || interval >= c.leaseDuration {
+			interval = c.leaseDuration / 3
+		}
+		if interval <= 0 {
+			interval = time.Second
+		}
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-heartbeatCtx.Done():
+				return
+			case <-ticker.C:
+				if err := c.workerStore.RenewLeasedSlot(heartbeatCtx, c.workerID, token, c.leaseDuration); err != nil {
+					if heartbeatCtx.Err() == nil && c.logger != nil {
+						c.logger.Printf("worker=%s slot heartbeat failed: %v", c.workerID, err)
+					}
+					cancelTask()
+					return
+				}
+			}
+		}
+	}()
+	return func() { cancel(); <-done }
 }
 
 func (c *TaskController) publishTaskEvent(task resources.Task, eventType string, message string) {
