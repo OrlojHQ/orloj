@@ -162,7 +162,7 @@ func (e *ReActExecutionEngine) ExecuteWithEventSink(
 	}
 	result.Output = preferredAgentOutput(stepEvents)
 	if checkpoint := worker.LastCheckpoint(); checkpoint != nil {
-		if result.Output == "" {
+		if result.Output == "" || (strings.EqualFold(agent.Spec.Execution.ToolUseBehavior, resources.AgentToolUseBehaviorStopOnFirstTool) && toolCalls > 0) {
 			result.Output = checkpoint.LastOutput
 		}
 		result.Steps = max(result.Steps, checkpoint.Steps)

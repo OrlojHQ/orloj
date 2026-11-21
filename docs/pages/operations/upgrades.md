@@ -17,6 +17,12 @@ This guide defines safe upgrade and rollback procedures for the Orloj server and
 - [ ] Verify baseline health (`/healthz`, workers, task flow).
 - [ ] Run smoke checks in staging.
 
+## Upgrading to Worker Capacity Leases
+
+When upgrading from a version that uses anonymous worker-capacity counts to one with owner-specific capacity leases, stop all old-version workers before starting any new-version workers. Include embedded workers running in `orlojd --embedded-worker`. The old and new versions cannot safely share capacity reservations, so the staged worker rollout below does not apply to this transition. Back up Postgres and let active work finish or plan for recovery before stopping workers.
+
+For a rollback across this transition, stop all new-version workers before starting the old version. External actions already started by a task can still complete after cancellation or lease loss; check their outcomes before replaying work.
+
 ## Upgrade Procedure
 
 1. Upgrade `orlojd` in staging.

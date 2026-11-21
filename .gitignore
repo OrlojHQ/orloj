@@ -46,3 +46,6 @@ coverage.out
 # Python bytecode/cache
 __pycache__/
 *.py[cod]
+bin/orlojctl
+bin/orlojd
+bin/orlojworker

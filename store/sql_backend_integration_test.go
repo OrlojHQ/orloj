@@ -209,3 +209,64 @@ func resetPostgresStoreTestTables(t *testing.T, db *sql.DB) {
 		}
 	}
 }
+
+func TestPostgresClaimNextDueRecoversExpiredTaskAssignedToOtherWorker(t *testing.T) {
+	dsn := os.Getenv("ORLOJ_POSTGRES_DSN")
+	if dsn == "" {
+		t.Skip("ORLOJ_POSTGRES_DSN is not set")
+	}
+	db, err := sql.Open("pgx", dsn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := EnsurePostgresSchema(db); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	tasks := NewTaskStoreWithDB(db)
+	prefix := fmt.Sprintf("failover-%d", time.Now().UnixNano())
+	// Pending tasks assigned elsewhere and running tasks with a live lease
+	// must remain unavailable to this worker.
+	for _, tc := range []struct {
+		name   string
+		status resources.TaskStatus
+	}{
+		{name: "pending-other", status: resources.TaskStatus{Phase: "Pending", AssignedWorker: "worker-a"}},
+		{name: "running-live", status: resources.TaskStatus{Phase: "Running", AssignedWorker: "worker-a", ClaimedBy: "worker-a", LeaseUntil: time.Now().Add(time.Minute).UTC().Format(time.RFC3339Nano)}},
+	} {
+		item := resources.Task{APIVersion: "orloj.dev/v1", Kind: "Task", Metadata: resources.ObjectMeta{Name: prefix + "-" + tc.name}, Spec: resources.TaskSpec{System: "example"}, Status: tc.status}
+		if _, err := tasks.Upsert(ctx, item); err != nil {
+			t.Fatal(err)
+		}
+		if _, ok, err := tasks.ClaimNextDue(ctx, "worker-b", time.Minute, WorkerClaimHints{AssignedWorker: "worker-b"}, nil); err != nil || ok {
+			t.Fatalf("%s must not be claimed: ok=%v err=%v", tc.name, ok, err)
+		}
+		if err := tasks.Delete(ctx, item.Metadata.Name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	task := resources.Task{
+		APIVersion: "orloj.dev/v1",
+		Kind:       "Task",
+		Metadata:   resources.ObjectMeta{Name: prefix + "-expired"},
+		Spec:       resources.TaskSpec{System: "example"},
+		Status: resources.TaskStatus{
+			Phase:          "Running",
+			AssignedWorker: "worker-a",
+			ClaimedBy:      "worker-a",
+			LeaseUntil:     time.Now().Add(-time.Minute).UTC().Format(time.RFC3339Nano),
+		},
+	}
+	if _, err := tasks.Upsert(ctx, task); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tasks.Delete(ctx, task.Metadata.Name) }()
+	claimed, ok, err := tasks.ClaimNextDue(ctx, "worker-b", time.Minute, WorkerClaimHints{AssignedWorker: "worker-b"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || claimed.Status.ClaimedBy != "worker-b" {
+		t.Fatalf("expected expired running task to be reclaimed by worker-b, got ok=%v task=%+v", ok, claimed.Status)
+	}
+}

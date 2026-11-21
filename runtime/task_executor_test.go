@@ -1068,6 +1068,9 @@ func TestTaskExecutorStopOnFirstToolCompletesImmediately(t *testing.T) {
 	if result.Steps != 1 {
 		t.Fatalf("expected completion on step 1 (stop_on_first_tool), got %d steps", result.Steps)
 	}
+	if result.Output != "<tool_result>\nweb_search:{\"q\":\"cats\"}\n</tool_result>" {
+		t.Fatalf("expected tool output, got %q", result.Output)
+	}
 	var sawStopEvent bool
 	for _, event := range result.StepEvents {
 		if strings.Contains(event.Message, "stop_on_first_tool") {
@@ -1076,6 +1079,28 @@ func TestTaskExecutorStopOnFirstToolCompletesImmediately(t *testing.T) {
 	}
 	if !sawStopEvent {
 		t.Fatal("expected stop_on_first_tool event")
+	}
+}
+
+type relayFailureRuntime struct{}
+
+func (*relayFailureRuntime) Call(context.Context, string, string) (string, error) {
+	return "", fmt.Errorf("relay failed")
+}
+
+func TestTaskExecutorStopOnFirstToolFailsOnToolError(t *testing.T) {
+	model := &scriptedModelGateway{responses: map[int]ModelResponse{1: {
+		Content: "calling tool", ToolCalls: []ModelToolCall{{ID: "call_1", Name: "relay", Input: `{}`}},
+	}}}
+	executor := NewTaskExecutorWithRuntime(nil, &relayFailureRuntime{}, model, nil)
+	agent := resources.Agent{Metadata: resources.ObjectMeta{Name: "relay"}, Spec: resources.AgentSpec{
+		ModelRef: "test-endpoint", Tools: []string{"relay"},
+		Execution: resources.AgentExecutionSpec{ToolUseBehavior: resources.AgentToolUseBehaviorStopOnFirstTool},
+		Limits:    resources.AgentLimits{MaxSteps: 2},
+	}}
+	_, err := executor.ExecuteAgent(context.Background(), agent, nil)
+	if err == nil || !strings.Contains(err.Error(), "relay failed") {
+		t.Fatalf("expected required tool failure, got %v", err)
 	}
 }
 

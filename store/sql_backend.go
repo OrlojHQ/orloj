@@ -897,8 +897,11 @@ func claimNextDueTaskSQL(ctx context.Context, db *sql.DB, workerID string, lease
 		args = append(args, hints.Region)
 	}
 	if hints.AssignedWorker != "" {
+		// Assignment is a placement hint for pending tasks. Expired running
+		// tasks must remain eligible for takeover by a different worker.
 		extraWhere += fmt.Sprintf(` AND (
-			assigned_worker = ''
+			status_phase = 'running'
+			OR assigned_worker = ''
 			OR LOWER(assigned_worker) = LOWER($%d)
 		)`, len(args)+1)
 		args = append(args, hints.AssignedWorker)
@@ -1005,7 +1008,7 @@ func claimNextDueTaskSQL(ctx context.Context, db *sql.DB, workerID string, lease
 // renewTaskLeaseSQL updates only the lease and heartbeat fields without
 // re-serializing the entire JSONB payload. This avoids write amplification on
 // the hot heartbeat path (called every ~15-30s per running task).
-func renewTaskLeaseSQL(ctx context.Context, db *sql.DB, name, workerID string, lease time.Duration) error {
+func renewTaskLeaseSQL(ctx context.Context, db *sql.DB, name, workerID, claimID string, lease time.Duration) error {
 	if lease <= 0 {
 		lease = 30 * time.Second
 	}
@@ -1035,8 +1038,9 @@ func renewTaskLeaseSQL(ctx context.Context, db *sql.DB, name, workerID string, l
 		     updated_at = NOW()
 		 WHERE name = $1
 		   AND status_phase = 'running'
-		   AND LOWER(TRIM(claimed_by)) = LOWER(TRIM($5))`,
-		name, leaseUntilTS, leaseUntilStr, heartbeatStr, workerID,
+		   AND LOWER(TRIM(claimed_by)) = LOWER(TRIM($5))
+		   AND ($6 = '' OR (payload->'metadata'->'annotations'->>'orloj.dev/task-claim' = $6 AND lease_until > NOW()))`,
+		name, leaseUntilTS, leaseUntilStr, heartbeatStr, workerID, claimID,
 	)
 	if err != nil {
 		return err
